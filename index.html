@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Finance</title>
+<meta name="theme-color" content="#0f1420">
+<meta name="description" content="Offline-first personal finance tracker synced to your Google Sheet.">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Finance">
+<style>
+:root{--bg:#0f1420;--card:#1a2233;--card2:#212c42;--ink:#e8edf7;--mut:#93a1bd;--line:#2c3a56;
+--ok:#37d39b;--bad:#ff6b6b;--warn:#ffc45c;--acc:#5b8cff}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:15px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);
+padding-bottom:20px;-webkit-font-smoothing:antialiased}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;
+border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(15,20,32,.96);
+backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:6;padding-top:calc(14px + env(safe-area-inset-top))}
+h1{margin:0;font-size:20px;letter-spacing:.2px}
+h1 span{color:var(--acc)}
+.hwrap{display:flex;align-items:center;gap:10px}
+#status{font-size:12px;color:var(--mut);text-align:right}
+main{padding:14px 16px 20px;max-width:640px;margin:0 auto}
+h2{font-size:12.5px;margin:20px 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px}
+.tile .k{color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px}
+.tile .v{font-size:18px;font-weight:700;margin-top:5px;word-break:break-word}
+.tile .n{color:var(--mut);font-size:11px;margin-top:2px}
+.tile.good .v{color:var(--ok)}.tile.bad .v{color:var(--bad)}.tile.accent .v{color:var(--acc)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+label{display:block;color:var(--mut);font-size:12px;margin:10px 0 4px;font-weight:600}
+input,select{background:var(--card2);border:1px solid var(--line);color:var(--ink);padding:11px 12px;border-radius:10px;font-size:15px;width:100%;margin:0}
+input:focus,select:focus{outline:none;border-color:var(--acc)}
+select{appearance:none;-webkit-appearance:none;
+background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2393a1bd' viewBox='0 0 16 16'><path d='M8 11L3 6h10z'/></svg>");
+background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+.row{display:flex;gap:10px}
+.row>div{flex:1;min-width:0}
+button.act{cursor:pointer;border:1px solid var(--acc);background:var(--acc);color:#fff;padding:12px 14px;border-radius:11px;font-weight:700;font-size:14.5px;width:100%}
+button.act:active{filter:brightness(1.12)}
+button.sync{cursor:pointer;border:1px solid var(--acc);background:transparent;color:var(--acc);padding:8px 14px;border-radius:10px;font-weight:700;font-size:13px;white-space:nowrap}
+button.sync:disabled{opacity:.5}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:700}
+.pill.ok{background:rgba(55,211,155,.15);color:var(--ok)}
+.pill.bad{background:rgba(255,107,107,.15);color:var(--bad)}
+.pill.warn{background:rgba(255,196,92,.15);color:var(--warn)}
+.txn{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.txn:first-child{padding-top:2px}.txn:last-child{border-bottom:none;padding-bottom:2px}
+.txn-cat{font-weight:600;font-size:14.5px}
+.txn-meta{color:var(--mut);font-size:12px;margin-top:2px}
+.txn-r{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.txn-amt{font-weight:700;font-size:15px}
+.badgedel{display:flex;align-items:center;gap:6px;justify-content:flex-end}
+.mini{cursor:pointer;background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:7px;padding:1px 9px;font-size:12px;line-height:1.5}
+.mini:active{border-color:var(--bad);color:var(--bad)}
+.note{color:var(--mut);font-size:13px;margin:6px 0}
+.low{color:var(--bad)}
+code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:12px}
+#foot{color:var(--mut);font-size:12px;text-align:center;padding:14px 16px 22px;line-height:1.7}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--acc);border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px}
+@keyframes sp{to{transform:rotate(360deg)}}
+#connect input{margin:6px 0 10px}
+</style>
+</head>
+
+<body>
+<header>
+  <h1>Fin<span>ance</span></h1>
+  <div class="hwrap">
+    <div id="status"></div>
+    <button class="sync" id="syncBtn" type="button">Sync</button>
+  </div>
+</header>
+<main>
+  <section id="connect" class="card" style="display:none">
+    <h2 style="margin-top:0">Connect your sheet</h2>
+    <p class="note" style="margin-top:2px">Paste your <b>Apps Script Web App URL</b> — the <code>…/exec</code> link from your Sheet:
+      <b>Extensions → Apps Script → Deploy → New deployment → Web app</b>. It's stored only on this phone.</p>
+    <input id="syncUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
+    <button class="act" id="connectBtn" type="button">Connect &amp; sync</button>
+  </section>
+
+  <section id="summary"></section>
+
+  <form id="addForm" class="card" autocomplete="off">
+    <h2 style="margin-top:0">Add expense</h2>
+    <label for="f_amount">Amount (₱)</label>
+    <input id="f_amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+    <div class="row">
+      <div>
+        <label for="f_account">Paid with</label>
+        <select id="f_account"><option value="" disabled selected>Pick…</option></select>
+      </div>
+      <div>
+        <label for="f_date">Date</label>
+        <input id="f_date" type="date">
+      </div>
+    </div>
+    <label for="f_category">Category</label>
+    <input id="f_category" list="cats" placeholder="e.g. Food / Gym Nutrition">
+    <datalist id="cats">
+      <option value="Food / Gym Nutrition"></option>
+      <option value="Gym Membership"></option>
+      <option value="Rent"></option>
+      <option value="Water"></option>
+      <option value="Wi-Fi"></option>
+      <option value="Spotify"></option>
+      <option value="Parents' Utilities Support"></option>
+      <option value="Laundry"></option>
+      <option value="Personal Treats / Gear"></option>
+      <option value="Transport"></option>
+      <option value="Debt payment"></option>
+      <option value="Savings / Sinking"></option>
+      <option value="Other"></option>
+    </datalist>
+    <label for="f_note">Note (optional)</label>
+    <input id="f_note" placeholder="optional">
+    <div style="margin-top:14px">
+      <button class="act" type="submit">Add expense</button>
+    </div>
+  </form>
+
+  <h2>Your expenses</h2>
+  <div id="txns" class="card"></div>
+</main>
+<footer id="foot"></footer>
+<script src="./app.js"></script>
+</body>
+</html>
+
