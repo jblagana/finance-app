@@ -20,9 +20,14 @@
 html,body{margin:0}
 body{font:15px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);
 padding-bottom:20px;-webkit-font-smoothing:antialiased}
-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;
-border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(15,20,32,.96);
-backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:6;padding-top:calc(14px + env(safe-area-inset-top))}
+#topbar{position:sticky;top:0;z-index:6;background:rgba(15,20,32,.96);backdrop-filter:blur(8px);
+-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px}
+#tabs{display:flex;gap:8px;padding:0 16px 10px}
+.tab{flex:1;cursor:pointer;background:var(--card);border:1px solid var(--line);color:var(--mut);
+padding:9px 10px;border-radius:10px;font-size:14px;font-weight:700}
+.tab.active{background:var(--acc);border-color:var(--acc);color:#fff}
+.tab:active{filter:brightness(1.12)}
 h1{margin:0;font-size:20px;letter-spacing:.2px}
 h1 span{color:var(--acc)}
 .hwrap{display:flex;align-items:center;gap:10px}
@@ -96,102 +101,120 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 </head>
 
 <body>
-<header>
-  <h1>Fin<span>ance</span></h1>
-  <div class="hwrap">
-    <div id="status"></div>
-    <button class="sync" id="syncBtn" type="button">Sync</button>
-  </div>
-</header>
+<div id="topbar">
+  <header>
+    <h1>Fin<span>ance</span></h1>
+    <div class="hwrap">
+      <div id="status"></div>
+      <button class="sync" id="syncBtn" type="button">Sync</button>
+    </div>
+  </header>
+  <nav id="tabs" aria-label="Sections">
+    <button type="button" class="tab active" data-tab="home">Home</button>
+    <button type="button" class="tab" data-tab="overview">Overview</button>
+  </nav>
+</div>
 <main>
-  <section id="connect" class="card" style="display:none">
-    <h2 style="margin-top:0">Connect your sheet</h2>
-    <p class="note" style="margin-top:2px">Paste your <b>Apps Script Web App URL</b> — the <code>…/exec</code> link from your Sheet:
-      <b>Extensions → Apps Script → Deploy → New deployment → Web app</b>. It's stored only on this phone.</p>
-    <input id="syncUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
-    <button class="act" id="connectBtn" type="button">Connect &amp; sync</button>
-  </section>
-
-  <section id="summary"></section>
-
-  <section id="coach" class="card coach" style="display:none">
-    <p class="coach-h" id="coachHead"></p>
-    <p class="coach-s" id="coachSub"></p>
-  </section>
-
-  <section id="insights" class="card" style="display:none">
-    <div class="ins-top">
-      <h2 style="margin-top:0">Insights</h2>
-      <div class="ins-ctrls">
-        <label class="ins-meal" for="mealEdit">treat ≈ ₱<input id="mealEdit" type="number" min="0" step="50" inputmode="numeric"></label>
-        <label class="ins-meal" for="nameEdit">name <input id="nameEdit" type="text" maxlength="20" placeholder="Jan" autocomplete="off" spellcheck="false"></label>
-      </div>
+  <div id="tab-home">
+    <div id="homeEmpty" class="card" style="display:none">
+      <p class="note" style="margin:2px 0">Connect your sheet on the <b>Overview</b> tab — the coach note and insights show up here once data syncs.</p>
     </div>
-    <div id="insBody"></div>
-  </section>
 
-  <form id="addForm" class="card" autocomplete="off">
-    <h2 style="margin-top:0">Add expense</h2>
-    <label for="f_amount">Amount (₱)</label>
-    <input id="f_amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
-    <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
-    <div class="row">
-      <div>
-        <label for="f_account">Paid with</label>
-        <select id="f_account"><option value="" disabled selected>Pick…</option></select>
-      </div>
-      <div>
-        <label for="f_date">Date</label>
-        <input id="f_date" type="date">
-      </div>
-    </div>
-    <label for="f_category">Category</label>
-    <input id="f_category" list="cats" placeholder="e.g. Food / Gym Nutrition">
-    <datalist id="cats">
-      <option value="Food / Gym Nutrition"></option>
-      <option value="Gym Membership"></option>
-      <option value="Rent"></option>
-      <option value="Water"></option>
-      <option value="Wi-Fi"></option>
-      <option value="Spotify"></option>
-      <option value="Parents' Utilities Support"></option>
-      <option value="Laundry"></option>
-      <option value="Personal Treats / Gear"></option>
-      <option value="Transport"></option>
-      <option value="Debt payment"></option>
-      <option value="Savings / Sinking"></option>
-      <option value="Other"></option>
-    </datalist>
-    <label for="f_note">Note (optional)</label>
-    <input id="f_note" placeholder="optional">
-    <div style="margin-top:14px">
-      <button class="act" type="submit">Add expense</button>
-    </div>
-  </form>
+    <section id="coach" class="card coach" style="display:none">
+      <p class="coach-h" id="coachHead"></p>
+      <p class="coach-s" id="coachSub"></p>
+    </section>
 
-  <h2>Your expenses</h2>
-  <div id="txns" class="card"></div>
+    <section id="insights" class="card" style="display:none">
+      <div class="ins-top">
+        <h2 style="margin-top:0">Insights</h2>
+        <div class="ins-ctrls">
+          <label class="ins-meal" for="mealEdit">treat ≈ ₱<input id="mealEdit" type="number" min="0" step="50" inputmode="numeric"></label>
+          <label class="ins-meal" for="nameEdit">name <input id="nameEdit" type="text" maxlength="20" placeholder="Jan" autocomplete="off" spellcheck="false"></label>
+        </div>
+      </div>
+      <div id="insBody"></div>
+    </section>
+  </div>
 
-  <h2>Plans · coming up</h2>
-  <form id="planForm" class="card" autocomplete="off">
-    <label for="p_name">What you're planning</label>
-    <input id="p_name" placeholder="e.g. Eat out, Shoes, Birthday gift">
-    <div class="row">
-      <div>
-        <label for="p_amount">Amount (₱)</label>
-        <input id="p_amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+  <div id="tab-overview" style="display:none">
+    <section id="connect" class="card" style="display:none">
+      <h2 style="margin-top:0">Connect your sheet</h2>
+      <p class="note" style="margin-top:2px">Paste your <b>Apps Script Web App URL</b> — the <code>…/exec</code> link from your Sheet:
+        <b>Extensions → Apps Script → Deploy → New deployment → Web app</b>. It's stored only on this phone.</p>
+      <input id="syncUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
+      <button class="act" id="connectBtn" type="button">Connect &amp; sync</button>
+    </section>
+
+    <section id="summary"></section>
+
+    <section id="projection" class="card" style="display:none">
+      <div id="projBody"></div>
+    </section>
+
+    <form id="addForm" class="card" autocomplete="off">
+      <h2 style="margin-top:0">Add expense</h2>
+      <label for="f_amount">Amount (₱)</label>
+      <input id="f_amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+      <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
+      <div class="row">
+        <div>
+          <label for="f_account">Paid with</label>
+          <select id="f_account"><option value="" disabled selected>Pick…</option></select>
+        </div>
+        <div>
+          <label for="f_date">Date</label>
+          <input id="f_date" type="date">
+        </div>
       </div>
-      <div>
-        <label for="p_date">Date</label>
-        <input id="p_date" type="date">
+      <label for="f_category">Category</label>
+      <input id="f_category" list="cats" placeholder="e.g. Food / Gym Nutrition">
+      <datalist id="cats">
+        <option value="Food / Gym Nutrition"></option>
+        <option value="Gym Membership"></option>
+        <option value="Rent"></option>
+        <option value="Water"></option>
+        <option value="Wi-Fi"></option>
+        <option value="Spotify"></option>
+        <option value="Parents' Utilities Support"></option>
+        <option value="Laundry"></option>
+        <option value="Personal Treats / Gear"></option>
+        <option value="Transport"></option>
+        <option value="Debt payment"></option>
+        <option value="Savings / Sinking"></option>
+        <option value="Other"></option>
+      </datalist>
+      <label for="f_note">Note (optional)</label>
+      <input id="f_note" placeholder="optional">
+      <div style="margin-top:14px">
+        <button class="act" type="submit">Add expense</button>
       </div>
-    </div>
-    <div style="margin-top:14px">
-      <button class="act" type="submit">Add plan</button>
-    </div>
-    <p class="note" style="margin:10px 0 0">Plans stay on this phone — they drive the advice above, they're not written to the sheet.</p>
-  </form>
-  <div id="plans" class="card"></div>
+    </form>
+
+    <h2>Your expenses</h2>
+    <div id="txns" class="card"></div>
+
+    <h2>Plans · coming up</h2>
+    <form id="planForm" class="card" autocomplete="off">
+      <label for="p_name">What you're planning</label>
+      <input id="p_name" placeholder="e.g. Eat out, Shoes, Birthday gift">
+      <div class="row">
+        <div>
+          <label for="p_amount">Amount (₱)</label>
+          <input id="p_amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div>
+          <label for="p_date">Date</label>
+          <input id="p_date" type="date">
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="act" type="submit">Add plan</button>
+      </div>
+      <p class="note" style="margin:10px 0 0">Plans stay on this phone — they drive the coach note and insights on Home; they're not written to the sheet.</p>
+    </form>
+    <div id="plans" class="card"></div>
+  </div>
 </main>
 <footer id="foot"></footer>
 <script src="./app.js"></script>

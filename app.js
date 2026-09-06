@@ -10,6 +10,7 @@
   var LS_URL = 'fin.syncUrl';
   var LS_MEAL = 'fin.mealBudget';
   var LS_NAME = 'fin.name';
+  var LS_TAB = 'fin.tab';
   var MEAL_DEFAULT = 400;
 
   var DEFAULT_ACCOUNTS = [
@@ -436,6 +437,8 @@
     var mealEl = byId('mealEdit');
     if (mealEl && !mealEl.value) mealEl.value = mealBudget();
     var d = insightsData();
+    var he = byId('homeEmpty');
+    if (he) he.style.display = d ? 'none' : '';
     if (!d) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
     var s = d.s, free = d.free, daysLeft = d.daysLeft, meal = d.meal;
@@ -472,7 +475,10 @@
     else { wCls = 'bad'; wTxt = 'Over free cash by ' + money(r2(weekTotal - free)) + ' — trim a plan, or know this dips into the floor.'; }
     blocks += insBlock('Next 7 days', wLines, wCls, wTxt);
 
-    // ---- This month: committed + phone plans + app spend pace
+    body.innerHTML = blocks;
+  }
+  function monthBlock(d) {
+    var s = d.s;
     var mLines = [];
     mLines.push('Committed on the sheet: <b>' + money(s.committed ? s.committed.base : 0) + '</b> (worst case ' + money(s.committed ? s.committed.worst : 0) + ').');
     var monthPlans = d.monthPlans, monthPlanCount = d.monthPlanCount;
@@ -485,9 +491,15 @@
     if (freeAfterPace < 0) { mCls = 'warn'; mTxt = 'At this pace you\'d need ' + money(r2(-freeAfterPace)) + ' more than your free cash — slow down or cut plans.'; }
     else if (monthPlanCount && monthPlans > freeAfterPace) { mCls = 'warn'; mTxt = 'Careful: doing all ' + monthPlanCount + ' planned item' + (monthPlanCount === 1 ? '' : 's') + ' would leave ' + money(r2(freeAfterPace - monthPlans)) + ' free — that\'s under your headroom.'; }
     else { mCls = 'good'; mTxt = 'On track: at this pace about ' + money(freeAfterPace) + ' stays free at month end' + (monthPlanCount ? ', before your ' + monthPlanCount + ' plan' + (monthPlanCount === 1 ? '' : 's') : '') + '.'; }
-    blocks += insBlock('This month', mLines, mCls, mTxt);
-
-    body.innerHTML = blocks;
+    return insBlock('This month', mLines, mCls, mTxt);
+  }
+  function renderProjection() {
+    var wrap = byId('projection'), body = byId('projBody');
+    if (!wrap || !body) return;
+    var d = insightsData();
+    if (!d) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    body.innerHTML = '<h2 style="margin-top:0">Projection · ' + esc(monthLabel(d.s.month)) + '</h2>' + monthBlock(d);
   }
   function seedAccounts() {
     var sel = byId('f_account');
@@ -589,9 +601,26 @@
     if (!getUrl()) parts.push('not connected');
     el.innerHTML = parts.join('<br>') || '&nbsp;';
   }
+  function setTab(name) {
+    var home = byId('tab-home'), over = byId('tab-overview');
+    if (!home || !over) return;
+    if (name === 'overview') { home.style.display = 'none'; over.style.display = ''; }
+    else { home.style.display = ''; over.style.display = 'none'; }
+    var btns = document.querySelectorAll('.tab');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].className = btns[i].getAttribute('data-tab') === name ? 'tab active' : 'tab';
+    }
+    try { localStorage.setItem(LS_TAB, name); } catch (e) {}
+    window.scrollTo(0, 0);
+  }
+  function currentTab() {
+    if (!state.snapshot) return 'overview';
+    try { var t = localStorage.getItem(LS_TAB); if (t === 'home' || t === 'overview') return t; } catch (e) {}
+    return 'home';
+  }
   function render() {
     renderStatus(); renderConnect(); renderSummary(); seedAccounts(); renderList();
-    renderCoach(); renderInsights(); renderPlans(); renderFooter(); updateChargeHint();
+    renderCoach(); renderInsights(); renderProjection(); renderPlans(); renderFooter(); updateChargeHint();
   }
 
   // ---------- init ----------
@@ -609,6 +638,11 @@
     };
     var sbtn = byId('syncBtn');
     if (sbtn) sbtn.onclick = function () { doSync(); };
+
+    var tabBtns = document.querySelectorAll('.tab');
+    for (var i = 0; i < tabBtns.length; i++) {
+      (function (b) { b.onclick = function () { setTab(b.getAttribute('data-tab')); }; })(tabBtns[i]);
+    }
 
     var form = byId('addForm');
     if (form) form.onsubmit = function (e) {
@@ -686,10 +720,12 @@
       if (!state.adjSig && state.snapshot) state.adjSig = snapSig(state.snapshot);
       state.adjLoaded = true;
       render();
+      setTab(currentTab());
       if (state.online && getUrl()) doSync();
     }).catch(function (err) {
       console.warn('IDB load failed', err);
       render();
+      setTab(currentTab());
     });
   }
 
