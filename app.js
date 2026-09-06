@@ -21,6 +21,14 @@
     { name: 'LandBank', type: 'cash' }
   ];
 
+  var CATEGORY_DEFAULTS = [
+    'Food / Gym Nutrition', 'Gym Membership', 'Rent', 'Water', 'Wi-Fi', 'Spotify',
+    "Parents' Utilities Support", 'Laundry', 'Personal Treats / Gear', 'Transport',
+    'Debt payment', 'Savings / Sinking', 'Other'
+  ];
+  var CAT_CUSTOM = '__custom__';
+  var catSig = '';
+
   var state = {
     online: navigator.onLine,
     txns: [],
@@ -521,8 +529,11 @@
     if (lines.length) {
       html += '<div class="ins-t" style="margin-top:10px">Monthly fixed</div>';
       lines.forEach(function (l) {
-        var tag = l.overridden ? ' · adjusted' : (Number(l.amount) === 0 ? ' · off' : '');
-        html += '<div class="kv"><span class="k">' + esc(l.name) + tag + '</span><b>' + money(l.amount || 0) + '</b></div>';
+        var amt = Number(l.amount) || 0;
+        var tag = l.overridden ? ' · adjusted' : (amt === 0 ? ' · off' : '');
+        var norm = Number(l.normal) || 0;
+        if (norm > 0 && Math.abs(norm - amt) > 0.004) tag += ' <span style="font-weight:400">(normally ' + money(norm) + ')</span>';
+        html += '<div class="kv"><span class="k">' + esc(l.name) + tag + '</span><b>' + money(amt) + '</b></div>';
       });
       html += '<div class="kv" style="font-weight:700"><span class="k">Total · ' + esc(monthLabel(month)) + '</span><b>' + money(ob.budget_total || 0) + '</b></div>';
     }
@@ -698,8 +709,29 @@
     try { var t = localStorage.getItem(LS_TAB); if (t === 'home' || t === 'overview' || t === 'add') return t; } catch (e) {}
     return 'home';
   }
+  function seedCategories() {
+    var sel = byId('f_category');
+    if (!sel) return;
+    var seen = {};
+    CATEGORY_DEFAULTS.forEach(function (c) { seen[c] = true; });
+    (state.txns || []).forEach(function (t) { if (t && t.category) seen[t.category] = true; });
+    var extra = Object.keys(seen).filter(function (c) { return CATEGORY_DEFAULTS.indexOf(c) < 0; }).sort();
+    var names = CATEGORY_DEFAULTS.concat(extra);
+    var sig = names.join('|');
+    if (sig === catSig) return;
+    catSig = sig;
+    var cur = sel.value;
+    var html = '<option value="" disabled' + (cur ? '' : ' selected') + '>Pick a category…</option>';
+    names.forEach(function (c) {
+      html += '<option value="' + esc(c) + '"' + (cur === c ? ' selected' : '') + '>' + esc(c) + '</option>';
+    });
+    html += '<option value="' + CAT_CUSTOM + '"' + (cur === CAT_CUSTOM ? ' selected' : '') + '>Custom…</option>';
+    sel.innerHTML = html;
+    var c = byId('f_categoryCustom');
+    if (c) c.style.display = sel.value === CAT_CUSTOM ? '' : 'none';
+  }
   function render() {
-    renderStatus(); renderConnect(); renderSummary(); seedAccounts(); renderList();
+    renderStatus(); renderConnect(); renderSummary(); seedAccounts(); seedCategories(); renderList();
     renderCoach(); renderInsights(); renderProjection(); renderObligations(); renderSinking();
     renderAddEmpty(); renderPlans(); renderFooter(); updateChargeHint();
   }
@@ -736,16 +768,24 @@
       var type = raw.slice(0, sep), name = raw.slice(sep + 2);
       var amount = parseFloat(byId('f_amount').value);
       if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
+      var catVal = byId('f_category').value;
+      var category = (catVal === CAT_CUSTOM ? byId('f_categoryCustom').value : catVal) || '';
+      category = category.trim();
+      if (!category) { alert('Pick a category — or choose Custom… and type one.'); return; }
       addTxn({
-        date: byId('f_date').value || new Date().toISOString().slice(0, 10),
+        date: byId('f_date').value || todayISO(),
         account: name,
         kind: type === 'CARD' ? 'card_charge' : 'cash_out',
-        category: (byId('f_category').value || '').trim(),
+        category: category,
         amount: amount,
         note: (byId('f_note').value || '').trim()
       }).then(function () {
         byId('f_amount').value = '';
+        byId('f_category').value = '';
+        byId('f_categoryCustom').value = '';
+        byId('f_categoryCustom').style.display = 'none';
         byId('f_note').value = '';
+        seedCategories();
         byId('f_amount').focus();
       });
     };
@@ -778,6 +818,11 @@
     };
     var amtEl = byId('f_amount');
     if (amtEl) amtEl.addEventListener('input', updateChargeHint);
+    var catEl = byId('f_category');
+    if (catEl) catEl.onchange = function () {
+      var c = byId('f_categoryCustom');
+      if (c) { c.style.display = catEl.value === CAT_CUSTOM ? '' : 'none'; if (catEl.value === CAT_CUSTOM) c.focus(); }
+    };
 
     window.addEventListener('online', function () { state.online = true; render(); doSync(); });
     window.addEventListener('offline', function () { state.online = false; render(); });
