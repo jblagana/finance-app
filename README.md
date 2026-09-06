@@ -47,8 +47,19 @@ the GitHub repo only ever holds this app code, **no balances or transactions**.
 - **IndexedDB** (on the phone) holds your entries + the last snapshot.
 - When online, pending entries are **POST**ed to the Web App (as `text/plain`, to
   avoid a CORS preflight) and appended to the **Ledger**; the app marks them synced.
-- The summary always reflects the last **server-computed** snapshot; a chip shows
-  any pending amount not yet in your Sheet.
+- The summary tiles show a **live view**: the server snapshot plus anything you
+  have recorded in the app (cash-outs lower Liquid cash, card charges raise Cards
+  owed / the prepay, and both lower Free / unallocated). When you next update
+  **Balances** in the Sheet, the app detects the changed numbers and re-bases
+  itself automatically (or tap **reset to sheet** under the tiles).
+- **Insights** (below the tiles) give daily / weekly / monthly advice, opened by a
+  short **coach note** ("Hey Jan — keep today around ₱X" / "this week is over
+  budget by ₱Y") with one concrete number to act on today or this week. Your name
+  comes from the **email** in the Config tab (the part before the @); edit it there
+  to change it. The treat amount is editable in the Insights header.
+- **Plans** (bottom of the app) are things coming up — eat out, bills, gifts.
+  They're stored only on the phone (not written to the Sheet) and drive the
+  advice above.
 
 ## Notes
 - App-added Ledger rows carry a hidden **`id`** (7th column) so a re-send never duplicates.
@@ -56,3 +67,11 @@ the GitHub repo only ever holds this app code, **no balances or transactions**.
   (the same rule as the CLI and the Dashboard).
 - Delete only removes **pending** entries in v1. Synced entries live in your Sheet —
   edit them there if you need to change one.
+
+## After redeploying the Insights build
+- Push `site/` to Pages, and for the Web App do **Deploy → Manage deployments →
+  edit → Version: "New version" → Deploy** (the `prepay_day` / `cutoff_day`
+  snapshot fields and the `as_of` date normalization live in `Code.gs`).
+- The service worker cache is now **v2**, so the phone picks up the new app
+  shell on its next load. If the app ever looks stale: open the Pages URL once
+  in Safari, then relaunch the home-screen icon.

@@ -37,7 +37,29 @@ h2{font-size:12.5px;margin:20px 0 10px;color:var(--mut);text-transform:uppercase
 .tile.good .v{color:var(--ok)}.tile.bad .v{color:var(--bad)}.tile.accent .v{color:var(--acc)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
 label{display:block;color:var(--mut);font-size:12px;margin:10px 0 4px;font-weight:600}
-input,select{background:var(--card2);border:1px solid var(--line);color:var(--ink);padding:11px 12px;border-radius:10px;font-size:15px;width:100%;margin:0}
+input,select{background:var(--card2);border:1px solid var(--line);color:var(--ink);padding:11px 12px;border-radius:10px;font-size:15px;width:100%;max-width:100%;min-width:0;margin:0}
+@media (max-width:600px){.row{flex-direction:column;gap:0}}
+.note.ok{color:var(--ok)}
+.ins-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ins-meal{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px;font-weight:400;margin:0}
+.ins-meal input{width:72px;padding:4px 8px;font-size:13px;border-radius:8px}
+.ins-block{padding:10px 0 2px;border-top:1px solid var(--line);margin-top:8px}
+.ins-block:first-child{border-top:0;margin-top:2px;padding-top:2px}
+.ins-t{font-weight:700;font-size:13.5px;margin:0 0 5px}
+.ins-line{color:var(--mut);font-size:12.5px;margin:2px 0}
+.ins-line b{color:var(--ink)}
+.verdict{margin-top:7px;font-size:12.5px;font-weight:700;padding:7px 10px;border-radius:9px;line-height:1.45}
+.verdict.good{background:rgba(55,211,155,.12);color:var(--ok)}
+.verdict.warn{background:rgba(255,196,92,.12);color:var(--warn)}
+.verdict.bad{background:rgba(255,107,107,.12);color:var(--bad)}
+.adjbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+.adjbar .note{margin:0;flex:1}
+.coach{border-left:3px solid var(--acc)}
+.coach.good{border-left-color:var(--ok)}
+.coach.warn{border-left-color:var(--warn)}
+.coach.bad{border-left-color:var(--bad)}
+.coach-h{font-size:15px;font-weight:700;margin:0 0 4px}
+.coach-s{color:var(--mut);font-size:13px;margin:0}
 input:focus,select:focus{outline:none;border-color:var(--acc)}
 select{appearance:none;-webkit-appearance:none;
 background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2393a1bd' viewBox='0 0 16 16'><path d='M8 11L3 6h10z'/></svg>");
@@ -90,10 +112,24 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 
   <section id="summary"></section>
 
+  <section id="coach" class="card coach" style="display:none">
+    <p class="coach-h" id="coachHead"></p>
+    <p class="coach-s" id="coachSub"></p>
+  </section>
+
+  <section id="insights" class="card" style="display:none">
+    <div class="ins-top">
+      <h2 style="margin-top:0">Insights</h2>
+      <label class="ins-meal" for="mealEdit">treat ≈ ₱<input id="mealEdit" type="number" min="0" step="50" inputmode="numeric"></label>
+    </div>
+    <div id="insBody"></div>
+  </section>
+
   <form id="addForm" class="card" autocomplete="off">
     <h2 style="margin-top:0">Add expense</h2>
     <label for="f_amount">Amount (₱)</label>
     <input id="f_amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+    <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
     <div class="row">
       <div>
         <label for="f_account">Paid with</label>
@@ -130,6 +166,27 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 
   <h2>Your expenses</h2>
   <div id="txns" class="card"></div>
+
+  <h2>Plans · coming up</h2>
+  <form id="planForm" class="card" autocomplete="off">
+    <label for="p_name">What you're planning</label>
+    <input id="p_name" placeholder="e.g. Eat out, Shoes, Birthday gift">
+    <div class="row">
+      <div>
+        <label for="p_amount">Amount (₱)</label>
+        <input id="p_amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div>
+        <label for="p_date">Date</label>
+        <input id="p_date" type="date">
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <button class="act" type="submit">Add plan</button>
+    </div>
+    <p class="note" style="margin:10px 0 0">Plans stay on this phone — they drive the advice above, they're not written to the sheet.</p>
+  </form>
+  <div id="plans" class="card"></div>
 </main>
 <footer id="foot"></footer>
 <script src="./app.js"></script>
