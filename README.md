@@ -54,9 +54,10 @@ the GitHub repo only ever holds this app code, **no balances or transactions**.
   itself automatically (or tap **reset to sheet** under the tiles).
 - **Insights** (below the tiles) give daily / weekly / monthly advice, opened by a
   short **coach note** ("Hey Jan — keep today around ₱X" / "this week is over
-  budget by ₱Y") with one concrete number to act on today or this week. Your name
-  comes from the **email** in the Config tab (the part before the @); edit it there
-  to change it. The treat amount is editable in the Insights header.
+  budget by ₱Y") with one concrete number to act on today or this week. The name
+  is set in the **name** box in the Insights header (saved on this phone); if left
+  blank it falls back to the `name` row in the Config tab, then to the **email**
+  (part before the @). The treat amount is in the same header.
 - **Plans** (bottom of the app) are things coming up — eat out, bills, gifts.
   They're stored only on the phone (not written to the Sheet) and drive the
   advice above.

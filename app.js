@@ -9,6 +9,7 @@
   var STORE_META = 'meta';
   var LS_URL = 'fin.syncUrl';
   var LS_MEAL = 'fin.mealBudget';
+  var LS_NAME = 'fin.name';
   var MEAL_DEFAULT = 400;
 
   var DEFAULT_ACCOUNTS = [
@@ -130,6 +131,12 @@
   }
   function mealBudget() {
     try { var v = parseFloat(localStorage.getItem(LS_MEAL)); return (v > 0) ? v : MEAL_DEFAULT; } catch (e) { return MEAL_DEFAULT; }
+  }
+  function coachName(s) {
+    var n = '';
+    try { n = (localStorage.getItem(LS_NAME) || '').trim(); } catch (e) {}
+    if (!n && s) n = String(s.display_name || '').trim();
+    return n;
   }
 
   // ---- live overlay: app entries adjust the sheet snapshot until the sheet catches up ----
@@ -387,7 +394,7 @@
     var d = insightsData();
     if (!d) { el.style.display = 'none'; return; }
     el.style.display = '';
-    var name = String((d.s && d.s.display_name) || '').trim();
+    var name = coachName(d.s);
     var hi = name ? 'Hey ' + name + ' — ' : 'Heads up — ';
     var cls, head, sub;
     if (d.free < 0) {
@@ -432,6 +439,8 @@
     if (!d) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
     var s = d.s, free = d.free, daysLeft = d.daysLeft, meal = d.meal;
+    var nameEl = byId('nameEdit');
+    if (nameEl && !nameEl.value) nameEl.value = coachName(d.s);
     var blocks = '';
 
     // ---- Today: daily headroom + treat check
@@ -642,6 +651,12 @@
       var v = parseFloat(mealEl.value);
       if (v > 0) { try { localStorage.setItem(LS_MEAL, String(v)); } catch (e2) {} }
       else mealEl.value = mealBudget();
+      render();
+    };
+    var nameEl = byId('nameEdit');
+    if (nameEl) nameEl.onchange = function () {
+      var v = nameEl.value.trim();
+      try { if (v) localStorage.setItem(LS_NAME, v); else localStorage.removeItem(LS_NAME); } catch (e2) {}
       render();
     };
     var amtEl = byId('f_amount');

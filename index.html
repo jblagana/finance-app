@@ -40,7 +40,8 @@ label{display:block;color:var(--mut);font-size:12px;margin:10px 0 4px;font-weigh
 input,select{background:var(--card2);border:1px solid var(--line);color:var(--ink);padding:11px 12px;border-radius:10px;font-size:15px;width:100%;max-width:100%;min-width:0;margin:0}
 @media (max-width:600px){.row{flex-direction:column;gap:0}}
 .note.ok{color:var(--ok)}
-.ins-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ins-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ins-ctrls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
 .ins-meal{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px;font-weight:400;margin:0}
 .ins-meal input{width:72px;padding:4px 8px;font-size:13px;border-radius:8px}
 .ins-block{padding:10px 0 2px;border-top:1px solid var(--line);margin-top:8px}
@@ -120,7 +121,10 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
   <section id="insights" class="card" style="display:none">
     <div class="ins-top">
       <h2 style="margin-top:0">Insights</h2>
-      <label class="ins-meal" for="mealEdit">treat ≈ ₱<input id="mealEdit" type="number" min="0" step="50" inputmode="numeric"></label>
+      <div class="ins-ctrls">
+        <label class="ins-meal" for="mealEdit">treat ≈ ₱<input id="mealEdit" type="number" min="0" step="50" inputmode="numeric"></label>
+        <label class="ins-meal" for="nameEdit">name <input id="nameEdit" type="text" maxlength="20" placeholder="Jan" autocomplete="off" spellcheck="false"></label>
+      </div>
     </div>
     <div id="insBody"></div>
   </section>
