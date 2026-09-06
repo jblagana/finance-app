@@ -7,8 +7,9 @@ the GitHub repo only ever holds this app code, **no balances or transactions**.
 
 ## What it does
 - **Add expense** offline (date, paid-with = card or cash, category, amount, note).
-- **View** a live summary (liquid cash, free/unallocated, cards owed, 14th prepay,
-  committed this month) + your entries with **Pending / Synced** badges.
+- **View** a live summary (liquid cash, free/unallocated, cards owed, 14th prepay),
+  the month's **Obligations** and **Sinking funds** cards, a projection, and your
+  entries with **Pending / Synced** badges.
 - **Syncs automatically** on reconnect (and on demand) into your Sheet's Ledger.
 - Installs to the iPhone **Home Screen** and runs full-screen.
 

@@ -104,6 +104,13 @@
     }
     return d;
   }
+  function syncDateLabel(input) {
+    var lab = byId(input.id + 'Label');
+    if (!lab) return;
+    if (!input.value) { lab.textContent = 'Pick a date'; lab.className = 'dlabel empty'; return; }
+    lab.textContent = fmtDate(input.value);
+    lab.className = 'dlabel';
+  }
   function getUrl() { try { return localStorage.getItem(LS_URL) || ''; } catch (e) { return ''; } }
   function setUrl(u) { try { localStorage.setItem(LS_URL, u); } catch (e) {} }
   function r2(x) { return Math.round((Number(x) || 0) * 100) / 100; }
@@ -316,7 +323,6 @@
     html += tile('Free / unallocated', money(free), 'card backing' + liveMark, free < 0 ? 'bad' : 'good');
     html += tile('Cards owed', money(s.card_owed), (s.cards || []).length + ' card(s)' + liveMark);
     html += tile(ordinal(s.prepay_day || 14) + ' prepay', money(s.total_prepay), 'due before the ' + (s.cutoff_day || 15) + liveMark, 'accent');
-    html += tile('Committed · ' + esc(monthLabel(s.month)), money(s.committed ? s.committed.base : 0), 'worst ' + money(s.committed ? s.committed.worst : 0));
     el.innerHTML = '<div class="tiles">' + html + '</div>' + adjBar();
     var rb = byId('resetAdj');
     if (rb) rb.onclick = resetAdj;
@@ -701,9 +707,11 @@
   // ---------- init ----------
   function init() {
     var dateEl = byId('f_date');
-    if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+    if (dateEl && !dateEl.value) dateEl.value = todayISO();
+    if (dateEl) { dateEl.addEventListener('input', function () { syncDateLabel(dateEl); }); syncDateLabel(dateEl); }
     var pdateEl = byId('p_date');
     if (pdateEl && !pdateEl.value) pdateEl.value = todayISO();
+    if (pdateEl) { pdateEl.addEventListener('input', function () { syncDateLabel(pdateEl); }); syncDateLabel(pdateEl); }
 
     var cbtn = byId('connectBtn');
     if (cbtn) cbtn.onclick = function () {

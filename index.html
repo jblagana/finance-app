@@ -26,9 +26,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 #bottombar{position:fixed;left:0;right:0;bottom:0;z-index:7;background:rgba(15,20,32,.97);
 backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);
 padding-bottom:env(safe-area-inset-bottom)}
-#tabs{display:flex;gap:6px;padding:8px 12px;max-width:640px;margin:0 auto}
-.tab{flex:1;cursor:pointer;background:transparent;border:1px solid transparent;color:var(--mut);
-padding:9px 6px;border-radius:10px;font-size:13.5px;font-weight:700}
+#tabs{display:flex;gap:6px;padding:8px 12px;max-width:640px;margin:0 auto;align-items:stretch}
+.tab{flex:1;display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--card);
+border:1px solid var(--line);color:var(--mut);padding:10px 6px;border-radius:10px;font-size:13.5px;
+font-weight:700;line-height:1.2}
 .tab.active{background:rgba(91,140,255,.16);border-color:var(--acc);color:#fff}
 .tab:active{filter:brightness(1.15)}
 h1{margin:0;font-size:20px;letter-spacing:.2px}
@@ -47,6 +48,13 @@ h2{font-size:12.5px;margin:20px 0 10px;color:var(--mut);text-transform:uppercase
 #summary{margin-bottom:14px}
 label{display:block;color:var(--mut);font-size:12px;margin:10px 0 4px;font-weight:600}
 input,select{background:var(--card2);border:1px solid var(--line);color:var(--ink);padding:11px 12px;border-radius:10px;font-size:15px;width:100%;max-width:100%;min-width:0;margin:0}
+.dfield{position:relative}
+.dfield input[type=date]{position:relative;z-index:1;opacity:0;-webkit-appearance:none;appearance:none;background:transparent}
+.dfield .dlabel{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;padding:11px 12px;
+ background:var(--card2);border:1px solid var(--line);border-radius:10px;font-size:15px;color:var(--ink);
+ pointer-events:none;overflow:hidden;white-space:nowrap}
+.dfield .dlabel.empty{color:var(--mut)}
+.dfield:focus-within .dlabel{border-color:var(--acc)}
 @media (max-width:600px){.row{flex-direction:column;gap:0}}
 .note.ok{color:var(--ok)}
 .ins-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
@@ -178,7 +186,10 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
         </div>
         <div>
           <label for="f_date">Date</label>
-          <input id="f_date" type="date">
+          <div class="dfield">
+            <input id="f_date" type="date">
+            <span class="dlabel empty" id="f_dateLabel" aria-hidden="true">Pick a date</span>
+          </div>
         </div>
       </div>
       <label for="f_category">Category</label>
@@ -219,7 +230,10 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
         </div>
         <div>
           <label for="p_date">Date</label>
-          <input id="p_date" type="date">
+          <div class="dfield">
+            <input id="p_date" type="date">
+            <span class="dlabel empty" id="p_dateLabel" aria-hidden="true">Pick a date</span>
+          </div>
         </div>
       </div>
       <div style="margin-top:14px">
