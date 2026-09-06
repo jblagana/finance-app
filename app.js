@@ -305,7 +305,7 @@
     var s = effectiveSnap();
     if (!s) {
       el.innerHTML = '<div class="card"><p class="note" style="margin:2px 0">' +
-        (state.online ? 'Syncing…' : (getUrl() ? 'Waiting for a connection to sync.' : 'Add expenses below — they save offline. Connect your sheet above to sync.')) + '</p></div>';
+        (state.online ? 'Syncing…' : (getUrl() ? 'Waiting for a connection to sync.' : 'Add expenses on the Add tab — they save offline. Connect your sheet above to sync.')) + '</p></div>';
       return;
     }
     var free = s.cash ? s.cash.free : 0;
@@ -501,6 +501,79 @@
     wrap.style.display = '';
     body.innerHTML = '<h2 style="margin-top:0">Projection · ' + esc(monthLabel(d.s.month)) + '</h2>' + monthBlock(d);
   }
+  function fmtNum(v) { return Math.round(Number(v) || 0).toLocaleString('en-US'); }
+  function renderObligations() {
+    var wrap = byId('obligations'), body = byId('obBody');
+    if (!wrap || !body) return;
+    var s = state.snapshot;
+    var ob = s && s.obligations;
+    if (!ob) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    var month = ob.month || s.month || '';
+    var html = '<h2 style="margin-top:0">Obligations · ' + esc(monthLabel(month)) + '</h2>';
+    var lines = ob.budget || [];
+    if (lines.length) {
+      html += '<div class="ins-t" style="margin-top:10px">Monthly fixed</div>';
+      lines.forEach(function (l) {
+        var tag = l.overridden ? ' · adjusted' : (Number(l.amount) === 0 ? ' · off' : '');
+        html += '<div class="kv"><span class="k">' + esc(l.name) + tag + '</span><b>' + money(l.amount || 0) + '</b></div>';
+      });
+      html += '<div class="kv" style="font-weight:700"><span class="k">Total · ' + esc(monthLabel(month)) + '</span><b>' + money(ob.budget_total || 0) + '</b></div>';
+    }
+    var debts = ob.debts || [];
+    if (debts.length) {
+      html += '<div class="ins-t" style="margin-top:12px">Debt</div>';
+      debts.forEach(function (d) {
+        var bal = d.balance != null ? ' · ' + fmtNum(d.balance) + ' left' : '';
+        var val = Number(d.this_month) > 0 ? money(d.this_month) : '—';
+        html += '<div class="kv"><span class="k">' + esc(d.name) + bal + '</span><b>' + val + '</b></div>';
+        var parts = [];
+        (d.schedule || []).forEach(function (p) { if (p.month > month) parts.push(monthLabel(p.month) + ' ' + fmtNum(p.amount)); });
+        if (parts.length) html += '<div class="note" style="margin:0 0 6px;font-size:11.5px">then ' + esc(parts.join(' · ')) + '</div>';
+      });
+    }
+    var oneOffs = (ob.one_offs || []).slice().sort(function (a, b) { return String(a.month) < String(b.month) ? -1 : 1; });
+    if (oneOffs.length) {
+      html += '<div class="ins-t" style="margin-top:12px">One-offs coming up</div>';
+      oneOffs.forEach(function (o) {
+        html += '<div class="kv"><span class="k">' + esc(monthLabel(o.month)) + ' · ' + esc(o.name) + '</span><b>' + money(o.amount || 0) + '</b></div>';
+      });
+    }
+    var loans = ob.loans || [];
+    if (loans.length) {
+      html += '<div class="ins-t" style="margin-top:12px">Loans</div>';
+      loans.forEach(function (l) {
+        html += '<div class="kv"><span class="k">' + esc(l.name) + (l.note ? ' · ' + esc(l.note) : '') + '</span><b>' + (Number(l.value) > 0 ? money(l.value) : 'cleared') + '</b></div>';
+      });
+    }
+    body.innerHTML = html;
+  }
+  function renderSinking() {
+    var wrap = byId('sinking'), body = byId('sinkBody');
+    if (!wrap || !body) return;
+    var s = state.snapshot;
+    var funds = s && s.sinking;
+    if (!funds || !funds.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    var html = '<h2 style="margin-top:0">Sinking funds</h2>';
+    funds.forEach(function (f) {
+      var pct = Number(f.goal) > 0 ? Math.min(100, Math.round((Number(f.funded) || 0) / Number(f.goal) * 100)) : 0;
+      html += '<div class="ins-block" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><div class="ins-t">' + esc(f.name) +
+        ' <span style="color:var(--mut);font-weight:400">· by ' + esc(f.deadline ? fmtDate(f.deadline) : '—') + '</span></div>' +
+        '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="kv" style="border-top:0"><span class="k">funded ' + pct + '%</span><b>' + money(f.funded || 0) + ' of ' + money(f.goal || 0) + '</b></div>';
+      if (Number(f.this_month) > 0) html += '<div class="kv"><span class="k">this month</span><b>' + money(f.this_month) + '</b></div>';
+      var parts = [];
+      (f.payments || []).forEach(function (p) { parts.push(monthLabel(p.month) + ' ' + fmtNum(p.amount)); });
+      if (parts.length) html += '<div class="kv"><span class="k">plan</span><b style="font-weight:600">' + esc(parts.join(' · ')) + '</b></div>';
+      html += '</div>';
+    });
+    body.innerHTML = html;
+  }
+  function renderAddEmpty() {
+    var el = byId('addEmpty');
+    if (el) el.style.display = getUrl() ? 'none' : '';
+  }
   function seedAccounts() {
     var sel = byId('f_account');
     if (!sel || seededAccounts) return;
@@ -602,10 +675,11 @@
     el.innerHTML = parts.join('<br>') || '&nbsp;';
   }
   function setTab(name) {
-    var home = byId('tab-home'), over = byId('tab-overview');
-    if (!home || !over) return;
-    if (name === 'overview') { home.style.display = 'none'; over.style.display = ''; }
-    else { home.style.display = ''; over.style.display = 'none'; }
+    if (name !== 'home' && name !== 'overview' && name !== 'add') name = 'home';
+    var panes = { home: byId('tab-home'), overview: byId('tab-overview'), add: byId('tab-add') };
+    Object.keys(panes).forEach(function (k) {
+      if (panes[k]) panes[k].style.display = k === name ? '' : 'none';
+    });
     var btns = document.querySelectorAll('.tab');
     for (var i = 0; i < btns.length; i++) {
       btns[i].className = btns[i].getAttribute('data-tab') === name ? 'tab active' : 'tab';
@@ -615,12 +689,13 @@
   }
   function currentTab() {
     if (!state.snapshot) return 'overview';
-    try { var t = localStorage.getItem(LS_TAB); if (t === 'home' || t === 'overview') return t; } catch (e) {}
+    try { var t = localStorage.getItem(LS_TAB); if (t === 'home' || t === 'overview' || t === 'add') return t; } catch (e) {}
     return 'home';
   }
   function render() {
     renderStatus(); renderConnect(); renderSummary(); seedAccounts(); renderList();
-    renderCoach(); renderInsights(); renderProjection(); renderPlans(); renderFooter(); updateChargeHint();
+    renderCoach(); renderInsights(); renderProjection(); renderObligations(); renderSinking();
+    renderAddEmpty(); renderPlans(); renderFooter(); updateChargeHint();
   }
 
   // ---------- init ----------

@@ -19,15 +19,18 @@
 *{box-sizing:border-box}
 html,body{margin:0}
 body{font:15px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);
-padding-bottom:20px;-webkit-font-smoothing:antialiased}
+padding-bottom:calc(80px + env(safe-area-inset-bottom));-webkit-font-smoothing:antialiased}
 #topbar{position:sticky;top:0;z-index:6;background:rgba(15,20,32,.96);backdrop-filter:blur(8px);
 -webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
 header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px}
-#tabs{display:flex;gap:8px;padding:0 16px 10px}
-.tab{flex:1;cursor:pointer;background:var(--card);border:1px solid var(--line);color:var(--mut);
-padding:9px 10px;border-radius:10px;font-size:14px;font-weight:700}
-.tab.active{background:var(--acc);border-color:var(--acc);color:#fff}
-.tab:active{filter:brightness(1.12)}
+#bottombar{position:fixed;left:0;right:0;bottom:0;z-index:7;background:rgba(15,20,32,.97);
+backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);
+padding-bottom:env(safe-area-inset-bottom)}
+#tabs{display:flex;gap:6px;padding:8px 12px;max-width:640px;margin:0 auto}
+.tab{flex:1;cursor:pointer;background:transparent;border:1px solid transparent;color:var(--mut);
+padding:9px 6px;border-radius:10px;font-size:13.5px;font-weight:700}
+.tab.active{background:rgba(91,140,255,.16);border-color:var(--acc);color:#fff}
+.tab:active{filter:brightness(1.15)}
 h1{margin:0;font-size:20px;letter-spacing:.2px}
 h1 span{color:var(--acc)}
 .hwrap{display:flex;align-items:center;gap:10px}
@@ -97,6 +100,11 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--acc);border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px}
 @keyframes sp{to{transform:rotate(360deg)}}
 #connect input{margin:6px 0 10px}
+.kv{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13px;padding:4px 0;border-top:1px solid var(--line)}
+.kv .k{color:var(--mut)}
+.kv b{color:var(--ink);text-align:right;word-break:break-word}
+.bar{height:8px;background:var(--card2);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:8px 0 6px}
+.bar i{display:block;height:100%;background:var(--acc);border-radius:6px}
 </style>
 </head>
 
@@ -109,10 +117,6 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
       <button class="sync" id="syncBtn" type="button">Sync</button>
     </div>
   </header>
-  <nav id="tabs" aria-label="Sections">
-    <button type="button" class="tab active" data-tab="home">Home</button>
-    <button type="button" class="tab" data-tab="overview">Overview</button>
-  </nav>
 </div>
 <main>
   <div id="tab-home">
@@ -151,6 +155,16 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
     <section id="projection" class="card" style="display:none">
       <div id="projBody"></div>
     </section>
+
+    <section id="obligations" class="card" style="display:none"><div id="obBody"></div></section>
+
+    <section id="sinking" class="card" style="display:none"><div id="sinkBody"></div></section>
+  </div>
+
+  <div id="tab-add" style="display:none">
+    <div id="addEmpty" class="card" style="display:none">
+      <p class="note" style="margin:2px 0">Entries are saved on this phone. Connect your sheet on <b>Overview</b> to sync them to Google Sheets.</p>
+    </div>
 
     <form id="addForm" class="card" autocomplete="off">
       <h2 style="margin-top:0">Add expense</h2>
@@ -217,6 +231,13 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
   </div>
 </main>
 <footer id="foot"></footer>
+<nav id="bottombar" aria-label="Sections">
+  <div id="tabs">
+    <button type="button" class="tab active" data-tab="home">Home</button>
+    <button type="button" class="tab" data-tab="overview">Overview</button>
+    <button type="button" class="tab" data-tab="add">Add</button>
+  </div>
+</nav>
 <script src="./app.js"></script>
 </body>
 </html>
