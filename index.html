@@ -93,13 +93,6 @@ button.sync:disabled{opacity:.5}
 .pill.ok{background:rgba(55,211,155,.15);color:var(--ok)}
 .pill.bad{background:rgba(255,107,107,.15);color:var(--bad)}
 .pill.warn{background:rgba(255,196,92,.15);color:var(--warn)}
-.txn{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
-.txn:first-child{padding-top:2px}.txn:last-child{border-bottom:none;padding-bottom:2px}
-.txn-cat{font-weight:600;font-size:14.5px}
-.txn-meta{color:var(--mut);font-size:12px;margin-top:2px}
-.txn-r{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
-.txn-amt{font-weight:700;font-size:15px}
-.badgedel{display:flex;align-items:center;gap:6px;justify-content:flex-end}
 .mini{cursor:pointer;background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:7px;padding:1px 9px;font-size:12px;line-height:1.5}
 .mini:active{border-color:var(--bad);color:var(--bad)}
 .note{color:var(--mut);font-size:13px;margin:6px 0}
@@ -245,21 +238,10 @@ padding:7px 14px;font-size:12.5px}
 .tiles.busy .tile::after{content:"";position:absolute;inset:0;pointer-events:none;
 background:linear-gradient(100deg,transparent 30%,rgba(232,237,247,.07) 50%,transparent 70%);
 background-size:220% 100%;animation:shim 1.1s linear infinite}
-/* ---- Phase 4: recurring toggle, ledger search + chips, month separators ---- */
+/* ---- Phase 4: recurring toggle ---- */
 label.chk{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:13.5px;font-weight:600;
 cursor:pointer;min-height:44px;margin-top:4px}
 label.chk input{width:18px;height:18px;accent-color:var(--acc);flex:0 0 auto;margin:0}
-#ledTools{padding:10px 14px}
-#ledTools input{margin:0}
-#chipRow{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}
-.chip-lbl{color:var(--mut);font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;margin:0 2px}
-.chip{cursor:pointer;background:var(--card2);border:1px solid var(--line);color:var(--mut);
-border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700;line-height:1.2;min-height:34px}
-.chip.on{background:rgba(91,140,255,.18);border-color:var(--acc);color:#fff}
-.chip:active{filter:brightness(1.2)}
-.msep{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--mut);
-margin:10px 0 2px;padding-top:6px;border-top:1px solid var(--line)}
-.msep:first-child{border-top:0;margin-top:0;padding-top:0}
 /* ---- Phase 6: money log (sanity-check audit trail, merged into the Ledger) ---- */
 .ml-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
  border-bottom:1px solid var(--line);padding:9px 2px 9px 10px;font-size:13px;line-height:1.4;
@@ -273,7 +255,9 @@ margin:10px 0 2px;padding-top:6px;border-top:1px solid var(--line)}
 .ml-up{color:var(--ok)}
 .ml-f{display:block;color:var(--mut);font-size:11.5px;font-variant-numeric:tabular-nums;margin-top:2px}
 .ml-x{display:block;color:var(--mut);font-size:11.5px;font-variant-numeric:tabular-nums}
-#moneyLog{margin:0 0 12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.ml-cat{font-size:13.5px;font-weight:700}
+.ml-note{font-size:12px;margin-top:1px}
+.ml-meta{color:var(--mut);font-size:11.5px;margin-top:2px}
 /* ---- Phase 4 a11y: 44px primary tap targets ---- */
 .tab{min-height:44px;padding:12px 6px}
 button.sync{min-height:44px}
@@ -281,7 +265,7 @@ button.gear{width:44px;height:44px}
 .sheet-x{width:44px;height:44px}
 .mini{min-height:32px;padding:4px 10px}
 @media (prefers-reduced-motion:reduce){#snack,#swToast{transition:none}
-#tab-home,#tab-money,#tab-ledger,#tab-coach,.txn,.dig,.drow,.ml-row,.tiles.busy .tile::after{animation:none!important}}
+#tab-home,#tab-money,#tab-ledger,#tab-coach,.dig,.drow,.ml-row,.tiles.busy .tile::after{animation:none!important}}
 </style>
 </head>
 
@@ -375,11 +359,6 @@ button.gear{width:44px;height:44px}
       <p class="note" style="margin:2px 0">Entries are saved on this phone. Connect your sheet via <b>Settings</b> (⚙) to sync them to Google Sheets.</p>
     </div>
 
-    <div id="ledTools" class="card" style="padding:10px 14px">
-      <input id="txnSearch" type="search" placeholder="Search category, account, note…" autocomplete="off" spellcheck="false">
-      <div id="chipRow"></div>
-    </div>
-
     <section id="donut" class="card" style="display:none">
       <h2 style="margin-top:0">This month · by category</h2>
       <div class="donutwrap">
@@ -396,11 +375,10 @@ button.gear{width:44px;height:44px}
 
     <section class="card" id="txnCard">
       <h2 style="margin-top:0">Your expenses</h2>
-      <div id="moneyLog" style="display:none">
-        <p class="note" style="margin:0 0 4px">How each entry moved your free cash, newest first. The change should always equal the entry — that is the sanity check.</p>
+      <div id="moneyLog">
+        <p class="note" id="mlNote" style="margin:0 0 4px">How each entry moved your free cash, newest first. The change should always equal the entry — that is the sanity check.</p>
         <div id="mlBody"></div>
       </div>
-      <div id="txns"></div>
     </section>
   </div>
 
@@ -479,7 +457,7 @@ button.gear{width:44px;height:44px}
         <div><button class="act" id="expCsv" type="button">Export CSV</button></div>
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">Finance PWA · offline-first · shell v17</p>
+    <p class="note" style="margin:14px 0 0">Finance PWA · offline-first · shell v18</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>

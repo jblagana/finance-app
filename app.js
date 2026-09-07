@@ -47,13 +47,13 @@
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
   var RENDER_BY_KEY = {
-    txn: [renderStatus, renderList, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderChips, renderMoneyLog],
+    txn: [renderStatus, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog],
     plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero],
     snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, updateChargeHint, renderHero],
-    sync: [renderStatus, renderSyncErr, renderList, renderFooter, renderConnect],
+    sync: [renderStatus, renderSyncErr, renderFooter, renderConnect],
     online: [renderStatus, renderSyncErr, renderFooter, renderConnect],
     adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero],
-    ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderList, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderChips, renderMoneyLog]
+    ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -386,8 +386,7 @@
   }
 
   // ---------- Phase 6: money log — per-change audit trail so the overview math can be sanity-checked ----------
-  var ML_CAP = 30;   // entries kept in the meta store
-  var ML_SHOW = 10;  // entries shown in the card
+  var ML_CAP = 30;   // entries kept in the meta store (the card shows all of them)
   function logMoney(action, t) {
     var s = effectiveSnap();
     if (!s) return;
@@ -413,34 +412,43 @@
   function mlDate(ts) {
     var d = new Date(ts);
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return MO[d.getMonth()] + ' ' + d.getDate();
+    return MO[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
   }
-  function mlLeft(e) {
-    var lab = e.c != null ? (e.c + (e.nt ? ' · ' + e.nt : '')) : (e.l || 'entry');
-    var parts = [lab, mlDate(e.at)];
+  function mlParts(e) {
+    var lab = e.c != null ? e.c : (e.l || 'entry');
+    var note = e.c != null ? (e.nt || '') : '';
     var m = e.m || (e.k === 'c' ? 'Card' : '');
-    if (m && lab !== m) parts.push(m);
-    return parts.join(' · ');
+    if (m && lab === m) m = '';
+    return { lab: lab, note: note, m: m };
   }
   function renderMoneyLog() {
     var el = byId('moneyLog');
     if (!el) return;
+    var noteEl = byId('mlNote');
+    var body = byId('mlBody');
     var log = state.moneyLog || [];
-    if (!log.length) { el.style.display = 'none'; return; }
-    el.style.display = '';
-    var items = log.slice(-ML_SHOW).reverse();
-    byId('mlBody').innerHTML = items.map(function (e) {
+    if (!log.length) {
+      if (noteEl) noteEl.style.display = 'none';
+      body.innerHTML = '<p class="note" style="margin:2px 0">' + (state.txns.length
+        ? 'Nothing logged yet — add or remove an entry to see how it moves your free cash.'
+        : 'No entries yet — tap + to add your first expense.') + '</p>';
+      return;
+    }
+    if (noteEl) noteEl.style.display = '';
+    body.innerHTML = log.slice().reverse().map(function (e) {
         var add = e.a === 'add';
         var before = r2(e.f + (add ? e.n : -e.n));
         var extra = '';
         if (e.k === 'c') extra = '<span class="ml-x">card ' + money(r2(e.o + (add ? -e.n : e.n))) + ' → ' + money(e.o) + '</span>';
         if (e.s != null) extra += '<span class="ml-x">month spent ' + money(r2(e.s + (add ? -e.n : e.n))) + ' → ' + money(e.s) + '</span>';
+        var p = mlParts(e);
         return '<div class="ml-row' + (add ? '' : ' del') + '">' +
-          '<div class="ml-l">' + esc(mlLeft(e)) + '</div>' +
+          '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
+          (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
+          '<div class="ml-meta">' + mlDate(e.at) + (p.m ? ' · ' + esc(p.m) : '') + '</div></div>' +
           '<div class="ml-r"><b class="' + (add ? 'ml-down' : 'ml-up') + '">' + (add ? '−' : '+') + money(e.n) + '</b>' +
           '<span class="ml-f">free ' + money(before) + ' → ' + money(e.f) + '</span>' + extra + '</div></div>';
-      }).join('') +
-      (log.length > ML_SHOW ? '<p class="note" style="margin:8px 0 0">Showing the last ' + ML_SHOW + ' of ' + log.length + ' entries.</p>' : '');
+      }).join('');
   }
 
   // ---------- bottom sheets (Add, Settings) ----------
@@ -1157,90 +1165,6 @@
     if (prev) sel.value = prev;
     seededAccounts = true;
   }
-  // ---------- Phase 4: ledger search + filter chips ----------
-  var ledFilter = { q: '', acct: '', cat: '', month: '' };
-  function renderChips() {
-    var row = byId('chipRow'); if (!row) return;
-    var accts = {}, cats = {}, months = {};
-    state.txns.forEach(function (t) {
-      if (t.account) accts[t.account] = 1;
-      if (t.category) cats[t.category] = 1;
-      months[String(t.date).slice(0, 7)] = 1;
-    });
-    var mlist = Object.keys(months).sort().reverse().slice(0, 6);
-    var html = '';
-    function group(lbl, names, key, fmt) {
-      if (!names.length) return;
-      html += '<span class="chip-lbl">' + lbl + '</span>';
-      names.forEach(function (n) {
-        html += '<button type="button" class="chip' + (ledFilter[key] === n ? ' on' : '') + '" data-fkey="' + key + '" data-fval="' + esc(n) + '">' + esc(fmt ? fmt(n) : n) + '</button>';
-      });
-    }
-    group('acct', Object.keys(accts).sort(), 'acct');
-    group('cat', Object.keys(cats).sort(), 'cat');
-    group('month', mlist, 'month', monthLabel);
-    row.innerHTML = html;
-    var btns = row.querySelectorAll('[data-fkey]');
-    for (var i = 0; i < btns.length; i++) {
-      btns[i].onclick = function () {
-        var k = this.getAttribute('data-fkey'), v = this.getAttribute('data-fval');
-        ledFilter[k] = ledFilter[k] === v ? '' : v;
-        renderChips(); renderList();
-      };
-    }
-  }
-  function renderList() {
-    var el = byId('txns'); if (!el) return;
-    var txns = state.txns.slice().sort(function (a, b) {
-      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
-      return (a.created || '') < (b.created || '') ? 1 : -1;
-    });
-    var q = ledFilter.q.toLowerCase();
-    var filtered = !!(q || ledFilter.acct || ledFilter.cat || ledFilter.month);
-    if (filtered) {
-      txns = txns.filter(function (t) {
-        if (ledFilter.acct && t.account !== ledFilter.acct) return false;
-        if (ledFilter.cat && t.category !== ledFilter.cat) return false;
-        if (ledFilter.month && String(t.date).slice(0, 7) !== ledFilter.month) return false;
-        if (q) {
-          var hay = ((t.category || '') + ' ' + (t.account || '') + ' ' + (t.note || '')).toLowerCase();
-          if (hay.indexOf(q) < 0) return false;
-        }
-        return true;
-      });
-    }
-    if (!txns.length) {
-      if (filtered) {
-        el.innerHTML = '<p class="note" style="margin:2px 0">Nothing matches — <a href="#" id="clearFilt" style="color:var(--acc);font-weight:700">clear search &amp; filters</a>.</p>';
-        var cf = byId('clearFilt');
-        if (cf) cf.onclick = function (e) {
-          e.preventDefault();
-          ledFilter.q = ledFilter.acct = ledFilter.cat = ledFilter.month = '';
-          var si = byId('txnSearch');
-          if (si) si.value = '';
-          renderChips(); renderList();
-        };
-      } else {
-        el.innerHTML = '<p class="note" style="margin:2px 0">No entries yet — tap + to add your first expense.</p>';
-      }
-      return;
-    }
-    var html = '';
-    var lastM = '';
-    txns.forEach(function (t) {
-      var m = String(t.date).slice(0, 7);
-      if (m !== lastM) { lastM = m; html += '<div class="msep">' + esc(monthLabel(m)) + '</div>'; }
-      var badge = t.synced ? '<span class="pill ok">synced</span>' : '<span class="pill warn">pending</span>';
-      var del = t.synced ? '' : '<button class="mini" data-del="' + t.id + '" title="Delete">✕</button>';
-      var amt = money(t.amount).replace('PHP ', '');
-      html += '<div class="txn"><div><div class="txn-cat">' + esc(t.category || '—') + '</div>' +
-        '<div class="txn-meta">' + fmtDate(t.date) + ' · ' + esc(t.account) + '</div></div>' +
-        '<div class="txn-r"><div class="txn-amt">− ' + amt + '</div><div class="badgedel">' + badge + del + '</div></div></div>';
-    });
-    el.innerHTML = html;
-    var btns = el.querySelectorAll('[data-del]');
-    for (var i = 0; i < btns.length; i++) btns[i].onclick = function () { deleteTxn(this.getAttribute('data-del')); };
-  }
   function renderPlans() {
     var el = byId('plans'); if (!el) return;
     var plans = state.plans.slice().sort(function (a, b) {
@@ -1556,8 +1480,6 @@
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
-    var ts = byId('txnSearch');
-    if (ts) ts.addEventListener('input', function () { ledFilter.q = ts.value.trim(); renderList(); renderChips(); });
     var ej = byId('expJson');
     if (ej) ej.onclick = function () { exportData('json'); };
     var ec = byId('expCsv');
