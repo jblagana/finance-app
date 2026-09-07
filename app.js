@@ -43,6 +43,28 @@
     adjLoaded: false
   };
 
+  // ---------- event bus: a state change re-renders only the views that depend on it ----------
+  var RENDER_BY_KEY = {
+    txn: [renderStatus, renderList, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint],
+    plan: [renderPlans, renderInsights, renderCoach, renderProjection],
+    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, updateChargeHint],
+    sync: [renderStatus, renderSyncErr, renderList, renderFooter],
+    online: [renderStatus, renderSyncErr, renderFooter],
+    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint],
+    ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderList, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint]
+  };
+  function emit(keys) {
+    var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
+    var seen = {};
+    list.forEach(function (k) {
+      (RENDER_BY_KEY[k] || RENDER_BY_KEY.ui).forEach(function (fn) {
+        if (seen[fn]) return;
+        seen[fn] = true;
+        try { fn(); } catch (e) { console.warn('render', e); }
+      });
+    });
+  }
+
   var seededAccounts = false;
 
   // ---------- IndexedDB ----------
@@ -197,7 +219,7 @@
   function resetAdj() {
     state.adj = { cash: 0, free: 0, card: 0, prepay: 0 };
     state.adjSig = snapSig(state.snapshot);
-    saveAdj().then(render);
+    saveAdj().then(function () { emit('adj'); });
   }
   function effectiveSnap() {
     var s = state.snapshot;
@@ -237,10 +259,10 @@
 
   function doSync() {
     if (state.syncing) return Promise.resolve();
-    if (!state.online || !getUrl()) { render(); return Promise.resolve(); }
+    if (!state.online || !getUrl()) { emit('sync'); return Promise.resolve(); }
     state.syncing = true;
     state.error = null;
-    render();
+    emit('sync');
     var pending = pendingList();
     var chain;
     if (pending.length) {
@@ -287,10 +309,20 @@
     state.txns.push(t);
     addAdj(txnAdj(t), 1);
     return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () {
-      render();
+      emit('txn');
+      snack('Added ' + money(t.amount) + ' · ' + esc(t.category || t.account), function () { undoAddTxn(id); });
       if (state.online && getUrl()) return doSync();
       return Promise.resolve();
     }).then(function () { return id; });
+  }
+  function undoAddTxn(id) {
+    var t = null;
+    for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === id) t = state.txns[i];
+    if (!t) return;
+    if (t.synced) { snack('Already synced to the sheet — remove it there.'); return; }
+    state.txns = state.txns.filter(function (x) { return x.id !== id; });
+    addAdj(txnAdj(t), -1);
+    Promise.all([idbDel(STORE_TX, id), saveAdj()]).then(function () { emit('txn'); });
   }
   function deleteTxn(id) {
     var t = null;
@@ -298,7 +330,32 @@
     if (!t || t.synced) return Promise.resolve();
     state.txns = state.txns.filter(function (x) { return x.id !== id; });
     addAdj(txnAdj(t), -1);
-    return Promise.all([idbDel(STORE_TX, id), saveAdj()]).then(render);
+    return Promise.all([idbDel(STORE_TX, id), saveAdj()]).then(function () {
+      emit('txn');
+      snack('Deleted ' + money(t.amount) + ' · ' + esc(t.category || t.account), function () {
+        state.txns.push(t);
+        addAdj(txnAdj(t), 1);
+        Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () { emit('txn'); });
+      });
+    });
+  }
+
+  // ---------- snackbar (with undo) ----------
+  var snackTimer = null;
+  function hideSnack() {
+    var el = byId('snack'); if (el) el.classList.remove('show');
+  }
+  function snack(msg, undoFn, ms) {
+    var el = byId('snack'); if (!el) return;
+    el.innerHTML = '<span class="snack-msg">' + msg + '</span>' +
+      (undoFn ? '<button type="button" id="snackUndo">Undo</button>' : '');
+    if (undoFn) {
+      var b = byId('snackUndo');
+      if (b) b.onclick = function () { hideSnack(); undoFn(); };
+    }
+    el.classList.add('show');
+    clearTimeout(snackTimer);
+    snackTimer = setTimeout(hideSnack, ms || 5200);
   }
 
   // ---------- render ----------
@@ -312,6 +369,17 @@
     var pend = p.length ? '&nbsp;·&nbsp;<b>' + p.length + '</b> pending ' + money(pendingSum()) : '';
     var spin = state.syncing ? '&nbsp;&nbsp;<span class="spin"></span> syncing…' : '';
     el.innerHTML = pill + pend + spin;
+    var sb = byId('syncBtn');
+    if (sb) { sb.disabled = !!state.syncing; sb.textContent = state.syncing ? 'Syncing…' : 'Sync'; }
+  }
+  function renderSyncErr() {
+    var el = byId('syncErr'); if (!el) return;
+    if (state.error && !state.syncing) {
+      el.style.display = '';
+      el.textContent = 'Sync failed — ' + state.error + ' · tap to retry';
+    } else {
+      el.style.display = 'none';
+    }
   }
   function renderConnect() {
     var el = byId('connect'); if (!el) return;
@@ -662,11 +730,27 @@
     var id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
     var p = { id: id, name: data.name, amount: data.amount, date: data.date, created: new Date().toISOString() };
     state.plans.push(p);
-    return idbPut(STORE_PLANS, p).then(function () { render(); return id; });
+    return idbPut(STORE_PLANS, p).then(function () {
+      emit('plan');
+      snack('Planned ' + esc(p.name) + ' · ' + money(p.amount), function () {
+        state.plans = state.plans.filter(function (x) { return x.id !== id; });
+        idbDel(STORE_PLANS, id).then(function () { emit('plan'); });
+      });
+      return id;
+    });
   }
   function deletePlan(id) {
+    var p = null;
+    for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === id) p = state.plans[i];
+    if (!p) return Promise.resolve();
     state.plans = state.plans.filter(function (x) { return x.id !== id; });
-    return idbDel(STORE_PLANS, id).then(render);
+    return idbDel(STORE_PLANS, id).then(function () {
+      emit('plan');
+      snack('Removed plan ' + esc(p.name), function () {
+        state.plans.push(p);
+        idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
+      });
+    });
   }
   function updateChargeHint() {
     var el = byId('chargeHint'); if (!el) return;
@@ -732,11 +816,7 @@
     var c = byId('f_categoryCustom');
     if (c) c.style.display = sel.value === CAT_CUSTOM ? '' : 'none';
   }
-  function render() {
-    renderStatus(); renderConnect(); renderSummary(); seedAccounts(); seedCategories(); renderList();
-    renderCoach(); renderInsights(); renderProjection(); renderObligations(); renderSinking();
-    renderAddEmpty(); renderPlans(); renderFooter(); updateChargeHint();
-  }
+  function render() { emit('ui'); }
 
   // ---------- bridge for chat.js (the chat writes through the app's own actions) ----------
   window.FinApp = {
@@ -744,6 +824,7 @@
     deletePlan: deletePlan,
     addTxn: addTxn,
     deleteTxn: deleteTxn,
+    snack: snack,
     sync: doSync,
     render: render,
     setTab: setTab,
@@ -757,6 +838,18 @@
     STORE_TX: STORE_TX,
     STORE_META: STORE_META
   };
+
+  // ---------- service worker: update toast ----------
+  var swReg = null;
+  function showSwToast() {
+    var el = byId('swToast'); if (!el) return;
+    el.classList.add('show');
+    var b = byId('swReload');
+    if (b) b.onclick = function () {
+      if (swReg && swReg.waiting) swReg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      setTimeout(function () { location.reload(); }, 350);
+    };
+  }
 
   // ---------- init ----------
   function init() {
@@ -846,14 +939,28 @@
       if (c) { c.style.display = catEl.value === CAT_CUSTOM ? '' : 'none'; if (catEl.value === CAT_CUSTOM) c.focus(); }
     };
 
-    window.addEventListener('online', function () { state.online = true; render(); doSync(); });
-    window.addEventListener('offline', function () { state.online = false; render(); });
+    window.addEventListener('online', function () { state.online = true; emit('online'); doSync(); });
+    window.addEventListener('offline', function () { state.online = false; emit('online'); });
     window.addEventListener('focus', function () { if (state.online && getUrl() && pendingList().length) doSync(); });
     document.addEventListener('visibilitychange', function () { if (!document.hidden && state.online && getUrl() && pendingList().length) doSync(); });
 
+    var se = byId('syncErr');
+    if (se) se.onclick = function () { doSync(); };
+
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
-        navigator.serviceWorker.register('./sw.js').catch(function (err) { console.warn('SW register failed', err); });
+        navigator.serviceWorker.register('./sw.js').then(function (reg) {
+          swReg = reg;
+          if (reg.waiting) showSwToast();
+          reg.addEventListener('updatefound', function () {
+            var nw = reg.installing;
+            if (!nw) return;
+            nw.addEventListener('statechange', function () {
+              // installed while this page is already controlled = a new version is ready
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) showSwToast();
+            });
+          });
+        }).catch(function (err) { console.warn('SW register failed', err); });
       });
     }
 

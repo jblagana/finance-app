@@ -12,6 +12,10 @@ the GitHub repo only ever holds this app code, **no balances or transactions**.
   entries with **Pending / Synced** badges.
 - **Syncs automatically** on reconnect (and on demand) into your Sheet's Ledger.
 - Installs to the iPhone **Home Screen** and runs full-screen.
+- **Coach chat** (floating 💬 button) — ask in plain language: status, debt/one-off/
+  sinking details, cash in any month, add/list/remove plans, charge checks, and
+  urgent-expense advice. Rule-based and offline-first (no AI, no made-up numbers);
+  see `repo/chat.js`.
 
 ## 1) Host this folder (GitHub Pages)
 1. Go to **github.com → New repository**, name it e.g. `finance-app`, set it **Public**, Create.

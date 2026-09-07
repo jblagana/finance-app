@@ -149,6 +149,29 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 #chatInput{flex:1;min-width:0}
 #chatSend{flex:0 0 auto;background:var(--acc);border:0;color:#fff;font-weight:700;padding:0 18px;border-radius:10px;font-size:14.5px;cursor:pointer}
 #chatSend:active{filter:brightness(1.12)}
+/* ---- sync error strip (tap to retry) ---- */
+#syncErr{display:none;max-width:640px;margin:0 auto;color:#ffb4b4;background:rgba(255,107,107,.13);
+border-bottom:1px solid rgba(255,107,107,.35);padding:8px 16px;font-size:12.5px;font-weight:600;
+cursor:pointer;text-align:center}
+#syncErr:active{filter:brightness(1.25)}
+/* ---- undo snackbar ---- */
+#snack{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom));transform:translate(-50%,10px);
+z-index:30;background:var(--card2);border:1px solid var(--line);color:var(--ink);border-radius:12px;
+padding:10px 14px;display:flex;align-items:center;gap:12px;font-size:13px;max-width:min(92vw,480px);
+box-shadow:0 8px 24px rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease}
+#snack.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#snack .snack-msg{overflow-wrap:anywhere}
+#snack button{cursor:pointer;background:transparent;border:0;color:var(--acc);font-weight:800;font-size:13px;
+padding:2px 4px;flex:0 0 auto}
+/* ---- service worker update toast ---- */
+#swToast{position:fixed;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translate(-50%,-160%);
+z-index:40;background:var(--card2);border:1px solid var(--acc);border-radius:999px;padding:9px 9px 9px 16px;
+display:flex;align-items:center;gap:12px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.5);
+transition:transform .22s ease}
+#swToast.show{transform:translate(-50%,0)}
+#swToast button{cursor:pointer;background:var(--acc);border:0;color:#fff;font-weight:800;border-radius:999px;
+padding:7px 14px;font-size:12.5px}
+@media (prefers-reduced-motion:reduce){#snack,#swToast{transition:none}}
 </style>
 </head>
 
@@ -162,6 +185,7 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
     </div>
   </header>
 </div>
+<div id="syncErr" role="alert"></div>
 <main>
   <div id="tab-home">
     <div id="homeEmpty" class="card" style="display:none">
@@ -281,6 +305,11 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
     <input id="chatInput" type="text" placeholder="Ask, plan, or tell me about an expense…" autocomplete="off" spellcheck="false">
     <button id="chatSend" type="button">Send</button>
   </div>
+</div>
+<div id="snack" role="status" aria-live="polite"></div>
+<div id="swToast" role="status" aria-live="polite">
+  <span>New version ready</span>
+  <button id="swReload" type="button">Reload</button>
 </div>
 <footer id="foot"></footer>
 <nav id="bottombar" aria-label="Sections">

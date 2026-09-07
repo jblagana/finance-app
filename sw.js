@@ -1,5 +1,5 @@
 /* Finance PWA service worker: cache-first app shell, network-only API. */
-const CACHE = 'finances-pwa-v9';
+const CACHE = 'finances-pwa-v10';
 const SHELL = ['./', './index.html', './app.js', './chat.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -8,6 +8,10 @@ self.addEventListener('install', (e) => {
       .then((c) => c.addAll(SHELL))
       .then(() => self.skipWaiting())
   );
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
