@@ -422,9 +422,7 @@
     if (!log.length) { el.style.display = 'none'; return; }
     el.style.display = '';
     var items = log.slice(-ML_SHOW).reverse();
-    byId('mlBody').innerHTML = '<h2>Money log</h2>' +
-      '<p class="note" style="margin:0 0 4px">How each entry moved your free cash, newest first. The change should always equal the entry — that is the sanity check on the numbers above.</p>' +
-      items.map(function (e) {
+    byId('mlBody').innerHTML = items.map(function (e) {
         var add = e.a === 'add';
         var before = r2(e.f + (add ? e.n : -e.n));
         var extra = '';
