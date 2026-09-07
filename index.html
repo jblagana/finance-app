@@ -240,7 +240,7 @@ padding:7px 14px;font-size:12.5px}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes shim{0%{background-position:200% 0}100%{background-position:-200% 0}}
 #tab-home,#tab-money,#tab-ledger,#tab-coach{animation:paneIn .18s ease}
-.txn,.dig,.drow{animation:rise .18s ease}
+.txn,.dig,.drow,.ml-row{animation:rise .18s ease}
 .tile{position:relative;overflow:hidden}
 .tiles.busy .tile::after{content:"";position:absolute;inset:0;pointer-events:none;
 background:linear-gradient(100deg,transparent 30%,rgba(232,237,247,.07) 50%,transparent 70%);
@@ -260,6 +260,22 @@ border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700;line-height:
 .msep{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--mut);
 margin:10px 0 2px;padding-top:6px;border-top:1px solid var(--line)}
 .msep:first-child{border-top:0;margin-top:0;padding-top:0}
+/* ---- Phase 6: money log (sanity-check audit trail, Money tab) ---- */
+.ml-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
+ border-bottom:1px solid var(--line);padding:9px 2px 9px 10px;font-size:13px;line-height:1.4;
+ border-left:3px solid transparent}
+.ml-row:last-of-type{border-bottom:0}
+.ml-row.del{opacity:.85}
+.ml-row .ml-l{flex:1;min-width:0}
+.ml-row .ml-r{flex:0 0 auto;text-align:right}
+.ml-tag{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+ border-radius:999px;padding:2px 8px;margin-right:6px;background:rgba(91,140,255,.14);color:var(--acc)}
+.ml-tag.del{background:rgba(255,178,102,.16);color:var(--warn)}
+.ml-row b{font-variant-numeric:tabular-nums;font-size:13px}
+.ml-down{color:var(--bad)}
+.ml-up{color:var(--ok)}
+.ml-f{display:block;color:var(--mut);font-size:11.5px;font-variant-numeric:tabular-nums;margin-top:2px}
+.ml-x{display:block;color:var(--mut);font-size:11.5px;font-variant-numeric:tabular-nums}
 /* ---- Phase 4 a11y: 44px primary tap targets ---- */
 .tab{min-height:44px;padding:12px 6px}
 button.sync{min-height:44px}
@@ -267,7 +283,7 @@ button.gear{width:44px;height:44px}
 .sheet-x{width:44px;height:44px}
 .mini{min-height:32px;padding:4px 10px}
 @media (prefers-reduced-motion:reduce){#snack,#swToast{transition:none}
-#tab-home,#tab-money,#tab-ledger,#tab-coach,.txn,.dig,.drow,.tiles.busy .tile::after{animation:none!important}}
+#tab-home,#tab-money,#tab-ledger,#tab-coach,.txn,.dig,.drow,.ml-row,.tiles.busy .tile::after{animation:none!important}}
 </style>
 </head>
 
@@ -318,6 +334,8 @@ button.gear{width:44px;height:44px}
 
   <div id="tab-money" style="display:none">
     <section id="summary"></section>
+
+    <section id="moneyLog" class="card" style="display:none"><div id="mlBody"></div></section>
 
     <section id="projection" class="card" style="display:none">
       <div id="projBody"></div>
@@ -459,7 +477,7 @@ button.gear{width:44px;height:44px}
         <div><button class="act" id="expCsv" type="button">Export CSV</button></div>
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">Finance PWA · offline-first · shell v14</p>
+    <p class="note" style="margin:14px 0 0">Finance PWA · offline-first · shell v15</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>

@@ -41,18 +41,19 @@
     adj: { cash: 0, free: 0, card: 0, prepay: 0 },
     adjSig: '',
     adjLoaded: false,
-    coachMem: null
+    coachMem: null,
+    moneyLog: []
   };
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
   var RENDER_BY_KEY = {
-    txn: [renderStatus, renderList, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderChips],
+    txn: [renderStatus, renderList, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderChips, renderMoneyLog],
     plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero],
     snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, updateChargeHint, renderHero],
     sync: [renderStatus, renderSyncErr, renderList, renderFooter, renderConnect],
     online: [renderStatus, renderSyncErr, renderFooter, renderConnect],
     adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero],
-    ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderList, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderChips]
+    ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderList, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderChips, renderMoneyLog]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -348,6 +349,7 @@
     };
     state.txns.push(t);
     addAdj(txnAdj(t), 1);
+    logMoney('add', t);
     return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () {
       emit('txn');
       snack('Added ' + money(t.amount) + ' · ' + esc(t.category || t.account), function () { undoAddTxn(id); });
@@ -362,6 +364,7 @@
     if (t.synced) { snack('Already synced to the sheet — remove it there.'); return; }
     state.txns = state.txns.filter(function (x) { return x.id !== id; });
     addAdj(txnAdj(t), -1);
+    logMoney('del', t);
     Promise.all([idbDel(STORE_TX, id), saveAdj()]).then(function () { emit('txn'); });
   }
   function deleteTxn(id) {
@@ -370,14 +373,69 @@
     if (!t || t.synced) return Promise.resolve();
     state.txns = state.txns.filter(function (x) { return x.id !== id; });
     addAdj(txnAdj(t), -1);
+    logMoney('del', t);
     return Promise.all([idbDel(STORE_TX, id), saveAdj()]).then(function () {
       emit('txn');
       snack('Deleted ' + money(t.amount) + ' · ' + esc(t.category || t.account), function () {
         state.txns.push(t);
         addAdj(txnAdj(t), 1);
+        logMoney('add', t);
         Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () { emit('txn'); });
       });
     });
+  }
+
+  // ---------- Phase 6: money log — per-change audit trail so the overview math can be sanity-checked ----------
+  var ML_CAP = 30;   // entries kept in the meta store
+  var ML_SHOW = 10;  // entries shown in the card
+  function logMoney(action, t) {
+    var s = effectiveSnap();
+    if (!s) return;
+    var amt = Number(t.amount) || 0;
+    var mp = todayISO().slice(0, 7);
+    var e = {
+      at: Date.now(), a: action,
+      l: (t.category || t.account || 'entry') + (t.note ? ' · ' + t.note : ''),
+      n: amt, k: t.kind === 'card_charge' ? 'c' : 'x'
+    };
+    e.f = r2(s.cash ? s.cash.free : 0);
+    if (t.kind === 'card_charge') e.o = r2(s.card_owed || 0);
+    if (String(t.date).slice(0, 7) === mp) {
+      var sp = 0;
+      state.txns.forEach(function (x) { if (String(x.date).slice(0, 7) === mp) sp += Number(x.amount) || 0; });
+      e.s = r2(sp);
+    }
+    state.moneyLog.push(e);
+    if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
+    idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
+  }
+  function mlWhen(ts) {
+    var d = new Date(ts);
+    var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return MO[d.getMonth()] + ' ' + d.getDate() + ' ' +
+      (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
+  }
+  function renderMoneyLog() {
+    var el = byId('moneyLog');
+    if (!el) return;
+    var log = state.moneyLog || [];
+    if (!log.length) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    var items = log.slice(-ML_SHOW).reverse();
+    byId('mlBody').innerHTML = '<h2>Money log</h2>' +
+      '<p class="note" style="margin:0 0 4px">How each entry moved your free cash, newest first. The change should always equal the entry — that is the sanity check on the numbers above.</p>' +
+      items.map(function (e) {
+        var add = e.a === 'add';
+        var before = r2(e.f + (add ? e.n : -e.n));
+        var extra = '';
+        if (e.k === 'c') extra = '<span class="ml-x">card ' + money(r2(e.o + (add ? -e.n : e.n))) + ' → ' + money(e.o) + '</span>';
+        if (e.s != null) extra += '<span class="ml-x">month spent ' + money(r2(e.s + (add ? -e.n : e.n))) + ' → ' + money(e.s) + '</span>';
+        return '<div class="ml-row' + (add ? '' : ' del') + '">' +
+          '<div class="ml-l"><span class="ml-tag' + (add ? '' : ' del') + '">' + (add ? 'added' : 'removed') + '</span>' + esc(e.l) + '</div>' +
+          '<div class="ml-r"><b class="' + (add ? 'ml-down' : 'ml-up') + '">' + (add ? '−' : '+') + money(e.n) + '</b>' +
+          '<span class="ml-f">' + mlWhen(e.at) + ' · free ' + money(before) + ' → ' + money(e.f) + '</span>' + extra + '</div></div>';
+      }).join('') +
+      (log.length > ML_SHOW ? '<p class="note" style="margin:8px 0 0">Showing the last ' + ML_SHOW + ' of ' + log.length + ' entries.</p>' : '');
   }
 
   // ---------- bottom sheets (Add, Settings) ----------
@@ -1530,6 +1588,7 @@
         else if (m.key === 'adj') { state.adj = m.value; hasAdj = true; }
         else if (m.key === 'adjSig') { state.adjSig = m.value || ''; }
         else if (m.key === 'coachMem') { state.coachMem = m.value; }
+        else if (m.key === 'moneyLog') { state.moneyLog = m.value || []; }
       });
       if (!hasAdj) computeAdjFromTxns();
       if (!state.adjSig && state.snapshot) state.adjSig = snapSig(state.snapshot);
