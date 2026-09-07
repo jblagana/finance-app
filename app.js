@@ -415,8 +415,16 @@
     return MO[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
   }
   function mlParts(e) {
-    var lab = e.c != null ? e.c : (e.l || 'entry');
-    var note = e.c != null ? (e.nt || '') : '';
+    var lab, note = '';
+    if (e.c != null) {
+      lab = e.c;
+      note = e.nt || '';
+    } else {
+      // legacy entry (pre-v17): only the merged "Category · note" label was stored
+      lab = e.l || 'entry';
+      var dot = lab.indexOf(' · ');
+      if (dot > 0) { note = lab.slice(dot + 3); lab = lab.slice(0, dot); }
+    }
     var m = e.m || (e.k === 'c' ? 'Card' : '');
     if (m && lab === m) m = '';
     return { lab: lab, note: note, m: m };
