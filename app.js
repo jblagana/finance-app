@@ -45,13 +45,13 @@
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
   var RENDER_BY_KEY = {
-    txn: [renderStatus, renderList, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDigest, renderDonut, renderPace],
+    txn: [renderStatus, renderList, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDigest, renderDonut, renderPace, renderChips],
     plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderDigest],
     snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, updateChargeHint, renderHero, renderDigest],
     sync: [renderStatus, renderSyncErr, renderList, renderFooter, renderConnect],
     online: [renderStatus, renderSyncErr, renderFooter, renderConnect],
     adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero],
-    ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderList, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDigest, renderDonut, renderPace]
+    ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderList, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDigest, renderDonut, renderPace, renderChips]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -191,6 +191,22 @@
       el.__countRaf = k < 1 ? requestAnimationFrame(step) : null;
     }
     el.__countRaf = requestAnimationFrame(step);
+  }
+  // ---------- Phase 4: recurring plans ----------
+  function shiftMonth(iso, k) {
+    var p = String(iso).split('-');
+    var d = new Date(Number(p[0]), Number(p[1]) - 1 + k, 1);
+    var dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    return localISO(new Date(d.getFullYear(), d.getMonth(), Math.min(Number(p[2]) || 1, dim)));
+  }
+  function planOccurrences(p) {
+    if (!p || p.repeat !== 'monthly') return [String(p.date)];
+    var today = todayISO();
+    var d = String(p.date), guard = 0;
+    while (d < today && guard < 36) { d = shiftMonth(d, 1); guard++; }
+    var out = [];
+    for (var k = 0; k < 3; k++) out.push(shiftMonth(d, k));
+    return out;
   }
   function mealBudget() {
     try { var v = parseFloat(localStorage.getItem(LS_MEAL)); return (v > 0) ? v : MEAL_DEFAULT; } catch (e) { return MEAL_DEFAULT; }
@@ -365,18 +381,29 @@
 
   // ---------- bottom sheets (Add, Settings) ----------
   var openSheetEl = null;
+  var lastFocus = null;
   function closeSheets() {
     var sc = byId('scrim');
+    var wasOpen = !!openSheetEl;
     if (sc) sc.classList.remove('show');
     if (openSheetEl) { openSheetEl.classList.remove('show'); openSheetEl = null; }
+    if (wasOpen && lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
+    lastFocus = null;
   }
   function openSheet(id) {
     var sh = byId(id), sc = byId('scrim');
     if (!sh || !sc) return;
     closeSheets();
+    lastFocus = document.activeElement;
     sc.classList.add('show');
     sh.classList.add('show');
     openSheetEl = sh;
+    // a11y: move focus into the sheet (first field, else first control)
+    try {
+      var f = sh.querySelectorAll('input,select,textarea');
+      if (!f.length) f = sh.querySelectorAll('button');
+      if (f && f.length) f[0].focus();
+    } catch (e) {}
   }
 
   // ---------- snackbar (with undo) ----------
@@ -483,9 +510,12 @@
     var items = [];
     var laterCount = 0, laterAmt = 0;
     state.plans.forEach(function (p) {
-      var dd = diffDays(today, p.date);
-      if (dd >= 0 && dd <= 6) items.push({ d: dd, date: p.date, label: p.name || 'Plan', amt: Number(p.amount) || 0 });
-      else if (dd > 6) { laterCount++; laterAmt += Number(p.amount) || 0; }
+      var countedLater = false;
+      planOccurrences(p).forEach(function (od) {
+        var dd = diffDays(today, od);
+        if (dd >= 0 && dd <= 6) items.push({ d: dd, date: od, label: p.name || 'Plan', amt: Number(p.amount) || 0 });
+        else if (dd > 6 && !countedLater) { laterCount++; laterAmt += Number(p.amount) || 0; countedLater = true; }
+      });
     });
     var prepayDay = Number(s.prepay_day) || 14;
     var pDay = parseISO(today);
@@ -500,7 +530,10 @@
     var weekCost = r2(items.reduce(function (sum, it) { return sum + it.amt; }, 0));
     var monthPlans = 0, monthPlanCount = 0;
     state.plans.forEach(function (p) {
-      if (String(p.date).slice(0, 7) === monthPrefix) { monthPlans += Number(p.amount) || 0; monthPlanCount++; }
+      var occ = planOccurrences(p);
+      for (var i = 0; i < occ.length; i++) {
+        if (String(occ[i]).slice(0, 7) === monthPrefix) { monthPlans += Number(p.amount) || 0; monthPlanCount++; break; }
+      }
     });
     var spentM = 0;
     state.txns.forEach(function (t) { if (String(t.date).slice(0, 7) === monthPrefix) spentM += Number(t.amount) || 0; });
@@ -552,6 +585,12 @@
       cls = 'good';
       head = hi + 'you are on track. You can spend up to ' + money(d.daily) + ' today.';
       sub = 'It keeps the next 7 days covered, and an eat-out (about ' + money(d.meal) + ') is safe.';
+    }
+    var rec = [];
+    state.plans.forEach(function (p) { if (p.repeat === 'monthly') rec.push(p); });
+    if (rec.length) {
+      var recAmt = rec.reduce(function (s, p) { return s + (Number(p.amount) || 0); }, 0);
+      sub += ' On repeat: ' + rec.map(function (p) { return p.name || 'plan'; }).join(', ') + ' — ' + money(recAmt) + ' a month.';
     }
     el.className = 'card coach ' + cls;
     var h = byId('coachHead'), sb = byId('coachSub');
@@ -949,15 +988,79 @@
     if (prev) sel.value = prev;
     seededAccounts = true;
   }
+  // ---------- Phase 4: ledger search + filter chips ----------
+  var ledFilter = { q: '', acct: '', cat: '', month: '' };
+  function renderChips() {
+    var row = byId('chipRow'); if (!row) return;
+    var accts = {}, cats = {}, months = {};
+    state.txns.forEach(function (t) {
+      if (t.account) accts[t.account] = 1;
+      if (t.category) cats[t.category] = 1;
+      months[String(t.date).slice(0, 7)] = 1;
+    });
+    var mlist = Object.keys(months).sort().reverse().slice(0, 6);
+    var html = '';
+    function group(lbl, names, key, fmt) {
+      if (!names.length) return;
+      html += '<span class="chip-lbl">' + lbl + '</span>';
+      names.forEach(function (n) {
+        html += '<button type="button" class="chip' + (ledFilter[key] === n ? ' on' : '') + '" data-fkey="' + key + '" data-fval="' + esc(n) + '">' + esc(fmt ? fmt(n) : n) + '</button>';
+      });
+    }
+    group('acct', Object.keys(accts).sort(), 'acct');
+    group('cat', Object.keys(cats).sort(), 'cat');
+    group('month', mlist, 'month', monthLabel);
+    row.innerHTML = html;
+    var btns = row.querySelectorAll('[data-fkey]');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].onclick = function () {
+        var k = this.getAttribute('data-fkey'), v = this.getAttribute('data-fval');
+        ledFilter[k] = ledFilter[k] === v ? '' : v;
+        renderChips(); renderList();
+      };
+    }
+  }
   function renderList() {
     var el = byId('txns'); if (!el) return;
     var txns = state.txns.slice().sort(function (a, b) {
       if (a.date !== b.date) return a.date < b.date ? 1 : -1;
       return (a.created || '') < (b.created || '') ? 1 : -1;
     });
-    if (!txns.length) { el.innerHTML = '<p class="note" style="margin:2px 0">No entries yet — tap + to add your first expense.</p>'; return; }
+    var q = ledFilter.q.toLowerCase();
+    var filtered = !!(q || ledFilter.acct || ledFilter.cat || ledFilter.month);
+    if (filtered) {
+      txns = txns.filter(function (t) {
+        if (ledFilter.acct && t.account !== ledFilter.acct) return false;
+        if (ledFilter.cat && t.category !== ledFilter.cat) return false;
+        if (ledFilter.month && String(t.date).slice(0, 7) !== ledFilter.month) return false;
+        if (q) {
+          var hay = ((t.category || '') + ' ' + (t.account || '') + ' ' + (t.note || '')).toLowerCase();
+          if (hay.indexOf(q) < 0) return false;
+        }
+        return true;
+      });
+    }
+    if (!txns.length) {
+      if (filtered) {
+        el.innerHTML = '<p class="note" style="margin:2px 0">Nothing matches — <a href="#" id="clearFilt" style="color:var(--acc);font-weight:700">clear search &amp; filters</a>.</p>';
+        var cf = byId('clearFilt');
+        if (cf) cf.onclick = function (e) {
+          e.preventDefault();
+          ledFilter.q = ledFilter.acct = ledFilter.cat = ledFilter.month = '';
+          var si = byId('txnSearch');
+          if (si) si.value = '';
+          renderChips(); renderList();
+        };
+      } else {
+        el.innerHTML = '<p class="note" style="margin:2px 0">No entries yet — tap + to add your first expense.</p>';
+      }
+      return;
+    }
     var html = '';
+    var lastM = '';
     txns.forEach(function (t) {
+      var m = String(t.date).slice(0, 7);
+      if (m !== lastM) { lastM = m; html += '<div class="msep">' + esc(monthLabel(m)) + '</div>'; }
       var badge = t.synced ? '<span class="pill ok">synced</span>' : '<span class="pill warn">pending</span>';
       var del = t.synced ? '' : '<button class="mini" data-del="' + t.id + '" title="Delete">✕</button>';
       var amt = money(t.amount).replace('PHP ', '');
@@ -982,10 +1085,16 @@
     var html = '';
     plans.forEach(function (p) {
       var amt = money(p.amount).replace('PHP ', '');
-      html += '<div class="txn"><div><div class="txn-cat">' + esc(p.name || 'Plan') + '</div>' +
-        '<div class="txn-meta">' + esc(planWhen(p.date)) + ' · ' + fmtDate(p.date) + '</div></div>' +
-        '<div class="txn-r"><div class="txn-amt">₱ ' + amt + '</div><div class="badgedel">' +
-        '<button class="mini" data-delp="' + p.id + '" title="Delete">✕</button></div></div></div>';
+      var rec = p.repeat === 'monthly';
+      var occ = planOccurrences(p);
+      occ.forEach(function (od, i) {
+        var meta = rec ? fmtDate(od) + ' · monthly' : esc(planWhen(p.date)) + ' · ' + fmtDate(p.date);
+        var tag = rec && i === 0 ? ' <span class="pill ok" style="font-size:10px">recurring</span>' : '';
+        html += '<div class="txn"><div><div class="txn-cat">' + esc(p.name || 'Plan') + tag + '</div>' +
+          '<div class="txn-meta">' + meta + '</div></div>' +
+          '<div class="txn-r"><div class="txn-amt">₱ ' + amt + '</div><div class="badgedel">' +
+          '<button class="mini" data-delp="' + p.id + '" title="Delete' + (rec ? ' recurring plan' : ' plan') + '">✕</button></div></div></div>';
+      });
     });
     el.innerHTML = html;
     var btns = el.querySelectorAll('[data-delp]');
@@ -993,11 +1102,12 @@
   }
   function addPlan(data) {
     var id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-    var p = { id: id, name: data.name, amount: data.amount, date: data.date, created: new Date().toISOString() };
+    var p = { id: id, name: data.name, amount: data.amount, date: data.date,
+      repeat: data.repeat === 'monthly' ? 'monthly' : null, created: new Date().toISOString() };
     state.plans.push(p);
     return idbPut(STORE_PLANS, p).then(function () {
       emit('plan');
-      snack('Planned ' + esc(p.name) + ' · ' + money(p.amount), function () {
+      snack('Planned ' + esc(p.name) + ' · ' + money(p.amount) + (p.repeat ? ' · every month' : ''), function () {
         state.plans = state.plans.filter(function (x) { return x.id !== id; });
         idbDel(STORE_PLANS, id).then(function () { emit('plan'); });
       });
@@ -1033,6 +1143,37 @@
       el.className = 'note low';
       el.innerHTML = '<b>Deficit warning</b> — free cash would drop to ' + money(after) + ' (over by ' + money(r2(-after)) + ').';
     }
+  }
+  // ---------- Phase 4: export (JSON / CSV) ----------
+  function csvQ(s) {
+    s = String(s == null ? '' : s);
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  function exportData(kind) {
+    var txns = state.txns.slice().sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return (a.created || '') < (b.created || '') ? -1 : 1;
+    });
+    var plans = state.plans.slice().sort(function (a, b) { return String(a.date) < String(b.date) ? -1 : 1; });
+    var stamp = todayISO();
+    var blob, name;
+    if (kind === 'csv') {
+      var lines = ['date,account,kind,category,amount,note,synced'];
+      txns.forEach(function (t) {
+        lines.push([t.date, csvQ(t.account), csvQ(t.kind), csvQ(t.category), t.amount, csvQ(t.note || ''), t.synced ? 'yes' : 'no'].join(','));
+      });
+      blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      name = 'finances-ledger-' + stamp + '.csv';
+    } else {
+      blob = new Blob([JSON.stringify({ app: 'finances-pwa', exportedAt: new Date().toISOString(), txns: txns, plans: plans }, null, 2)], { type: 'application/json' });
+      name = 'finances-export-' + stamp + '.json';
+    }
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 600);
+    snack('Exported ' + name);
   }
   function renderFooter() {
     var el = byId('foot'); if (!el) return;
@@ -1186,9 +1327,12 @@
       var amount = parseFloat(byId('p_amount').value);
       if (!name) { alert('Give the plan a name.'); return; }
       if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
-      addPlan({ name: name, amount: amount, date: byId('p_date').value || todayISO() }).then(function () {
+      var repEl = byId('p_repeat');
+      addPlan({ name: name, amount: amount, date: byId('p_date').value || todayISO(),
+        repeat: repEl && repEl.checked ? 'monthly' : null }).then(function () {
         byId('p_name').value = '';
         byId('p_amount').value = '';
+        if (repEl) repEl.checked = false;
         byId('p_name').focus();
       });
     };
@@ -1232,6 +1376,23 @@
     var scrim = byId('scrim');
     if (scrim) scrim.onclick = closeSheets;
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheets(); });
+    // a11y: trap Tab focus inside the open sheet
+    document.addEventListener('keydown', function (e) {
+      if (!openSheetEl || e.key !== 'Tab') return;
+      var f = openSheetEl.querySelectorAll('input,select,button,textarea');
+      var list = [];
+      for (var j = 0; j < f.length; j++) if (!f[j].disabled) list.push(f[j]);
+      if (!list.length) return;
+      var first = list[0], last = list[list.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+    var ts = byId('txnSearch');
+    if (ts) ts.addEventListener('input', function () { ledFilter.q = ts.value.trim(); renderList(); renderChips(); });
+    var ej = byId('expJson');
+    if (ej) ej.onclick = function () { exportData('json'); };
+    var ec = byId('expCsv');
+    if (ec) ec.onclick = function () { exportData('csv'); };
     var snb = byId('syncNowBtn');
     if (snb) snb.onclick = function () { doSync(); };
     var hob = byId('homeOpenSet');

@@ -234,6 +234,27 @@ padding:7px 14px;font-size:12.5px}
 .tiles.busy .tile::after{content:"";position:absolute;inset:0;pointer-events:none;
 background:linear-gradient(100deg,transparent 30%,rgba(232,237,247,.07) 50%,transparent 70%);
 background-size:220% 100%;animation:shim 1.1s linear infinite}
+/* ---- Phase 4: recurring toggle, ledger search + chips, month separators ---- */
+label.chk{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:13.5px;font-weight:600;
+cursor:pointer;min-height:44px;margin-top:4px}
+label.chk input{width:18px;height:18px;accent-color:var(--acc);flex:0 0 auto;margin:0}
+#ledTools{padding:10px 14px}
+#ledTools input{margin:0}
+#chipRow{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}
+.chip-lbl{color:var(--mut);font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;margin:0 2px}
+.chip{cursor:pointer;background:var(--card2);border:1px solid var(--line);color:var(--mut);
+border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700;line-height:1.2;min-height:34px}
+.chip.on{background:rgba(91,140,255,.18);border-color:var(--acc);color:#fff}
+.chip:active{filter:brightness(1.2)}
+.msep{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--mut);
+margin:10px 0 2px;padding-top:6px;border-top:1px solid var(--line)}
+.msep:first-child{border-top:0;margin-top:0;padding-top:0}
+/* ---- Phase 4 a11y: 44px primary tap targets ---- */
+.tab{min-height:44px;padding:12px 6px}
+button.sync{min-height:44px}
+button.gear{width:44px;height:44px}
+.sheet-x{width:44px;height:44px}
+.mini{min-height:32px;padding:4px 10px}
 @media (prefers-reduced-motion:reduce){#snack,#swToast{transition:none}
 #tab-home,#tab-money,#tab-ledger,#tab-coach,.txn,.dig,.drow,.tiles.busy .tile::after{animation:none!important}}
 </style>
@@ -244,7 +265,7 @@ background-size:220% 100%;animation:shim 1.1s linear infinite}
   <header>
     <h1>Fin<span>ance</span></h1>
     <div class="hwrap">
-      <div id="status"></div>
+      <div id="status" aria-live="polite"></div>
       <button class="gear" id="setBtn" type="button" aria-label="Settings">⚙&#xFE0E;</button>
       <button class="sync" id="syncBtn" type="button">Sync</button>
     </div>
@@ -315,6 +336,10 @@ background-size:220% 100%;animation:shim 1.1s linear infinite}
           </div>
         </div>
       </div>
+      <label class="chk" for="p_repeat">
+        <input type="checkbox" id="p_repeat">
+        <span>Every month (recurring — shown 3 months ahead)</span>
+      </label>
       <div style="margin-top:14px">
         <button class="act" type="submit">Add plan</button>
       </div>
@@ -326,6 +351,11 @@ background-size:220% 100%;animation:shim 1.1s linear infinite}
   <div id="tab-ledger" style="display:none">
     <div id="addEmpty" class="card" style="display:none">
       <p class="note" style="margin:2px 0">Entries are saved on this phone. Connect your sheet via <b>Settings</b> (⚙) to sync them to Google Sheets.</p>
+    </div>
+
+    <div id="ledTools" class="card" style="padding:10px 14px">
+      <input id="txnSearch" type="search" placeholder="Search category, account, note…" autocomplete="off" spellcheck="false">
+      <div id="chipRow"></div>
     </div>
 
     <section id="donut" class="card" style="display:none">
@@ -403,7 +433,7 @@ background-size:220% 100%;animation:shim 1.1s linear infinite}
     <button id="setClose" class="sheet-x" type="button" aria-label="Close">✕</button>
   </div>
   <div class="sheet-b">
-    <p id="connStatus" class="note" style="margin:10px 0 14px"></p>
+    <p id="connStatus" class="note" style="margin:10px 0 14px" aria-live="polite"></p>
     <section id="connect" class="card" style="display:none">
       <h2 style="margin-top:0">Connect your sheet</h2>
       <p class="note" style="margin-top:2px">Paste your <b>Apps Script Web App URL</b> — the <code>…/exec</code> link from your Sheet:
@@ -413,7 +443,15 @@ background-size:220% 100%;animation:shim 1.1s linear infinite}
     </section>
     <button class="act" id="syncNowBtn" type="button">Sync now</button>
     <p class="note" style="margin-top:12px">Synced entries live in your Sheet — edit or delete them there. Plans and the chat stay on this phone.</p>
-    <p class="note" style="margin:10px 0 0">Finance PWA · offline-first · shell v12</p>
+    <section class="card" style="margin-top:16px">
+      <h2 style="margin-top:0">Export</h2>
+      <p class="note" style="margin:4px 0 10px">Download what this phone holds — every entry (synced and pending) plus your plans. CSV holds the ledger only; JSON holds everything.</p>
+      <div class="row">
+        <div><button class="act" id="expJson" type="button">Export JSON</button></div>
+        <div><button class="act" id="expCsv" type="button">Export CSV</button></div>
+      </div>
+    </section>
+    <p class="note" style="margin:14px 0 0">Finance PWA · offline-first · shell v13</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>
