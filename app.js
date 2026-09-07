@@ -40,18 +40,19 @@
     error: null,
     adj: { cash: 0, free: 0, card: 0, prepay: 0 },
     adjSig: '',
-    adjLoaded: false
+    adjLoaded: false,
+    coachMem: null
   };
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
   var RENDER_BY_KEY = {
-    txn: [renderStatus, renderList, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDigest, renderDonut, renderPace, renderChips],
-    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderDigest],
-    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, updateChargeHint, renderHero, renderDigest],
+    txn: [renderStatus, renderList, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderChips],
+    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero],
+    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, updateChargeHint, renderHero],
     sync: [renderStatus, renderSyncErr, renderList, renderFooter, renderConnect],
     online: [renderStatus, renderSyncErr, renderFooter, renderConnect],
     adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero],
-    ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderList, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDigest, renderDonut, renderPace, renderChips]
+    ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderList, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderChips]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -544,11 +545,20 @@
       daily: daysLeft > 0 ? r2(Math.max(0, free) / daysLeft) : 0,
       todaySpend: r2(todaySpend), items: items,
       prepayDay: prepayDay, prepayIn: prepayIn, prepayAmt: prepayAmt,
+      prepayDate: localISO(new Date(now.getFullYear(), now.getMonth(), prepayDay)),
       weekCost: weekCost, laterCount: laterCount, laterAmt: r2(laterAmt),
       monthPlans: r2(monthPlans), monthPlanCount: monthPlanCount,
       spentM: spentM, pace: pace,
       freeAfterPace: r2(free - r2(pace * Math.max(0, daysLeft - 1)))
     };
+  }
+  // ---------- Phase 5: unified coach card (narrative + attention rows + one-tap actions) ----------
+  function prefillAdd(amt, dateISO, note) {
+    var a = byId('f_amount'), dt = byId('f_date'), n = byId('f_note');
+    if (a) a.value = amt != null ? String(amt) : '';
+    if (dt && dateISO) dt.value = dateISO;
+    if (n && note) n.value = note;
+    openSheet('addSheet');
   }
   function renderCoach() {
     var el = byId('coach'); if (!el) return;
@@ -557,22 +567,40 @@
     el.style.display = '';
     var name = coachName(d.s);
     var hi = name ? 'Hey ' + name + ' — ' : 'Heads up — ';
+    var info = coachRows(d);
+    var rows = info.rows;
+    var prepayActive = info.prepayActive && !info.prepayPaid;
     var cls, head, sub;
+    var shortfall = r2(d.weekCost - d.free);
+    var afterWeek = r2(d.free - d.weekCost);
+    var floor = info.floor;
+    var due = d.prepayIn === 0 ? 'today' : 'in ' + d.prepayIn + ' day' + (d.prepayIn === 1 ? '' : 's');
+    var trim = null;
+    d.items.forEach(function (it) {
+      if (/card prepay/i.test(it.label)) return;
+      if (!trim || it.amt > trim.amt) trim = it;
+    });
     if (d.free < 0) {
       cls = 'bad';
       head = hi + 'no room to breathe right now.';
-      sub = 'Free cash is ' + money(d.free) + '.' + (d.prepayAmt > 0
-        ? ' Skip the treats today and put it toward the ' + money(d.prepayAmt) + ' prepay due on the ' + ordinal(d.prepayDay) + '.'
+      sub = 'Free cash is ' + money(d.free) + '.' + (prepayActive
+        ? ' Skip the treats today and put it toward the ' + money(d.prepayAmt) + ' prepay due on the ' + ordinal(d.prepayDay) + ' (below).'
         : ' Skip the treats today — back the cards first.');
-    } else if (d.prepayIn <= 3 && d.prepayAmt > 0) {
-      cls = 'warn';
-      var due = d.prepayIn === 0 ? 'today' : 'in ' + d.prepayIn + ' day' + (d.prepayIn === 1 ? '' : 's');
+    } else if (prepayActive && d.prepayIn <= 3) {
+      cls = d.prepayIn <= 1 ? 'bad' : 'warn';
       head = hi + money(d.prepayAmt) + ' card prepay is due ' + due + ' (the ' + ordinal(d.prepayDay) + ').';
-      sub = 'Set aside ' + money(d.prepayIn > 0 ? r2(d.prepayAmt / d.prepayIn) : d.prepayAmt) + ' a day and keep today under ' + money(d.daily) + ' so it stays covered.';
-    } else if (d.weekCost > d.free) {
+      sub = 'Set aside ' + money(d.prepayIn > 0 ? r2(d.prepayAmt / d.prepayIn) : d.prepayAmt) + '/day to cover it.';
+      if (afterWeek < floor) sub += ' Paying it takes cash to ' + money(afterWeek) + ' — under your ' + money(floor) + ' floor' +
+        (trim ? '. Biggest lever if you need room: ' + trim.label + ' (' + money(trim.amt) + ').' : '.');
+      else sub += ' After it, about ' + money(afterWeek) + ' stays free — safe.';
+    } else if (shortfall > 0) {
       cls = 'bad';
-      head = hi + 'this week is over budget by ' + money(r2(d.weekCost - d.free)) + '.';
-      sub = 'The next 7 days have ' + money(d.weekCost) + ' coming up vs ' + money(d.free) + ' free. Keep today at zero extras, or trim a plan to make room.';
+      head = hi + 'this week is over budget by ' + money(shortfall) + '.';
+      sub = (prepayActive ? 'The card prepay below is the reason: ' : 'This week\'s plans total ') + money(d.weekCost) + ' vs ' + money(d.free) + ' free.';
+      if (trim) sub += ' Biggest lever: ' + trim.label + ' (' + money(trim.amt) + ').';
+      if (prepayActive && d.prepayIn > 0) sub += ' Or set aside ' + money(r2(shortfall / d.prepayIn)) + '/day until the ' + ordinal(d.prepayDay) + ' and it\'s covered.';
+      if (afterWeek < floor) sub += ' As is, cash dips to ' + money(afterWeek) + ' — under your ' + money(floor) + ' floor.';
+      else sub += ' Keep today at zero extras and it stays above the floor.';
     } else if (d.freeAfterPace < 0) {
       cls = 'warn';
       head = hi + 'at ' + money(d.pace) + '/day you finish the month ' + money(r2(-d.freeAfterPace)) + ' in the red.';
@@ -580,7 +608,7 @@
     } else if (d.daily < d.meal) {
       cls = 'warn';
       head = hi + 'keep today around ' + money(d.daily) + '.';
-      sub = 'That is your daily share of the free cash; a ' + money(d.meal) + ' treat would overshoot by ' + money(r2(d.meal - d.daily)) + '. I recommend not going over budget.';
+      sub = 'That is your daily share of the free cash; a ' + money(d.meal) + ' treat would overshoot by ' + money(r2(d.meal - d.daily)) + '.';
     } else {
       cls = 'good';
       head = hi + 'you are on track. You can spend up to ' + money(d.daily) + ' today.';
@@ -592,10 +620,62 @@
       var recAmt = rec.reduce(function (s, p) { return s + (Number(p.amount) || 0); }, 0);
       sub += ' On repeat: ' + rec.map(function (p) { return p.name || 'plan'; }).join(', ') + ' — ' + money(recAmt) + ' a month.';
     }
+    // ---- coach memory: compare with the last visit, notice what got handled ----
+    var mem = state.coachMem;
+    if (mem && mem.d && mem.d !== d.today) {
+      var bits = [];
+      var dFree = r2(d.free - (Number(mem.free) || 0));
+      if (Math.abs(dFree) >= 1) bits.push('free cash ' + (dFree < 0 ? 'fell' : 'rose') + ' ' + money(Math.abs(dFree)));
+      var dSpent = r2(d.spentM - (Number(mem.spentM) || 0));
+      if (dSpent > 1) bits.push('you logged ' + money(dSpent) + ' in new spending');
+      (mem.alerts || []).forEach(function (k) {
+        if (info.alerts.indexOf(k) >= 0) return;
+        if (k === 'prepay') bits.push(info.prepayPaid ? 'the prepay you handled is off the list' : 'the prepay is past its window');
+        else if (k === 'floor') bits.push('the cash floor alert cleared');
+      });
+      if (bits.length) sub = 'Since your last check: ' + bits.slice(0, 2).join('; ') + '. ' + sub;
+      else if (info.alerts.length && (mem.alerts || []).join() === info.alerts.join()) {
+        sub = 'Same story as your last check — ' + (info.alerts.indexOf('prepay') >= 0 ? 'the prepay is still the priority. ' : 'the items below are still the priority. ') + sub;
+      }
+    }
     el.className = 'card coach ' + cls;
     var h = byId('coachHead'), sb = byId('coachSub');
     if (h) h.textContent = head;
     if (sb) sb.textContent = sub;
+    // ---- attention rows (same card, no duplicate card) ----
+    var body = byId('digBody');
+    if (body) {
+      var html = '';
+      rows.forEach(function (rw) {
+        html += '<button type="button" class="dig ' + rw.cls + '" data-digto="money">' +
+          '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
+          '<span class="dg-r">' + esc(rw.r) + '</span></button>';
+      });
+      body.innerHTML = html;
+      var btns = body.querySelectorAll('[data-digto]');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].onclick = function () { setTab(this.getAttribute('data-digto')); };
+      }
+    }
+    // ---- one-tap actions ----
+    var acts = byId('coachActs');
+    if (acts) {
+      var ah = '';
+      if (prepayActive) ah += '<button type="button" class="cbtn" id="actPrepay">Log prepay ' + money(d.prepayAmt) + '</button>';
+      var hasPlanRow = rows.some(function (rw) { return rw.tag === 'Plan due'; });
+      if (hasPlanRow) ah += '<button type="button" class="cbtn ghost" id="actPlans">See this week\'s plans</button>';
+      acts.innerHTML = ah;
+      var ap = byId('actPrepay');
+      if (ap) ap.onclick = function () { prefillAdd(d.prepayAmt, d.prepayDate, 'Card prepay (the ' + ordinal(d.prepayDay) + ')'); };
+      var aa = byId('actPlans');
+      if (aa) aa.onclick = function () { setTab('money'); };
+    }
+    // ---- persist coach memory (only when it changed) ----
+    var newMem = { d: d.today, free: r2(d.free), spentM: r2(d.spentM), alerts: info.alerts.slice(0, 5) };
+    if (!mem || JSON.stringify(mem) !== JSON.stringify(newMem)) {
+      state.coachMem = newMem;
+      idbPut(STORE_META, { key: 'coachMem', value: newMem }).catch(function () {});
+    }
   }
   function renderInsights() {
     var wrap = byId('insights'), body = byId('insBody');
@@ -805,19 +885,42 @@
     });
     box.innerHTML = svg + '</svg>';
   }
-  // ---------- Phase 3: needs-attention digest (Home) ----------
-  function renderDigest() {
-    var wrap = byId('digest'), body = byId('digBody');
-    if (!wrap || !body) return;
-    var d = insightsData();
-    if (!d) { wrap.style.display = 'none'; return; }
-    var s = d.s;
-    var rows = [];
-    if (d.prepayIn >= 0 && d.prepayIn <= 7 && d.prepayAmt > 0) {
+  // ---------- Phase 5: attention rows for the unified coach card ----------
+  function findPaidTxn(d, kind) {
+    var out = null;
+    state.txns.forEach(function (t) {
+      var amt = Number(t.amount) || 0;
+      var hay = ((t.category || '') + ' ' + (t.note || '')).toLowerCase();
+      if (kind === 'prepay') {
+        if (String(t.date).slice(0, 7) !== d.monthPrefix) return;
+        if (!/prepay|card|amex|visa|master|credit/.test(hay)) return;
+        if (amt >= 0.5 * d.prepayAmt) out = t;
+      } else {
+        var dd = diffDays(String(t.date), kind.date);
+        if (dd < -2 || dd > 2) return;
+        var words = String(kind.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 4; });
+        if (!words.length || !words.some(function (w) { return hay.indexOf(w) >= 0; })) return;
+        var pa = Number(kind.amount) || 0;
+        if (amt >= 0.5 * pa && amt <= 2.5 * pa) out = t;
+      }
+    });
+    return out;
+  }
+  function coachRows(d) {
+    var s = d.s, rows = [], alerts = [];
+    var prepayActive = d.prepayAmt > 0;
+    var prepayPaid = prepayActive ? findPaidTxn(d, 'prepay') : null;
+    if (prepayActive) {
       var pw = d.prepayIn === 0 ? 'today' : (d.prepayIn === 1 ? 'tomorrow' : 'in ' + d.prepayIn + ' days');
-      rows.push({ cls: d.prepayIn <= 2 ? 'bad' : 'warn', tag: 'Card prepay',
-        text: 'Set aside ' + money(d.prepayAmt) + ' for the ' + ordinal(d.prepayDay) + ' prepay — due ' + pw + '.',
-        r: money(d.prepayAmt) });
+      if (prepayPaid) rows.push({ cls: 'done', tag: 'Card prepay',
+        text: 'Handled — ' + money(Number(prepaid.amount) || 0) + ' logged on ' + planWhen(String(prepaid.date)) + '. Nice.',
+        r: 'done' });
+      else {
+        rows.push({ cls: d.prepayIn <= 2 ? 'bad' : 'warn', tag: 'Card prepay',
+          text: 'Set aside ' + money(d.prepayAmt) + ' for the ' + ordinal(d.prepayDay) + ' prepay — due ' + pw + '.',
+          r: money(d.prepayAmt) });
+        alerts.push('prepay');
+      }
     }
     var floor = Number(s.floor) > 0 ? Number(s.floor) : (Number(s.emergency_cap) || 0);
     if (floor > 0 && state.snapshot && state.snapshot.matrix && state.snapshot.matrix.base) {
@@ -832,12 +935,12 @@
           if (wv < floor && (!worstDip || wv < worstDip.v)) worstDip = { v: wv, m: w.month };
         }
       });
-      if (baseDip) rows.push({ cls: 'bad', tag: 'Cash floor',
+      if (baseDip) { rows.push({ cls: 'bad', tag: 'Cash floor',
         text: 'Cash dips to ' + money(baseDip.v) + ' in ' + monthLabel(baseDip.m) + ' — floor is ' + money(floor) + '.',
-        r: 'below floor' });
-      else if (worstDip) rows.push({ cls: 'warn', tag: 'Worst case',
+        r: 'below floor' }); alerts.push('floor'); }
+      else if (worstDip) { rows.push({ cls: 'warn', tag: 'Worst case',
         text: 'With the full emergency budgeted each month, cash dips to ' + money(worstDip.v) + ' in ' + monthLabel(worstDip.m) + '.',
-        r: 'floor ' + fmtNum(floor) });
+        r: 'floor ' + fmtNum(floor) }); alerts.push('floor'); }
     }
     var sink = state.snapshot && state.snapshot.sinking;
     var nowM = d.monthPrefix;
@@ -862,35 +965,38 @@
           rows.push({ cls: planned > 0 ? 'warn' : 'bad', tag: 'Sinking behind',
             text: f.name + ' needs about ' + money(needed) + '/month to reach ' + money(goal) + ' by ' + monthLabel(dl) + '; it is on ' + money(planned) + '/month.',
             r: money(needed - planned) + ' short' });
+          alerts.push('sink');
         }
       });
     }
     var urgent = [];
     state.plans.forEach(function (p) {
-      var dd = diffDays(d.today, p.date);
-      if (dd >= 0 && dd <= 7) urgent.push({ p: p, dd: dd });
+      planOccurrences(p).forEach(function (od) {
+        var dd = diffDays(d.today, od);
+        if (dd >= 0 && dd <= 7) urgent.push({ p: p, date: od, dd: dd });
+      });
     });
     urgent.sort(function (a, b) { return a.dd - b.dd; });
-    urgent.slice(0, 2).forEach(function (u) {
+    var shown = 0;
+    for (var i = 0; i < urgent.length && shown < 2; i++) {
+      var u = urgent[i];
+      var paid = findPaidTxn(d, { date: u.date, name: u.p.name, amount: u.p.amount });
       var pw2 = u.dd === 0 ? 'today' : (u.dd === 1 ? 'tomorrow' : 'in ' + u.dd + ' days');
-      rows.push({ cls: u.dd <= 2 ? 'bad' : 'warn', tag: 'Plan due',
-        text: (u.p.name || 'Plan') + ' is due ' + pw2 + '.',
-        r: money(u.p.amount) });
-    });
-    rows = rows.slice(0, 5);
-    if (!rows.length) { wrap.style.display = 'none'; return; }
-    wrap.style.display = '';
-    var html = '';
-    rows.forEach(function (rw) {
-      html += '<button type="button" class="dig ' + rw.cls + '" data-digto="money">' +
-        '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
-        '<span class="dg-r">' + esc(rw.r) + '</span></button>';
-    });
-    body.innerHTML = html;
-    var btns = body.querySelectorAll('[data-digto]');
-    for (var i = 0; i < btns.length; i++) {
-      btns[i].onclick = function () { setTab(this.getAttribute('data-digto')); };
+      if (paid) rows.push({ cls: 'done', tag: 'Plan · ' + (u.p.name || 'Plan'),
+        text: 'Handled — ' + money(Number(paid.amount) || 0) + ' logged on ' + planWhen(paid.date) + '.',
+        r: 'done' });
+      else {
+        rows.push({ cls: u.dd <= 2 ? 'bad' : 'warn', tag: 'Plan due',
+          text: (u.p.name || 'Plan') + ' is due ' + pw2 + '.',
+          r: money(u.p.amount) });
+        alerts.push('plan:' + (u.p.name || 'Plan'));
+        shown++;
+      }
     }
+    var done = rows.filter(function (r) { return r.cls === 'done'; });
+    var act = rows.filter(function (r) { return r.cls !== 'done'; });
+    rows = done.slice(0, 2).concat(act.slice(0, 5 - done.slice(0, 2).length));
+    return { rows: rows, alerts: alerts, prepayActive: prepayActive, prepayPaid: !!prepayPaid, floor: floor };
   }
   // ---------- Phase 3: category donut + spend pace (Ledger) ----------
   var DONUT_COLORS = ['#5b8cff', '#37d39b', '#ffc45c', '#ff6b6b', '#b48cff', '#64748b'];
@@ -1423,6 +1529,7 @@
         if (m.key === 'snapshot') { state.snapshot = m.value; state.lastSync = m.at; }
         else if (m.key === 'adj') { state.adj = m.value; hasAdj = true; }
         else if (m.key === 'adjSig') { state.adjSig = m.value || ''; }
+        else if (m.key === 'coachMem') { state.coachMem = m.value; }
       });
       if (!hasAdj) computeAdjFromTxns();
       if (!state.adjSig && state.snapshot) state.adjSig = snapSig(state.snapshot);

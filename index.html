@@ -199,18 +199,29 @@ padding:7px 14px;font-size:12.5px}
 .hero-sub b{color:var(--ink)}
 .spark{margin-top:12px}
 .spark svg{width:100%;height:auto;display:block}
-/* ---- Phase 3: needs-attention digest ---- */
+/* ---- Phase 5: attention rows inside the unified coach card ---- */
 .dig{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
- text-align:left;background:var(--card2);border:1px solid var(--line);border-radius:10px;
- color:var(--ink);padding:10px 12px;margin-top:8px;font-size:13px;cursor:pointer;line-height:1.45}
+ text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);
+ color:var(--ink);padding:10px 2px 10px 12px;margin-top:0;font-size:13px;cursor:pointer;line-height:1.45;
+ border-left:3px solid transparent;min-height:44px}
+.dig:first-child{margin-top:12px}
 .dig:active{filter:brightness(1.15)}
 .dig .dg-l{flex:1;min-width:0}
 .dig .dg-r{flex:0 0 auto;font-weight:700;font-size:12.5px;color:var(--mut);white-space:nowrap}
-.dig.warn{border-left:3px solid var(--warn)}
-.dig.bad{border-left:3px solid var(--bad)}
+.dig.warn{border-left-color:var(--warn)}
+.dig.bad{border-left-color:var(--bad)}
+.dig.done{border-left-color:var(--ok);opacity:.85}
 .dg-tag{display:block;font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;margin-bottom:2px}
 .dig.warn .dg-tag{color:var(--warn)}
 .dig.bad .dg-tag{color:var(--bad)}
+.dig.done .dg-tag{color:var(--ok)}
+.coach-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.cbtn{cursor:pointer;background:transparent;border:1px solid var(--acc);color:var(--acc);
+ border-radius:999px;padding:9px 14px;font-size:12.5px;font-weight:700;min-height:40px;font-family:inherit}
+.cbtn:active{filter:brightness(1.2)}
+.cbtn.ghost{border-color:var(--line);color:var(--mut)}
+#digBody:empty{display:none}
+#coachActs:empty{display:none}
 /* ---- Phase 3: donut + spend pace (Ledger) ---- */
 .donutwrap{display:flex;gap:14px;align-items:center}
 .donutwrap svg{flex:0 0 108px;width:108px;height:108px}
@@ -286,14 +297,11 @@ button.gear{width:44px;height:44px}
       <div class="spark" id="sparkBox"></div>
     </section>
 
-    <section id="digest" style="display:none">
-      <h2 style="margin-top:18px">Needs attention</h2>
-      <div id="digBody"></div>
-    </section>
-
     <section id="coach" class="card coach" style="display:none">
       <p class="coach-h" id="coachHead"></p>
       <p class="coach-s" id="coachSub"></p>
+      <div id="digBody"></div>
+      <div id="coachActs" class="coach-acts"></div>
     </section>
 
     <section id="insights" class="card" style="display:none">
@@ -451,7 +459,7 @@ button.gear{width:44px;height:44px}
         <div><button class="act" id="expCsv" type="button">Export CSV</button></div>
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">Finance PWA · offline-first · shell v13</p>
+    <p class="note" style="margin:14px 0 0">Finance PWA · offline-first · shell v14</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>
