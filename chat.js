@@ -863,12 +863,14 @@
     });
     if (F.online()) F.sync().catch(function () {});
     updateFresh({ at: null, online: F.online() });
-    inputEl.focus();
+    // no auto-focus: the keyboard should only appear when the user taps the input
   }
   function closeChat() {
     if (panelEl) {
       panelEl.style.display = 'none';
       if (fabEl) fabEl.style.display = '';
+    } else if (F.closeCoach) {
+      F.closeCoach();
     } else if (F.setTab) {
       F.setTab('home');
     }

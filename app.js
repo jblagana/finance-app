@@ -1286,12 +1286,17 @@
   }
   var TABS = ['home', 'money', 'ledger', 'coach'];
   var TAB_MIGRATE = { overview: 'money', add: 'ledger' };
+  var shownTab = null;        // pane currently on screen
+  var lastCoachTab = 'home';  // where Coach returns to when the tab is tapped again
   function setTab(name) {
     if (TAB_MIGRATE[name]) name = TAB_MIGRATE[name];
     if (TABS.indexOf(name) < 0) name = 'home';
+    if (name === 'coach' && shownTab === 'coach') name = lastCoachTab;  // tapping the Coach tab again closes it
+    else if (name !== 'coach') lastCoachTab = name;
+    shownTab = name;
     var panes = { home: byId('tab-home'), money: byId('tab-money'), ledger: byId('tab-ledger'), coach: byId('tab-coach') };
     Object.keys(panes).forEach(function (k) {
-      if (panes[k]) panes[k].style.display = k === name ? (k === 'coach' ? 'flex' : '') : 'none';
+      if (panes[k]) panes[k].style.display = k === name ? '' : 'none';
     });
     var btns = document.querySelectorAll('#tabs .tab');
     for (var i = 0; i < btns.length; i++) {
@@ -1300,6 +1305,9 @@
     try { localStorage.setItem(LS_TAB, name); } catch (e) {}
     window.scrollTo(0, 0);
     if (name === 'coach' && window.__financeChat && window.__financeChat.open) window.__financeChat.open();
+  }
+  function closeCoach() {
+    if (shownTab === 'coach') setTab(lastCoachTab || 'home');
   }
   function currentTab() {
     if (!state.snapshot) return 'home';
@@ -1343,6 +1351,7 @@
     sync: doSync,
     render: render,
     setTab: setTab,
+    closeCoach: closeCoach,
     openSettings: function () { openSheet('setSheet'); },
     online: function () { return state.online; },
     lastSync: function () { return state.lastSync; },
