@@ -3,10 +3,11 @@
   'use strict';
 
   var DB_NAME = 'finances-pwa';
-  var DB_VERSION = 2;
+  var DB_VERSION = 3;
   var STORE_TX = 'txns';
   var STORE_PLANS = 'plans';
   var STORE_META = 'meta';
+  var STORE_CHAT = 'chat';
   var LS_URL = 'fin.syncUrl';
   var LS_MEAL = 'fin.mealBudget';
   var LS_NAME = 'fin.name';
@@ -55,6 +56,7 @@
         if (!db.objectStoreNames.contains(STORE_TX)) db.createObjectStore(STORE_TX, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(STORE_PLANS)) db.createObjectStore(STORE_PLANS, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META, { keyPath: 'key' });
+        if (!db.objectStoreNames.contains(STORE_CHAT)) db.createObjectStore(STORE_CHAT, { keyPath: 'id' });
       };
       req.onsuccess = function () { resolve(req.result); };
       req.onerror = function () { reject(req.error); };
@@ -288,7 +290,7 @@
       render();
       if (state.online && getUrl()) return doSync();
       return Promise.resolve();
-    });
+    }).then(function () { return id; });
   }
   function deleteTxn(id) {
     var t = null;
@@ -660,7 +662,7 @@
     var id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
     var p = { id: id, name: data.name, amount: data.amount, date: data.date, created: new Date().toISOString() };
     state.plans.push(p);
-    return idbPut(STORE_PLANS, p).then(function () { render(); });
+    return idbPut(STORE_PLANS, p).then(function () { render(); return id; });
   }
   function deletePlan(id) {
     state.plans = state.plans.filter(function (x) { return x.id !== id; });
@@ -735,6 +737,26 @@
     renderCoach(); renderInsights(); renderProjection(); renderObligations(); renderSinking();
     renderAddEmpty(); renderPlans(); renderFooter(); updateChargeHint();
   }
+
+  // ---------- bridge for chat.js (the chat writes through the app's own actions) ----------
+  window.FinApp = {
+    addPlan: addPlan,
+    deletePlan: deletePlan,
+    addTxn: addTxn,
+    deleteTxn: deleteTxn,
+    sync: doSync,
+    render: render,
+    setTab: setTab,
+    online: function () { return state.online; },
+    lastSync: function () { return state.lastSync; },
+    idbAll: idbAll,
+    idbPut: idbPut,
+    idbDel: idbDel,
+    STORE_CHAT: STORE_CHAT,
+    STORE_PLANS: STORE_PLANS,
+    STORE_TX: STORE_TX,
+    STORE_META: STORE_META
+  };
 
   // ---------- init ----------
   function init() {

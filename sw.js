@@ -1,6 +1,6 @@
 /* Finance PWA service worker: cache-first app shell, network-only API. */
-const CACHE = 'finances-pwa-v8';
-const SHELL = ['./', './index.html', './app.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const CACHE = 'finances-pwa-v9';
+const SHELL = ['./', './index.html', './app.js', './chat.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
