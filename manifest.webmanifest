@@ -1,7 +1,7 @@
 {
   "name": "Finance",
   "short_name": "Finance",
-  "description": "Offline-first personal finance tracker synced to your Google Sheet.",
+  "description": "Fully local personal finance tracker — your numbers live on this phone.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

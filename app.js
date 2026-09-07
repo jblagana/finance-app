@@ -1,4 +1,4 @@
-/* Finance PWA client — offline-first, syncs to the Apps Script Web App. */
+/* Finance PWA client — fully local-first: base data + all math live on this phone. */
 (function () {
   'use strict';
 
@@ -8,7 +8,6 @@
   var STORE_PLANS = 'plans';
   var STORE_META = 'meta';
   var STORE_CHAT = 'chat';
-  var LS_URL = 'fin.syncUrl';
   var LS_MEAL = 'fin.mealBudget';
   var LS_NAME = 'fin.name';
   var LS_TAB = 'fin.tab';
@@ -34,10 +33,8 @@
     online: navigator.onLine,
     txns: [],
     plans: [],
+    base: null,
     snapshot: null,
-    lastSync: null,
-    syncing: false,
-    error: null,
     adj: { cash: 0, free: 0, card: 0, prepay: 0 },
     adjSig: '',
     adjLoaded: false,
@@ -47,13 +44,11 @@
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
   var RENDER_BY_KEY = {
-    txn: [renderStatus, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog],
+    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog],
     plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero],
-    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, updateChargeHint, renderHero],
-    sync: [renderStatus, renderSyncErr, renderFooter, renderConnect],
-    online: [renderStatus, renderSyncErr, renderFooter, renderConnect],
+    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus],
     adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero],
-    ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog]
+    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -66,8 +61,6 @@
       });
     });
   }
-
-  var seededAccounts = false;
 
   // ---------- IndexedDB ----------
   var dbPromise = null;
@@ -145,8 +138,6 @@
     lab.textContent = fmtDate(input.value);
     lab.className = 'dlabel';
   }
-  function getUrl() { try { return localStorage.getItem(LS_URL) || ''; } catch (e) { return ''; } }
-  function setUrl(u) { try { localStorage.setItem(LS_URL, u); } catch (e) {} }
   function r2(x) { return Math.round((Number(x) || 0) * 100) / 100; }
   function monthLabel(m) {
     var p = String(m || '').split('-');
@@ -276,67 +267,288 @@
     return e;
   }
 
-  // ---------- API ----------
-  function apiGet() {
-    return fetch(getUrl(), { method: 'GET', cache: 'no-store' }).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    });
+  // ---------- local base data: the single source of truth on this phone ----------
+  function defaultBase() {
+    return {
+      v: 1, name: '', as_of: todayISO(),
+      salary: 0, salary_overrides: {},
+      prepay_day: 14, cutoff_day: 15, card_util_target: 0.099,
+      liquidity_floor: 0, emergency_cap: 0,
+      accounts: [], budgets: {}, budget_overrides: {},
+      one_offs: {}, debts: {}, sinking: {},
+      migrated_from_snapshot: null, edited: null
+    };
   }
-  function apiPost(txns) {
-    return fetch(getUrl(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ txns: txns })
-    }).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
+  function baseIsEmpty(b) {
+    if (!b) return true;
+    if ((b.accounts || []).length || (Number(b.salary) || 0) > 0) return false;
+    return !Object.keys(b.budgets || {}).length && !Object.keys(b.debts || {}).length
+      && !Object.keys(b.one_offs || {}).length && !Object.keys(b.sinking || {}).length;
+  }
+  // One-time migration: the last cached sheet snapshot becomes the local base.
+  function snapshotToBase(s) {
+    if (!s) return null;
+    var b = defaultBase();
+    b.name = String(s.display_name || '').trim();
+    b.as_of = String(s.as_of || todayISO());
+    b.salary = Number(s.salary) || 0;
+    b.prepay_day = Number(s.prepay_day) || 14;
+    b.cutoff_day = Number(s.cutoff_day) || 15;
+    b.liquidity_floor = Number(s.floor) || 0;
+    b.emergency_cap = Number(s.emergency_cap) || 0;
+    b.migrated_from_snapshot = String(s.month || s.as_of || '');
+    var target = 0;
+    (s.cards || []).forEach(function (c) {
+      b.accounts.push({ name: c.name, kind: 'card', value: Number(c.balance) || 0, limit: c.limit ? Number(c.limit) : 0, note: '' });
+      if (!target && c.limit && (Number(c.prepay) || 0) > 0) target = (Number(c.balance) - Number(c.prepay)) / Number(c.limit);
     });
+    if (target > 0) b.card_util_target = r2(target);
+    ((s.cash && s.cash.accounts) || []).forEach(function (a) {
+      b.accounts.push({ name: a.name, kind: 'cash', value: Number(a.value) || 0, limit: 0, note: '' });
+    });
+    var ob = s.obligations || {};
+    var month = String(s.month || '');
+    (ob.budget || []).forEach(function (l) {
+      b.budgets[l.name] = Number(l.normal) || 0;
+      if (l.overridden || Math.abs((Number(l.amount) || 0) - (Number(l.normal) || 0)) > 0.004) {
+        b.budget_overrides[month] = b.budget_overrides[month] || {};
+        b.budget_overrides[month][l.name] = Number(l.amount) || 0;
+      }
+    });
+    (ob.debts || []).forEach(function (d) {
+      var dd = { monthly: 0, active_months: [], payments: {} };
+      var amts = (d.schedule || []).map(function (p) { return Number(p.amount) || 0; });
+      if (amts.length && amts.every(function (a) { return Math.abs(a - amts[0]) <= 0.004; })) {
+        // uniform rhythm: reconstruct as monthly + active months
+        dd.monthly = amts[0];
+        (d.schedule || []).forEach(function (p) { dd.active_months.push(p.month); });
+      } else {
+        (d.schedule || []).forEach(function (p) { dd.payments[p.month] = Number(p.amount) || 0; });
+      }
+      if (d.balance != null) b.accounts.push({ name: d.name, kind: 'debt', value: Number(d.balance) || 0, limit: 0, note: '' });
+      b.debts[d.name] = dd;
+    });
+    (ob.one_offs || []).forEach(function (o) {
+      b.one_offs[o.month] = b.one_offs[o.month] || {};
+      b.one_offs[o.month][o.name] = Number(o.amount) || 0;
+    });
+    (ob.loans || []).forEach(function (l) {
+      b.accounts.push({ name: l.name, kind: 'loan', value: Number(l.value) || 0, limit: 0, note: l.note || '' });
+    });
+    (s.sinking || []).forEach(function (f) {
+      var payments = {};
+      (f.payments || []).forEach(function (p) { payments[p.month] = Number(p.amount) || 0; });
+      b.sinking[f.name] = { goal: Number(f.goal) || 0, deadline: f.deadline || '', funded: Number(f.funded) || 0, payments: payments };
+    });
+    ((s.matrix && s.matrix.base) || []).forEach(function (row) {
+      var sal = Number(row.comp && row.comp.salary) || 0;
+      if (Math.abs(sal - b.salary) > 0.004) b.salary_overrides[row.comp.month] = sal;
+    });
+    return b;
   }
 
-  // ---------- sync ----------
-  function pendingList() { return state.txns.filter(function (t) { return !t.synced; }); }
-  function pendingSum() { return pendingList().reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0); }
-
-  function doSync() {
-    if (state.syncing) return Promise.resolve();
-    if (!state.online || !getUrl()) { emit('sync'); return Promise.resolve(); }
-    state.syncing = true;
-    state.error = null;
-    emit('sync');
-    var pending = pendingList();
-    var chain;
-    if (pending.length) {
-      var payload = pending.map(function (t) {
-        return { id: t.id, date: t.date, account: t.account, kind: t.kind, category: t.category, amount: t.amount, note: t.note };
-      });
-      chain = apiPost(payload).then(function (res) {
-        if (!res.ok) throw new Error(res.error || 'sync failed');
-        var done = {};
-        (res.appended || []).concat(res.skipped || []).forEach(function (id) { done[id] = true; });
-        var toSave = [];
-        state.txns.forEach(function (t) { if (!t.synced && done[t.id]) { t.synced = true; toSave.push(t); } });
-        if (res.snapshot) setServerSnapshot(res.snapshot);
-        return toSave;
-      });
-    } else {
-      chain = apiGet().then(function (snap) { setServerSnapshot(snap); return []; });
+  // ---------- local math (ported 1:1 from google/Code.gs — the sheet is no longer in the loop) ----------
+  function baseCashTotal(b) {
+    return r2((b.accounts || []).filter(function (a) { return a.kind === 'cash'; })
+      .reduce(function (s, a) { return s + (Number(a.value) || 0); }, 0));
+  }
+  function baseCardTotal(b) {
+    return r2((b.accounts || []).filter(function (a) { return a.kind === 'card'; })
+      .reduce(function (s, a) { return s + (Number(a.value) || 0); }, 0));
+  }
+  function prepayAmount(balance, limit, target) {
+    if (!limit || limit <= 0) return 0;
+    return r2(Math.max(0, balance - limit * target));
+  }
+  function baseCardPrepays(b) {
+    var target = Number(b.card_util_target) || 0;
+    var per = {}, total = 0;
+    (b.accounts || []).filter(function (a) { return a.kind === 'card'; }).forEach(function (c) {
+      var balance = Number(c.value) || 0, limit = Number(c.limit) || 0;
+      var d = {
+        balance: balance, limit: limit,
+        util_pct: limit ? r2(balance / limit * 100) : null,
+        prepay: prepayAmount(balance, limit, target),
+        target_balance: r2(limit * target)
+      };
+      per[c.name] = d;
+      total += d.prepay;
+    });
+    return { per: per, total: r2(total) };
+  }
+  function localMonths(startMonth, n) {
+    var p = String(startMonth || todayISO().slice(0, 7)).split('-');
+    var y = Number(p[0]), m = Number(p[1]), out = [];
+    for (var i = 0; i < (n || 6); i++) {
+      var d = new Date(y, m - 1 + i, 1);
+      out.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
     }
-    return chain
-      .then(function (toSave) {
-        state.lastSync = new Date().toISOString();
-        return Promise.all(toSave.map(function (t) { return idbPut(STORE_TX, t); }));
-      })
-      .then(function () {
-        var saves = [idbPut(STORE_META, { key: 'snapshot', value: state.snapshot, at: state.lastSync })];
-        if (state.adjLoaded) {
-          saves.push(idbPut(STORE_META, { key: 'adj', value: state.adj }));
-          saves.push(idbPut(STORE_META, { key: 'adjSig', value: state.adjSig }));
-        }
-        return Promise.all(saves);
-      })
-      .catch(function (err) { state.error = String(err && err.message || err); })
-      .then(function () { state.syncing = false; render(); });
+    return out;
+  }
+  function baseMonthComponents(month, months, b, emergency, applyOverrides) {
+    emergency = emergency || 0;
+    var salary = (b.salary_overrides[month] !== undefined) ? Number(b.salary_overrides[month]) : Number(b.salary) || 0;
+    var budget = {};
+    Object.keys(b.budgets || {}).forEach(function (k) { budget[k] = Number(b.budgets[k]) || 0; });
+    if (applyOverrides && b.budget_overrides[month]) {
+      Object.keys(b.budget_overrides[month]).forEach(function (k) { budget[k] = Number(b.budget_overrides[month][k]) || 0; });
+    }
+    var budgetTotal = 0;
+    Object.keys(budget).forEach(function (k) { if (budget[k]) budgetTotal += budget[k]; });
+    budgetTotal = r2(budgetTotal);
+    var debtTotal = 0;
+    Object.keys(b.debts || {}).forEach(function (name) {
+      var d = b.debts[name];
+      if (d.payments && d.payments[month] !== undefined) debtTotal += Number(d.payments[month]) || 0;
+      else if ((d.active_months || []).indexOf(month) >= 0 && d.monthly) debtTotal += Number(d.monthly) || 0;
+    });
+    debtTotal = r2(debtTotal);
+    var sinkTotal = 0;
+    Object.keys(b.sinking || {}).forEach(function (name) {
+      var s = b.sinking[name];
+      if (s.payments && s.payments[month] !== undefined) sinkTotal += Number(s.payments[month]) || 0;
+    });
+    sinkTotal = r2(sinkTotal);
+    var oneOffs = (b.one_offs || {})[month] || {}, oneOffTotal = 0;
+    Object.keys(oneOffs).forEach(function (k) { oneOffTotal += Number(oneOffs[k]) || 0; });
+    oneOffTotal = r2(oneOffTotal);
+    var cardPrepay = (month === months[0]) ? baseCardPrepays(b).total : 0;
+    var outflows = r2(budgetTotal + debtTotal + sinkTotal + oneOffTotal + cardPrepay + emergency);
+    return { month: month, salary: salary, budget_total: budgetTotal, debt_total: debtTotal,
+      sinking_total: sinkTotal, one_off_total: oneOffTotal, card_prepay: cardPrepay,
+      emergency: emergency, partner_repay: 0, outflows: outflows, net: r2(salary - outflows) };
+  }
+  function baseMatrix(b, months) {
+    var start = baseCashTotal(b);
+    var cap = Number(b.emergency_cap) || 0;
+    var base = [], worst = [], bc = start, wc = start;
+    months.forEach(function (m) {
+      var bi = baseMonthComponents(m, months, b, 0, true);
+      var w = baseMonthComponents(m, months, b, cap, true);
+      bc = r2(bc + bi.net);
+      wc = r2(wc + w.net);
+      base.push({ comp: bi, running: bc });
+      worst.push({ comp: w, running: wc });
+    });
+    return { start_cash: start, base: base, worst: worst };
+  }
+  function baseBridge(b, months) {
+    var cash = baseCashTotal(b);
+    var floor = Number(b.liquidity_floor) || 0;
+    function advice(outflows) {
+      var toZero = Math.max(0, r2(outflows - cash));
+      return { outflows: outflows, end_cash_no_borrow: r2(cash - outflows),
+        borrow_to_avoid_negative: toZero, borrow_to_keep_floor: Math.max(0, r2(outflows - cash + floor)),
+        need_borrow: toZero > 0 };
+    }
+    var mand = baseMonthComponents(months[0], months, b, 0, true);
+    var full = baseMonthComponents(months[0], months, b, 0, false);
+    return { cash: cash, floor: floor, mandatory_only: advice(mand.outflows), full_living: advice(full.outflows) };
+  }
+
+  function baseToSnapshot(b) {
+    var month = String(b.as_of || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(month)) month = todayISO().slice(0, 7);
+    var months = localMonths(month, 6);
+    var pp = baseCardPrepays(b);
+    var comp0 = baseMonthComponents(month, months, b, 0, true);
+    var compW = baseMonthComponents(month, months, b, Number(b.emergency_cap) || 0, true);
+    var cards = [];
+    Object.keys(pp.per).forEach(function (name) {
+      var d = pp.per[name];
+      cards.push({ name: name, balance: d.balance, limit: d.limit, util_pct: d.util_pct, prepay: d.prepay });
+    });
+    var cashAccounts = (b.accounts || []).filter(function (a) { return a.kind === 'cash'; })
+      .map(function (a) { return { name: a.name, value: Number(a.value) || 0 }; });
+    var ovM = (b.budget_overrides || {})[month] || {};
+    var budget = {}, bkeys = {};
+    Object.keys(b.budgets || {}).forEach(function (k) { budget[k] = Number(b.budgets[k]) || 0; bkeys[k] = true; });
+    Object.keys(ovM).forEach(function (k) { bkeys[k] = true; });
+    var budgetLines = [];
+    Object.keys(bkeys).forEach(function (k) {
+      var amt = ovM[k] !== undefined ? Number(ovM[k]) : budget[k];
+      budgetLines.push({ name: k, amount: r2(amt), normal: r2(Number(b.budgets[k]) || 0), overridden: ovM[k] !== undefined });
+    });
+    var budgetTotal = 0;
+    budgetLines.forEach(function (l) { if (l.amount) budgetTotal += l.amount; });
+    budgetTotal = r2(budgetTotal);
+    var debtLines = [];
+    Object.keys(b.debts || {}).forEach(function (name) {
+      var d = b.debts[name];
+      var thisMonth = 0;
+      if (d.payments && d.payments[month] !== undefined) thisMonth = Number(d.payments[month]) || 0;
+      else if ((d.active_months || []).indexOf(month) >= 0 && d.monthly) thisMonth = Number(d.monthly) || 0;
+      var schedule = [];
+      months.forEach(function (m) {
+        var amt = 0;
+        if (d.payments && d.payments[m] !== undefined) amt = Number(d.payments[m]) || 0;
+        else if ((d.active_months || []).indexOf(m) >= 0) amt = Number(d.monthly) || 0;
+        if (amt > 0) schedule.push({ month: m, amount: r2(amt) });
+      });
+      var bal = null;
+      (b.accounts || []).forEach(function (a) { if (a.kind === 'debt' && a.name === name) bal = r2(Number(a.value) || 0); });
+      debtLines.push({ name: name, this_month: r2(thisMonth), balance: bal, schedule: schedule });
+    });
+    var oneOffLines = [];
+    months.forEach(function (m) {
+      var o = (b.one_offs || {})[m] || {};
+      Object.keys(o).forEach(function (k) { oneOffLines.push({ month: m, name: k, amount: r2(Number(o[k]) || 0) }); });
+    });
+    var loanLines = (b.accounts || []).filter(function (a) { return a.kind === 'loan'; })
+      .map(function (a) { return { name: a.name, value: r2(Number(a.value) || 0), note: a.note || '' }; });
+    var sinkLines = [];
+    Object.keys(b.sinking || {}).forEach(function (name) {
+      var s = b.sinking[name];
+      var payments = [];
+      months.forEach(function (m) {
+        if (s.payments && s.payments[m] !== undefined) payments.push({ month: m, amount: r2(Number(s.payments[m]) || 0) });
+      });
+      sinkLines.push({ name: name, goal: Number(s.goal) || 0, deadline: s.deadline || '',
+        funded: r2(Number(s.funded) || 0), this_month: r2((s.payments && s.payments[month]) ? Number(s.payments[month]) : 0),
+        payments: payments });
+    });
+    return {
+      ok: true,
+      as_of: b.as_of || '',
+      currency: 'PHP',
+      month: month,
+      months: months,
+      prepay_day: Number(b.prepay_day) || 14,
+      cutoff_day: Number(b.cutoff_day) || 15,
+      display_name: String(b.name || '').trim(),
+      salary: Number(b.salary) || 0,
+      floor: Number(b.liquidity_floor) || 0,
+      card_owed: baseCardTotal(b),
+      total_prepay: pp.total,
+      cash: { total: baseCashTotal(b), free: r2(baseCashTotal(b) - comp0.outflows), accounts: cashAccounts },
+      cards: cards,
+      committed: { base: comp0.outflows, worst: compW.outflows },
+      obligations: { month: month, budget: budgetLines, budget_total: budgetTotal, debts: debtLines, one_offs: oneOffLines, loans: loanLines },
+      sinking: sinkLines,
+      emergency_cap: Number(b.emergency_cap) || 0,
+      matrix: baseMatrix(b, months),
+      bridge: baseBridge(b, months)
+    };
+  }
+  function refreshLocalSnapshot() {
+    state.snapshot = state.base && !baseIsEmpty(state.base) ? baseToSnapshot(state.base) : null;
+    var sig = snapSig(state.snapshot);
+    // The base numbers moved (edited in Settings) -> rebase: the base is source of truth again.
+    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0 };
+    state.adjSig = sig;
+  }
+  function persistSnapshot() {
+    return idbPut(STORE_META, { key: 'snapshot', value: state.snapshot, at: (state.base && state.base.edited) || null }).catch(function () {});
+  }
+  function saveBase(b) {
+    b.edited = new Date().toISOString();
+    state.base = b;
+    refreshLocalSnapshot();
+    return Promise.all([
+      idbPut(STORE_META, { key: 'base', value: b }).catch(function () {}),
+      persistSnapshot(),
+      saveAdj()
+    ]);
   }
 
   // ---------- actions ----------
@@ -345,7 +557,7 @@
     var t = {
       id: id, date: data.date, account: data.account, kind: data.kind,
       category: data.category, amount: data.amount, note: data.note,
-      synced: false, created: new Date().toISOString()
+      created: new Date().toISOString()
     };
     state.txns.push(t);
     addAdj(txnAdj(t), 1);
@@ -353,7 +565,6 @@
     return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () {
       emit('txn');
       snack('Added ' + money(t.amount) + ' · ' + esc(t.category || t.account), function () { undoAddTxn(id); });
-      if (state.online && getUrl()) return doSync();
       return Promise.resolve();
     }).then(function () { return id; });
   }
@@ -361,7 +572,6 @@
     var t = null;
     for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === id) t = state.txns[i];
     if (!t) return;
-    if (t.synced) { snack('Already synced to the sheet — remove it there.'); return; }
     state.txns = state.txns.filter(function (x) { return x.id !== id; });
     addAdj(txnAdj(t), -1);
     logMoney('del', t);
@@ -370,7 +580,7 @@
   function deleteTxn(id) {
     var t = null;
     for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === id) t = state.txns[i];
-    if (!t || t.synced) return Promise.resolve();
+    if (!t) return Promise.resolve();
     state.txns = state.txns.filter(function (x) { return x.id !== id; });
     addAdj(txnAdj(t), -1);
     logMoney('del', t);
@@ -478,8 +688,11 @@
     sc.classList.add('show');
     sh.classList.add('show');
     openSheetEl = sh;
-    // a11y: move focus into the sheet (first field, else first control)
+    if (id === 'setSheet') renderBaseEditor();
+    // a11y: move focus into the sheet (first field, else first control).
+    // The Settings sheet is skipped: it has many text inputs and focus would pop the keyboard.
     try {
+      if (id === 'setSheet') return;
       var f = sh.querySelectorAll('input,select,textarea');
       if (!f.length) f = sh.querySelectorAll('button');
       if (f && f.length) f[0].focus();
@@ -504,43 +717,286 @@
     snackTimer = setTimeout(hideSnack, ms || 5200);
   }
 
-  // ---------- render ----------
-  function tile(k, v, n, cls) {
-    return '<div class="tile ' + (cls || '') + '"><div class="k">' + esc(k) + '</div><div class="v">' + v + '</div><div class="n">' + esc(n) + '</div></div>';
+  // ---------- "Your numbers" editor (Settings sheet) ----------
+  function numVal(el) {
+    var v = el ? parseFloat(el.value) : NaN;
+    return isFinite(v) ? r2(v) : 0;
   }
-  function renderStatus() {
-    var el = byId('status'); if (!el) return;
-    var pill = state.online ? '<span class="pill ok">online</span>' : '<span class="pill warn">offline</span>';
-    var p = pendingList();
-    var pend = p.length ? '&nbsp;·&nbsp;<b>' + p.length + '</b> pending ' + money(pendingSum()) : '';
-    var spin = state.syncing ? '&nbsp;&nbsp;<span class="spin"></span> syncing…' : '';
-    el.innerHTML = pill + pend + spin;
-    var sb = byId('syncBtn');
-    if (sb) { sb.disabled = !!state.syncing; sb.textContent = state.syncing ? 'Syncing…' : 'Sync'; }
+  function bsec(title) {
+    return '<div class="bhead"><span class="ins-t">' + esc(title) + '</span></div>';
   }
-  function renderSyncErr() {
-    var el = byId('syncErr'); if (!el) return;
-    if (state.error && !state.syncing) {
-      el.style.display = '';
-      el.textContent = 'Sync failed — ' + state.error + ' · tap to retry';
-    } else {
-      el.style.display = 'none';
+  function brow(inner) { return '<div class="brow">' + inner + '</div>'; }
+  function delBtn(label, blk) { return '<button type="button" class="mini" data-rm="' + (blk ? 'blk' : '1') + '" aria-label="' + esc(label || 'Remove') + '">✕</button>'; }
+  function payRow(m, a) {
+    return brow('<input data-r="m" type="month" placeholder="YYYY-MM" value="' + esc(m || '') + '">' +
+      '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (a != null ? a : '') + '">' +
+      delBtn('Remove payment'));
+  }
+  function accRow(a) {
+    a = a || {};
+    var kinds = ['cash', 'card', 'debt', 'loan'];
+    return brow('<input class="grow" data-r="name" placeholder="name" value="' + esc(a.name || '') + '" autocomplete="off">' +
+      '<select data-r="kind">' + kinds.map(function (k) {
+        return '<option value="' + k + '"' + (a.kind === k ? ' selected' : '') + '>' + k + '</option>';
+      }).join('') + '</select>' +
+      '<input data-r="value" type="number" inputmode="decimal" step="0.01" placeholder="value" value="' + (a.value != null ? a.value : '') + '">' +
+      '<input data-r="limit" type="number" inputmode="decimal" step="0.01" placeholder="limit" value="' + (a.limit ? a.limit : '') + '"' + (a.kind === 'card' ? '' : ' disabled') + '>' +
+      delBtn('Remove account'));
+  }
+  function debtBlock(d) {
+    d = d || {};
+    var pays = d.payments ? Object.keys(d.payments).map(function (m) { return payRow(m, d.payments[m]); }).join('') : '';
+    return '<div class="bblk" data-sec="debt">' +
+      brow('<input class="grow" data-r="name" placeholder="debt name" value="' + esc(d.name || '') + '" autocomplete="off">' + delBtn('Remove debt', true)) +
+      brow('<span class="bnote">monthly</span><input data-r="monthly" type="number" inputmode="decimal" step="0.01" value="' + (d.monthly != null ? d.monthly : '') + '">' +
+        '<span class="bnote">active</span><input class="grow" data-r="active" placeholder="2027-02, 2027-03" value="' + esc((d.active_months || []).join(', ')) + '" autocomplete="off">') +
+      '<div data-r="pays">' + pays + '</div>' +
+      '<button type="button" class="addrow" data-add="dpay">+ payment by month</button>' +
+      '</div>';
+  }
+  function sinkBlock(s) {
+    s = s || {};
+    var pays = s.payments ? Object.keys(s.payments).map(function (m) { return payRow(m, s.payments[m]); }).join('') : '';
+    return '<div class="bblk" data-sec="sink">' +
+      brow('<input class="grow" data-r="name" placeholder="goal name" value="' + esc(s.name || '') + '" autocomplete="off">' + delBtn('Remove goal', true)) +
+      brow('<span class="bnote">goal</span><input data-r="goal" type="number" inputmode="decimal" step="0.01" value="' + (s.goal != null ? s.goal : '') + '">' +
+        '<span class="bnote">funded</span><input data-r="funded" type="number" inputmode="decimal" step="0.01" value="' + (s.funded != null ? s.funded : '') + '>') +
+      brow('<span class="bnote">by</span><input data-r="deadline" type="date" value="' + esc(s.deadline || '') + '">') +
+      '<div data-r="pays">' + pays + '</div>' +
+      '<button type="button" class="addrow" data-add="spay">+ payment by month</button>' +
+      '</div>';
+  }
+  function renderBaseEditor() {
+    var bb = byId('baseBody');
+    if (!bb) return;
+    var b = state.base || defaultBase();
+    var h = '';
+    h += brow('<span class="bnote">name</span><input class="grow" id="b_name" type="text" placeholder="Jan" value="' + esc(b.name || '') + '" autocomplete="off">');
+    h += brow('<span class="bnote">as of</span><input class="grow" id="b_asof" type="date" value="' + esc(b.as_of || '') + '">');
+    h += brow('<span class="bnote">salary / month</span><input class="grow" id="b_salary" type="number" inputmode="decimal" step="0.01" value="' + (b.salary || '') + '">');
+    h += brow('<span class="bnote">liquidity floor</span><input class="grow" id="b_floor" type="number" inputmode="decimal" step="0.01" value="' + (b.liquidity_floor || '') + '">');
+    h += brow('<span class="bnote">emergency cap</span><input class="grow" id="b_ecap" type="number" inputmode="decimal" step="0.01" value="' + (b.emergency_cap || '') + '">');
+    h += brow('<span class="bnote">prepay day</span><input class="grow" id="b_pday" type="number" inputmode="numeric" min="1" max="31" value="' + (b.prepay_day || 14) + '">' +
+      '<span class="bnote">cutoff</span><input class="grow" id="b_cday" type="number" inputmode="numeric" min="1" max="31" value="' + (b.cutoff_day || 15) + '">');
+    h += brow('<span class="bnote">card target util</span><input class="grow" id="b_util" type="number" inputmode="decimal" step="0.001" value="' + (b.card_util_target || '') + '" title="0.099 = just under 10%">');
+    var salRows = '';
+    Object.keys(b.salary_overrides || {}).forEach(function (m) { salRows += payRow(m, b.salary_overrides[m]); });
+    h += bsec('Salary overrides') + '<div id="rowsSal">' + salRows + '</div>' +
+      '<button type="button" class="addrow" data-add="sal">+ override month</button>';
+    var accRows = (b.accounts || []).map(accRow).join('');
+    h += bsec('Accounts (cash, cards, debts, loans)') + '<div id="rowsAcc">' + accRows + '</div>' +
+      '<button type="button" class="addrow" data-add="acc">+ account</button>';
+    var budRows = '';
+    Object.keys(b.budgets || {}).forEach(function (k) {
+      budRows += brow('<input class="grow" data-r="name" placeholder="e.g. Rent" value="' + esc(k) + '" autocomplete="off">' +
+        '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (Number(b.budgets[k]) || '') + '">' + delBtn('Remove budget'));
+    });
+    h += bsec('Monthly budgets') + '<div id="rowsBud">' + budRows + '</div>' +
+      '<button type="button" class="addrow" data-add="bud">+ budget</button>';
+    var bovRows = '';
+    Object.keys(b.budget_overrides || {}).forEach(function (m) {
+      Object.keys(b.budget_overrides[m] || {}).forEach(function (k) {
+        var opts = Object.keys(b.budgets || {}).map(function (bk) {
+          return '<option value="' + esc(bk) + '"' + (bk === k ? ' selected' : '') + '>' + esc(bk) + '</option>';
+        }).join('') || '<option value="">—</option>';
+        bovRows += brow('<input data-r="m" type="month" placeholder="YYYY-MM" value="' + esc(m) + '">' +
+          '<select data-r="cat">' + opts + '</select>' +
+          '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (Number(b.budget_overrides[m][k]) || '') + '">' + delBtn('Remove override'));
+      });
+    });
+    h += bsec('Budget overrides (one month)') + '<div id="rowsBov">' + bovRows + '</div>' +
+      '<button type="button" class="addrow" data-add="bov">+ override</button>';
+    var debtBlocks = '';
+    Object.keys(b.debts || {}).forEach(function (k) {
+      var d = Object.assign({ name: k }, b.debts[k]);
+      debtBlocks += debtBlock(d);
+    });
+    h += bsec('Debts') + '<div id="rowsDebt">' + debtBlocks + '</div>' +
+      '<button type="button" class="addrow" data-add="debt">+ debt</button>';
+    var oneRows = '';
+    Object.keys(b.one_offs || {}).forEach(function (m) {
+      Object.keys(b.one_offs[m] || {}).forEach(function (k) {
+        oneRows += brow('<input data-r="m" type="month" placeholder="YYYY-MM" value="' + esc(m) + '">' +
+          '<input class="grow" data-r="name" placeholder="what" value="' + esc(k) + '" autocomplete="off">' +
+          '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (Number(b.one_offs[m][k]) || '') + '">' + delBtn('Remove one-off'));
+      });
+    });
+    h += bsec('One-offs') + '<div id="rowsOne">' + oneRows + '</div>' +
+      '<button type="button" class="addrow" data-add="one">+ one-off</button>';
+    var sinkBlocks = '';
+    Object.keys(b.sinking || {}).forEach(function (k) {
+      var s = Object.assign({ name: k }, b.sinking[k]);
+      sinkBlocks += sinkBlock(s);
+    });
+    h += bsec('Sinking funds') + '<div id="rowsSink">' + sinkBlocks + '</div>' +
+      '<button type="button" class="addrow" data-add="sink">+ goal</button>';
+    bb.innerHTML = h;
+    renderBaseStatus();
+  }
+  function readBaseForm() {
+    var bb = byId('baseBody');
+    if (!bb) return null;
+    var b = defaultBase();
+    if (state.base) b.migrated_from_snapshot = state.base.migrated_from_snapshot || null;
+    var gv = function (id) { var el = byId(id); return el ? String(el.value || '') : ''; };
+    var isMonth = function (s) { return /^\d{4}-\d{2}$/.test(String(s || '')); };
+    b.name = gv('b_name').trim();
+    b.as_of = gv('b_asof').trim() || todayISO();
+    b.salary = numVal(byId('b_salary'));
+    b.liquidity_floor = numVal(byId('b_floor'));
+    b.emergency_cap = numVal(byId('b_ecap'));
+    var pd = parseInt(gv('b_pday'), 10);
+    var cd = parseInt(gv('b_cday'), 10);
+    b.prepay_day = pd > 0 ? pd : 14;
+    b.cutoff_day = cd > 0 ? cd : 15;
+    var ut = numVal(byId('b_util'));
+    b.card_util_target = ut > 0 ? ut : 0.099;
+    bb.querySelectorAll('#rowsSal .brow').forEach(function (row) {
+      var m = row.querySelector('[data-r="m"]'); var a = row.querySelector('[data-r="a"]');
+      if (m && a && isMonth(m.value)) b.salary_overrides[m.value] = numVal(a);
+    });
+    bb.querySelectorAll('#rowsAcc .brow').forEach(function (row) {
+      var ni = row.querySelector('[data-r="name"]'); var ki = row.querySelector('[data-r="kind"]');
+      var vi = row.querySelector('[data-r="value"]'); var li = row.querySelector('[data-r="limit"]');
+      var name = ni ? ni.value.trim() : '';
+      var kind = ki ? ki.value : 'cash';
+      var value = numVal(vi);
+      if (!name && !value) return;
+      b.accounts.push({ name: name || '(unnamed)', kind: kind, value: value, limit: kind === 'card' ? numVal(li) : 0, note: '' });
+    });
+    bb.querySelectorAll('#rowsBud .brow').forEach(function (row) {
+      var ni = row.querySelector('[data-r="name"]'); var ai = row.querySelector('[data-r="a"]');
+      var name = ni ? ni.value.trim() : '';
+      var amt = numVal(ai);
+      if (!name && !amt) return;
+      b.budgets[name || '(unnamed)'] = amt;
+    });
+    bb.querySelectorAll('#rowsBov .brow').forEach(function (row) {
+      var m = row.querySelector('[data-r="m"]'); var c = row.querySelector('[data-r="cat"]'); var a = row.querySelector('[data-r="a"]');
+      if (m && c && a && isMonth(m.value) && c.value) {
+        b.budget_overrides[m.value] = b.budget_overrides[m.value] || {};
+        b.budget_overrides[m.value][c.value] = numVal(a);
+      }
+    });
+    bb.querySelectorAll('#rowsOne .brow').forEach(function (row) {
+      var m = row.querySelector('[data-r="m"]'); var ni = row.querySelector('[data-r="name"]'); var a = row.querySelector('[data-r="a"]');
+      var name = ni ? ni.value.trim() : '';
+      if (m && isMonth(m.value) && (name || numVal(a) > 0)) {
+        b.one_offs[m.value] = b.one_offs[m.value] || {};
+        b.one_offs[m.value][name || '(unnamed)'] = numVal(a);
+      }
+    });
+    bb.querySelectorAll('.bblk[data-sec="debt"]').forEach(function (blk) {
+      var ni = blk.querySelector('[data-r="name"]');
+      var name = ni ? ni.value.trim() : '';
+      if (!name) return;
+      var d = { monthly: numVal(blk.querySelector('[data-r="monthly"]')), active_months: [], payments: {} };
+      var act = blk.querySelector('[data-r="active"]');
+      if (act) act.value.split(',').forEach(function (s) { s = s.trim(); if (isMonth(s)) d.active_months.push(s); });
+      blk.querySelectorAll('[data-r="pays"] .brow').forEach(function (row) {
+        var m = row.querySelector('[data-r="m"]'); var a = row.querySelector('[data-r="a"]');
+        if (m && a && isMonth(m.value) && numVal(a) > 0) d.payments[m.value] = numVal(a);
+      });
+      b.debts[name] = d;
+    });
+    bb.querySelectorAll('.bblk[data-sec="sink"]').forEach(function (blk) {
+      var ni = blk.querySelector('[data-r="name"]');
+      var name = ni ? ni.value.trim() : '';
+      if (!name) return;
+      var dl = blk.querySelector('[data-r="deadline"]');
+      var s = { goal: numVal(blk.querySelector('[data-r="goal"]')), deadline: dl ? dl.value : '',
+        funded: numVal(blk.querySelector('[data-r="funded"]')), payments: {} };
+      blk.querySelectorAll('[data-r="pays"] .brow').forEach(function (row) {
+        var m = row.querySelector('[data-r="m"]'); var a = row.querySelector('[data-r="a"]');
+        if (m && a && isMonth(m.value) && numVal(a) > 0) s.payments[m.value] = numVal(a);
+      });
+      b.sinking[name] = s;
+    });
+    return b;
+  }
+  function addBaseRow(kind) {
+    var bb = byId('baseBody');
+    if (!bb) return;
+    var host = null, html = '';
+    if (kind === 'sal') { host = byId('rowsSal'); html = payRow('', ''); }
+    else if (kind === 'acc') { host = byId('rowsAcc'); html = accRow({}); }
+    else if (kind === 'bud') {
+      host = byId('rowsBud');
+      html = brow('<input class="grow" data-r="name" placeholder="e.g. Rent" autocomplete="off">' +
+        '<input data-r="a" type="number" inputmode="decimal" step="0.01">' + delBtn('Remove budget'));
+    } else if (kind === 'bov') {
+      host = byId('rowsBov');
+      var opts = Object.keys((state.base && state.base.budgets) || {}).map(function (k) {
+        return '<option value="' + esc(k) + '">' + esc(k) + '</option>';
+      }).join('') || '<option value="">—</option>';
+      html = brow('<input data-r="m" type="month" placeholder="YYYY-MM"><select data-r="cat">' + opts + '</select>' +
+        '<input data-r="a" type="number" inputmode="decimal" step="0.01">' + delBtn('Remove override'));
+    } else if (kind === 'one') {
+      host = byId('rowsOne');
+      html = brow('<input data-r="m" type="month" placeholder="YYYY-MM"><input class="grow" data-r="name" placeholder="what" autocomplete="off">' +
+        '<input data-r="a" type="number" inputmode="decimal" step="0.01">' + delBtn('Remove one-off'));
+    } else if (kind === 'debt') { host = byId('rowsDebt'); html = debtBlock({}); }
+    else if (kind === 'sink') { host = byId('rowsSink'); html = sinkBlock({}); }
+    else if (kind === 'dpay') {
+      var db = bb.querySelectorAll('.bblk[data-sec="debt"]');
+      host = db.length ? db[db.length - 1].querySelector('[data-r="pays"]') : null;
+      html = payRow('', '');
+    } else if (kind === 'spay') {
+      var sb = bb.querySelectorAll('.bblk[data-sec="sink"]');
+      host = sb.length ? sb[sb.length - 1].querySelector('[data-r="pays"]') : null;
+      html = payRow('', '');
+    }
+    if (!host) return;
+    host.insertAdjacentHTML('beforeend', html);
+    var last = host.lastElementChild;
+    if (last && last.querySelector) {
+      var f = last.querySelector('input');
+      if (f) f.focus();
     }
   }
-  function renderConnect() {
-    var el = byId('connect');
-    if (el) el.style.display = getUrl() ? 'none' : '';
-    var st = byId('connStatus');
-    if (st) st.innerHTML = getUrl()
-      ? '<span class="pill ok">connected</span>&nbsp; · last synced ' + (state.lastSync ? new Date(state.lastSync).toLocaleTimeString() : '—')
-      : '<span class="pill warn">not connected</span>&nbsp; · entries save on this phone only';
+  function commitBaseForm() {
+    var nb = readBaseForm();
+    if (!nb) return;
+    saveBase(nb).then(function () {
+      emit('snap');
+      renderFooter();
+      var bb = byId('baseBody');
+      if (bb) bb.querySelectorAll('#rowsAcc .brow').forEach(function (row) {
+        var ki = row.querySelector('[data-r="kind"]'); var li = row.querySelector('[data-r="limit"]');
+        if (ki && li) li.disabled = ki.value !== 'card';
+      });
+    });
+  }
+  function renderBaseStatus() {
+    var el = byId('baseStatus');
+    if (!el) return;
+    var b = state.base;
+    var mg = byId('baseMigrated');
+    if (!b || baseIsEmpty(b)) {
+      el.innerHTML = '<span class="pill warn">no numbers yet</span>&nbsp; · everything is stored on this phone';
+      if (mg) mg.style.display = 'none';
+      return;
+    }
+    el.innerHTML = '<span class="pill ok">local</span>&nbsp; · as of ' + esc(fmtDate(b.as_of)) +
+      (b.edited ? '&nbsp; · saved ' + new Date(b.edited).toLocaleTimeString() : '');
+    if (mg) {
+      if (b.migrated_from_snapshot) {
+        mg.innerHTML = 'Imported from your last sheet snapshot (' + esc(b.migrated_from_snapshot) + ') — review the numbers below; from now on they live only in this app.';
+        mg.style.display = '';
+      } else mg.style.display = 'none';
+    }
+  }
+  // ---- render ----
+  function tile(k, v, n, cls) {
+    return '<div class="tile ' + (cls || '') + '"><div class="k">' + esc(k) + '</div><div class="v">' + v + '</div><div class="n">' + esc(n) + '</div></div>';
   }
   function renderSummary() {
     var el = byId('summary'); if (!el) return;
     var s = effectiveSnap();
     if (!s) {
       el.innerHTML = '<div class="card"><p class="note" style="margin:2px 0">' +
-        (state.online ? 'Syncing…' : (getUrl() ? 'Waiting for a connection to sync.' : 'Add expenses with the + button — they save offline. Connect your sheet in Settings to sync.')) + '</p></div>';
+        'No numbers yet — add your accounts, salary and debts in <b>Settings (⚙) → Your numbers</b>. You can already log expenses with the + button; they save on this phone.' +
+        '</p></div>';
       return;
     }
     var free = s.cash ? s.cash.free : 0;
@@ -551,14 +1007,14 @@
     html += tile('Free / unallocated', money(free), 'card backing' + liveMark, free < 0 ? 'bad' : 'good');
     html += tile('Cards owed', money(s.card_owed), (s.cards || []).length + ' card(s)' + liveMark);
     html += tile(ordinal(s.prepay_day || 14) + ' prepay', money(s.total_prepay), 'due before the ' + (s.cutoff_day || 15) + liveMark, 'accent');
-    el.innerHTML = '<div class="tiles' + (state.syncing ? ' busy' : '') + '">' + html + '</div>' + adjBar();
+    el.innerHTML = '<div class="tiles">' + html + '</div>' + adjBar();
     var rb = byId('resetAdj');
     if (rb) rb.onclick = resetAdj;
   }
   function adjBar() {
     if (!adjActive()) return '';
     return '<div class="adjbar"><span class="note">live view: includes ' + money(state.adj.free) + ' recorded in this app</span>' +
-      '<button class="mini" id="resetAdj" type="button" title="Stop adjusting and trust the sheet numbers">reset to sheet</button></div>';
+      '<button class="mini" id="resetAdj" type="button" title="Stop adjusting and trust the numbers in Settings">reset to my numbers</button></div>';
   }
   function insBlock(title, lines, cls, text) {
     var l = '';
@@ -1148,20 +1604,16 @@
   }
   function renderAddEmpty() {
     var el = byId('addEmpty');
-    if (el) el.style.display = getUrl() ? 'none' : '';
+    if (el) el.style.display = (state.base && !baseIsEmpty(state.base)) ? 'none' : '';
   }
   function seedAccounts() {
     var sel = byId('f_account');
-    if (!sel || seededAccounts) return;
-    var s = state.snapshot;
-    var accounts;
-    if (s && ((s.cards && s.cards.length) || (s.cash && s.cash.accounts && s.cash.accounts.length))) {
-      accounts = [];
-      (s.cards || []).forEach(function (c) { accounts.push({ name: c.name, type: 'card' }); });
-      (s.cash.accounts || []).forEach(function (a) { accounts.push({ name: a.name, type: 'cash' }); });
-    } else {
-      accounts = DEFAULT_ACCOUNTS;
-    }
+    if (!sel) return;
+    var b = state.base;
+    var accounts = (b && b.accounts || [])
+      .filter(function (a) { return a.kind === 'card' || a.kind === 'cash'; })
+      .map(function (a) { return { name: a.name, type: a.kind === 'card' ? 'card' : 'cash' }; });
+    if (!accounts.length) accounts = DEFAULT_ACCOUNTS;
     if (!accounts.length) return;
     var prev = sel.value;
     var html = '<option value="" disabled selected>Pick…</option>';
@@ -1171,7 +1623,6 @@
     });
     sel.innerHTML = html;
     if (prev) sel.value = prev;
-    seededAccounts = true;
   }
   function renderPlans() {
     var el = byId('plans'); if (!el) return;
@@ -1259,14 +1710,17 @@
     var stamp = todayISO();
     var blob, name;
     if (kind === 'csv') {
-      var lines = ['date,account,kind,category,amount,note,synced'];
+      var lines = ['date,account,kind,category,amount,note'];
       txns.forEach(function (t) {
-        lines.push([t.date, csvQ(t.account), csvQ(t.kind), csvQ(t.category), t.amount, csvQ(t.note || ''), t.synced ? 'yes' : 'no'].join(','));
+        lines.push([t.date, csvQ(t.account), csvQ(t.kind), csvQ(t.category), t.amount, csvQ(t.note || '')].join(','));
       });
       blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
       name = 'finances-ledger-' + stamp + '.csv';
     } else {
-      blob = new Blob([JSON.stringify({ app: 'finances-pwa', exportedAt: new Date().toISOString(), txns: txns, plans: plans }, null, 2)], { type: 'application/json' });
+      blob = new Blob([JSON.stringify({
+        app: 'finances-pwa', exportedAt: new Date().toISOString(),
+        base: state.base, txns: txns, plans: plans
+      }, null, 2)], { type: 'application/json' });
       name = 'finances-export-' + stamp + '.json';
     }
     var url = URL.createObjectURL(blob);
@@ -1276,13 +1730,52 @@
     setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 600);
     snack('Exported ' + name);
   }
+  function importData(file) {
+    var fr = new FileReader();
+    fr.onload = function () {
+      try {
+        var data = JSON.parse(String(fr.result || ''));
+        if (!data || data.app !== 'finances-pwa') throw new Error('not a Finance PWA backup');
+        var nb = defaultBase();
+        if (data.base && (data.base.accounts || data.base.salary)) {
+          Object.keys(nb).forEach(function (k) { if (data.base[k] !== undefined) nb[k] = data.base[k]; });
+          state.base = nb;
+        }
+        var saves = [];
+        state.txns.forEach(function (t) { saves.push(idbDel(STORE_TX, t.id)); });
+        state.plans.forEach(function (p) { saves.push(idbDel(STORE_PLANS, p.id)); });
+        Promise.all(saves).then(function () {
+          var puts = [];
+          (data.txns || []).forEach(function (t) { if (t && t.id && t.date) puts.push(idbPut(STORE_TX, t)); });
+          (data.plans || []).forEach(function (p) { if (p && p.id) puts.push(idbPut(STORE_PLANS, p)); });
+          return Promise.all(puts);
+        }).then(function () {
+          state.txns = data.txns || [];
+          state.plans = data.plans || [];
+          refreshLocalSnapshot();
+          state.adj = { cash: 0, free: 0, card: 0, prepay: 0 };
+          state.adjSig = snapSig(state.snapshot);
+          state.adjLoaded = true;
+          saveAdj();
+          persistSnapshot();
+          renderBaseEditor();
+          render();
+          snack('Imported ' + (data.txns || []).length + ' entries · ' + (data.plans || []).length + ' plans' + (state.base.migrated_from_snapshot || (data.base && data.base.accounts) ? ' · numbers restored' : ''));
+        });
+      } catch (err) {
+        snack('Import failed: ' + esc(String((err && err.message) || err)));
+      }
+    };
+    fr.onerror = function () { snack('Import failed: could not read the file.'); };
+    fr.readAsText(file);
+  }
   function renderFooter() {
     var el = byId('foot'); if (!el) return;
-    var parts = [];
-    if (state.lastSync) parts.push('last synced ' + new Date(state.lastSync).toLocaleTimeString());
-    if (state.error) parts.push('<span class="low">sync error: ' + esc(state.error) + '</span>');
-    if (!getUrl()) parts.push('not connected');
-    el.innerHTML = parts.join('<br>') || '&nbsp;';
+    var b = state.base;
+    if (!b || baseIsEmpty(b)) { el.innerHTML = 'fully local · add your numbers in Settings (⚙)'; return; }
+    var parts = ['numbers as of ' + esc(fmtDate(b.as_of || ''))];
+    if (b.edited) parts.push('last edited ' + new Date(b.edited).toLocaleTimeString());
+    el.innerHTML = parts.join('<br>');
   }
   var TABS = ['home', 'money', 'ledger', 'coach'];
   var TAB_MIGRATE = { overview: 'money', add: 'ledger' };
@@ -1348,13 +1841,10 @@
     addTxn: addTxn,
     deleteTxn: deleteTxn,
     snack: snack,
-    sync: doSync,
     render: render,
     setTab: setTab,
     closeCoach: closeCoach,
     openSettings: function () { openSheet('setSheet'); },
-    online: function () { return state.online; },
-    lastSync: function () { return state.lastSync; },
     idbAll: idbAll,
     idbPut: idbPut,
     idbDel: idbDel,
@@ -1384,15 +1874,6 @@
     var pdateEl = byId('p_date');
     if (pdateEl && !pdateEl.value) pdateEl.value = todayISO();
     if (pdateEl) { pdateEl.addEventListener('input', function () { syncDateLabel(pdateEl); }); syncDateLabel(pdateEl); }
-
-    var cbtn = byId('connectBtn');
-    if (cbtn) cbtn.onclick = function () {
-      var u = (byId('syncUrl').value || '').trim();
-      if (!u) return;
-      setUrl(u); render(); doSync();
-    };
-    var sbtn = byId('syncBtn');
-    if (sbtn) sbtn.onclick = function () { doSync(); };
 
     var tabBtns = document.querySelectorAll('.tab');
     for (var i = 0; i < tabBtns.length; i++) {
@@ -1467,13 +1948,8 @@
       if (c) { c.style.display = catEl.value === CAT_CUSTOM ? '' : 'none'; if (catEl.value === CAT_CUSTOM) c.focus(); }
     };
 
-    window.addEventListener('online', function () { state.online = true; emit('online'); doSync(); });
-    window.addEventListener('offline', function () { state.online = false; emit('online'); });
-    window.addEventListener('focus', function () { if (state.online && getUrl() && pendingList().length) doSync(); });
-    document.addEventListener('visibilitychange', function () { if (!document.hidden && state.online && getUrl() && pendingList().length) doSync(); });
-
-    var se = byId('syncErr');
-    if (se) se.onclick = function () { doSync(); };
+    window.addEventListener('online', function () { state.online = true; });
+    window.addEventListener('offline', function () { state.online = false; });
 
     var ab = byId('addBtn');
     if (ab) ab.onclick = function () { openSheet('addSheet'); };
@@ -1501,8 +1977,32 @@
     if (ej) ej.onclick = function () { exportData('json'); };
     var ec = byId('expCsv');
     if (ec) ec.onclick = function () { exportData('csv'); };
-    var snb = byId('syncNowBtn');
-    if (snb) snb.onclick = function () { doSync(); };
+    var ib = byId('impBtn');
+    if (ib) ib.onclick = function () { var f = byId('impFile'); if (f) f.click(); };
+    var ifile = byId('impFile');
+    if (ifile) ifile.onchange = function () {
+      var f = ifile.files && ifile.files[0];
+      if (f) importData(f);
+      ifile.value = '';
+    };
+    var bb = byId('baseBody');
+    if (bb) {
+      var deb = null;
+      bb.addEventListener('input', function () { clearTimeout(deb); deb = setTimeout(commitBaseForm, 450); });
+      bb.addEventListener('change', function () { clearTimeout(deb); commitBaseForm(); });
+      bb.addEventListener('click', function (ev) {
+        var t = ev.target;
+        if (!t || !t.getAttribute) return;
+        var add = t.getAttribute('data-add');
+        if (add) { addBaseRow(add); return; }
+        var rm = t.getAttribute('data-rm');
+        if (rm) {
+          var holder = rm === 'blk' ? t.closest('.bblk') : t.closest('.brow');
+          if (holder) holder.parentNode.removeChild(holder);
+          commitBaseForm();
+        }
+      });
+    }
     var hob = byId('homeOpenSet');
     if (hob) hob.onclick = function () { openSheet('setSheet'); };
 
@@ -1526,22 +2026,33 @@
     Promise.all([idbAll(STORE_TX), idbAll(STORE_META), idbAll(STORE_PLANS)]).then(function (res) {
       state.txns = res[0] || [];
       state.plans = res[2] || [];
-      var hasAdj = false;
+      var cachedSnap = null, hasAdj = false;
       (res[1] || []).forEach(function (m) {
-        if (m.key === 'snapshot') { state.snapshot = m.value; state.lastSync = m.at; }
+        if (m.key === 'base') { state.base = m.value; }
+        else if (m.key === 'snapshot') { cachedSnap = m.value; }
         else if (m.key === 'adj') { state.adj = m.value; hasAdj = true; }
         else if (m.key === 'adjSig') { state.adjSig = m.value || ''; }
         else if (m.key === 'coachMem') { state.coachMem = m.value; }
         else if (m.key === 'moneyLog') { state.moneyLog = m.value || []; }
       });
-      if (!hasAdj) computeAdjFromTxns();
-      if (!state.adjSig && state.snapshot) state.adjSig = snapSig(state.snapshot);
+      if (!state.base) {
+        // First launch: one-time migration from the last cached sheet snapshot (if any).
+        state.base = snapshotToBase(cachedSnap) || defaultBase();
+      }
+      refreshLocalSnapshot();
+      if (!hasAdj && !state.adjSig) computeAdjFromTxns();
+      if (!state.adjSig) state.adjSig = snapSig(state.snapshot);
       state.adjLoaded = true;
+      persistSnapshot();
+      idbPut(STORE_META, { key: 'base', value: state.base }).catch(function () {});
+      renderBaseEditor();
       render();
       setTab(currentTab());
-      if (state.online && getUrl()) doSync();
     }).catch(function (err) {
       console.warn('IDB load failed', err);
+      state.base = state.base || defaultBase();
+      refreshLocalSnapshot();
+      state.adjSig = snapSig(state.snapshot);
       render();
       setTab(currentTab());
     });

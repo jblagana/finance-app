@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Finance</title>
 <meta name="theme-color" content="#0f1420">
-<meta name="description" content="Offline-first personal finance tracker synced to your Google Sheet.">
+<meta name="description" content="Fully local personal finance tracker — your numbers live on this phone.">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="./icon-192.png">
@@ -36,7 +36,6 @@ font-weight:700;line-height:1.2}
 h1{margin:0;font-size:20px;letter-spacing:.2px}
 h1 span{color:var(--acc)}
 .hwrap{display:flex;align-items:center;gap:10px}
-#status{font-size:12px;color:var(--mut);text-align:right}
 main{flex:1;width:100%;padding:14px 16px 20px;max-width:640px;margin:0 auto}
 h2{font-size:12.5px;margin:20px 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
 .tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
@@ -87,8 +86,7 @@ background-repeat:no-repeat;background-position:right 12px center;padding-right:
 .row>div{flex:1;min-width:0}
 button.act{cursor:pointer;border:1px solid var(--acc);background:var(--acc);color:#fff;padding:12px 14px;border-radius:11px;font-weight:700;font-size:14.5px;width:100%}
 button.act:active{filter:brightness(1.12)}
-button.sync{cursor:pointer;border:1px solid var(--acc);background:transparent;color:var(--acc);padding:8px 14px;border-radius:10px;font-weight:700;font-size:13px;white-space:nowrap}
-button.sync:disabled{opacity:.5}
+button.act.ghost{background:transparent;color:var(--acc)}
 .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:700}
 .pill.ok{background:rgba(55,211,155,.15);color:var(--ok)}
 .pill.bad{background:rgba(255,107,107,.15);color:var(--bad)}
@@ -101,21 +99,23 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 #foot{color:var(--mut);font-size:12px;text-align:center;padding:14px 16px 22px;line-height:1.7}
 .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--acc);border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px}
 @keyframes sp{to{transform:rotate(360deg)}}
-#connect input{margin:6px 0 10px}
 .kv{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13px;padding:4px 0;border-top:1px solid var(--line)}
 .kv .k{color:var(--mut)}
 .kv b{color:var(--ink);text-align:right;word-break:break-word}
 .bar{height:8px;background:var(--card2);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:8px 0 6px}
 .bar i{display:block;height:100%;background:var(--acc);border-radius:6px}
-/* coach chat (the Coach tab — inline card pane; tap the Coach tab again to close) */
-#tab-coach{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px}
-#chatHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+/* coach chat (the Coach tab — inline card pane; tap the Coach tab again to close)
+   v21: explicit column flex so a stale/mixed cache can never break the layout:
+   head / chips / input are fixed, #chatMsgs is the only growing+scrolling child */
+#tab-coach{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px;
+ display:flex;flex-direction:column}
+#chatHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);flex:0 0 auto}
 #chatTitle{font-size:17px;font-weight:700}
 #chatFresh{font-size:11px;color:var(--mut);margin-top:2px}
 #chatClose{background:var(--card2);border:1px solid var(--line);color:var(--mut);width:36px;height:36px;border-radius:10px;
  font-size:15px;cursor:pointer;flex:0 0 auto}
 #chatClose:active{border-color:var(--bad);color:var(--bad)}
-#chatMsgs{max-height:50vh;overflow-y:auto;padding:14px 14px 6px;-webkit-overflow-scrolling:touch}
+#chatMsgs{flex:1 1 auto;min-height:0;max-height:50vh;overflow-y:auto;padding:14px 14px 6px;-webkit-overflow-scrolling:touch}
 .msg{max-width:84%;margin:0 0 10px;padding:9px 11px;border-radius:13px;font-size:13.5px;line-height:1.42;overflow-wrap:break-word}
 .msg.user{margin-left:auto;background:rgba(91,140,255,.20);border:1px solid rgba(91,140,255,.45);border-bottom-right-radius:6px}
 .msg.bot{margin-right:auto;background:var(--card2);border:1px solid var(--line);border-bottom-left-radius:6px}
@@ -128,12 +128,12 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 .c-act{cursor:pointer;background:var(--card);border:1px solid var(--acc);color:var(--ink);border-radius:9px;padding:7px 11px;font-size:12.5px;font-weight:700}
 .c-act:active{background:var(--acc);color:#fff}
 .c-done{color:var(--ok);font-size:12px;font-weight:700;padding:4px 2px}
-#chatChips{display:flex;gap:6px;overflow-x:auto;padding:9px 14px;border-top:1px solid var(--line);scrollbar-width:none;background:var(--card)}
+#chatChips{display:flex;gap:6px;overflow-x:auto;padding:9px 14px;border-top:1px solid var(--line);scrollbar-width:none;background:var(--card);flex:0 0 auto}
 #chatChips::-webkit-scrollbar{display:none}
 .chip{flex:0 0 auto;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:999px;padding:7px 12px;
  font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap}
 .chip:active{border-color:var(--acc);color:var(--ink)}
-#chatInRow{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--card)}
+#chatInRow{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--card);flex:0 0 auto}
 #chatInput{flex:1;min-width:0;font-size:16px}
 #chatSend{flex:0 0 auto;background:var(--acc);border:0;color:#fff;font-weight:700;padding:0 18px;border-radius:10px;font-size:14.5px;cursor:pointer}
 #chatSend:active{filter:brightness(1.12)}
@@ -159,12 +159,26 @@ button.gear:active{border-color:var(--acc);color:var(--acc)}
 .sheet-x:active{border-color:var(--bad);color:var(--bad)}
 .sheet-b{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 16px calc(18px + env(safe-area-inset-bottom))}
 #addSheet form{margin-bottom:0}
-#connStatus .pill{vertical-align:1px}
-/* ---- sync error strip (tap to retry) ---- */
-#syncErr{display:none;max-width:640px;margin:0 auto;color:#ffb4b4;background:rgba(255,107,107,.13);
-border-bottom:1px solid rgba(255,107,107,.35);padding:8px 16px;font-size:12.5px;font-weight:600;
+#baseStatus .pill{vertical-align:1px}
+/* ---- v21: Your numbers editor (Settings sheet) ---- */
+.bnote{color:var(--mut);font-size:12px;font-weight:600}
+.brow{display:flex;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--line)}
+.brow:first-of-type{border-top:0}
+.brow input,.brow select{padding:9px 10px;font-size:14px}
+.brow .grow{flex:1;min-width:0}
+.brow .bnote{flex:0 0 auto}
+.brow .mini{flex:0 0 auto}
+.bblk{padding:8px 0;border-top:1px solid var(--line)}
+.bhead{margin-top:14px}
+.addrow{cursor:pointer;background:transparent;border:1px dashed var(--line);color:var(--mut);border-radius:9px;
+ padding:9px 12px;font-size:12.5px;font-weight:700;margin-top:6px;width:100%}
+.addrow:active{border-color:var(--acc);color:var(--acc)}
+input[type="month"]{min-height:44px}
+/* (v21: sync error strip removed — the app is fully local) */
+
+
 cursor:pointer;text-align:center}
-#syncErr:active{filter:brightness(1.25)}
+
 /* ---- undo snackbar ---- */
 #snack{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom));transform:translate(-50%,10px);
 z-index:30;background:var(--card2);border:1px solid var(--line);color:var(--ink);border-radius:12px;
@@ -259,7 +273,6 @@ label.chk input{width:18px;height:18px;accent-color:var(--acc);flex:0 0 auto;mar
 .ml-meta{color:var(--mut);font-size:11.5px;margin-top:2px}
 /* ---- Phase 4 a11y: 44px primary tap targets ---- */
 .tab{min-height:44px;padding:12px 6px}
-button.sync{min-height:44px}
 button.gear{width:44px;height:44px}
 .sheet-x{width:44px;height:44px}
 .mini{min-height:32px;padding:4px 10px}
@@ -273,18 +286,15 @@ button.gear{width:44px;height:44px}
   <header>
     <h1>Fin<span>ance</span></h1>
     <div class="hwrap">
-      <div id="status" aria-live="polite"></div>
       <button class="gear" id="setBtn" type="button" aria-label="Settings">⚙&#xFE0E;</button>
-      <button class="sync" id="syncBtn" type="button">Sync</button>
     </div>
   </header>
 </div>
-<div id="syncErr" role="alert"></div>
 <main>
   <div id="tab-home">
     <div id="homeEmpty" class="card" style="display:none">
-      <p class="note" style="margin:2px 0">Connect your sheet to see your numbers — the coach note and insights show up here once data syncs. Anything you add meanwhile is saved on this phone and syncs later.</p>
-      <button class="act" id="homeOpenSet" type="button" style="margin-top:12px">Open Settings &amp; connect</button>
+      <p class="note" style="margin:2px 0">Add your numbers — accounts, salary, debts, budgets, one-offs — in <b>Settings (⚙ top right) → Your numbers</b>. The coach note and insights show up here once they exist. Anything you log meanwhile is saved on this phone.</p>
+      <button class="act" id="homeOpenSet" type="button" style="margin-top:12px">Open Settings &amp; add your numbers</button>
     </div>
 
     <section id="hero" class="card hero" style="display:none">
@@ -348,14 +358,14 @@ button.gear{width:44px;height:44px}
       <div style="margin-top:14px">
         <button class="act" type="submit">Add plan</button>
       </div>
-      <p class="note" style="margin:10px 0 0">Plans stay on this phone — they drive the coach note and insights on Home; they're not written to the sheet.</p>
+      <p class="note" style="margin:10px 0 0">Plans stay on this phone — they drive the coach note and insights on Home.</p>
     </form>
     <div id="plans" class="card"></div>
   </div>
 
   <div id="tab-ledger" style="display:none">
     <div id="addEmpty" class="card" style="display:none">
-      <p class="note" style="margin:2px 0">Entries are saved on this phone. Connect your sheet via <b>Settings</b> (⚙) to sync them to Google Sheets.</p>
+      <p class="note" style="margin:2px 0">Entries are saved on this phone. For full free-cash math, add your numbers in <b>Settings (⚙) → Your numbers</b>.</p>
     </div>
 
     <section id="donut" class="card" style="display:none">
@@ -438,25 +448,26 @@ button.gear{width:44px;height:44px}
     <button id="setClose" class="sheet-x" type="button" aria-label="Close">✕</button>
   </div>
   <div class="sheet-b">
-    <p id="connStatus" class="note" style="margin:10px 0 14px" aria-live="polite"></p>
-    <section id="connect" class="card" style="display:none">
-      <h2 style="margin-top:0">Connect your sheet</h2>
-      <p class="note" style="margin-top:2px">Paste your <b>Apps Script Web App URL</b> — the <code>…/exec</code> link from your Sheet:
-        <b>Extensions → Apps Script → Deploy → New deployment → Web app</b>. It's stored only on this phone.</p>
-      <input id="syncUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
-      <button class="act" id="connectBtn" type="button">Connect &amp; sync</button>
+    <p id="baseStatus" class="note" style="margin:10px 0 14px" aria-live="polite"></p>
+    <section class="card">
+      <h2 style="margin-top:0">Your numbers</h2>
+      <p class="note" style="margin-top:2px">Everything is stored on this phone — edit it here and the whole app (tiles, coach, projection) recomputes instantly. Changes save as you type.</p>
+      <div id="baseBody"></div>
+      <p id="baseMigrated" class="note" style="display:none;margin-top:10px"></p>
     </section>
-    <button class="act" id="syncNowBtn" type="button">Sync now</button>
-    <p class="note" style="margin-top:12px">Synced entries live in your Sheet — edit or delete them there. Plans and the chat stay on this phone.</p>
     <section class="card" style="margin-top:16px">
-      <h2 style="margin-top:0">Export</h2>
-      <p class="note" style="margin:4px 0 10px">Download what this phone holds — every entry (synced and pending) plus your plans. CSV holds the ledger only; JSON holds everything.</p>
+      <h2 style="margin-top:0">Backup</h2>
+      <p class="note" style="margin:4px 0 10px">Download everything this phone holds — your numbers, every entry and your plans. JSON holds it all; CSV holds the ledger only. Import restores a backup.</p>
       <div class="row">
         <div><button class="act" id="expJson" type="button">Export JSON</button></div>
         <div><button class="act" id="expCsv" type="button">Export CSV</button></div>
       </div>
+      <div style="margin-top:8px">
+        <button class="act ghost" id="impBtn" type="button">Import JSON…</button>
+        <input id="impFile" type="file" accept="application/json,.json" style="display:none">
+      </div>
     </section>
-    <p class="note" style="margin:14px 0 0">Finance PWA · offline-first · shell v20</p>
+    <p class="note" style="margin:14px 0 0">Finance PWA · fully local · shell v21</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>

@@ -1,14 +1,13 @@
 /* Finance PWA coach chat — the Coach tab.
  *
- * Rule-based and offline-first: it answers from the same data the app's tiles
- * use — the last sheet snapshot cached in IndexedDB plus this phone's plans and
- * entries — so it works with no signal. When online it refreshes the snapshot
- * first (the same sync path as the rest of the app).
+ * Rule-based and fully local: it answers from the same data the app's tiles
+ * use — the local base snapshot (accounts, salary, debts, budgets, one-offs,
+ * sinking) computed on this phone, plus this phone's plans and entries — so it
+ * works with no signal and no sheet.
  *
  * It never writes on its own: every change (plan, expense) is confirmed with a
  * button and goes through the app's own actions (window.FinApp), so chat-made
- * plans/entries behave exactly like the forms (same stores, same sync, same
- * deficit math).
+ * plans/entries behave exactly like the forms (same stores, same deficit math).
  */
 (function () {
   'use strict';
@@ -98,7 +97,7 @@
         eff.card_owed = r2((snap.card_owed || 0) + a.card);
         eff.total_prepay = r2((snap.total_prepay || 0) + a.prepay);
       }
-      return { snap: snap, eff: eff, plans: res[1] || [], txns: res[2] || [], at: at, online: !!F.online() };
+      return { snap: snap, eff: eff, plans: res[1] || [], txns: res[2] || [], at: at };
     });
   }
 
@@ -275,8 +274,8 @@
   }
   function freshness(ctx) {
     if (!ctx) return '';
-    var when = ctx.at ? new Date(ctx.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'not synced yet';
-    return '<div class="note">numbers as of ' + esc(when) + (ctx.online ? '' : ' · offline') + '</div>';
+    var when = ctx.at ? new Date(ctx.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'today';
+    return '<div class="note">numbers as of ' + esc(when) + ' · on this phone</div>';
   }
 
   // ---------- intents ----------
@@ -299,7 +298,7 @@
     var h = block(n ? 'Hey ' + esc(n) : 'Hey',
       line('I’m your money coach. Ask for <b>status</b>, <b>plans</b>, <b>debt</b> details, a <b>charge check</b>, or tell me about an <b>urgent expense</b> — it works offline.') +
       line('Type <b>help</b> for the full list.'),
-      'I answer from your last synced numbers.', 'good');
+      'I answer from your numbers on this phone.', 'good');
     return { html: h + freshness(ctx) };
   }
 
@@ -412,12 +411,12 @@
         (b.full_living.borrow_to_keep_floor > 0 ? kv('Borrow to keep the floor', money(b.full_living.borrow_to_keep_floor)) : ''),
         b.mandatory_only.need_borrow
           ? 'Even mandatory-only needs a bridge of ' + money(b.mandatory_only.borrow_to_avoid_negative) + '.'
-          : 'Mandatory-only needs no borrowing. Any full-living borrow is repaid with the Oct double salary.',
+          : 'Mandatory-only needs no borrowing. Any full-living borrow should be repaid as soon as cash allows.',
         b.mandatory_only.need_borrow ? 'warn' : 'good');
       return { html: h + freshness(ctx) };
     }
     if (!m) {
-      return { html: block('Projection', line('I don’t have the 6-month projection cached yet — sync once while online and I can project.'), null, null) + freshness(ctx) };
+      return { html: block('Projection', line('I don’t have your numbers yet — add them in Settings → Your numbers and I can project.'), null, null) + freshness(ctx) };
     }
     var target = null;
     if (monthWord) {
@@ -454,7 +453,9 @@
         var w = (m.worst || [])[i];
         lines += kv(monthLabel(r.comp.month), money(r.running) + ' <span class="note" style="font-size:11px">worst ' + money(w ? w.running : '—') + '</span>');
       });
-      var h3 = block('Sept 2026 → Feb 2027 · running cash', lines,
+      var ms = (ctx.snap && ctx.snap.months) || [];
+      var winTitle = ms.length >= 2 ? monthLabel(ms[0]) + ' → ' + monthLabel(ms[ms.length - 1]) : '6 months';
+      var h3 = block(winTitle + ' · running cash', lines,
         'Worst case also eats the ' + money(ctx.snap.emergency_cap || 0) + ' emergency every month.', 'good');
       return { html: h3 + freshness(ctx) };
     }
@@ -500,7 +501,7 @@
       sel.length
         ? kv(scope, money(total) + ' <span class="note" style="font-size:11px">(' + sel.length + ' entr' + (sel.length === 1 ? 'y' : 'ies') + ')</span>')
         : line('Nothing logged ' + scope + ' yet.'),
-      'This counts entries added in the app; the full ledger lives in your Sheet.', 'good');
+      'This counts entries logged in this app — everything is stored on this phone.', 'good');
     return { html: h + freshness(ctx) };
   }
 
@@ -611,7 +612,7 @@
       h += '<div class="verdict bad">This breaks the ' + money(floor) + ' floor: paying cash drops you to ' + money(afterCash) + '.</div>';
       h += line('Options: (1) trim plans — ' + (frees.length ? frees.map(function (f2) { return esc(f2.name) + ' ' + money(f2.amount); }).join(', ') + ' frees ' + money(cum) : 'nothing big enough') +
         '; (2) card it' + (card ? ' on ' + esc(card.name) + ' (prepay → ' + money(r2(e.total_prepay + A)) + ')' : '') +
-        '; (3) bridge ' + money(borrow) + ' from your partner, repaid with the Oct double salary.');
+        '; (3) bridge ' + money(borrow) + ' from a partner and repay it when cash allows.');
       if (card) actions.push({ label: 'Log expense · ' + esc(card.name), act: 'log_expense', payload: { amount: A, kind: 'card_charge', account: card.name, category: p.cat, note: 'urgent: ' + (p.what || 'unplanned') } });
       actions.push({ label: 'Add as plan instead', act: 'add_plan', payload: { name: p.what || 'Urgent expense', amount: A, date: todayISO() } });
     }
@@ -657,7 +658,7 @@
       kv(esc(acct.name || 'Cash'), money(A)) +
       kv('Category', esc(cat)) +
       kv('Date', esc(fmtDate(date))),
-      'Tap to log it — it lands in the Ledger and syncs to the Sheet.', 'good');
+      'Tap to log it — it lands in the Ledger on this phone.', 'good');
     return {
       html: h + freshness(ctx),
       actions: [{
@@ -673,7 +674,7 @@
       html: block('Not sure about that one',
         line('I only answer from the numbers on this phone — that question is outside them.') +
         line('I can: <b>status</b> (free cash, prepay, cards), <b>details</b> (debt schedules, one-offs, sinking, cash in any month), <b>plans</b>, <b>charge checks</b>, <b>urgent-expense options</b>, and <b>what you’ve logged</b>.') +
-        line('For anything else, the <b>Money</b> tab has the full sheet view.'),
+        line('For anything else, the <b>Money</b> tab has the full numbers view.'),
         'Type “help” to see examples.', 'warn')
     };
   }
@@ -685,8 +686,8 @@
     if (!ctx.eff) {
       return {
         html: block('No numbers yet',
-          line('I need one sync to your sheet before I can answer money questions. Until then you can still add and view plans.'),
-          'Open Settings (the ⚙ in the top right) → paste your Web App URL → Connect & sync.', 'warn'),
+          line('Add your accounts, salary, debts, budgets and one-offs in <b>Settings → Your numbers</b> and I can answer money questions. Until then you can still add and view plans.'),
+          'Everything is stored on this phone — no sheet needed.', 'warn'),
         actions: [{ label: 'Open Settings', act: 'open_settings' }]
       };
     }
@@ -714,7 +715,7 @@
   }
 
   // ---------- chat store + message UI ----------
-  var fabEl = null, panelEl = null, inputEl = null, msgsEl = null;
+  var inputEl = null, msgsEl = null;
   var CHIPS = ['How much is free?', 'My 14th prepay', 'Show my plans', 'What’s coming up?', 'Check a charge', 'Urgent expense'];
 
   function chatId() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -809,7 +810,7 @@
       }).then(function () {
         markDone(m);
         pushBot('Logged <b>' + esc(money(pl.amount)) + '</b> · ' + esc(pl.category || 'Other') + ' · ' + esc(pl.account || 'cash') +
-          '. It’s in the Ledger' + (F.online() ? ' and syncing to the Sheet.' : ' — it syncs when you’re back online.'));
+          '. It’s in the Ledger on this phone.');
       });
       return;
     }
@@ -824,8 +825,7 @@
     typing.innerHTML = '<span class="spin"></span> thinking…';
     msgsEl.appendChild(typing);
     scrollBottom();
-    var p0 = F.online() ? Promise.resolve(F.sync()).catch(function () {}) : Promise.resolve();
-    p0.then(loadCtx).then(function (ctx) {
+    loadCtx().then(function (ctx) {
       var res = handle(v, ctx);
       var bm = { id: chatId(), who: 'bot', html: res.html, actions: res.actions || [], at: new Date().toISOString() };
       return saveMsg(bm).then(function () {
@@ -841,18 +841,16 @@
   function updateFresh(ctx) {
     var el = byId('chatFresh');
     if (!el || !ctx) return;
-    var when = ctx.at ? new Date(ctx.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'not synced yet';
-    el.textContent = 'as of ' + when + (ctx.online ? '' : ' · offline');
+    var when = ctx.at ? new Date(ctx.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'today';
+    el.textContent = 'as of ' + when + ' · on this phone';
   }
   function welcomeHtml() {
     var n = coachName();
     return '<div class="c-block"><div class="c-t">' + (n ? 'Hey ' + esc(n) : 'Hey') + '</div>' +
-      '<div class="ins-line">I’m your money coach — ask me anything about your plan, or tell me when something unexpected comes up. Works offline; numbers refresh when you’re online.</div>' +
+      '<div class="ins-line">I’m your money coach — ask me anything about your plan, or tell me when something unexpected comes up. Everything is stored on this phone.</div>' +
       '<div class="ins-line">Try: <b>“how much is free?”</b> · <b>“plan: shoes 1,500 on the 20th”</b> · <b>“urgent: car repair 8,000 this week”</b></div></div>';
   }
   function openChat() {
-    if (panelEl) panelEl.style.display = 'flex';
-    if (fabEl) fabEl.style.display = 'none';
     loadChat().then(function (rows) {
       if (!rows.length) {
         var m = { id: chatId(), who: 'bot', html: welcomeHtml(), at: new Date().toISOString() };
@@ -861,15 +859,15 @@
         renderMsgs(rows);
       }
     });
-    if (F.online()) F.sync().catch(function () {});
-    updateFresh({ at: null, online: F.online() });
-    // no auto-focus: the keyboard should only appear when the user taps the input
+    loadCtx().then(function (c) { updateFresh(c); }).catch(function () {});
+    // no auto-focus: the keyboard should only appear when the user taps the input.
+    // If a stale focus survived a tab switch, drop it defensively.
+    setTimeout(function () {
+      try { if (inputEl && document.activeElement === inputEl) inputEl.blur(); } catch (e) {}
+    }, 60);
   }
   function closeChat() {
-    if (panelEl) {
-      panelEl.style.display = 'none';
-      if (fabEl) fabEl.style.display = '';
-    } else if (F.closeCoach) {
+    if (F.closeCoach) {
       F.closeCoach();
     } else if (F.setTab) {
       F.setTab('home');
@@ -889,13 +887,10 @@
     });
   }
   function init() {
-    fabEl = byId('chatFab');
-    panelEl = byId('chatPanel');
     inputEl = byId('chatInput');
     msgsEl = byId('chatMsgs');
     if (!inputEl || !msgsEl) return;
     renderChips();
-    if (fabEl) fabEl.onclick = openChat;
     var c = byId('chatClose');
     if (c) c.onclick = closeChat;
     var s = byId('chatSend');
