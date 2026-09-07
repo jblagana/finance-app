@@ -268,9 +268,6 @@ margin:10px 0 2px;padding-top:6px;border-top:1px solid var(--line)}
 .ml-row.del{opacity:.85}
 .ml-row .ml-l{flex:1;min-width:0}
 .ml-row .ml-r{flex:0 0 auto;text-align:right}
-.ml-tag{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
- border-radius:999px;padding:2px 8px;margin-right:6px;background:rgba(91,140,255,.14);color:var(--acc)}
-.ml-tag.del{background:rgba(255,178,102,.16);color:var(--warn)}
 .ml-row b{font-variant-numeric:tabular-nums;font-size:13px}
 .ml-down{color:var(--bad)}
 .ml-up{color:var(--ok)}
@@ -398,12 +395,11 @@ button.gear{width:44px;height:44px}
     </section>
 
     <section class="card" id="txnCard">
+      <h2 style="margin-top:0">Your expenses</h2>
       <div id="moneyLog" style="display:none">
-        <h2 style="margin-top:0">Money log</h2>
         <p class="note" style="margin:0 0 4px">How each entry moved your free cash, newest first. The change should always equal the entry — that is the sanity check.</p>
         <div id="mlBody"></div>
       </div>
-      <h2 style="margin-top:2px">Your expenses</h2>
       <div id="txns"></div>
     </section>
   </div>
@@ -483,7 +479,7 @@ button.gear{width:44px;height:44px}
         <div><button class="act" id="expCsv" type="button">Export CSV</button></div>
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">Finance PWA · offline-first · shell v16</p>
+    <p class="note" style="margin:14px 0 0">Finance PWA · offline-first · shell v17</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>

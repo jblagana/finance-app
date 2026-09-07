@@ -396,6 +396,7 @@
     var e = {
       at: Date.now(), a: action,
       l: (t.category || t.account || 'entry') + (t.note ? ' · ' + t.note : ''),
+      c: t.category || t.account || 'entry', nt: t.note || '', m: t.account || '',
       n: amt, k: t.kind === 'card_charge' ? 'c' : 'x'
     };
     e.f = r2(s.cash ? s.cash.free : 0);
@@ -409,11 +410,17 @@
     if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
     idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
   }
-  function mlWhen(ts) {
+  function mlDate(ts) {
     var d = new Date(ts);
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return MO[d.getMonth()] + ' ' + d.getDate() + ' ' +
-      (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
+    return MO[d.getMonth()] + ' ' + d.getDate();
+  }
+  function mlLeft(e) {
+    var lab = e.c != null ? (e.c + (e.nt ? ' · ' + e.nt : '')) : (e.l || 'entry');
+    var parts = [lab, mlDate(e.at)];
+    var m = e.m || (e.k === 'c' ? 'Card' : '');
+    if (m && lab !== m) parts.push(m);
+    return parts.join(' · ');
   }
   function renderMoneyLog() {
     var el = byId('moneyLog');
@@ -429,9 +436,9 @@
         if (e.k === 'c') extra = '<span class="ml-x">card ' + money(r2(e.o + (add ? -e.n : e.n))) + ' → ' + money(e.o) + '</span>';
         if (e.s != null) extra += '<span class="ml-x">month spent ' + money(r2(e.s + (add ? -e.n : e.n))) + ' → ' + money(e.s) + '</span>';
         return '<div class="ml-row' + (add ? '' : ' del') + '">' +
-          '<div class="ml-l"><span class="ml-tag' + (add ? '' : ' del') + '">' + (add ? 'added' : 'removed') + '</span>' + esc(e.l) + '</div>' +
+          '<div class="ml-l">' + esc(mlLeft(e)) + '</div>' +
           '<div class="ml-r"><b class="' + (add ? 'ml-down' : 'ml-up') + '">' + (add ? '−' : '+') + money(e.n) + '</b>' +
-          '<span class="ml-f">' + mlWhen(e.at) + ' · free ' + money(before) + ' → ' + money(e.f) + '</span>' + extra + '</div></div>';
+          '<span class="ml-f">free ' + money(before) + ' → ' + money(e.f) + '</span>' + extra + '</div></div>';
       }).join('') +
       (log.length > ML_SHOW ? '<p class="note" style="margin:8px 0 0">Showing the last ' + ML_SHOW + ' of ' + log.length + ' entries.</p>' : '');
   }
