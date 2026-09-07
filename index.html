@@ -190,7 +190,52 @@ transition:transform .22s ease}
 #swToast.show{transform:translate(-50%,0)}
 #swToast button{cursor:pointer;background:var(--acc);border:0;color:#fff;font-weight:800;border-radius:999px;
 padding:7px 14px;font-size:12.5px}
-@media (prefers-reduced-motion:reduce){#snack,#swToast{transition:none}}
+/* ---- Phase 3: hero + cash sparkline ---- */
+.hero{padding:16px 16px 14px}
+.hero-k{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+.hero-v{font-size:34px;font-weight:800;letter-spacing:.3px;margin-top:4px;font-variant-numeric:tabular-nums}
+.hero-v.bad{color:var(--bad)}
+.hero-sub{color:var(--mut);font-size:12.5px;margin-top:6px;line-height:1.5}
+.hero-sub b{color:var(--ink)}
+.spark{margin-top:12px}
+.spark svg{width:100%;height:auto;display:block}
+/* ---- Phase 3: needs-attention digest ---- */
+.dig{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+ text-align:left;background:var(--card2);border:1px solid var(--line);border-radius:10px;
+ color:var(--ink);padding:10px 12px;margin-top:8px;font-size:13px;cursor:pointer;line-height:1.45}
+.dig:active{filter:brightness(1.15)}
+.dig .dg-l{flex:1;min-width:0}
+.dig .dg-r{flex:0 0 auto;font-weight:700;font-size:12.5px;color:var(--mut);white-space:nowrap}
+.dig.warn{border-left:3px solid var(--warn)}
+.dig.bad{border-left:3px solid var(--bad)}
+.dg-tag{display:block;font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;margin-bottom:2px}
+.dig.warn .dg-tag{color:var(--warn)}
+.dig.bad .dg-tag{color:var(--bad)}
+/* ---- Phase 3: donut + spend pace (Ledger) ---- */
+.donutwrap{display:flex;gap:14px;align-items:center}
+.donutwrap svg{flex:0 0 108px;width:108px;height:108px}
+.donut-legend{flex:1;min-width:0}
+.drow{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:4px 0}
+.drow .sw{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.drow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mut)}
+.drow b{font-variant-numeric:tabular-nums}
+.drow .pc{color:var(--mut);font-size:11px;width:32px;text-align:right;flex:0 0 auto}
+.pace{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pace .p{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 8px;text-align:center}
+.pace .p .k{color:var(--mut);font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;line-height:1.35}
+.pace .p .v{font-size:14px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+/* ---- Phase 3 motion: pane crossfade, slide-in, shimmer ---- */
+@keyframes paneIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes shim{0%{background-position:200% 0}100%{background-position:-200% 0}}
+#tab-home,#tab-money,#tab-ledger,#tab-coach{animation:paneIn .18s ease}
+.txn,.dig,.drow{animation:rise .18s ease}
+.tile{position:relative;overflow:hidden}
+.tiles.busy .tile::after{content:"";position:absolute;inset:0;pointer-events:none;
+background:linear-gradient(100deg,transparent 30%,rgba(232,237,247,.07) 50%,transparent 70%);
+background-size:220% 100%;animation:shim 1.1s linear infinite}
+@media (prefers-reduced-motion:reduce){#snack,#swToast{transition:none}
+#tab-home,#tab-money,#tab-ledger,#tab-coach,.txn,.dig,.drow,.tiles.busy .tile::after{animation:none!important}}
 </style>
 </head>
 
@@ -212,6 +257,18 @@ padding:7px 14px;font-size:12.5px}
       <p class="note" style="margin:2px 0">Connect your sheet to see your numbers — the coach note and insights show up here once data syncs. Anything you add meanwhile is saved on this phone and syncs later.</p>
       <button class="act" id="homeOpenSet" type="button" style="margin-top:12px">Open Settings &amp; connect</button>
     </div>
+
+    <section id="hero" class="card hero" style="display:none">
+      <div class="hero-k">Free / unallocated</div>
+      <div class="hero-v" id="heroFree">—</div>
+      <div class="hero-sub" id="heroSub"></div>
+      <div class="spark" id="sparkBox"></div>
+    </section>
+
+    <section id="digest" style="display:none">
+      <h2 style="margin-top:18px">Needs attention</h2>
+      <div id="digBody"></div>
+    </section>
 
     <section id="coach" class="card coach" style="display:none">
       <p class="coach-h" id="coachHead"></p>
@@ -270,6 +327,20 @@ padding:7px 14px;font-size:12.5px}
     <div id="addEmpty" class="card" style="display:none">
       <p class="note" style="margin:2px 0">Entries are saved on this phone. Connect your sheet via <b>Settings</b> (⚙) to sync them to Google Sheets.</p>
     </div>
+
+    <section id="donut" class="card" style="display:none">
+      <h2 style="margin-top:0">This month · by category</h2>
+      <div class="donutwrap">
+        <div id="donutSvg"></div>
+        <div class="donut-legend" id="donutLegend"></div>
+      </div>
+    </section>
+
+    <section id="pace" class="card" style="display:none">
+      <h2 style="margin-top:0">Spend pace</h2>
+      <div class="pace" id="paceBox"></div>
+      <p class="note" id="paceNote" style="margin:10px 0 0"></p>
+    </section>
 
     <h2 style="margin-top:2px">Your expenses</h2>
     <div id="txns" class="card"></div>
@@ -342,7 +413,7 @@ padding:7px 14px;font-size:12.5px}
     </section>
     <button class="act" id="syncNowBtn" type="button">Sync now</button>
     <p class="note" style="margin-top:12px">Synced entries live in your Sheet — edit or delete them there. Plans and the chat stay on this phone.</p>
-    <p class="note" style="margin:10px 0 0">Finance PWA · offline-first · shell v11</p>
+    <p class="note" style="margin:10px 0 0">Finance PWA · offline-first · shell v12</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>

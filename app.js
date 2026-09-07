@@ -45,13 +45,13 @@
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
   var RENDER_BY_KEY = {
-    txn: [renderStatus, renderList, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint],
-    plan: [renderPlans, renderInsights, renderCoach, renderProjection],
-    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, updateChargeHint],
+    txn: [renderStatus, renderList, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDigest, renderDonut, renderPace],
+    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderDigest],
+    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, updateChargeHint, renderHero, renderDigest],
     sync: [renderStatus, renderSyncErr, renderList, renderFooter, renderConnect],
     online: [renderStatus, renderSyncErr, renderFooter, renderConnect],
-    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint],
-    ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderList, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint]
+    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero],
+    ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderList, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDigest, renderDonut, renderPace]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -168,6 +168,29 @@
   }
   function diffDays(fromISO, toISO) {
     return Math.round((parseISO(toISO) - parseISO(fromISO)) / 86400000);
+  }
+  // ---------- shared visual helpers (Phase 3) ----------
+  var REDUCED_MOTION = false;
+  try { REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) {}
+  function monthShort(m) {
+    var p = String(m || '').split('-');
+    if (p.length === 2 && /^\d{4}$/.test(p[0]) && /^\d{2}$/.test(p[1])) {
+      return ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'][Number(p[1]) - 1] + " '" + p[0].slice(2);
+    }
+    return m || '';
+  }
+  function countUp(el, from, to, fmt) {
+    if (!el) return;
+    if (REDUCED_MOTION || !isFinite(from) || from === to) { el.textContent = fmt(to); return; }
+    if (el.__countRaf) cancelAnimationFrame(el.__countRaf);
+    var t0 = null;
+    function step(ts) {
+      if (t0 === null) t0 = ts;
+      var k = Math.min(1, (ts - t0) / 400);
+      el.textContent = fmt(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+      el.__countRaf = k < 1 ? requestAnimationFrame(step) : null;
+    }
+    el.__countRaf = requestAnimationFrame(step);
   }
   function mealBudget() {
     try { var v = parseFloat(localStorage.getItem(LS_MEAL)); return (v > 0) ? v : MEAL_DEFAULT; } catch (e) { return MEAL_DEFAULT; }
@@ -421,7 +444,7 @@
     html += tile('Free / unallocated', money(free), 'card backing' + liveMark, free < 0 ? 'bad' : 'good');
     html += tile('Cards owed', money(s.card_owed), (s.cards || []).length + ' card(s)' + liveMark);
     html += tile(ordinal(s.prepay_day || 14) + ' prepay', money(s.total_prepay), 'due before the ' + (s.cutoff_day || 15) + liveMark, 'accent');
-    el.innerHTML = '<div class="tiles">' + html + '</div>' + adjBar();
+    el.innerHTML = '<div class="tiles' + (state.syncing ? ' busy' : '') + '">' + html + '</div>' + adjBar();
     var rb = byId('resetAdj');
     if (rb) rb.onclick = resetAdj;
   }
@@ -676,6 +699,228 @@
       html += '</div>';
     });
     body.innerHTML = html;
+  }
+  // ---------- Phase 3: hero free-cash card + SVG cash sparkline ----------
+  var heroVal = null;
+  function renderHero() {
+    var el = byId('hero'); if (!el) return;
+    var s = effectiveSnap();
+    if (!s) { el.style.display = 'none'; heroVal = null; return; }
+    el.style.display = '';
+    var free = s.cash ? s.cash.free : 0;
+    var hv = byId('heroFree');
+    if (hv) {
+      hv.className = 'hero-v' + (free < 0 ? ' bad' : '');
+      countUp(hv, heroVal == null ? free : heroVal, free, function (v) { return money(v); });
+    }
+    heroVal = free;
+    var d = insightsData();
+    var sub = [];
+    sub.push('Liquid <b>' + money(s.cash ? s.cash.total : 0) + '</b>');
+    sub.push('Cards owed <b>' + money(s.card_owed) + '</b>');
+    if (d && d.prepayAmt > 0) {
+      var pw = d.prepayIn <= 0 ? 'Prepay due today' : 'Prepay in ' + d.prepayIn + ' day' + (d.prepayIn === 1 ? '' : 's');
+      sub.push(pw + ' <b>' + money(d.prepayAmt) + '</b>');
+    }
+    var hs = byId('heroSub');
+    if (hs) hs.innerHTML = sub.join(' · ');
+    renderSpark();
+  }
+  function sparkData() {
+    var s = state.snapshot;
+    if (!s || !s.matrix || !s.matrix.base || !s.matrix.base.length) return null;
+    var pts = [{ label: 'now', v: Number(s.matrix.start_cash) || 0 }];
+    s.matrix.base.forEach(function (row) {
+      pts.push({ label: monthShort(row.month), v: Number(row.running) || 0 });
+    });
+    var floorLine = Number(s.floor) > 0 ? Number(s.floor) : (Number(s.emergency_cap) || 0);
+    return { pts: pts, floor: floorLine };
+  }
+  function renderSpark() {
+    var box = byId('sparkBox'); if (!box) return;
+    var data = sparkData();
+    if (!data) { box.innerHTML = ''; return; }
+    var pts = data.pts, floor = data.floor;
+    var W = 320, H = 108, PL = 8, PR = 8, PT = 10, PB = 16;
+    var vals = pts.map(function (p) { return p.v; });
+    var lo = Math.min.apply(null, vals.concat(floor > 0 ? [floor] : []));
+    var hi = Math.max.apply(null, vals);
+    var pad = Math.max(1, (hi - lo) * 0.1);
+    lo -= pad; hi += pad;
+    var iw = W - PL - PR, ih = H - PT - PB;
+    var X = function (i) { return PL + iw * (i / (pts.length - 1)); };
+    var Y = function (v) { return PT + ih * (1 - (v - lo) / (hi - lo)); };
+    var line = pts.map(function (p, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p.v).toFixed(1); }).join(' ');
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Projected cash for the next six months">' +
+      '<path d="' + line + ' L' + X(pts.length - 1).toFixed(1) + ' ' + (H - PB) + ' L' + X(0).toFixed(1) + ' ' + (H - PB) + ' Z" fill="rgba(91,140,255,.13)" stroke="none"/>' +
+      '<path d="' + line + '" fill="none" stroke="#5b8cff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    if (floor > 0) {
+      var fy = Y(floor).toFixed(1);
+      svg += '<line x1="' + PL + '" y1="' + fy + '" x2="' + (W - PR) + '" y2="' + fy + '" stroke="#ffc45c" stroke-width="1" stroke-dasharray="4 4" opacity=".8"/>' +
+        '<text x="' + (W - PR - 2) + '" y="' + (fy - 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="#ffc45c">floor ' + fmtNum(floor) + '</text>';
+    }
+    svg += '<circle cx="' + X(0).toFixed(1) + '" cy="' + Y(pts[0].v).toFixed(1) + '" r="3.2" fill="#37d39b" stroke="#0f1420" stroke-width="1.5"/>';
+    pts.forEach(function (p, i) {
+      var anch = i === 0 ? 'start' : (i === pts.length - 1 ? 'end' : 'middle');
+      svg += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 4) + '" text-anchor="' + anch + '" font-size="8" fill="#93a1bd">' + esc(p.label) + '</text>';
+    });
+    box.innerHTML = svg + '</svg>';
+  }
+  // ---------- Phase 3: needs-attention digest (Home) ----------
+  function renderDigest() {
+    var wrap = byId('digest'), body = byId('digBody');
+    if (!wrap || !body) return;
+    var d = insightsData();
+    if (!d) { wrap.style.display = 'none'; return; }
+    var s = d.s;
+    var rows = [];
+    if (d.prepayIn >= 0 && d.prepayIn <= 7 && d.prepayAmt > 0) {
+      var pw = d.prepayIn === 0 ? 'today' : (d.prepayIn === 1 ? 'tomorrow' : 'in ' + d.prepayIn + ' days');
+      rows.push({ cls: d.prepayIn <= 2 ? 'bad' : 'warn', tag: 'Card prepay',
+        text: 'Set aside ' + money(d.prepayAmt) + ' for the ' + ordinal(d.prepayDay) + ' prepay — due ' + pw + '.',
+        r: money(d.prepayAmt) });
+    }
+    var floor = Number(s.floor) > 0 ? Number(s.floor) : (Number(s.emergency_cap) || 0);
+    if (floor > 0 && state.snapshot && state.snapshot.matrix && state.snapshot.matrix.base) {
+      var base = state.snapshot.matrix.base, worst = state.snapshot.matrix.worst || [];
+      var baseDip = null, worstDip = null;
+      base.forEach(function (row, i) {
+        var rv = Number(row.running) || 0;
+        if (!baseDip && rv < floor) baseDip = { v: rv, m: row.month };
+        var w = worst[i];
+        if (w) {
+          var wv = Number(w.running) || 0;
+          if (wv < floor && (!worstDip || wv < worstDip.v)) worstDip = { v: wv, m: w.month };
+        }
+      });
+      if (baseDip) rows.push({ cls: 'bad', tag: 'Cash floor',
+        text: 'Cash dips to ' + money(baseDip.v) + ' in ' + monthLabel(baseDip.m) + ' — floor is ' + money(floor) + '.',
+        r: 'below floor' });
+      else if (worstDip) rows.push({ cls: 'warn', tag: 'Worst case',
+        text: 'With the full emergency budgeted each month, cash dips to ' + money(worstDip.v) + ' in ' + monthLabel(worstDip.m) + '.',
+        r: 'floor ' + fmtNum(floor) });
+    }
+    var sink = state.snapshot && state.snapshot.sinking;
+    var nowM = d.monthPrefix;
+    var nd = new Date(d.now.getFullYear(), d.now.getMonth() + 1, 1);
+    var nextM = localISO(nd).slice(0, 7);
+    if (sink && sink.length) {
+      sink.forEach(function (f) {
+        var goal = Number(f.goal) || 0, funded = Number(f.funded) || 0;
+        if (goal <= 0 || funded >= goal || !f.deadline) return;
+        var dl = String(f.deadline).slice(0, 7);
+        if (!/^\d{4}-\d{2}$/.test(dl) || dl < nowM) return;
+        var pp = dl.split('-'), qq = nowM.split('-');
+        var monthsLeft = (Number(pp[0]) - Number(qq[0])) * 12 + (Number(pp[1]) - Number(qq[1]));
+        if (monthsLeft < 1) monthsLeft = 1;
+        var needed = (goal - funded) / monthsLeft;
+        var planned = Number(f.this_month) || 0;
+        (f.payments || []).forEach(function (x) {
+          var pm = String(x.month);
+          if (pm >= nowM && pm <= nextM) planned = Math.max(planned, Number(x.amount) || 0);
+        });
+        if (planned + 0.004 < needed) {
+          rows.push({ cls: planned > 0 ? 'warn' : 'bad', tag: 'Sinking behind',
+            text: f.name + ' needs about ' + money(needed) + '/month to reach ' + money(goal) + ' by ' + monthLabel(dl) + '; it is on ' + money(planned) + '/month.',
+            r: money(needed - planned) + ' short' });
+        }
+      });
+    }
+    var urgent = [];
+    state.plans.forEach(function (p) {
+      var dd = diffDays(d.today, p.date);
+      if (dd >= 0 && dd <= 7) urgent.push({ p: p, dd: dd });
+    });
+    urgent.sort(function (a, b) { return a.dd - b.dd; });
+    urgent.slice(0, 2).forEach(function (u) {
+      var pw2 = u.dd === 0 ? 'today' : (u.dd === 1 ? 'tomorrow' : 'in ' + u.dd + ' days');
+      rows.push({ cls: u.dd <= 2 ? 'bad' : 'warn', tag: 'Plan due',
+        text: (u.p.name || 'Plan') + ' is due ' + pw2 + '.',
+        r: money(u.p.amount) });
+    });
+    rows = rows.slice(0, 5);
+    if (!rows.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    var html = '';
+    rows.forEach(function (rw) {
+      html += '<button type="button" class="dig ' + rw.cls + '" data-digto="money">' +
+        '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
+        '<span class="dg-r">' + esc(rw.r) + '</span></button>';
+    });
+    body.innerHTML = html;
+    var btns = body.querySelectorAll('[data-digto]');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].onclick = function () { setTab(this.getAttribute('data-digto')); };
+    }
+  }
+  // ---------- Phase 3: category donut + spend pace (Ledger) ----------
+  var DONUT_COLORS = ['#5b8cff', '#37d39b', '#ffc45c', '#ff6b6b', '#b48cff', '#64748b'];
+  function renderDonut() {
+    var wrap = byId('donut'), svgBox = byId('donutSvg'), leg = byId('donutLegend');
+    if (!wrap || !svgBox || !leg) return;
+    var mp = todayISO().slice(0, 7);
+    var totals = {}, grand = 0;
+    state.txns.forEach(function (t) {
+      if (String(t.date).slice(0, 7) !== mp) return;
+      var a = Number(t.amount) || 0;
+      var c = t.category || 'Other';
+      totals[c] = (totals[c] || 0) + a;
+      grand += a;
+    });
+    var names = Object.keys(totals).sort(function (a, b) { return totals[b] - totals[a]; });
+    if (!names.length || grand <= 0) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    var segs = names.slice(0, 5).map(function (n) { return { name: n, v: totals[n] }; });
+    var rest = 0;
+    names.slice(5).forEach(function (n) { rest += totals[n]; });
+    if (rest > 0) segs.push({ name: 'Other', v: rest });
+    var R = 40, C = 2 * Math.PI * R, off = 0;
+    var svg = '<svg viewBox="0 0 100 100" role="img" aria-label="This month by category">' +
+      '<circle cx="50" cy="50" r="' + R + '" fill="none" stroke="#2c3a56" stroke-width="12" opacity=".5"/>';
+    segs.forEach(function (sg, i) {
+      var len = C * (sg.v / grand);
+      svg += '<circle cx="50" cy="50" r="' + R + '" fill="none" stroke="' + DONUT_COLORS[i % DONUT_COLORS.length] + '" stroke-width="12" ' +
+        'stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '" ' +
+        'transform="rotate(-90 50 50)" stroke-linecap="butt"/>';
+      off += len;
+    });
+    svg += '<text x="50" y="46" text-anchor="middle" font-size="8" fill="#93a1bd">spent</text>' +
+      '<text x="50" y="58" text-anchor="middle" font-size="10.5" font-weight="700" fill="#e8edf7">' + fmtNum(grand) + '</text></svg>';
+    svgBox.innerHTML = svg;
+    var html = '';
+    segs.forEach(function (sg, i) {
+      html += '<div class="drow"><span class="sw" style="background:' + DONUT_COLORS[i % DONUT_COLORS.length] + '"></span>' +
+        '<span class="nm">' + esc(sg.name) + '</span><b>' + fmtNum(sg.v) + '</b>' +
+        '<span class="pc">' + Math.round(sg.v / grand * 100) + '%</span></div>';
+    });
+    leg.innerHTML = html;
+  }
+  function renderPace() {
+    var wrap = byId('pace'), box = byId('paceBox'), note = byId('paceNote');
+    if (!wrap || !box) return;
+    var now = new Date();
+    var mp = todayISO().slice(0, 7);
+    var dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    var elapsed = now.getDate();
+    var spent = 0;
+    state.txns.forEach(function (t) { if (String(t.date).slice(0, 7) === mp) spent += Number(t.amount) || 0; });
+    if (!spent && !state.txns.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    var daily = elapsed > 0 ? r2(spent / elapsed) : 0;
+    var projected = r2(daily * dim);
+    box.innerHTML =
+      '<div class="p"><div class="k">Spent · ' + esc(monthLabel(mp)) + '</div><div class="v">' + money(spent) + '</div></div>' +
+      '<div class="p"><div class="k">Avg / day (' + elapsed + 'd)</div><div class="v">' + money(daily) + '</div></div>' +
+      '<div class="p"><div class="k">Projected · ' + dim + 'd</div><div class="v">' + money(projected) + '</div></div>';
+    if (note) {
+      var s = effectiveSnap();
+      if (!s) { note.style.display = 'none'; return; }
+      var free = s.cash ? s.cash.free : 0;
+      note.style.display = '';
+      note.innerHTML = projected > free
+        ? '<span class="low">At this pace, ' + esc(monthLabel(mp)) + ' spend (' + money(projected) + ') would exceed free cash (' + money(free) + ').</span>'
+        : 'Leaves ' + money(r2(free - projected)) + ' of free cash unspent at this pace.';
+    }
   }
   function renderAddEmpty() {
     var el = byId('addEmpty');
