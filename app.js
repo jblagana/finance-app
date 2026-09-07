@@ -48,8 +48,8 @@
     txn: [renderStatus, renderList, renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint],
     plan: [renderPlans, renderInsights, renderCoach, renderProjection],
     snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, updateChargeHint],
-    sync: [renderStatus, renderSyncErr, renderList, renderFooter],
-    online: [renderStatus, renderSyncErr, renderFooter],
+    sync: [renderStatus, renderSyncErr, renderList, renderFooter, renderConnect],
+    online: [renderStatus, renderSyncErr, renderFooter, renderConnect],
     adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint],
     ui: [renderStatus, renderSyncErr, renderConnect, renderSummary, seedAccounts, seedCategories, renderList, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint]
   };
@@ -340,6 +340,22 @@
     });
   }
 
+  // ---------- bottom sheets (Add, Settings) ----------
+  var openSheetEl = null;
+  function closeSheets() {
+    var sc = byId('scrim');
+    if (sc) sc.classList.remove('show');
+    if (openSheetEl) { openSheetEl.classList.remove('show'); openSheetEl = null; }
+  }
+  function openSheet(id) {
+    var sh = byId(id), sc = byId('scrim');
+    if (!sh || !sc) return;
+    closeSheets();
+    sc.classList.add('show');
+    sh.classList.add('show');
+    openSheetEl = sh;
+  }
+
   // ---------- snackbar (with undo) ----------
   var snackTimer = null;
   function hideSnack() {
@@ -382,15 +398,19 @@
     }
   }
   function renderConnect() {
-    var el = byId('connect'); if (!el) return;
-    el.style.display = getUrl() ? 'none' : '';
+    var el = byId('connect');
+    if (el) el.style.display = getUrl() ? 'none' : '';
+    var st = byId('connStatus');
+    if (st) st.innerHTML = getUrl()
+      ? '<span class="pill ok">connected</span>&nbsp; · last synced ' + (state.lastSync ? new Date(state.lastSync).toLocaleTimeString() : '—')
+      : '<span class="pill warn">not connected</span>&nbsp; · entries save on this phone only';
   }
   function renderSummary() {
     var el = byId('summary'); if (!el) return;
     var s = effectiveSnap();
     if (!s) {
       el.innerHTML = '<div class="card"><p class="note" style="margin:2px 0">' +
-        (state.online ? 'Syncing…' : (getUrl() ? 'Waiting for a connection to sync.' : 'Add expenses on the Add tab — they save offline. Connect your sheet above to sync.')) + '</p></div>';
+        (state.online ? 'Syncing…' : (getUrl() ? 'Waiting for a connection to sync.' : 'Add expenses with the + button — they save offline. Connect your sheet in Settings to sync.')) + '</p></div>';
       return;
     }
     var free = s.cash ? s.cash.free : 0;
@@ -690,7 +710,7 @@
       if (a.date !== b.date) return a.date < b.date ? 1 : -1;
       return (a.created || '') < (b.created || '') ? 1 : -1;
     });
-    if (!txns.length) { el.innerHTML = '<p class="note" style="margin:2px 0">No entries yet — add your first expense above.</p>'; return; }
+    if (!txns.length) { el.innerHTML = '<p class="note" style="margin:2px 0">No entries yet — tap + to add your first expense.</p>'; return; }
     var html = '';
     txns.forEach(function (t) {
       var badge = t.synced ? '<span class="pill ok">synced</span>' : '<span class="pill warn">pending</span>';
@@ -777,22 +797,30 @@
     if (!getUrl()) parts.push('not connected');
     el.innerHTML = parts.join('<br>') || '&nbsp;';
   }
+  var TABS = ['home', 'money', 'ledger', 'coach'];
+  var TAB_MIGRATE = { overview: 'money', add: 'ledger' };
   function setTab(name) {
-    if (name !== 'home' && name !== 'overview' && name !== 'add') name = 'home';
-    var panes = { home: byId('tab-home'), overview: byId('tab-overview'), add: byId('tab-add') };
+    if (TAB_MIGRATE[name]) name = TAB_MIGRATE[name];
+    if (TABS.indexOf(name) < 0) name = 'home';
+    var panes = { home: byId('tab-home'), money: byId('tab-money'), ledger: byId('tab-ledger'), coach: byId('tab-coach') };
     Object.keys(panes).forEach(function (k) {
-      if (panes[k]) panes[k].style.display = k === name ? '' : 'none';
+      if (panes[k]) panes[k].style.display = k === name ? (k === 'coach' ? 'flex' : '') : 'none';
     });
-    var btns = document.querySelectorAll('.tab');
+    var btns = document.querySelectorAll('#tabs .tab');
     for (var i = 0; i < btns.length; i++) {
       btns[i].className = btns[i].getAttribute('data-tab') === name ? 'tab active' : 'tab';
     }
     try { localStorage.setItem(LS_TAB, name); } catch (e) {}
     window.scrollTo(0, 0);
+    if (name === 'coach' && window.__financeChat && window.__financeChat.open) window.__financeChat.open();
   }
   function currentTab() {
-    if (!state.snapshot) return 'overview';
-    try { var t = localStorage.getItem(LS_TAB); if (t === 'home' || t === 'overview' || t === 'add') return t; } catch (e) {}
+    if (!state.snapshot) return 'home';
+    try {
+      var t = localStorage.getItem(LS_TAB);
+      if (TAB_MIGRATE[t]) t = TAB_MIGRATE[t];
+      if (TABS.indexOf(t) >= 0) return t;
+    } catch (e) {}
     return 'home';
   }
   function seedCategories() {
@@ -828,6 +856,7 @@
     sync: doSync,
     render: render,
     setTab: setTab,
+    openSettings: function () { openSheet('setSheet'); },
     online: function () { return state.online; },
     lastSync: function () { return state.lastSync; },
     idbAll: idbAll,
@@ -946,6 +975,22 @@
 
     var se = byId('syncErr');
     if (se) se.onclick = function () { doSync(); };
+
+    var ab = byId('addBtn');
+    if (ab) ab.onclick = function () { openSheet('addSheet'); };
+    var sbtn2 = byId('setBtn');
+    if (sbtn2) sbtn2.onclick = function () { openSheet('setSheet'); };
+    var ac = byId('addClose');
+    if (ac) ac.onclick = closeSheets;
+    var scb = byId('setClose');
+    if (scb) scb.onclick = closeSheets;
+    var scrim = byId('scrim');
+    if (scrim) scrim.onclick = closeSheets;
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheets(); });
+    var snb = byId('syncNowBtn');
+    if (snb) snb.onclick = function () { doSync(); };
+    var hob = byId('homeOpenSet');
+    if (hob) hob.onclick = function () { openSheet('setSheet'); };
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {

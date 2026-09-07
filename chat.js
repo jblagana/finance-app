@@ -1,4 +1,4 @@
-/* Finance PWA coach chat — the floating assistant.
+/* Finance PWA coach chat — the Coach tab.
  *
  * Rule-based and offline-first: it answers from the same data the app's tiles
  * use — the last sheet snapshot cached in IndexedDB plus this phone's plans and
@@ -285,7 +285,7 @@
     var h = block('What I can do',
       line('• <b>Status</b> — free cash, liquid cash, cards owed, the 14th prepay') +
       line('• <b>Details</b> — debt schedules, one-offs, sinking funds, “what’s my cash in Feb?”') +
-      line('• <b>Plans</b> — add / list / remove plans, exactly like the Add tab') +
+      line('• <b>Plans</b> — add / list / remove plans, exactly like the form on the Money tab') +
       line('• <b>Charge check</b> — “can I charge 2,500 on Maya?”') +
       line('• <b>Urgent expense</b> — tell me something unplanned and I’ll map the options') +
       line('• <b>Spending</b> — what you’ve logged in this app this week / month'),
@@ -547,7 +547,7 @@
     return {
       html: block('New plan',
         kv(whenLabel(date) + ' · ' + esc(name), money(am.amt)),
-        'It goes to your plans (Add tab) and feeds the Home insights.', 'good'),
+        'It goes to your plans (Money tab) and feeds the Home insights.', 'good'),
       actions: [{ label: 'Add plan: ' + esc(name), act: 'add_plan', payload: { name: name, amount: am.amt, date: date } }]
     };
   }
@@ -657,7 +657,7 @@
       kv(esc(acct.name || 'Cash'), money(A)) +
       kv('Category', esc(cat)) +
       kv('Date', esc(fmtDate(date))),
-      'Tap to log it — it lands in the Add tab list and syncs to the Sheet.', 'good');
+      'Tap to log it — it lands in the Ledger and syncs to the Sheet.', 'good');
     return {
       html: h + freshness(ctx),
       actions: [{
@@ -673,7 +673,7 @@
       html: block('Not sure about that one',
         line('I only answer from the numbers on this phone — that question is outside them.') +
         line('I can: <b>status</b> (free cash, prepay, cards), <b>details</b> (debt schedules, one-offs, sinking, cash in any month), <b>plans</b>, <b>charge checks</b>, <b>urgent-expense options</b>, and <b>what you’ve logged</b>.') +
-        line('For anything else, the <b>Overview</b> tab has the full sheet view.'),
+        line('For anything else, the <b>Money</b> tab has the full sheet view.'),
         'Type “help” to see examples.', 'warn')
     };
   }
@@ -686,8 +686,8 @@
       return {
         html: block('No numbers yet',
           line('I need one sync to your sheet before I can answer money questions. Until then you can still add and view plans.'),
-          'Open Overview → paste your Web App URL → Connect & sync.', 'warn'),
-        actions: [{ label: 'Open Overview', act: 'open_tab', payload: { tab: 'overview' } }]
+          'Open Settings (the ⚙ in the top right) → paste your Web App URL → Connect & sync.', 'warn'),
+        actions: [{ label: 'Open Settings', act: 'open_settings' }]
       };
     }
     var dm = findDateSpan(t);
@@ -779,10 +779,15 @@
       markDone(m);
       return;
     }
+    if (a.act === 'open_settings') {
+      if (F.openSettings) F.openSettings(); else F.setTab('home');
+      markDone(m);
+      return;
+    }
     if (a.act === 'add_plan') {
       F.addPlan({ name: pl.name, amount: pl.amount, date: pl.date }).then(function () {
         markDone(m);
-        pushBot('Added to your plans: <b>' + esc(pl.name) + '</b> · ' + esc(fmtDate(pl.date)) + ' · ' + esc(money(pl.amount)) + '. It shows on Home and the Add tab.');
+        pushBot('Added to your plans: <b>' + esc(pl.name) + '</b> · ' + esc(fmtDate(pl.date)) + ' · ' + esc(money(pl.amount)) + '. It shows on Home and the Money tab.');
       });
       return;
     }
@@ -804,7 +809,7 @@
       }).then(function () {
         markDone(m);
         pushBot('Logged <b>' + esc(money(pl.amount)) + '</b> · ' + esc(pl.category || 'Other') + ' · ' + esc(pl.account || 'cash') +
-          '. It’s in the Add tab' + (F.online() ? ' and syncing to the Sheet.' : ' — it syncs when you’re back online.'));
+          '. It’s in the Ledger' + (F.online() ? ' and syncing to the Sheet.' : ' — it syncs when you’re back online.'));
       });
       return;
     }
@@ -846,8 +851,8 @@
       '<div class="ins-line">Try: <b>“how much is free?”</b> · <b>“plan: shoes 1,500 on the 20th”</b> · <b>“urgent: car repair 8,000 this week”</b></div></div>';
   }
   function openChat() {
-    panelEl.style.display = 'flex';
-    fabEl.style.display = 'none';
+    if (panelEl) panelEl.style.display = 'flex';
+    if (fabEl) fabEl.style.display = 'none';
     loadChat().then(function (rows) {
       if (!rows.length) {
         var m = { id: chatId(), who: 'bot', html: welcomeHtml(), at: new Date().toISOString() };
@@ -861,8 +866,12 @@
     inputEl.focus();
   }
   function closeChat() {
-    panelEl.style.display = 'none';
-    fabEl.style.display = '';
+    if (panelEl) {
+      panelEl.style.display = 'none';
+      if (fabEl) fabEl.style.display = '';
+    } else if (F.setTab) {
+      F.setTab('home');
+    }
   }
   function renderChips() {
     var el = byId('chatChips');
@@ -882,9 +891,9 @@
     panelEl = byId('chatPanel');
     inputEl = byId('chatInput');
     msgsEl = byId('chatMsgs');
-    if (!fabEl || !panelEl || !msgsEl) return;
+    if (!inputEl || !msgsEl) return;
     renderChips();
-    fabEl.onclick = openChat;
+    if (fabEl) fabEl.onclick = openChat;
     var c = byId('chatClose');
     if (c) c.onclick = closeChat;
     var s = byId('chatSend');
@@ -900,7 +909,9 @@
     findDateSpan: findDateSpan,
     findAmount: findAmount,
     norm: norm,
-    URGENT_RX: URGENT_RX
+    URGENT_RX: URGENT_RX,
+    open: openChat,
+    close: closeChat
   };
 
   if (typeof document !== 'undefined') {

@@ -114,12 +114,8 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 .kv b{color:var(--ink);text-align:right;word-break:break-word}
 .bar{height:8px;background:var(--card2);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:8px 0 6px}
 .bar i{display:block;height:100%;background:var(--acc);border-radius:6px}
-/* coach chat (floating assistant) */
-#chatFab{position:fixed;right:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:20;width:54px;height:54px;border-radius:50%;
- border:1px solid var(--line);background:var(--acc);color:#fff;font-size:23px;box-shadow:0 6px 18px rgba(0,0,0,.4);
- cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
-#chatFab:active{filter:brightness(1.15)}
-#chatPanel{position:fixed;inset:0;z-index:21;background:var(--bg);flex-direction:column}
+/* coach chat (the Coach tab — full-screen takeover, same shell as before) */
+#tab-coach{position:fixed;inset:0;z-index:21;background:var(--bg);flex-direction:column}
 #chatHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;
  padding-top:calc(14px + env(safe-area-inset-top));border-bottom:1px solid var(--line);background:rgba(15,20,32,.97)}
 #chatTitle{font-size:17px;font-weight:700}
@@ -149,6 +145,29 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 #chatInput{flex:1;min-width:0}
 #chatSend{flex:0 0 auto;background:var(--acc);border:0;color:#fff;font-weight:700;padding:0 18px;border-radius:10px;font-size:14.5px;cursor:pointer}
 #chatSend:active{filter:brightness(1.12)}
+/* ---- bottom bar: raised + button, settings gear ---- */
+.addbtn{flex:0 0 auto;width:52px;height:52px;border-radius:50%;border:1px solid var(--acc);background:var(--acc);color:#fff;
+ font-size:26px;line-height:1;cursor:pointer;margin:-18px auto 0;box-shadow:0 5px 16px rgba(91,140,255,.45);
+ display:flex;align-items:center;justify-content:center}
+.addbtn:active{filter:brightness(1.12)}
+button.gear{cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--mut);width:34px;height:34px;
+ border-radius:10px;font-size:16px;flex:0 0 auto;line-height:1}
+button.gear:active{border-color:var(--acc);color:var(--acc)}
+/* ---- bottom sheets (Add, Settings) ---- */
+#scrim{position:fixed;inset:0;z-index:22;background:rgba(5,8,14,.6);opacity:0;pointer-events:none;transition:opacity .18s ease}
+#scrim.show{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:23;background:var(--card);border:1px solid var(--line);border-bottom:none;
+ border-radius:18px 18px 0 0;transform:translateY(105%);transition:transform .2s ease;max-height:86vh;max-height:min(86dvh,720px);
+ display:flex;flex-direction:column;box-shadow:0 -10px 34px rgba(0,0,0,.5)}
+.sheet.show{transform:translateY(0)}
+.sheet-h{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.sheet-h .t{font-size:16px;font-weight:700}
+.sheet-x{background:var(--card2);border:1px solid var(--line);color:var(--mut);width:34px;height:34px;border-radius:10px;
+ font-size:14px;cursor:pointer;flex:0 0 auto}
+.sheet-x:active{border-color:var(--bad);color:var(--bad)}
+.sheet-b{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 16px calc(18px + env(safe-area-inset-bottom))}
+#addSheet form{margin-bottom:0}
+#connStatus .pill{vertical-align:1px}
 /* ---- sync error strip (tap to retry) ---- */
 #syncErr{display:none;max-width:640px;margin:0 auto;color:#ffb4b4;background:rgba(255,107,107,.13);
 border-bottom:1px solid rgba(255,107,107,.35);padding:8px 16px;font-size:12.5px;font-weight:600;
@@ -181,6 +200,7 @@ padding:7px 14px;font-size:12.5px}
     <h1>Fin<span>ance</span></h1>
     <div class="hwrap">
       <div id="status"></div>
+      <button class="gear" id="setBtn" type="button" aria-label="Settings">⚙&#xFE0E;</button>
       <button class="sync" id="syncBtn" type="button">Sync</button>
     </div>
   </header>
@@ -189,7 +209,8 @@ padding:7px 14px;font-size:12.5px}
 <main>
   <div id="tab-home">
     <div id="homeEmpty" class="card" style="display:none">
-      <p class="note" style="margin:2px 0">Connect your sheet on the <b>Overview</b> tab — the coach note and insights show up here once data syncs.</p>
+      <p class="note" style="margin:2px 0">Connect your sheet to see your numbers — the coach note and insights show up here once data syncs. Anything you add meanwhile is saved on this phone and syncs later.</p>
+      <button class="act" id="homeOpenSet" type="button" style="margin-top:12px">Open Settings &amp; connect</button>
     </div>
 
     <section id="coach" class="card coach" style="display:none">
@@ -209,15 +230,7 @@ padding:7px 14px;font-size:12.5px}
     </section>
   </div>
 
-  <div id="tab-overview" style="display:none">
-    <section id="connect" class="card" style="display:none">
-      <h2 style="margin-top:0">Connect your sheet</h2>
-      <p class="note" style="margin-top:2px">Paste your <b>Apps Script Web App URL</b> — the <code>…/exec</code> link from your Sheet:
-        <b>Extensions → Apps Script → Deploy → New deployment → Web app</b>. It's stored only on this phone.</p>
-      <input id="syncUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
-      <button class="act" id="connectBtn" type="button">Connect &amp; sync</button>
-    </section>
-
+  <div id="tab-money" style="display:none">
     <section id="summary"></section>
 
     <section id="projection" class="card" style="display:none">
@@ -227,43 +240,6 @@ padding:7px 14px;font-size:12.5px}
     <section id="obligations" class="card" style="display:none"><div id="obBody"></div></section>
 
     <section id="sinking" class="card" style="display:none"><div id="sinkBody"></div></section>
-  </div>
-
-  <div id="tab-add" style="display:none">
-    <div id="addEmpty" class="card" style="display:none">
-      <p class="note" style="margin:2px 0">Entries are saved on this phone. Connect your sheet on <b>Overview</b> to sync them to Google Sheets.</p>
-    </div>
-
-    <form id="addForm" class="card" autocomplete="off">
-      <h2 style="margin-top:0">Add expense</h2>
-      <label for="f_amount">Amount (₱)</label>
-      <input id="f_amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
-      <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
-      <div class="row">
-        <div>
-          <label for="f_account">Paid with</label>
-          <select id="f_account"><option value="" disabled selected>Pick…</option></select>
-        </div>
-        <div>
-          <label for="f_date">Date</label>
-          <div class="dfield">
-            <input id="f_date" type="date">
-            <span class="dlabel empty" id="f_dateLabel" aria-hidden="true">Pick a date</span>
-          </div>
-        </div>
-      </div>
-      <label for="f_category">Category</label>
-      <select id="f_category"><option value="" disabled selected>Pick a category…</option></select>
-      <input id="f_categoryCustom" type="text" placeholder="Type a new category" style="display:none;margin-top:8px" autocomplete="off">
-      <label for="f_note">Note (optional)</label>
-      <input id="f_note" placeholder="optional">
-      <div style="margin-top:14px">
-        <button class="act" type="submit">Add expense</button>
-      </div>
-    </form>
-
-    <h2>Your expenses</h2>
-    <div id="txns" class="card"></div>
 
     <h2>Plans · coming up</h2>
     <form id="planForm" class="card" autocomplete="off">
@@ -289,21 +265,84 @@ padding:7px 14px;font-size:12.5px}
     </form>
     <div id="plans" class="card"></div>
   </div>
-</main>
-<button id="chatFab" type="button" aria-label="Ask the coach">💬</button>
-<div id="chatPanel" role="dialog" aria-label="Coach chat" style="display:none">
-  <div id="chatHead">
-    <div>
-      <div id="chatTitle">Coach</div>
-      <div id="chatFresh"></div>
+
+  <div id="tab-ledger" style="display:none">
+    <div id="addEmpty" class="card" style="display:none">
+      <p class="note" style="margin:2px 0">Entries are saved on this phone. Connect your sheet via <b>Settings</b> (⚙) to sync them to Google Sheets.</p>
     </div>
-    <button id="chatClose" type="button" aria-label="Close chat">✕</button>
+
+    <h2 style="margin-top:2px">Your expenses</h2>
+    <div id="txns" class="card"></div>
   </div>
-  <div id="chatMsgs"></div>
-  <div id="chatChips"></div>
-  <div id="chatInRow">
-    <input id="chatInput" type="text" placeholder="Ask, plan, or tell me about an expense…" autocomplete="off" spellcheck="false">
-    <button id="chatSend" type="button">Send</button>
+
+  <div id="tab-coach" style="display:none">
+    <div id="chatHead">
+      <div>
+        <div id="chatTitle">Coach</div>
+        <div id="chatFresh"></div>
+      </div>
+      <button id="chatClose" type="button" aria-label="Close chat">✕</button>
+    </div>
+    <div id="chatMsgs"></div>
+    <div id="chatChips"></div>
+    <div id="chatInRow">
+      <input id="chatInput" type="text" placeholder="Ask, plan, or tell me about an expense…" autocomplete="off" spellcheck="false">
+      <button id="chatSend" type="button">Send</button>
+    </div>
+  </div>
+</main>
+<div id="scrim"></div>
+<div id="addSheet" class="sheet" role="dialog" aria-label="Add expense">
+  <div class="sheet-h">
+    <div class="t">Add</div>
+    <button id="addClose" class="sheet-x" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-b">
+    <form id="addForm" autocomplete="off">
+      <label for="f_amount" style="margin-top:6px">Amount (₱)</label>
+      <input id="f_amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+      <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
+      <div class="row">
+        <div>
+          <label for="f_account">Paid with</label>
+          <select id="f_account"><option value="" disabled selected>Pick…</option></select>
+        </div>
+        <div>
+          <label for="f_date">Date</label>
+          <div class="dfield">
+            <input id="f_date" type="date">
+            <span class="dlabel empty" id="f_dateLabel" aria-hidden="true">Pick a date</span>
+          </div>
+        </div>
+      </div>
+      <label for="f_category">Category</label>
+      <select id="f_category"><option value="" disabled selected>Pick a category…</option></select>
+      <input id="f_categoryCustom" type="text" placeholder="Type a new category" style="display:none;margin-top:8px" autocomplete="off">
+      <label for="f_note">Note (optional)</label>
+      <input id="f_note" placeholder="optional">
+      <div style="margin-top:14px">
+        <button class="act" type="submit">Add expense</button>
+      </div>
+    </form>
+  </div>
+</div>
+<div id="setSheet" class="sheet" role="dialog" aria-label="Settings">
+  <div class="sheet-h">
+    <div class="t">Settings</div>
+    <button id="setClose" class="sheet-x" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-b">
+    <p id="connStatus" class="note" style="margin:10px 0 14px"></p>
+    <section id="connect" class="card" style="display:none">
+      <h2 style="margin-top:0">Connect your sheet</h2>
+      <p class="note" style="margin-top:2px">Paste your <b>Apps Script Web App URL</b> — the <code>…/exec</code> link from your Sheet:
+        <b>Extensions → Apps Script → Deploy → New deployment → Web app</b>. It's stored only on this phone.</p>
+      <input id="syncUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
+      <button class="act" id="connectBtn" type="button">Connect &amp; sync</button>
+    </section>
+    <button class="act" id="syncNowBtn" type="button">Sync now</button>
+    <p class="note" style="margin-top:12px">Synced entries live in your Sheet — edit or delete them there. Plans and the chat stay on this phone.</p>
+    <p class="note" style="margin:10px 0 0">Finance PWA · offline-first · shell v11</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>
@@ -315,8 +354,10 @@ padding:7px 14px;font-size:12.5px}
 <nav id="bottombar" aria-label="Sections">
   <div id="tabs">
     <button type="button" class="tab active" data-tab="home">Home</button>
-    <button type="button" class="tab" data-tab="overview">Overview</button>
-    <button type="button" class="tab" data-tab="add">Add</button>
+    <button type="button" class="tab" data-tab="money">Money</button>
+    <button type="button" class="addbtn" id="addBtn" aria-label="Add expense">+</button>
+    <button type="button" class="tab" data-tab="ledger">Ledger</button>
+    <button type="button" class="tab" data-tab="coach">Coach</button>
   </div>
 </nav>
 <script src="./app.js"></script>
