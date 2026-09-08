@@ -2144,16 +2144,21 @@
     window.scrollTo(0, 0);
   }
   // v23: Coach is the floating bot; v24: floating bubble above the FAB;
-  // v25: clicking the bot toggles the bubble (open, or close if already open)
+  // v25: clicking the bot toggles the bubble (open, or close if already open);
+  // v26: a tap outside the bubble (the scrim, incl. over the tabs) closes it
   function openCoach() {
     var ov = byId('coachOv');
     if (!ov) return;
     ov.classList.add('show');
+    var sc = byId('scrim');
+    if (sc) sc.classList.add('show');
     if (window.__financeChat && window.__financeChat.open) window.__financeChat.open();
   }
   function closeCoach() {
     var ov = byId('coachOv');
     if (ov) ov.classList.remove('show');
+    var sc = byId('scrim');
+    if (sc && !openSheetEl) sc.classList.remove('show');
   }
   function currentTab() {
     if (!state.snapshot) return 'home';
@@ -2321,7 +2326,7 @@
     var scb = byId('setClose');
     if (scb) scb.onclick = closeSheets;
     var scrim = byId('scrim');
-    if (scrim) scrim.onclick = closeSheets;
+    if (scrim) scrim.onclick = function () { closeCoach(); closeSheets(); };
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeCoach(); closeSheets(); } });
     // a11y: trap Tab focus inside the open sheet
     document.addEventListener('keydown', function (e) {
