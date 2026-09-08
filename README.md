@@ -1,4 +1,4 @@
-# Finance PWA (iPhone)
+# FinSmart (iPhone)
 
 A **fully local**, installable web app for your personal finances. All numbers
 (accounts, salary, debts, budgets, one-offs, sinking funds) and all math live
@@ -17,7 +17,7 @@ The GitHub repo only ever holds this app code, **no balances or transactions**.
   prepay), the month's **Obligations** and **Sinking funds** cards, a 6-month
   projection, and a money log that sanity-checks every entry.
 - Installs to the iPhone **Home Screen** and runs full-screen.
-- **Coach** (the floating bot, bottom right — opens a full-screen chat) — ask
+- **Coach** (the floating bot, bottom right — opens a floating chat bubble; the tabs stay visible) — ask
   in plain language: status, debt/one-off/sinking details, cash in any month,
   add/list/remove plans, charge checks, and urgent-expense advice. Rule-based
   and fully local (no AI, no made-up numbers); see `chat.js`.
@@ -185,7 +185,7 @@ month picker).
   notes; **Import JSON** restores them (replaces what's on the phone).
 
 ## After redeploying
-- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v23),
+- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v24),
   so the phone picks up the new app shell on its next load — the "New version
   ready" toast offers a one-tap reload. If the app ever looks stale: open the
   Pages URL once in Safari, then relaunch the home-screen icon.
