@@ -20,7 +20,7 @@ The GitHub repo only ever holds this app code, **no balances or transactions**.
 - **Coach** (Coach tab, inline card pane) — ask in plain language: status,
   debt/one-off/sinking details, cash in any month, add/list/remove plans,
   charge checks, and urgent-expense advice. Rule-based and fully local
-  (no AI, no made-up numbers); see `repo/chat.js`.
+  (no AI, no made-up numbers); see `chat.js`.
 - **Backup**: export/import a JSON file with your numbers + entries + plans
   + owed notes.
 
@@ -46,7 +46,7 @@ numbers; the original sum stays shown on the entry so you can check it later.
 
 ## 1) Host this folder (GitHub Pages)
 1. Go to **github.com → New repository**, name it e.g. `finance-app`, set it **Public**, Create.
-2. In the empty repo: **Add file → Upload files** → drag in the **contents of this `site/` folder**
+2. In the empty repo: **Add file → Upload files** → drag in the **contents of this folder**
    (so `index.html` is at the top) → **Commit changes**.
 3. **Settings → Pages → Build and deployment → Source: "Deploy from a branch"** →
    branch `main`, folder `/ (root)` → **Save**.
@@ -176,15 +176,14 @@ month picker).
 
 ## Notes
 - **Free / unallocated** = liquid cash − this month's committed outflows
-  (the same rule as the CLI and the sheet Dashboard — the math is ported 1:1
-  from `google/Code.gs` into `repo/app.js`).
+  (the math was ported 1:1 from the original Apps Script into `app.js`).
 - The 6-month projection window is derived from your **as of** date (the first
   month is the as-of month), not hardcoded.
 - Backups: **Export JSON** includes your numbers + entries + plans + owed
   notes; **Import JSON** restores them (replaces what's on the phone).
 
 ## After redeploying
-- Push `site/` to Pages; the service worker cache is bumped per release (v22),
+- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v22),
   so the phone picks up the new app shell on its next load — the "New version
   ready" toast offers a one-tap reload. If the app ever looks stale: open the
   Pages URL once in Safari, then relaunch the home-screen icon.
