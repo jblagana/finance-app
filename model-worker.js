@@ -1,4 +1,4 @@
-/* FinSmart v39 — offline brain, dedicated worker.
+/* FinSmart v40 — offline brain, dedicated worker.
  *
  * Every model computation happens here so the UI thread never does math:
  *   - all-MiniLM-L6-v2 (q8, ~23 MB)  -> sentence embeddings, which chat.js
@@ -33,9 +33,15 @@
  */
 'use strict';
 
-var TF_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.web.min.js';
-// All onnxruntime backend binaries (jsep wasm for the CPU path, classic wasm
-// + ort.webgpu.mjs for the GPU path) live in this one pinned folder, so the
+// The BUNDLED build: onnxruntime 1.22.0-dev (wasm/jsep kernels + the WebGPU
+// EP) is inlined, so no bare package imports are left for the browser to
+// resolve. The "externals" build (transformers.web.min.js) fails in a
+// browser worker with: Failed to resolve module specifier
+// "onnxruntime-common".
+var TF_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
+// The jsep wasm kernel binaries the bundle fetches at runtime
+// (ort-wasm-simd-threaded.jsep.mjs/.wasm, ~21 MB) come from this one pinned
+// folder — the exact onnxruntime version the bundle inlines — so the
 // service worker only ever has to cache a single CDN origin.
 var ORT_WASM_PATHS = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0-dev.20250409-89f8206ba4/dist/';
 var EMBED_MODEL = 'Xenova/all-MiniLM-L6-v2';
