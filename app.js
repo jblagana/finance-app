@@ -1210,7 +1210,7 @@
     } else {
       cls = 'good';
       head = hi + 'you are on track. You can spend up to ' + money(d.daily) + ' today.';
-      sub = 'It keeps the next 7 days covered, and an eat-out (about ' + money(d.meal) + ') is safe.';
+      sub = 'Next 7 days stay covered; an eat-out (about ' + money(d.meal) + ') is safe.';
     }
     var rec = [];
     state.plans.forEach(function (p) { if (p.repeat === 'monthly') rec.push(p); });
@@ -1293,7 +1293,7 @@
     // ---- Today: daily headroom + treat check
     var todaySpend = d.todaySpend;
     var daily = d.daily;
-    var tLines = ['Headroom: <b>' + money(daily) + '/day</b> left across the next ' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' (free cash ÷ days left).'];
+    var tLines = ['Headroom: <b>' + money(daily) + '/day</b> left across the next ' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + '.'];
     if (todaySpend > 0) tLines.push('Spent in this app today: <b>' + money(todaySpend) + '</b>.');
     var tCls, tTxt;
     if (free < 0) { tCls = 'bad'; tTxt = 'No room for treats — free cash is negative. Back the cards first.'; }
@@ -1742,10 +1742,22 @@
       });
     });
   }
+  // v23: quick-sums in the Add sheet (the prepay path) - live = total hint
+  function addAmtEq(input) {
+    var eq = byId('amtEq'); if (!eq) return;
+    var raw = String(input.value || '').trim();
+    if (!raw) { eq.style.display = 'none'; eq.className = 'amtEq'; return; }
+    var v = evalExpr(raw);
+    eq.style.display = '';
+    if (v === null) { eq.textContent = 'plain number, or a quick sum like 300-125+10'; eq.className = 'amtEq bad'; }
+    else if (v <= 0) { eq.textContent = '= ' + money(v) + ' · must be more than 0'; eq.className = 'amtEq bad'; }
+    else { eq.textContent = '= ' + money(v); eq.className = 'amtEq'; }
+  }
   function updateChargeHint() {
     var el = byId('chargeHint'); if (!el) return;
     var amtEl = byId('f_amount');
-    var amt = amtEl ? parseFloat(amtEl.value) : NaN;
+    var amt = amtEl ? evalExpr(amtEl.value) : null;
+    if (amt === null) amt = NaN;
     var s = effectiveSnap();
     if (!s || !(amt > 0)) { el.style.display = 'none'; return; }
     var free = s.cash ? s.cash.free : 0;
@@ -2113,17 +2125,14 @@
     if (b.edited) parts.push('last edited ' + new Date(b.edited).toLocaleTimeString());
     el.innerHTML = parts.join('<br>');
   }
-  var TABS = ['home', 'money', 'ledger', 'owed', 'coach'];
-  var TAB_MIGRATE = { overview: 'money', add: 'ledger' };
+  var TABS = ['home', 'money', 'ledger', 'owed'];
+  var TAB_MIGRATE = { overview: 'money', add: 'ledger', coach: 'home' };
   var shownTab = null;        // pane currently on screen
-  var lastCoachTab = 'home';  // where Coach returns to when the tab is tapped again
   function setTab(name) {
     if (TAB_MIGRATE[name]) name = TAB_MIGRATE[name];
     if (TABS.indexOf(name) < 0) name = 'home';
-    if (name === 'coach' && shownTab === 'coach') name = lastCoachTab;  // tapping the Coach tab again closes it
-    else if (name !== 'coach') lastCoachTab = name;
     shownTab = name;
-    var panes = { home: byId('tab-home'), money: byId('tab-money'), ledger: byId('tab-ledger'), owed: byId('tab-owed'), coach: byId('tab-coach') };
+    var panes = { home: byId('tab-home'), money: byId('tab-money'), ledger: byId('tab-ledger'), owed: byId('tab-owed') };
     Object.keys(panes).forEach(function (k) {
       if (panes[k]) panes[k].style.display = k === name ? '' : 'none';
     });
@@ -2133,10 +2142,17 @@
     }
     try { localStorage.setItem(LS_TAB, name); } catch (e) {}
     window.scrollTo(0, 0);
-    if (name === 'coach' && window.__financeChat && window.__financeChat.open) window.__financeChat.open();
+  }
+  // v23: Coach is the floating bot - a full-screen overlay opened by the FAB
+  function openCoach() {
+    var ov = byId('coachOv');
+    if (!ov) return;
+    ov.classList.add('show');
+    if (window.__financeChat && window.__financeChat.open) window.__financeChat.open();
   }
   function closeCoach() {
-    if (shownTab === 'coach') setTab(lastCoachTab || 'home');
+    var ov = byId('coachOv');
+    if (ov) ov.classList.remove('show');
   }
   function currentTab() {
     if (!state.snapshot) return 'home';
@@ -2223,8 +2239,9 @@
       if (!raw) { alert('Pick an account (card or cash).'); return; }
       var sep = raw.indexOf('::');
       var type = raw.slice(0, sep), name = raw.slice(sep + 2);
-      var amount = parseFloat(byId('f_amount').value);
-      if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
+      var amtRaw = String(byId('f_amount').value || '').trim();
+      var amount = evalExpr(amtRaw);
+      if (amount === null || !(amount > 0)) { alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.'); return; }
       var catVal = byId('f_category').value;
       var category = (catVal === CAT_CUSTOM ? byId('f_categoryCustom').value : catVal) || '';
       category = category.trim();
@@ -2279,7 +2296,7 @@
       render();
     };
     var amtEl = byId('f_amount');
-    if (amtEl) amtEl.addEventListener('input', updateChargeHint);
+    if (amtEl) amtEl.addEventListener('input', function () { addAmtEq(amtEl); updateChargeHint(); });
     var catEl = byId('f_category');
     if (catEl) catEl.onchange = function () {
       var c = byId('f_categoryCustom');
@@ -2291,6 +2308,8 @@
 
     var ab = byId('addBtn');
     if (ab) ab.onclick = function () { openSheet('addSheet'); };
+    var cfab = byId('coachFab');
+    if (cfab) cfab.onclick = openCoach;
     var sbtn2 = byId('setBtn');
     if (sbtn2) sbtn2.onclick = function () { openSheet('setSheet'); };
     var ac = byId('addClose');
@@ -2299,7 +2318,7 @@
     if (scb) scb.onclick = closeSheets;
     var scrim = byId('scrim');
     if (scrim) scrim.onclick = closeSheets;
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheets(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeCoach(); closeSheets(); } });
     // a11y: trap Tab focus inside the open sheet
     document.addEventListener('keydown', function (e) {
       if (!openSheetEl || e.key !== 'Tab') return;

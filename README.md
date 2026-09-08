@@ -17,10 +17,10 @@ The GitHub repo only ever holds this app code, **no balances or transactions**.
   prepay), the month's **Obligations** and **Sinking funds** cards, a 6-month
   projection, and a money log that sanity-checks every entry.
 - Installs to the iPhone **Home Screen** and runs full-screen.
-- **Coach** (Coach tab, inline card pane) — ask in plain language: status,
-  debt/one-off/sinking details, cash in any month, add/list/remove plans,
-  charge checks, and urgent-expense advice. Rule-based and fully local
-  (no AI, no made-up numbers); see `chat.js`.
+- **Coach** (the floating bot, bottom right — opens a full-screen chat) — ask
+  in plain language: status, debt/one-off/sinking details, cash in any month,
+  add/list/remove plans, charge checks, and urgent-expense advice. Rule-based
+  and fully local (no AI, no made-up numbers); see `chat.js`.
 - **Backup**: export/import a JSON file with your numbers + entries + plans
   + owed notes.
 
@@ -43,6 +43,8 @@ projection or the coach.
 the math the way you think it: `300-125+10` shows `= PHP 185.00` as you type
 and saves `185`. Works with `+ - * /` (or `× ÷`), parentheses and plain
 numbers; the original sum stays shown on the entry so you can check it later.
+The **Add** sheet's amount accepts the same quick sums — the Home coach card's
+**Log prepay** action opens it prefilled, ready to adjust.
 
 ## 1) Host this folder (GitHub Pages)
 1. Go to **github.com → New repository**, name it e.g. `finance-app`, set it **Public**, Create.
@@ -183,7 +185,7 @@ month picker).
   notes; **Import JSON** restores them (replaces what's on the phone).
 
 ## After redeploying
-- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v22),
+- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v23),
   so the phone picks up the new app shell on its next load — the "New version
   ready" toast offers a one-tap reload. If the app ever looks stale: open the
   Pages URL once in Safari, then relaunch the home-screen icon.

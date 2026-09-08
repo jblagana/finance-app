@@ -37,7 +37,7 @@ h1{margin:0;font-size:20px;letter-spacing:.2px}
 h1 span{color:var(--acc)}
 .hwrap{display:flex;align-items:center;gap:10px}
 main{flex:1;width:100%;padding:14px 16px 20px;max-width:640px;margin:0 auto}
-h2{font-size:12.5px;margin:20px 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
+h2{font-size:12.5px;margin:16px 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
 .tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px}
 .tile .k{color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px}
@@ -72,10 +72,7 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--in
 .verdict.bad{background:rgba(255,107,107,.12);color:var(--bad)}
 .adjbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
 .adjbar .note{margin:0;flex:1}
-.coach{border-left:3px solid var(--acc)}
-.coach.good{border-left-color:var(--ok)}
-.coach.warn{border-left-color:var(--warn)}
-.coach.bad{border-left-color:var(--bad)}
+/* v23: the home coach card no longer carries a colored vertical left bar */
 .coach-h{font-size:15px;font-weight:700;margin:0 0 4px}
 .coach-s{color:var(--mut);font-size:13px;margin:0}
 input:focus,select:focus{outline:none;border-color:var(--acc)}
@@ -104,18 +101,23 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 .kv b{color:var(--ink);text-align:right;word-break:break-word}
 .bar{height:8px;background:var(--card2);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:8px 0 6px}
 .bar i{display:block;height:100%;background:var(--acc);border-radius:6px}
-/* coach chat (the Coach tab — inline card pane; tap the Coach tab again to close)
+/* coach chat (v23: the floating bot opens a full-screen overlay; ✕ or Esc closes)
    v21: explicit column flex so a stale/mixed cache can never break the layout:
    head / chips / input are fixed, #chatMsgs is the only growing+scrolling child */
-#tab-coach{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px;
- display:flex;flex-direction:column}
+#coachOv{position:fixed;inset:0;z-index:25;background:var(--bg);display:flex;flex-direction:column;
+  transform:translateY(105%);transition:transform .22s ease;padding-bottom:env(safe-area-inset-bottom)}
+#coachOv.show{transform:translateY(0)}
+.chat-id{display:flex;align-items:center;gap:11px;min-width:0}
+.chat-avatar{flex:0 0 auto;width:42px;height:42px;border-radius:13px;background:var(--card2);
+  border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.chat-avatar svg{display:block;width:30px;height:30px}
 #chatHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);flex:0 0 auto}
 #chatTitle{font-size:17px;font-weight:700}
 #chatFresh{font-size:11px;color:var(--mut);margin-top:2px}
 #chatClose{background:var(--card2);border:1px solid var(--line);color:var(--mut);width:36px;height:36px;border-radius:10px;
  font-size:15px;cursor:pointer;flex:0 0 auto}
 #chatClose:active{border-color:var(--bad);color:var(--bad)}
-#chatMsgs{flex:1 1 auto;min-height:0;max-height:50vh;overflow-y:auto;padding:14px 14px 6px;-webkit-overflow-scrolling:touch}
+#chatMsgs{flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px 14px 6px;-webkit-overflow-scrolling:touch}
 .msg{max-width:84%;margin:0 0 10px;padding:9px 11px;border-radius:13px;font-size:13.5px;line-height:1.42;overflow-wrap:break-word}
 .msg.user{margin-left:auto;background:rgba(91,140,255,.20);border:1px solid rgba(91,140,255,.45);border-bottom-right-radius:6px}
 .msg.bot{margin-right:auto;background:var(--card2);border:1px solid var(--line);border-bottom-left-radius:6px}
@@ -142,6 +144,13 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
  font-size:26px;line-height:1;cursor:pointer;margin:-18px auto 0;box-shadow:0 5px 16px rgba(91,140,255,.45);
  display:flex;align-items:center;justify-content:center}
 .addbtn:active{filter:brightness(1.12)}
+/* v23: floating coach bot (cute face, opens the full-screen chat overlay) */
+#coachFab{position:fixed;right:16px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:20;
+  width:58px;height:58px;border-radius:50%;border:1px solid var(--acc);background:var(--card);
+  box-shadow:0 6px 18px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+#coachFab:active{filter:brightness(1.15)}
+#coachFab svg{display:block;width:38px;height:38px}
+#coachOv.show~#coachFab{display:none}
 button.gear{cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--mut);width:34px;height:34px;
  border-radius:10px;font-size:16px;flex:0 0 auto;line-height:1}
 button.gear:active{border-color:var(--acc);color:var(--acc)}
@@ -197,6 +206,9 @@ button.gear:active{border-color:var(--acc);color:var(--acc)}
 .oent-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .oent-eq{margin:6px 0 0;font-size:12.5px;font-weight:600;color:var(--acc);min-height:16px}
 .oent-eq.bad{color:var(--warn)}
+/* v23: quick-sum hint under the Add-sheet amount (the prepay path) */
+.amtEq{margin:8px 0 0;font-size:12.5px;font-weight:600;color:var(--acc)}
+.amtEq.bad{color:var(--warn)}
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .seg label{display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--line);border-radius:10px;
  padding:9px 10px;font-size:12.5px;font-weight:600;color:var(--mut);cursor:pointer;margin:0}
@@ -276,7 +288,7 @@ padding:7px 14px;font-size:12.5px}
 @keyframes paneIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes shim{0%{background-position:200% 0}100%{background-position:-200% 0}}
-#tab-home,#tab-money,#tab-ledger,#tab-owed,#tab-coach{animation:paneIn .18s ease}
+#tab-home,#tab-money,#tab-ledger,#tab-owed{animation:paneIn .18s ease}
 .txn,.dig,.drow,.ml-row{animation:rise .18s ease}
 .tile{position:relative;overflow:hidden}
 .tiles.busy .tile::after{content:"";position:absolute;inset:0;pointer-events:none;
@@ -308,7 +320,7 @@ button.gear{width:44px;height:44px}
 .sheet-x{width:44px;height:44px}
 .mini{min-height:32px;padding:4px 10px}
 @media (prefers-reduced-motion:reduce){#snack,#swToast{transition:none}
-#tab-home,#tab-money,#tab-ledger,#tab-owed,#tab-coach,.dig,.drow,.ml-row,.tiles.busy .tile::after{animation:none!important}
+#tab-home,#tab-money,#tab-ledger,#tab-owed,.dig,.drow,.ml-row,.tiles.busy .tile::after{animation:none!important}
 </style>
 </head>
 
@@ -324,7 +336,7 @@ button.gear{width:44px;height:44px}
 <main>
   <div id="tab-home">
     <div id="homeEmpty" class="card" style="display:none">
-      <p class="note" style="margin:2px 0">Add your numbers — accounts, salary, debts, budgets, one-offs — in <b>Settings (⚙ top right) → Your numbers</b>. The coach note and insights show up here once they exist. Anything you log meanwhile is saved on this phone.</p>
+      <p class="note" style="margin:2px 0">Add your numbers (accounts, salary, debts, budgets) in <b>Settings ⚙ → Your numbers</b> — the coach note and insights appear here once they exist.</p>
       <button class="act" id="homeOpenSet" type="button" style="margin-top:12px">Open Settings &amp; add your numbers</button>
     </div>
 
@@ -446,23 +458,48 @@ button.gear{width:44px;height:44px}
     <div id="owedBody"></div>
   </div>
 
-  <div id="tab-coach" style="display:none">
-    <div id="chatHead">
+</main>
+<div id="scrim"></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="botFace" viewBox="0 0 64 64">
+    <line x1="32" y1="15" x2="32" y2="10" stroke="#8fb0ff" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="32" cy="7.5" r="3.5" fill="#ffc45c"/>
+    <rect x="4" y="29" width="7" height="13" rx="3.5" fill="#8fb0ff"/>
+    <rect x="53" y="29" width="7" height="13" rx="3.5" fill="#8fb0ff"/>
+    <rect x="10" y="15" width="44" height="38" rx="13" fill="#5b8cff"/>
+    <rect x="16" y="21" width="32" height="26" rx="10" fill="#101828"/>
+    <circle cx="26" cy="32" r="5" fill="#cdd9f2"/>
+    <circle cx="38" cy="32" r="5" fill="#cdd9f2"/>
+    <circle cx="27.2" cy="33.4" r="2.3" fill="#16233d"/>
+    <circle cx="39.2" cy="33.4" r="2.3" fill="#16233d"/>
+    <circle cx="28.4" cy="30.6" r="1.1" fill="#ffffff"/>
+    <circle cx="40.4" cy="30.6" r="1.1" fill="#ffffff"/>
+    <circle cx="21" cy="38.5" r="2" fill="#f2a2b4"/>
+    <circle cx="43" cy="38.5" r="2" fill="#f2a2b4"/>
+    <path d="M27.5 40.5q4.5 3.5 9 0" stroke="#37d39b" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  </symbol>
+</svg>
+<div id="coachOv" role="dialog" aria-label="Coach chat">
+  <div id="chatHead">
+    <div class="chat-id">
+      <span class="chat-avatar"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#botFace"/></svg></span>
       <div>
         <div id="chatTitle">Coach</div>
         <div id="chatFresh"></div>
       </div>
-      <button id="chatClose" type="button" aria-label="Close chat">✕</button>
     </div>
-    <div id="chatMsgs"></div>
-    <div id="chatChips"></div>
-    <div id="chatInRow">
-      <input id="chatInput" type="text" placeholder="Ask, plan, or tell me about an expense…" autocomplete="off" spellcheck="false">
-      <button id="chatSend" type="button">Send</button>
-    </div>
+    <button id="chatClose" type="button" aria-label="Close chat">✕</button>
+
   </div>
-</main>
-<div id="scrim"></div>
+  <div id="chatMsgs"></div>
+  <div id="chatChips"></div>
+  <div id="chatInRow">
+    <input id="chatInput" type="text" placeholder="Ask, plan, or tell me about an expense…" autocomplete="off" spellcheck="false">
+
+    <button id="chatSend" type="button">Send</button>
+  </div>
+</div>
+<button id="coachFab" type="button" aria-label="Open coach"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#botFace"/></svg></button>
 <div id="addSheet" class="sheet" role="dialog" aria-label="Add expense">
   <div class="sheet-h">
     <div class="t">Add</div>
@@ -471,7 +508,8 @@ button.gear{width:44px;height:44px}
   <div class="sheet-b">
     <form id="addForm" autocomplete="off">
       <label for="f_amount" style="margin-top:6px">Amount (₱)</label>
-      <input id="f_amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+      <input id="f_amount" type="text" inputmode="decimal" placeholder="0.00, or a quick sum like 300-125+10">
+      <p id="amtEq" class="amtEq" style="display:none"></p>
       <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
       <div class="row">
         <div>
@@ -522,7 +560,7 @@ button.gear{width:44px;height:44px}
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">Finance PWA · fully local · shell v22</p>
+    <p class="note" style="margin:14px 0 0">Finance PWA · fully local · shell v23</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>
@@ -538,7 +576,6 @@ button.gear{width:44px;height:44px}
     <button type="button" class="addbtn" id="addBtn" aria-label="Add expense">+</button>
     <button type="button" class="tab" data-tab="ledger">Ledger</button>
     <button type="button" class="tab" data-tab="owed">Owed</button>
-    <button type="button" class="tab" data-tab="coach">Coach</button>
   </div>
 </nav>
 <script src="./app.js"></script>
