@@ -32,7 +32,7 @@ The GitHub repo only ever holds this app code, **no balances or transactions**.
 4. After ~1 minute your app is live at `https://<your-username>.github.io/finance-app/`.
 
 > A **public** repo is fine (and needed for free GitHub Pages on a free account).
-> It contains **no personal data** — your numbers live in your private Sheet.
+> It contains **no personal data** — your numbers live only on your phone.
 
 ## 2) Enter your numbers once
 1. Open the app → **Settings (⚙ top right) → Your numbers**.
@@ -66,8 +66,8 @@ The GitHub repo only ever holds this app code, **no balances or transactions**.
   short **coach note** ("Hey Jan — keep today around ₱X" / "this week is over
   budget by ₱Y") with one concrete number to act on today or this week. The name
   is set in the **name** box in the Insights header (saved on this phone); if left
-  blank it falls back to the `name` row in the Config tab, then to the **email**
-  (part before the @). The treat amount is in the same header.
+  blank it falls back to the **name** field in Settings → Your numbers. The treat
+  amount is in the same header.
 - **Plans** (bottom of the app) are things coming up — eat out, bills, gifts.
   They're stored only on the phone (not written to the Sheet) and drive the
   advice above.
