@@ -15,7 +15,7 @@
 <meta name="apple-mobile-web-app-title" content="FinSmart">
 <style>
 :root{--bg:#0f1420;--card:#1a2233;--card2:#212c42;--ink:#e8edf7;--mut:#93a1bd;--line:#2c3a56;
---ok:#37d39b;--bad:#ff6b6b;--warn:#ffc45c;--acc:#5b8cff}
+--ok:#37d39b;--bad:#ff6b6b;--warn:#ffc45c;--acc:#37d39b}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{font:15px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);
@@ -31,7 +31,7 @@ padding-bottom:env(safe-area-inset-bottom)}
 .tab{flex:1;display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--card);
 border:1px solid var(--line);color:var(--mut);padding:10px 4px;border-radius:10px;font-size:12.5px;
 font-weight:700;line-height:1.2;white-space:nowrap}
-.tab.active{background:rgba(91,140,255,.16);border-color:var(--acc);color:#fff}
+.tab.active{background:rgba(55,211,155,.16);border-color:var(--acc);color:#fff}
 .tab:active{filter:brightness(1.15)}
 h1{margin:0;font-size:20px;letter-spacing:.2px}
 h1 span{color:var(--acc)}
@@ -124,7 +124,7 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 #chatClose:active{border-color:var(--bad);color:var(--bad)}
 #chatMsgs{flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px 14px 6px;-webkit-overflow-scrolling:touch}
 .msg{max-width:84%;margin:0 0 10px;padding:9px 11px;border-radius:13px;font-size:13.5px;line-height:1.42;overflow-wrap:break-word}
-.msg.user{margin-left:auto;background:rgba(91,140,255,.20);border:1px solid rgba(91,140,255,.45);border-bottom-right-radius:6px}
+.msg.user{margin-left:auto;background:rgba(55,211,155,.20);border:1px solid rgba(55,211,155,.45);border-bottom-right-radius:6px}
 .msg.bot{margin-right:auto;background:var(--card2);border:1px solid var(--line);border-bottom-left-radius:6px}
 .msg .c-t{font-weight:700;font-size:13.5px;margin:0 0 5px}
 .msg .c-block + .c-block{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
@@ -146,7 +146,7 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 #chatSend:active{filter:brightness(1.12)}
 /* ---- bottom bar: raised + button, settings gear ---- */
 .addbtn{flex:0 0 auto;width:52px;height:52px;border-radius:50%;border:1px solid var(--acc);background:var(--acc);color:#fff;
- font-size:26px;line-height:1;cursor:pointer;margin:-18px auto 0;box-shadow:0 5px 16px rgba(91,140,255,.45);
+ font-size:26px;line-height:1;cursor:pointer;margin:-18px auto 0;box-shadow:0 5px 16px rgba(55,211,155,.45);
  display:flex;align-items:center;justify-content:center}
 .addbtn:active{filter:brightness(1.12)}
 /* v23: floating coach bot (cute face) — v24: stays put while the bubble is open;
@@ -218,7 +218,7 @@ button.gear:active{border-color:var(--acc);color:var(--acc)}
 .seg label{display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--line);border-radius:10px;
  padding:9px 10px;font-size:12.5px;font-weight:600;color:var(--mut);cursor:pointer;margin:0}
 .seg input{width:auto;min-width:0;padding:0;margin:0}
-.seg label.sel{border-color:var(--acc);color:#fff;background:rgba(91,140,255,.16)}
+.seg label.sel{border-color:var(--acc);color:#fff;background:rgba(55,211,155,.16)}
 .kv b.pos{color:var(--ok)}
 .kv b.neg{color:var(--warn)}
 input[type="month"]{min-height:44px}
@@ -467,11 +467,11 @@ button.gear{width:44px;height:44px}
 <div id="scrim"></div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="botFace" viewBox="0 0 64 64">
-    <line x1="32" y1="15" x2="32" y2="10" stroke="#8fb0ff" stroke-width="3" stroke-linecap="round"/>
+    <line x1="32" y1="15" x2="32" y2="10" stroke="#a0d1b4" stroke-width="3" stroke-linecap="round"/>
     <circle cx="32" cy="7.5" r="3.5" fill="#ffc45c"/>
-    <rect x="4" y="29" width="7" height="13" rx="3.5" fill="#8fb0ff"/>
-    <rect x="53" y="29" width="7" height="13" rx="3.5" fill="#8fb0ff"/>
-    <rect x="10" y="15" width="44" height="38" rx="13" fill="#5b8cff"/>
+    <rect x="4" y="29" width="7" height="13" rx="3.5" fill="#a0d1b4"/>
+    <rect x="53" y="29" width="7" height="13" rx="3.5" fill="#a0d1b4"/>
+    <rect x="10" y="15" width="44" height="38" rx="13" fill="#8bc5a0"/>
     <rect x="16" y="21" width="32" height="26" rx="10" fill="#101828"/>
     <circle cx="26" cy="32" r="5" fill="#cdd9f2"/>
     <circle cx="38" cy="32" r="5" fill="#cdd9f2"/>
@@ -565,7 +565,7 @@ button.gear{width:44px;height:44px}
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">FinSmart · fully local · shell v32</p>
+    <p class="note" style="margin:14px 0 0">FinSmart · fully local · shell v33</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>

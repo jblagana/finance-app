@@ -1469,8 +1469,8 @@
     var Y = function (v) { return PT + ih * (1 - (v - lo) / (hi - lo)); };
     var line = pts.map(function (p, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p.v).toFixed(1); }).join(' ');
     var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Projected cash for the next six months">' +
-      '<path d="' + line + ' L' + X(pts.length - 1).toFixed(1) + ' ' + (H - PB) + ' L' + X(0).toFixed(1) + ' ' + (H - PB) + ' Z" fill="rgba(91,140,255,.13)" stroke="none"/>' +
-      '<path d="' + line + '" fill="none" stroke="#5b8cff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+      '<path d="' + line + ' L' + X(pts.length - 1).toFixed(1) + ' ' + (H - PB) + ' L' + X(0).toFixed(1) + ' ' + (H - PB) + ' Z" fill="rgba(55,211,155,.13)" stroke="none"/>' +
+      '<path d="' + line + '" fill="none" stroke="#37d39b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
     if (floor > 0) {
       var fy = Y(floor).toFixed(1);
       svg += '<line x1="' + PL + '" y1="' + fy + '" x2="' + (W - PR) + '" y2="' + fy + '" stroke="#ffc45c" stroke-width="1" stroke-dasharray="4 4" opacity=".8"/>' +
@@ -1597,7 +1597,7 @@
     return { rows: rows, alerts: alerts, prepayActive: prepayActive, prepayPaid: !!prepayPaid, floor: floor };
   }
   // ---------- Phase 3: category donut + spend pace (Ledger) ----------
-  var DONUT_COLORS = ['#5b8cff', '#37d39b', '#ffc45c', '#ff6b6b', '#b48cff', '#64748b'];
+  var DONUT_COLORS = ['#37d39b', '#a0d1b4', '#ffc45c', '#ff6b6b', '#b48cff', '#64748b'];
   function renderDonut() {
     var wrap = byId('donut'), svgBox = byId('donutSvg'), leg = byId('donutLegend');
     if (!wrap || !svgBox || !leg) return;
