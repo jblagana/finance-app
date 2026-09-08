@@ -27,7 +27,10 @@ The GitHub repo only ever holds this app code, **no balances or transactions**.
     give name matching a semantic second chance ("the gym one" → your *Gym
     membership* budget). Rules always win, and the models only *read* your
     data — they never write anything; with the brain off (the default) the
-    coach behaves exactly as before, fully offline.
+    coach behaves exactly as before, fully offline. On iPhone/iPad the brain runs
+     the standard (non-jsep) WASM kernel instead of the faster jsep one —
+     WebKit 26.2+'s new JIT crashes on jsep ("A problem repeatedly occurred
+     on ...", onnxruntime#26827); see `model-worker.js`.
 - **Backup**: export/import a JSON file with your numbers + entries + plans
   + owed notes.
 
@@ -196,7 +199,7 @@ month picker).
   notes; **Import JSON** restores them (replaces what's on the phone).
 
 ## After redeploying
-- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v41),
+- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v42),
   so the phone picks up the new app shell on its next load — the "New version
   ready" toast offers a one-tap reload. If the app ever looks stale: open the
   Pages URL once in Safari, then relaunch the home-screen icon.

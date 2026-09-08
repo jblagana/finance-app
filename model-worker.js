@@ -1,4 +1,4 @@
-/* FinSmart v41 — offline brain, dedicated worker.
+/* FinSmart v42 — offline brain, dedicated worker.
  *
  * Every model computation happens here so the UI thread never does math:
  *   - all-MiniLM-L6-v2 (q8, ~23 MB)  -> sentence embeddings, which chat.js
@@ -15,7 +15,11 @@
  *     are then kept by transformers.js itself in Cache Storage
  *     (useBrowserCache, true in workers) -> offline after first download
  *
- * Device: WebGPU when navigator.gpu exists, WASM (jsep) otherwise.
+ * Device: WebGPU when navigator.gpu exists, WASM otherwise — except on
+ * WebKit (iOS/iPadOS/macOS Safari), which always runs the standard
+ * (non-jsep) WASM kernel: WebKit 26.2+'s new JIT makes the jsep kernel
+ * spin at 400%+ CPU and grow past 14 GB until the OS kills the page
+ * ("A problem repeatedly occurred on ..."). See the isWebKit() note.
  *
  * Message protocol (postMessage):
  *   main -> worker:  {type:'load'}   {type:'status'}
@@ -43,7 +47,14 @@ var TF_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/
 // The jsep wasm kernel binaries the bundle fetches at runtime
 // (ort-wasm-simd-threaded.jsep.mjs/.wasm, ~21 MB) come from this one pinned
 // folder — the exact onnxruntime version the bundle inlines — so the
-// service worker only ever has to cache a single CDN origin.
+// service worker only ever has to cache a single CDN origin. WebKit (see
+// isWebKit below) instead fetches the STANDARD kernel from the same folder
+// (ort-wasm-simd-threaded.mjs/.wasm, ~11 MB): WebKit 26.2+'s new JIT makes
+// the jsep kernel spin at 400%+ CPU and grow to 14 GB+ until iOS kills the
+// whole page ("A problem repeatedly occurred on ..."). The plain kernel is
+// the confirmed WebKit-safe path (onnxruntime#26827: "Standard WASM backend
+// (non-JSEP) works correctly in all configurations"; the transformers.js
+// #1242 workaround recipe).
 var ORT_WASM_PATHS = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0-dev.20250409-89f8206ba4/dist/';
 var EMBED_MODEL = 'Xenova/all-MiniLM-L6-v2';
 var LLM_MODELS = [
@@ -65,7 +76,27 @@ var loading = null; // in-flight load promise
 
 function post(o) { self.postMessage(o); }
 
+// Is this WebKit? iPhone/iPad Safari, Chrome-on-iOS (still WebKit under the
+// hood), iPadOS masquerading as a Mac, and macOS Safari all hit the jsep
+// kernel / WebKit-JIT bug above. Chrome on Android and desktop browsers
+// (Blink/Gecko) run the jsep kernel fine.
+function isWebKit() {
+  var ua = '';
+  try { ua = String((typeof navigator !== 'undefined' && navigator.userAgent) || ''); } catch (e) {}
+  if (/(iPhone|iPad|iPod)/.test(ua)) return true;
+  if (/Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome\//.test(ua) && !/Chromium\//.test(ua)) return true;
+  try {
+    var d = (typeof navigator !== 'undefined' && navigator.userAgentData && navigator.userAgentData.brands) || [];
+    for (var i = 0; i < d.length; i++) {
+      var b = d[i] && d[i].brand || '';
+      if (b === 'AppleWebKit' || b === 'Safari') return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
 function pickDevice() {
+  if (isWebKit()) { device = 'wasm'; return; } // WebKit: standard kernel only (see isWebKit)
   try { device = (typeof navigator !== 'undefined' && navigator.gpu) ? 'webgpu' : 'wasm'; }
   catch (e) { device = 'wasm'; }
 }
@@ -99,7 +130,20 @@ function ensureModule() {
     mod.env.allowRemoteModels = true;
     mod.env.useBrowserCache = true;    // weights -> Cache Storage -> offline later
     if (mod.env.backends && mod.env.backends.onnx && mod.env.backends.onnx.wasm) {
-      mod.env.backends.onnx.wasm.wasmPaths = ORT_WASM_PATHS;
+      var w = mod.env.backends.onnx.wasm;
+      if (isWebKit()) {
+        // Object form: ORT imports exactly this mjs and loads exactly this
+        // wasm — the bundled jsep file names are only its defaults when
+        // wasmPaths is unset. numThreads=1: GitHub Pages ships no COOP/COEP,
+        // so the threaded (SharedArrayBuffer) path can never activate anyway.
+        w.wasmPaths = {
+          mjs: ORT_WASM_PATHS + 'ort-wasm-simd-threaded.mjs',
+          wasm: ORT_WASM_PATHS + 'ort-wasm-simd-threaded.wasm'
+        };
+        w.numThreads = 1;
+      } else {
+        w.wasmPaths = ORT_WASM_PATHS;
+      }
     }
     T = mod;
     return T;
