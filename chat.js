@@ -148,7 +148,8 @@
         var ab = full.slice(0, 3);
         if (tk === full || tk === ab) return monthKeyFor(k);
         if (tk.length >= 4 && Math.abs(tk.length - full.length) <= 1 && lev(tk, full) <= 1) return monthKeyFor(k);
-        if (tk.length >= 3 && Math.abs(tk.length - 3) <= 1 && lev(tk, ab) <= 1) return monthKeyFor(k);
+        // v37: 3-letter tokens must match an abbreviation exactly ("pay" must NOT read as "may")
+        if (tk.length >= 4 && Math.abs(tk.length - 3) <= 1 && lev(tk, ab) <= 1) return monthKeyFor(k);
       }
     }
     if (/\bnext month\b/.test(t)) return addMonthsKey(1);
@@ -787,13 +788,16 @@
   function findAmounts(text) {
     var out = [];
     var rx = /(?:php|₱|pesos?)\s*([\d][\d,]*(?:\.\d{1,2})?)\s*(k\b)|(?:php|₱|pesos?)\s*([\d][\d,]*(?:\.\d{1,2})?)|([\d][\d,]*\.\d{1,2})|([\d][\d,]*)(\s*k\b)?/g;
+    // v37: non-participating groups are '' under JScript (undefined in browsers) —
+    // accept only a non-empty group string, like lev() uses charAt, not bracket indexing.
+    function grp(m, i) { var v = m[i]; return (typeof v === 'string' && v !== '') ? v : null; }
     var m;
     while ((m = rx.exec(text)) !== null) {
-      var n = m[1] != null ? m[1] : (m[3] != null ? m[3] : (m[4] != null ? m[4] : m[5]));
+      var n = grp(m, 1) || grp(m, 3) || grp(m, 4) || grp(m, 5);
       if (n == null) continue;
       var amt = Number(String(n).replace(/,/g, ''));
-      if (m[1] != null && m[2] != null) amt *= 1000;
-      else if (m[5] != null && m[6] != null) amt *= 1000;
+      if (grp(m, 1) != null && grp(m, 2) != null) amt *= 1000;
+      else if (grp(m, 5) != null && grp(m, 6) != null) amt *= 1000;
       out.push({ raw: m[0], amt: amt, idx: m.index });
     }
     return out;
@@ -852,11 +856,169 @@
     return bestScore >= 1 ? best : null;
   }
 
+  // ---------- v37: semantic story layer (local scorer, no cloud) ----------
+  // Hand-tuned affinity vocabulary: a "topic" (word bucket or known entity) plus
+  // optional action words, scored per clause. Only clauses the v35 regex cues
+  // left alone ever reach the scorer — the cues always win.
+  var SEM = {
+    salary: ['salary', 'paycheck', 'payslip', 'take home', 'takehome', 'take-home', 'net pay', 'netpay', 'income'],
+    budget: ['budget', 'budgeting', 'allowance', 'cap', 'capped', 'limit', 'limited', 'provision', 'set aside', 'set-aside', 'allocation', 'allocated'],
+    pay: ['paid', 'paying', 'pay', 'pays', 'payment', 'payments', 'due', 'remitted', 'remittance', 'settled', 'cleared', 'took care of', 'handled'],
+    oneoff: ['one-off', 'one off', 'oneoff', 'unexpected', 'surprise', 'extra', 'special', 'just once', 'this once'],
+    recurring: ['monthly', 'every month', 'each month', 'a month', 'per month', 'subscription', 'sub', 'installment', 'installments', 'recurring'],
+    acct: ['balance', 'balances', 'left', 'available', 'showing', 'holds', 'has', 'have', 'got', 'up to', 'down to', 'went up', 'went down', 'remaining'],
+    change: ['went up', 'up to', 'down to', 'raised', 'raise', 'hiked', 'increased', 'bumped', 'cut', 'lowered', 'new', 'changed', 'became', 'adjusted'],
+    weak: ['is', 'was', 'low', 'running low', 'running high', 'high', 'bit high']
+  };
+  var SEM_HI = 3.0;   // at/above: draft line (only when the required slots are present)
+  var SEM_ASK = 2.0;  // at/above with a required slot missing: ask for the number
+  var SEM_RE_BUDGET_NAME = /\bfor\s+([a-z'&\- ]{2,40}?)(?:\s+(?:is|was|in|this|on)\b|[,;]|\s(?=[\d,])|$)/;
+  var SEM_RE_RECURRING_NAME = /\b(?:pay|paying|pays|for|to)\s+([a-z'&\- ]{2,40}?)(?:\s+(?:every|each|monthly|a|per|in|is|for|on)\b|[,;]|\s(?=[\d,])|$)/;
+  var SEM_RE_ONEOFF_NAME = /(?:for|called|named)?\s*[:\-]?\s*([a-z][a-z'&\- ]{1,40}?)(?:\s+(?:is|was|in|this|on|for)\b|[,;]|\s(?=[\d,])|$)/;
+
+  function semHas(cl, words) {
+    for (var i = 0; i < words.length; i++) {
+      if (new RegExp('\\b' + words[i] + '\\b').test(cl)) return true;
+    }
+    return false;
+  }
+  // Same two-pass rule as amtIn: amount in this clause, else a bare number in the
+  // immediately following clause. (No after-idx / consumed needed — the cues ran
+  // first, so no amounts were consumed in a clause that reaches the scorer.)
+  function semAmtIn(r, rs, allAmt, t) {
+    for (var pass = 0; pass < 2; pass++) {
+      var rr = null;
+      for (var x = 0; x < rs.length; x++) {
+        if (rs[x].s === r.s && rs[x].e === r.e) { rr = pass === 0 ? rs[x] : (rs[x + 1] || null); break; }
+      }
+      if (!rr) break;
+      for (var i = 0; i < allAmt.length; i++) {
+        var a = allAmt[i];
+        if (a.idx < rr.s || a.idx >= rr.e) continue;
+        if (pass === 1 && !/^[\d][\d,\.]*\s*(k|php|pesos?)?\.?$/.test(t.slice(rr.s, rr.e).trim())) continue;
+        return i;
+      }
+    }
+    return null;
+  }
+
+  // Semantic candidate for one clause. Returns {line: {label, change}} or {ask: '...'} or null.
+  function semClause(cl, r, rs, allAmt, names, t, cur) {
+    if (isQuestion(cl)) return null;
+    var toks = cl.split(/\s+/);
+    var monthHere = storyMonth(cl);
+    var month = monthHere || (/\bthis month\b/.test(cl) ? cur : null);
+
+    var sal = semHas(cl, SEM.salary);
+    var budw = semHas(cl, SEM.budget);
+    var payw = semHas(cl, SEM.pay);
+    var oow = semHas(cl, SEM.oneoff);
+    var recw = semHas(cl, SEM.recurring);
+    var acctw = semHas(cl, SEM.acct);
+    var chg = semHas(cl, SEM.change);
+    var weak = semHas(cl, SEM.weak);
+
+    var entBudget = fuzzyNameIn(names.budgets, cl);
+    var entDebt = fuzzyNameIn(names.debts, cl);
+    var entAccount = null;
+    for (var iA = 0; iA < names.accounts.length; iA++) {
+      if (nameScore(names.accounts[iA].name, toks) >= 1) { entAccount = names.accounts[iA]; break; }
+    }
+
+    var ai = semAmtIn(r, rs, allAmt, t);
+    var hasAmt = ai != null;
+    var amt = hasAmt ? allAmt[ai].amt : null;
+
+    // 1. salary — topic word + amount (month -> override, none -> base salary)
+    if (sal) {
+      var sc1 = 2.0 + (hasAmt ? 1.0 : 0.0) + (month ? 0.5 : 0.0);
+      if (hasAmt && sc1 >= SEM_HI) {
+        var ch1 = month ? { type: 'salary', month: month, amount: amt } : { type: 'salary_base', amount: amt };
+        return { line: { label: month ? 'Salary · ' + monthLabel(month) : 'Base salary', change: ch1 } };
+      }
+      if (sc1 >= SEM_ASK) return { ask: "What's the new salary?" };
+      return null;
+    }
+    // 2. account — known account + balance-ish word + amount
+    if (entAccount) {
+      var sc2 = (nameScore(entAccount.name, toks) >= 2 ? 2.0 : 1.0)
+        + ((acctw || chg) ? 1.5 : (weak ? 1.0 : 0.0)) + (hasAmt ? 1.0 : 0.0);
+      if (hasAmt && sc2 >= SEM_HI) {
+        return { line: { label: 'Account · ' + entAccount.name, change: { type: 'account', name: entAccount.name, kind: entAccount.kind, value: amt } } };
+      }
+      if (sc2 >= SEM_ASK) return { ask: "What's the current balance for " + entAccount.name + "?" };
+      return null;
+    }
+    // 3. debt payment — known debt + pay/change word + amount + month
+    if (entDebt && (payw || chg)) {
+      var sc3 = (nameScore(entDebt, toks) >= 2 ? 2.0 : 1.0)
+        + 1.5 + (hasAmt ? 1.0 : 0.0) + (month ? 0.5 : 0.0);
+      if (hasAmt && month && sc3 >= SEM_HI) {
+        return { line: { label: 'Debt payment · ' + entDebt + ' · ' + monthLabel(month), change: { type: 'debt_payment', name: entDebt, month: month, amount: amt } } };
+      }
+      if (sc3 >= SEM_ASK) {
+        return { ask: hasAmt ? "Which month is the " + entDebt + " payment for?" : "What's the new payment for " + entDebt + "?" };
+      }
+      return null;
+    }
+    // 4. budget — known budget (or budget word + extracted name) + amount
+    var nmB2 = entBudget;
+    if (!nmB2 && budw) {
+      var fB2 = cl.match(SEM_RE_BUDGET_NAME);
+      if (fB2 && fB2[1].trim().length >= 3 && !isMonthWord(fB2[1].trim())) nmB2 = fB2[1].trim();
+    }
+    if (nmB2 && !recw) { // recurring-cadence phrases belong to the recurring candidate
+      var sc4 = 1.0 + ((chg || budw) ? 1.5 : (weak ? 1.0 : 0.0)) + (hasAmt ? 1.0 : 0.0) + (month ? 0.5 : 0.0);
+      if (hasAmt && sc4 >= SEM_HI) {
+        var ch4 = month
+          ? { type: 'budget_override', month: month, name: nmB2, amount: amt }
+          : { type: 'budget', name: nmB2, amount: amt };
+        return { line: { label: month ? 'Budget · ' + nmB2 + ' · ' + monthLabel(month) : 'Budget · ' + nmB2, change: ch4 } };
+      }
+      if (entBudget && sc4 >= SEM_ASK) return { ask: "What's the new number for " + nmB2 + "?" };
+      return null;
+    }
+    // 5. recurring — recurring word + amount + name (known or extracted)
+    if (recw) {
+      var nmR2 = fuzzyNameIn(names.debts.concat(names.budgets), cl);
+      var known = !!nmR2;
+      if (!nmR2) {
+        var fR2 = cl.match(SEM_RE_RECURRING_NAME);
+        if (fR2 && fR2[1].trim().length >= 3 && !isMonthWord(fR2[1].trim())) nmR2 = fR2[1].trim();
+      }
+      if (nmR2 && hasAmt) {
+        var sc5 = 2.0 + 1.0 + (known ? 2.0 : 1.0);
+        if (sc5 >= SEM_HI) {
+          var monthsR2 = [];
+          for (var kR2 = 0; kR2 < 6; kR2++) monthsR2.push(addMonthsKey(kR2));
+          return { line: { label: 'Recurring · ' + nmR2 + ' · 6 months', change: { type: 'recurring', name: nmR2, amount: amt, months: monthsR2 } } };
+        }
+      }
+      return null;
+    }
+    // 6. one-off — oneoff word + amount + name (known or extracted)
+    if (oow) {
+      var nmO2 = fuzzyNameIn(names.oneoffs, cl);
+      if (!nmO2) {
+        var fO2 = cl.match(SEM_RE_ONEOFF_NAME);
+        if (fO2 && fO2[1].trim().length >= 3 && !isMonthWord(fO2[1].trim())) nmO2 = fO2[1].trim();
+      }
+      if (nmO2 && hasAmt) {
+        var moO2 = monthHere || storyMonth(t) || cur;
+        return { line: { label: 'One-off · ' + nmO2 + ' · ' + monthLabel(moO2), change: { type: 'one_off', month: moO2, name: nmO2, amount: amt } } };
+      }
+      return null;
+    }
+    return null;
+  }
+
   // Parse a normalized update into change objects app.js can validate & apply.
-  // Returns [] when nothing recognizable happened — then the normal intents take over.
-  function extractStory(t, ctx) {
+  // v37: v35 regex cues first; clauses they leave alone go to the semantic scorer,
+  // which may add a line or a targeted question (asks).
+  function storyParse(t, ctx) {
     var lines = [];
-    if (!t) return lines;
+    var asks = [];
+    if (!t) return { lines: lines, asks: asks };
     var names = storyNames(ctx);
     var cur = curMonthKey();
     var rs = clauseRanges(t);
@@ -887,6 +1049,7 @@
       var consumed = [];
       var clToks = cl.split(/\s+/);
       var monthHere = storyMonth(cl);
+      var nBefore = lines.length; // v37: semantic fallback only for clauses the cues left alone
 
       // 1. salary — "my salary in october is 25k" (a month -> override; none -> base salary)
       var salM = cl.match(/\b(?:my\s+|our\s+)?(?:new\s+|base\s+)?salary\b|\bpaycheck\b|\bpayslip\b/);
@@ -982,7 +1145,8 @@
       }
 
       // 6. casual budget update for a known budget — "water went up to 1800"
-      if (!isQuestion(cl)) {
+      //    (v37: recurring-cadence phrases defer to the semantic recurring candidate)
+      if (!isQuestion(cl) && !/\b(?:every|each)\s+month\b|\bmonthly\b|\ba month\b|\bper month\b/.test(cl)) {
         var nmC = fuzzyNameIn(names.budgets, cl);
         if (nmC) {
           var aiC = amtIn(r, null, consumed);
@@ -1011,14 +1175,38 @@
           lines.push({ label: 'Account · ' + nmA.name, change: { type: 'account', name: nmA.name, kind: nmA.kind, value: aA.amt } });
         }
       }
+
+      // v37: semantic fallback for clauses the v35 cues left alone
+      if (lines.length === nBefore) {
+        var sem = semClause(cl, r, rs, allAmt, names, t, cur);
+        if (sem) {
+          if (sem.line) lines.push(sem.line);
+          else if (sem.ask) asks.push(sem.ask);
+        }
+      }
     });
 
-    return lines;
+    var uniq = [];
+    for (var iu = 0; iu < asks.length; iu++) if (uniq.indexOf(asks[iu]) < 0) uniq.push(asks[iu]);
+    return { lines: lines, asks: uniq.slice(0, 2) };
   }
+  // v35 API kept for callers/gates: lines only
+  function extractStory(t, ctx) { return storyParse(t, ctx).lines; }
+  function storyAsks(t, ctx) { return storyParse(t, ctx).asks; }
 
   function intentStory(t, ctx, p) {
-    var changes = extractStory(t, ctx);
-    if (!changes.length) return null;
+    var parsed = storyParse(t, ctx);
+    var changes = parsed.lines;
+    var asks = parsed.asks;
+    if (!changes.length && !asks.length) return null;
+    if (!changes.length) {
+      // v37: the scorer recognized the topic but a number is missing — ask for it
+      var qRows = asks.map(function (q) { return line(esc(q)); }).join('');
+      var hq = block('One number short',
+        qRows + line('<span class="note">tell me the number and I\'ll draft the change for you</span>'),
+        'Nothing is written yet — just answer the question above.', 'good');
+      return { html: hq + freshness(ctx), actions: [], storyLines: [], storyRaw: t, storyAsk: asks.join(' · ') };
+    }
     var rows = changes.map(function (l, i) {
       var v = l.change.amount != null ? l.change.amount : l.change.value;
       return '<div class="ins-line"><b>' + (i + 1) + '.</b> ' + esc(l.label) + ' — ' + esc(money(v)) + '</div>';
@@ -1028,10 +1216,11 @@
     });
     actions.push({ label: 'Confirm ' + changes.length + ' change' + (changes.length > 1 ? 's' : ''), act: 'confirm_story', payload: { lines: changes } });
     actions.push({ label: 'Discard', act: 'discard_story' });
+    var askNote = asks.length ? line('<span class="note">also missing: ' + esc(asks.join(' — ')) + '</span>') : '';
     var h = block('Draft: base-data changes',
-      rows + line('<span class="note">nothing is written yet — tap ✕ to drop a line, or confirm to apply</span>'),
+      rows + askNote + line('<span class="note">nothing is written yet — tap ✕ to drop a line, or confirm to apply</span>'),
       'Applies to Your numbers through the Settings save path — one-tap undo after.', 'warn');
-    return { html: h + freshness(ctx), actions: actions, storyLines: changes, storyRaw: t };
+    return { html: h + freshness(ctx), actions: actions, storyLines: changes, storyRaw: t, storyAsk: asks.join(' · ') };
   }
 
   // ---------- dispatch ----------
