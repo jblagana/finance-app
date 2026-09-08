@@ -63,8 +63,8 @@ numbers; the original sum stays shown on the entry so you can check it later.
 
 > The app can also import a JSON backup (Settings → Backup → Import JSON) —
 > e.g. one exported from an older build that synced to a Google Sheet.
-> `google/Code.gs` is kept as the reference implementation of the same math
-> (and still works standalone in the Sheet), but the PWA no longer calls it.
+> Older builds synced to a Google Sheet instead; that path was removed in the
+> local-first release, and the app no longer talks to any Sheet.
 
 ## What each input means (Settings ⚙ → Your numbers)
 
