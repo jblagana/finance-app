@@ -149,8 +149,9 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
  font-size:26px;line-height:1;cursor:pointer;margin:-18px auto 0;box-shadow:0 5px 16px rgba(91,140,255,.45);
  display:flex;align-items:center;justify-content:center}
 .addbtn:active{filter:brightness(1.12)}
-/* v23: floating coach bot (cute face) — v24: stays put while the bubble is open */
-#coachFab{position:fixed;right:16px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:20;
+/* v23: floating coach bot (cute face) — v24: stays put while the bubble is open;
+   v27: sits above the scrim (22) so it stays bright and tappable while open */
+#coachFab{position:fixed;right:16px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:24;
   width:58px;height:58px;border-radius:50%;border:1px solid var(--acc);background:var(--card);
   box-shadow:0 6px 18px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 #coachFab:active{filter:brightness(1.15)}
@@ -564,7 +565,7 @@ button.gear{width:44px;height:44px}
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">FinSmart · fully local · shell v26</p>
+    <p class="note" style="margin:14px 0 0">FinSmart · fully local · shell v27</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>
