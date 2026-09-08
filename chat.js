@@ -5,9 +5,16 @@
  * sinking) computed on this phone, plus this phone's plans and entries — so it
  * works with no signal and no sheet.
  *
- * It never writes on its own: every change (plan, expense) is confirmed with a
- * button and goes through the app's own actions (window.FinApp), so chat-made
- * plans/entries behave exactly like the forms (same stores, same deficit math).
+ * It never writes on its own: every change (plan, expense, story-mode base edit)
+ * is confirmed with a button and goes through the app's own actions
+ * (window.FinApp), so chat-made plans/entries/base changes behave exactly like
+ * the forms (same stores, same deficit math, same saveBase recompute).
+ *
+ * v35 story mode: a casual update ("my salary in october is 25k, water went up
+ * to 1800") is parsed into validated change objects, shown as a draft card you
+ * can edit line by line, and only on confirm is it applied through
+ * FinApp.applyBaseChanges — with a one-tap undo (FinApp.undoBaseStory) that the
+ * app keeps in its own meta store. Chat never mutates the app's base directly.
  */
 (function () {
   'use strict';
@@ -24,7 +31,20 @@
     });
   }
   function norm(s) {
-    return String(s == null ? '' : s).toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, ' ').trim();
+    var t = String(s == null ? '' : s).toLowerCase().replace(/[’‘]/g, "'");
+    t = t
+      .replace(/\bu\b/g, 'you')
+      .replace(/\bur\b/g, 'your')
+      .replace(/\bwhats\b/g, "what's")
+      .replace(/\bwhos\b/g, "who's")
+      .replace(/\bim\b/g, "i'm")
+      .replace(/\bdont\b/g, "don't")
+      .replace(/\bcant\b/g, "can't")
+      .replace(/\bwont\b/g, "won't")
+      .replace(/\bthx\b/g, 'thanks')
+      .replace(/\bty\b/g, 'thanks')
+      .replace(/\b(pls|plz)\b/g, 'please');
+    return t.replace(/\s+/g, ' ').trim();
   }
   function num(s) { return Number(String(s).replace(/,/g, '')) || 0; }
   function r2(x) { return Math.round((Number(x) || 0) * 100) / 100; }
@@ -35,6 +55,7 @@
   }
   function fmtNum(v) { return Math.round(Number(v) || 0).toLocaleString('en-US'); }
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var MONFULL = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
   var MOKEY = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
   var MONAME = '(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)(?:uary|ruary|ch|il|ust|tember|ober|ember)?';
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -71,6 +92,79 @@
     return fmtDate(iso);
   }
 
+  // ---------- v35: fuzzy matching + month tokens (story mode) ----------
+  // Levenshtein distance (capped: longer-than-3 diffs can never match).
+  function lev(a, b) {
+    var m = a.length, n = b.length;
+    if (Math.abs(m - n) > 3) return 99;
+    var dp = [], i, j;
+    for (i = 0; i <= m; i++) { dp[i] = [i]; }
+    for (j = 0; j <= n; j++) dp[0][j] = j;
+    for (i = 1; i <= m; i++) {
+      for (j = 1; j <= n; j++) {
+        // charAt (not a[i-1]): bracket indexing on strings is not portable (JScript)
+        dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1));
+      }
+    }
+    return dp[m][n];
+  }
+  function cleanTok(s) { return String(s == null ? '' : s).replace(/[^a-z0-9]/g, ''); }
+  // true if any token in toks is word-equal or a close typo of word (word is a name word, >= 3 chars)
+  function fuzzyTokIn(word, toks) {
+    var w = cleanTok(String(word || '').toLowerCase());
+    if (w.length < 3) return false;
+    for (var i = 0; i < toks.length; i++) {
+      var tk = cleanTok(toks[i]);
+      if (!tk) continue;
+      if (tk === w) return true;
+      var max = w.length >= 6 ? 2 : 1;
+      if (tk.length >= 3 && Math.abs(tk.length - w.length) <= max && lev(tk, w) <= max) return true;
+    }
+    return false;
+  }
+  function curMonthKey() { return todayISO().slice(0, 7); }
+  function addMonthsKey(offset) {
+    var c = todayISO().split('-');
+    var m = Number(c[1]) + offset, y = Number(c[0]);
+    while (m < 1) { m += 12; y -= 1; }
+    while (m > 12) { m -= 12; y += 1; }
+    return y + '-' + pad2(m);
+  }
+  // "next occurrence" month key: october in September 2026 -> 2026-10, october in November -> 2027-10
+  function monthKeyFor(k) {
+    var now = todayISO().split('-');
+    var y = Number(now[0]), nm = Number(now[1]);
+    if (k + 1 < nm) y += 1;
+    return y + '-' + pad2(k + 1);
+  }
+  // first month token in text, exact or a 1-keystroke typo ("septmber", "jane"); null when absent
+  function storyMonth(t) {
+    var toks = String(t || '').split(/\s+/);
+    for (var i = 0; i < toks.length; i++) {
+      var tk = cleanTok(toks[i]);
+      if (!tk) continue;
+      for (var k = 0; k < MON.length; k++) {
+        var full = MONFULL[k];
+        var ab = full.slice(0, 3);
+        if (tk === full || tk === ab) return monthKeyFor(k);
+        if (tk.length >= 4 && Math.abs(tk.length - full.length) <= 1 && lev(tk, full) <= 1) return monthKeyFor(k);
+        if (tk.length >= 3 && Math.abs(tk.length - 3) <= 1 && lev(tk, ab) <= 1) return monthKeyFor(k);
+      }
+    }
+    if (/\bnext month\b/.test(t)) return addMonthsKey(1);
+    return null;
+  }
+  function isMonthWord(s) {
+    var tk = cleanTok(s);
+    if (!tk) return false;
+    for (var k = 0; k < MON.length; k++) {
+      var full = MONFULL[k];
+      if (tk === full || tk === full.slice(0, 3)) return true;
+      if (tk.length >= 4 && Math.abs(tk.length - full.length) <= 1 && lev(tk, full) <= 1) return true;
+    }
+    return false;
+  }
+
   // ---------- data: read our own copies from IndexedDB (race-free) ----------
   function snapSig(s) {
     if (!s) return '';
@@ -78,11 +172,12 @@
   }
   function loadCtx() {
     return Promise.all([F.idbAll(F.STORE_META), F.idbAll(F.STORE_PLANS), F.idbAll(F.STORE_TX)]).then(function (res) {
-      var snap = null, adj = { cash: 0, free: 0, card: 0, prepay: 0 }, adjSig = '', at = null;
+      var snap = null, adj = { cash: 0, free: 0, card: 0, prepay: 0 }, adjSig = '', at = null, base = null;
       (res[0] || []).forEach(function (m) {
         if (m.key === 'snapshot') { snap = m.value; at = m.at; }
         else if (m.key === 'adj') adj = m.value || adj;
         else if (m.key === 'adjSig') adjSig = m.value || '';
+        else if (m.key === 'base') base = m.value; // v35: story mode matches names against the stored base
       });
       var eff = null;
       if (snap) {
@@ -97,7 +192,7 @@
         eff.card_owed = r2((snap.card_owed || 0) + a.card);
         eff.total_prepay = r2((snap.total_prepay || 0) + a.prepay);
       }
-      return { snap: snap, eff: eff, plans: res[1] || [], txns: res[2] || [], at: at };
+      return { snap: snap, eff: eff, base: base, plans: res[1] || [], txns: res[2] || [], at: at };
     });
   }
 
@@ -222,6 +317,7 @@
     [/laundry|laundromat/, 'Laundry'],
     [/treat|gear|\bshoe|\bgift|birthday/, 'Personal Treats / Gear'],
     [/transport|jeep|tricycle|uber|grab|\bgas\b|fuel/, 'Transport'],
+    [/spaylater|paylater|pay[- ]?late|installment|in[- ]house/, 'Debt payment'],
     [/\bdebt\b|\bloan\b/, 'Debt payment'],
     [/savings|sinking|christmas|\bsave/, 'Savings / Sinking'],
     [/repair|fix|doctor|meds|pharm|hospital/, 'Other']
@@ -280,20 +376,23 @@
 
   // ---------- intents ----------
   function intentHelp(t) {
-    if (!/^(help|\?+|what can you do|what do you do|how do you work|commands|abilities)\b/.test(t)) return null;
+    if (!/^(help|\?+|what can you do|what do you do|what can i ask|how do you work|commands|abilities)\b/.test(t)) return null;
     var h = block('What I can do',
       line('• <b>Status</b> — free cash, liquid cash, cards owed, the 14th prepay') +
       line('• <b>Details</b> — debt schedules, one-offs, sinking funds, “what’s my cash in Feb?”') +
       line('• <b>Plans</b> — add / list / remove plans, exactly like the form on the Money tab') +
       line('• <b>Charge check</b> — “can I charge 2,500 on Maya?”') +
       line('• <b>Urgent expense</b> — tell me something unplanned and I’ll map the options') +
-      line('• <b>Spending</b> — what you’ve logged in this app this week / month'),
+      line('• <b>Spending</b> — what you’ve logged in this app this week / month') +
+      line('• <b>Story mode</b> — tell me changes in plain words: “my salary in october is 25k, water went up to 1,800” — I draft them and you confirm before anything is written'),
       'Try: “urgent: car repair 8,000 this week”', 'good');
     return { html: h };
   }
 
   function intentGreet(t, ctx) {
-    if (!/^(hi|hiya|hey|hello|yo|um)([!.? ,]*)$/.test(t) && !/^good (morning|afternoon|evening)\b/.test(t)) return null;
+    if (!/^(hi|hiya|hey|hello|yo|um|sup)([!.? ,]*)$/.test(t)
+      && !/^good (morning|afternoon|evening)\b/.test(t)
+      && !/^(what'?s up|how'?s it going|how are you(?: doing)?|hey there)\b/.test(t)) return null;
     var n = coachName();
     var h = block(n ? 'Hey ' + esc(n) : 'Hey',
       line('I’m your money coach. Ask for <b>status</b>, <b>plans</b>, <b>debt</b> details, a <b>charge check</b>, or tell me about an <b>urgent expense</b> — it works offline.') +
@@ -646,7 +745,10 @@
   }
 
   function intentLog(t, ctx, p) {
-    if (!/^(log|record|add|note)\b/.test(t) || !/\b(expense|spend|spent|charge|paid|payment|bought)\b/.test(t)) return null;
+    // v35: casual past tense ("i paid for spaylater today 1828 pesos") logs like a command does
+    var cmd = /^(log|record|add|note)\b/.test(t);
+    var casual = /^(?:i|we)\s+(?:just\s+|already\s+|did\s+)?(?:paid|bought|spent|charged|gave|sent|swiped|used)\b/.test(t);
+    if ((!cmd && !casual) || (!casual && !/\b(expense|spend|spent|charge|paid|payment|bought)\b/.test(t))) return null;
     var A = p.amt;
     if (!A || A <= 0) {
       return { html: block('Log an expense', line('How much, paid with what?'), 'e.g. “log expense 500 food maya” or “log 8,000 car repair cash”', 'good') + freshness(ctx) };
@@ -679,6 +781,259 @@
     };
   }
 
+  // ---------- v35: story mode — casual updates -> validated base changes ----------
+  // Everything here only BUILDS change objects + a draft. Writing happens solely
+  // through F.applyBaseChanges on confirm; the app validates and saves the base.
+  function findAmounts(text) {
+    var out = [];
+    var rx = /(?:php|₱|pesos?)\s*([\d][\d,]*(?:\.\d{1,2})?)\s*(k\b)|(?:php|₱|pesos?)\s*([\d][\d,]*(?:\.\d{1,2})?)|([\d][\d,]*\.\d{1,2})|([\d][\d,]*)(\s*k\b)?/g;
+    var m;
+    while ((m = rx.exec(text)) !== null) {
+      var n = m[1] != null ? m[1] : (m[3] != null ? m[3] : (m[4] != null ? m[4] : m[5]));
+      if (n == null) continue;
+      var amt = Number(String(n).replace(/,/g, ''));
+      if (m[1] != null && m[2] != null) amt *= 1000;
+      else if (m[5] != null && m[6] != null) amt *= 1000;
+      out.push({ raw: m[0], amt: amt, idx: m.index });
+    }
+    return out;
+  }
+  // one update can hold several facts; clauses split on ";", "," and " and "
+  function clauseRanges(t) {
+    var rs = [], s = 0, rx = /\s*[;,]\s*|\s+and\s+/g, m;
+    while ((m = rx.exec(t)) !== null) {
+      if (m.index > s) rs.push({ s: s, e: m.index });
+      s = m.index + m[0].length;
+    }
+    if (s < t.length) rs.push({ s: s, e: t.length });
+    return rs;
+  }
+  function isQuestion(cl) {
+    return /^(?:what|whats|who|how|when|where|why|can|could|should|do|does|did|are|am|tell|show|check)\b/.test(cl);
+  }
+  function storyNames(ctx) {
+    var b = (ctx && ctx.base) || {};
+    var oneoffs = [];
+    Object.keys(b.one_offs || {}).forEach(function (mo) {
+      Object.keys(b.one_offs[mo] || {}).forEach(function (nm) { if (oneoffs.indexOf(nm) < 0) oneoffs.push(nm); });
+    });
+    return {
+      budgets: Object.keys(b.budgets || {}),
+      debts: Object.keys(b.debts || {}),
+      oneoffs: oneoffs,
+      sinks: Object.keys(b.sinking || {}),
+      accounts: (b.accounts || []).map(function (a) { return { name: a.name, kind: a.kind }; })
+    };
+  }
+  // score how well a stored name fits the clause tokens: 2 = strong, 1 = weak (one shared word), 0 = none
+  function nameScore(name, toks) {
+    var wds = String(name || '').toLowerCase().split(/[\s/]+/).filter(function (w) {
+      return w.length >= 3 && w !== 'the' && w !== 'for' && w !== 'and';
+    });
+    if (!wds.length) return 0;
+    var hits = 0;
+    for (var i = 0; i < wds.length; i++) if (fuzzyTokIn(wds[i], toks)) hits += 1;
+    if (!hits) return 0;
+    return wds.length === 1 ? 2 : (hits >= 2 ? 2 : 1);
+  }
+  function fuzzyNameIn(pool, cl) {
+    var toks = cl.split(/\s+/);
+    var best = null, bestScore = 0, bestWords = 0;
+    for (var i = 0; i < pool.length; i++) {
+      var wds = String(pool[i]).toLowerCase().split(/[\s/]+/).filter(function (w) {
+        return w.length >= 3 && w !== 'the' && w !== 'for' && w !== 'and';
+      });
+      var sc = nameScore(pool[i], toks);
+      // tie-break: the more specific (fewer words) name wins
+      if (sc > bestScore || (sc === bestScore && sc > 0 && wds.length < bestWords)) {
+        best = pool[i]; bestScore = sc; bestWords = wds.length;
+      }
+    }
+    return bestScore >= 1 ? best : null;
+  }
+
+  // Parse a normalized update into change objects app.js can validate & apply.
+  // Returns [] when nothing recognizable happened — then the normal intents take over.
+  function extractStory(t, ctx) {
+    var lines = [];
+    if (!t) return lines;
+    var names = storyNames(ctx);
+    var cur = curMonthKey();
+    var rs = clauseRanges(t);
+    var allAmt = findAmounts(t);
+
+    function amtIn(r, afterIdx, consumed) {
+      for (var pass = 0; pass < 2; pass++) {
+        var rr = null;
+        for (var x = 0; x < rs.length; x++) {
+          if (rs[x].s === r.s && rs[x].e === r.e) { rr = pass === 0 ? rs[x] : (rs[x + 1] || null); break; }
+        }
+        if (!rr) break;
+        for (var i = 0; i < allAmt.length; i++) {
+          var a = allAmt[i];
+          if (a.idx < rr.s || a.idx >= rr.e) continue;
+          if (pass === 0 && afterIdx != null && a.idx < afterIdx) continue;
+          if (consumed.indexOf(i) >= 0) continue;
+          if (pass === 1 && !/^[\d][\d,\.]*\s*(k|php|pesos?)?\.?$/.test(t.slice(rr.s, rr.e).trim())) continue; // bare-number clause only
+          return i;
+        }
+      }
+      return null;
+    }
+
+    rs.forEach(function (r) {
+      var cl = t.slice(r.s, r.e).trim();
+      if (!cl || cl.length < 4) return;
+      var consumed = [];
+      var clToks = cl.split(/\s+/);
+      var monthHere = storyMonth(cl);
+
+      // 1. salary — "my salary in october is 25k" (a month -> override; none -> base salary)
+      var salM = cl.match(/\b(?:my\s+|our\s+)?(?:new\s+|base\s+)?salary\b|\bpaycheck\b|\bpayslip\b/);
+      if (salM) {
+        var ai = amtIn(r, salM.index, consumed);
+        if (ai != null) {
+          consumed.push(ai);
+          var a = allAmt[ai];
+          if (monthHere) lines.push({ label: 'Salary · ' + monthLabel(monthHere), change: { type: 'salary', month: monthHere, amount: a.amt } });
+          else if (/\bthis month\b/.test(cl)) lines.push({ label: 'Salary · ' + monthLabel(cur), change: { type: 'salary', month: cur, amount: a.amt } });
+          else lines.push({ label: 'Base salary', change: { type: 'salary_base', amount: a.amt } });
+          return;
+        }
+      }
+
+      // 2. budget with an explicit cue — "budget for food is 8k"
+      var budM = cl.match(/\bbudget(?:ing)?(?:\s+for)?\b/);
+      if (budM) {
+        var aiB = amtIn(r, budM.index, consumed);
+        if (aiB != null) {
+          consumed.push(aiB);
+          var aB = allAmt[aiB];
+          var nmB = fuzzyNameIn(names.budgets, cl);
+          if (!nmB) {
+            var fB = cl.slice(budM.index).match(/\bfor\s+([a-z'&\- ]{2,40}?)(?:\s+(?:is|was|in|this|on)\b|[,;]|\s(?=[\d,])|$)/);
+            if (fB && fB[1].trim().length >= 3 && !isMonthWord(fB[1].trim())) nmB = fB[1].trim();
+          }
+          if (nmB) {
+            var moB = monthHere || (/\bthis month\b/.test(cl) ? cur : null);
+            lines.push(moB
+              ? { label: 'Budget · ' + nmB + ' · ' + monthLabel(moB), change: { type: 'budget_override', month: moB, name: nmB, amount: aB.amt } }
+              : { label: 'Budget · ' + nmB, change: { type: 'budget', name: nmB, amount: aB.amt } });
+            return;
+          }
+        }
+      }
+
+      // 3. one-off — "one-off: december power bill 1500"
+      var ooM = cl.match(/\bone[- ]?offs?\b/);
+      if (ooM) {
+        var aiO = amtIn(r, ooM.index, consumed);
+        if (aiO != null) {
+          consumed.push(aiO);
+          var aO = allAmt[aiO];
+          var nmO = fuzzyNameIn(names.oneoffs, cl);
+          if (!nmO) {
+            var fO = cl.slice(ooM.index + ooM[0].length).match(/^\s*(?:for|called|named)?\s*[:\-]?\s*([a-z'&\- ]{2,40}?)(?:\s+(?:in|for|on)\s+[a-z]{3,}\b|[,;]|\s(?=[\d,])|\s*$)/);
+            if (fO && fO[1].trim().length >= 3 && !isMonthWord(fO[1].trim())) nmO = fO[1].trim();
+          }
+          if (nmO) {
+            var moO = monthHere || storyMonth(t) || cur;
+            lines.push({ label: 'One-off · ' + nmO + ' · ' + monthLabel(moO), change: { type: 'one_off', month: moO, name: nmO, amount: aO.amt } });
+            return;
+          }
+        }
+      }
+      // 4. recurring — "gym is 2000 every month"
+      var recM = cl.match(/\b(?:every|each)\s+month\b|\bmonthly\b/);
+      if (recM) {
+        var aiR = amtIn(r, null, consumed);
+        if (aiR != null) {
+          consumed.push(aiR);
+          var aR = allAmt[aiR];
+          var nmR = fuzzyNameIn(names.debts.concat(names.budgets), cl);
+          if (!nmR) {
+            var fR = cl.match(/\b(?:pay|paying|pays|for|to)\s+([a-z'&\- ]{2,40}?)(?:\s+(?:every|each|monthly|in|is|for|on)\b|[,;]|\s(?=[\d,])|$)/);
+            if (fR && fR[1].trim().length >= 3 && !isMonthWord(fR[1].trim())) nmR = fR[1].trim();
+          }
+          if (nmR) {
+            var monthsR = [];
+            for (var kR = 0; kR < 6; kR++) monthsR.push(addMonthsKey(kR));
+            lines.push({ label: 'Recurring · ' + nmR + ' · 6 months', change: { type: 'recurring', name: nmR, amount: aR.amt, months: monthsR } });
+            return;
+          }
+        }
+      }
+
+      // 5. debt payment for a known debt — "ave payment in october is 2200" (needs a month)
+      if (/\b(?:pay|pays|paying|payment|payments|due)\b/.test(cl)) {
+        var nmD = fuzzyNameIn(names.debts, cl);
+        if (nmD) {
+          var aiD = amtIn(r, null, consumed);
+          if (aiD != null) {
+            consumed.push(aiD);
+            var aD = allAmt[aiD];
+            var moD = monthHere || storyMonth(t);
+            if (moD) {
+              lines.push({ label: 'Debt payment · ' + nmD + ' · ' + monthLabel(moD), change: { type: 'debt_payment', name: nmD, month: moD, amount: aD.amt } });
+              return;
+            }
+          }
+        }
+      }
+
+      // 6. casual budget update for a known budget — "water went up to 1800"
+      if (!isQuestion(cl)) {
+        var nmC = fuzzyNameIn(names.budgets, cl);
+        if (nmC) {
+          var aiC = amtIn(r, null, consumed);
+          if (aiC != null) {
+            consumed.push(aiC);
+            var aC = allAmt[aiC];
+            var moC = monthHere || (/\bthis month\b/.test(cl) ? cur : null);
+            lines.push(moC
+              ? { label: 'Budget · ' + nmC + ' · ' + monthLabel(moC), change: { type: 'budget_override', month: moC, name: nmC, amount: aC.amt } }
+              : { label: 'Budget · ' + nmC, change: { type: 'budget', name: nmC, amount: aC.amt } });
+            return;
+          }
+        }
+      }
+
+      // 7. account balance update — "gcash balance is 50k"
+      var nmA = null;
+      for (var iA = 0; iA < names.accounts.length; iA++) {
+        if (nameScore(names.accounts[iA].name, clToks) >= 1) { nmA = names.accounts[iA]; break; }
+      }
+      if (nmA && /\b(?:balance|left|has|have|got|showing|available)\b/.test(cl)) {
+        var aiA = amtIn(r, null, consumed);
+        if (aiA != null) {
+          consumed.push(aiA);
+          var aA = allAmt[aiA];
+          lines.push({ label: 'Account · ' + nmA.name, change: { type: 'account', name: nmA.name, kind: nmA.kind, value: aA.amt } });
+        }
+      }
+    });
+
+    return lines;
+  }
+
+  function intentStory(t, ctx, p) {
+    var changes = extractStory(t, ctx);
+    if (!changes.length) return null;
+    var rows = changes.map(function (l, i) {
+      var v = l.change.amount != null ? l.change.amount : l.change.value;
+      return '<div class="ins-line"><b>' + (i + 1) + '.</b> ' + esc(l.label) + ' — ' + esc(money(v)) + '</div>';
+    }).join('');
+    var actions = changes.map(function (l, i) {
+      return { label: '✕ ' + l.label, act: 'story_drop_line', payload: { i: i } };
+    });
+    actions.push({ label: 'Confirm ' + changes.length + ' change' + (changes.length > 1 ? 's' : ''), act: 'confirm_story', payload: { lines: changes } });
+    actions.push({ label: 'Discard', act: 'discard_story' });
+    var h = block('Draft: base-data changes',
+      rows + line('<span class="note">nothing is written yet — tap ✕ to drop a line, or confirm to apply</span>'),
+      'Applies to Your numbers through the Settings save path — one-tap undo after.', 'warn');
+    return { html: h + freshness(ctx), actions: actions, storyLines: changes, storyRaw: t };
+  }
+
   // ---------- dispatch ----------
   function handle(raw, ctx) {
     var t = norm(raw);
@@ -705,7 +1060,7 @@
       cashAcct: fa.exact && fa.exact.kind === 'cash' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'cash'; })[0] || null)
     };
     var order = [intentHelp, intentGreet, intentPlanRemove, intentPlanAdd, intentPlanList,
-      intentUrgent, intentLog, intentDeficit, intentSpend,
+      intentUrgent, intentLog, intentDeficit, intentSpend, intentStory,
       intentDebt, intentOneOff, intentSinking, intentFuture, intentStatus];
     for (var i = 0; i < order.length; i++) {
       var r = order[i](t, ctx, p);
@@ -814,6 +1169,72 @@
       });
       return;
     }
+    if (a.act === 'story_drop_line') {
+      var sl = m.storyLines;
+      var si = Number(a.payload.i);
+      if (!sl || !sl.length || !sl[si]) { markDone(m); return; }
+      sl.splice(si, 1);
+      m.storyLines = sl;
+      saveMsg(m);
+      var el = msgsEl ? msgsEl.querySelector('[data-cid="' + m.id + '"]') : null;
+      if (!sl.length) {
+        if (el) { var ar0 = el.querySelector('.a-row'); if (ar0) ar0.innerHTML = '<span class="c-done">✓ discarded</span>'; }
+        pushBot('Nothing left in the draft — discarded, nothing was changed.');
+      } else {
+        var na = [];
+        sl.forEach(function (l2, i2) { na.push({ label: '✕ ' + l2.label, act: 'story_drop_line', payload: { i: i2 } }); });
+        na.push({ label: 'Confirm ' + sl.length + ' change' + (sl.length > 1 ? 's' : ''), act: 'confirm_story', payload: { lines: sl } });
+        na.push({ label: 'Discard', act: 'discard_story' });
+        m.actions = na;
+        saveMsg(m);
+        if (el) { var ar2 = el.querySelector('.a-row'); if (ar2) { ar2.innerHTML = actionsHtml(m); bindActions(el, m); } }
+      }
+      return;
+    }
+    if (a.act === 'confirm_story') {
+      var cl2 = (a.payload && a.payload.lines) || m.storyLines || [];
+      if (typeof F.applyBaseChanges !== 'function') {
+        markDone(m);
+        pushBot('This phone needs the latest app version to apply a story — pull to refresh.');
+        return;
+      }
+      if (!cl2.length) { markDone(m); return; }
+      var nCh = cl2.length;
+      F.applyBaseChanges(cl2.map(function (l3) { return l3.change; })).then(function () {
+        m.storyLines = [];
+        markDone(m);
+        var um = {
+          id: chatId(), who: 'bot',
+          html: '<div class="c-block"><div class="c-t">Story applied</div>' +
+            '<div class="ins-line">' + nCh + ' change' + (nCh > 1 ? 's' : '') + ' written to Your numbers — tiles, projection and the coach all recomputed on this phone.</div></div>',
+          actions: [{ label: 'Undo this story', act: 'undo_story' }],
+          at: new Date().toISOString()
+        };
+        saveMsg(um).then(function () { appendMsg(um); });
+      }).catch(function (err) {
+        pushBot('Could not apply that: ' + esc(String((err && err.message) || err)));
+      });
+      return;
+    }
+    if (a.act === 'discard_story') {
+      m.storyLines = [];
+      markDone(m);
+      pushBot('Discarded — nothing was changed.');
+      return;
+    }
+    if (a.act === 'undo_story') {
+      if (typeof F.undoBaseStory !== 'function') {
+        pushBot('This phone needs the latest app version to undo — pull to refresh.');
+        return;
+      }
+      F.undoBaseStory().then(function (nb) {
+        markDone(m);
+        pushBot(nb ? 'Undone — your numbers are back to exactly how they were before the story.' : 'Nothing to undo — those changes were already reverted.');
+      }).catch(function (err) {
+        pushBot('Undo failed: ' + esc(String((err && err.message) || err)));
+      });
+      return;
+    }
   }
   function send(text) {
     var v = String(text || '').trim();
@@ -828,6 +1249,8 @@
     loadCtx().then(function (ctx) {
       var res = handle(v, ctx);
       var bm = { id: chatId(), who: 'bot', html: res.html, actions: res.actions || [], at: new Date().toISOString() };
+      if (res.storyLines) bm.storyLines = res.storyLines; // v35: the draft lives on the message (persisted in the chat store)
+      if (res.storyRaw) bm.storyRaw = res.storyRaw;
       return saveMsg(bm).then(function () {
         if (typing.parentNode) typing.parentNode.removeChild(typing);
         appendMsg(bm);
@@ -848,7 +1271,7 @@
     var n = coachName();
     return '<div class="c-block"><div class="c-t">' + (n ? 'Hey ' + esc(n) : 'Hey') + '</div>' +
       '<div class="ins-line">I’m your money coach — ask me anything about your plan, or tell me when something unexpected comes up. Everything is stored on this phone.</div>' +
-      '<div class="ins-line">Try: <b>“how much is free?”</b> · <b>“plan: shoes 1,500 on the 20th”</b> · <b>“urgent: car repair 8,000 this week”</b></div></div>';
+      '<div class="ins-line">Try: <b>“how much is free?”</b> · <b>“plan: shoes 1,500 on the 20th”</b> · <b>“urgent: car repair 8,000 this week”</b> · <b>“my salary in october is 25k, water went up to 1,800”</b></div></div>';
   }
   function openChat() {
     loadChat().then(function (rows) {
@@ -905,8 +1328,12 @@
     handle: handle,
     findDateSpan: findDateSpan,
     findAmount: findAmount,
+    findAmounts: findAmounts,
     norm: norm,
     URGENT_RX: URGENT_RX,
+    extractStory: extractStory,
+    storyMonth: storyMonth,
+    fuzzyNameIn: fuzzyNameIn,
     open: openChat,
     close: closeChat
   };

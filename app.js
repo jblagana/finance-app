@@ -614,6 +614,85 @@
     ]);
   }
 
+  // ---------- v35: story mode — the coach chat writes base changes through this path ----------
+  // Chat never touches state.base directly: it hands over validated change objects, we clone
+  // the current base, apply them one by one, and save through the same saveBase() path the
+  // Settings editor uses (same recompute, same stores, same live overlay rebase). The
+  // previous base is kept in meta under its own key so "undo this story" is one tap.
+  var STORY_UNDO_KEY = 'baseStoryUndo';
+  function cloneObj(o) { return JSON.parse(JSON.stringify(o)); }
+  function applyBaseChange(b, ch) {
+    var month = String(ch.month || ''), name = String(ch.name || '').trim();
+    function needMonth() { if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('bad month: ' + month); }
+    if (ch.type === 'salary') {
+      needMonth();
+      b.salary_overrides[month] = Number(ch.amount) || 0;
+    } else if (ch.type === 'salary_base') {
+      b.salary = Number(ch.amount) || 0;
+    } else if (ch.type === 'one_off') {
+      needMonth(); if (!name) throw new Error('one-off needs a name');
+      b.one_offs[month] = b.one_offs[month] || {};
+      b.one_offs[month][name] = Number(ch.amount) || 0;
+    } else if (ch.type === 'budget') {
+      if (!name) throw new Error('budget needs a name');
+      b.budgets[name] = Number(ch.amount) || 0;
+    } else if (ch.type === 'budget_override') {
+      needMonth(); if (!name) throw new Error('budget override needs a name');
+      b.budget_overrides[month] = b.budget_overrides[month] || {};
+      b.budget_overrides[month][name] = Number(ch.amount) || 0;
+    } else if (ch.type === 'recurring') {
+      if (!name) throw new Error('recurring payment needs a name');
+      var months = (ch.months || []).filter(function (x) { return /^\d{4}-\d{2}$/.test(x); });
+      if (!months.length) throw new Error('recurring payment needs months');
+      var amt = Number(ch.amount) || 0;
+      b.debts[name] = { monthly: 0, active_months: [], payments: {} };
+      months.forEach(function (x) { b.debts[name].payments[x] = amt; });
+    } else if (ch.type === 'debt_payment') {
+      needMonth(); if (!name) throw new Error('debt payment needs a name');
+      if (!b.debts[name]) b.debts[name] = { monthly: 0, active_months: [], payments: {} };
+      b.debts[name].payments[month] = Number(ch.amount) || 0;
+    } else if (ch.type === 'account') {
+      if (!name) throw new Error('account needs a name');
+      var kind = ['cash', 'card', 'debt', 'loan'].indexOf(ch.kind) >= 0 ? ch.kind : 'cash';
+      var hit = null;
+      (b.accounts || []).forEach(function (a) { if (a.name === name && a.kind === kind) hit = a; });
+      if (hit) {
+        hit.value = Number(ch.value) || 0;
+        if (kind === 'card' && ch.limit != null) hit.limit = Number(ch.limit) || 0;
+      } else {
+        b.accounts.push({ name: name, kind: kind, value: Number(ch.value) || 0, limit: kind === 'card' ? (Number(ch.limit) || 0) : 0, note: '' });
+      }
+    } else {
+      throw new Error('unknown story change: ' + ch.type);
+    }
+  }
+  function applyBaseChanges(changes) {
+    if (!changes || !changes.length) return Promise.reject(new Error('nothing to apply'));
+    var nb = cloneObj(state.base || defaultBase());
+    changes.forEach(function (ch) { applyBaseChange(nb, ch); });
+    var prev = cloneObj(state.base || defaultBase());
+    return saveBase(nb).then(function () {
+      idbPut(STORE_META, { key: STORY_UNDO_KEY, value: { base: prev, at: Date.now() } }).catch(function () {});
+      emit('snap');
+      renderFooter();
+      return nb;
+    });
+  }
+  function undoBaseStory() {
+    return idbAll(STORE_META).then(function (rows) {
+      var prev = null;
+      (rows || []).forEach(function (m) { if (m.key === STORY_UNDO_KEY) prev = m.value; });
+      if (!prev || !prev.base) return null;
+      var nb = cloneObj(prev.base);
+      return saveBase(nb).then(function () {
+        idbDel(STORE_META, STORY_UNDO_KEY).catch(function () {});
+        emit('snap');
+        renderFooter();
+        return nb;
+      });
+    });
+  }
+
   // ---------- actions ----------
   function addTxn(data) {
     var id = 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -2306,6 +2385,8 @@
     deletePlan: deletePlan,
     addTxn: addTxn,
     deleteTxn: deleteTxn,
+    applyBaseChanges: applyBaseChanges,
+    undoBaseStory: undoBaseStory,
     snack: snack,
     render: render,
     setTab: setTab,
