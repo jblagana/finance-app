@@ -2143,7 +2143,8 @@
     try { localStorage.setItem(LS_TAB, name); } catch (e) {}
     window.scrollTo(0, 0);
   }
-  // v23: Coach is the floating bot - a full-screen overlay opened by the FAB
+  // v23: Coach is the floating bot; v24: floating bubble above the FAB;
+  // v25: clicking the bot toggles the bubble (open, or close if already open)
   function openCoach() {
     var ov = byId('coachOv');
     if (!ov) return;
@@ -2309,7 +2310,10 @@
     var ab = byId('addBtn');
     if (ab) ab.onclick = function () { openSheet('addSheet'); };
     var cfab = byId('coachFab');
-    if (cfab) cfab.onclick = openCoach;
+    if (cfab) cfab.onclick = function () {
+      var ov = byId('coachOv');
+      if (ov && ov.classList.contains('show')) closeCoach(); else openCoach();
+    };
     var sbtn2 = byId('setBtn');
     if (sbtn2) sbtn2.onclick = function () { openSheet('setSheet'); };
     var ac = byId('addClose');
