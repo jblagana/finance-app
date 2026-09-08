@@ -4,7 +4,7 @@
  * the chat UI honest:
  *  - lazy: the worker starts on first need (a question or the download card),
  *    never on app open
- *  - consent: the ~400 MB first download only starts from the chat offer card
+ *  - consent: the ~250 MB first download only starts from the chat offer card
  *    or the Settings toggle — both say the size out loud
  *  - FinAI.prepare(text) embeds the message the coach is about to parse, so
  *    chat.js can read the vector synchronously while its rules run
@@ -245,7 +245,7 @@
     } else if (s.state === 'error') {
       note.textContent = 'Couldn’t load (' + (s.err || 'unknown error') + '). Flip this off and on to retry.';
     } else {
-      note.textContent = 'On — downloads about 400 MB the first time you use it, then works without signal.';
+      note.textContent = 'On — downloads about 250 MB the first time you use it, then works without signal.';
     }
   }
   function bindSettings() {

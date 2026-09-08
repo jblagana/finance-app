@@ -22,7 +22,7 @@ The GitHub repo only ever holds this app code, **no balances or transactions**.
   add/list/remove plans, charge checks, and urgent-expense advice. Rule-based
   and fully local (no made-up numbers); see `chat.js`.
   - **Offline brain (opt-in, v39)** — open questions the rules can't answer can
-    be coached by a small local LLM (SmolLM2, ~400 MB one-time download,
+    be coached by a small local LLM (SmolLM2, ~250 MB one-time download,
     Settings → "Offline brain"), and sentence embeddings (all-MiniLM-L6-v2)
     give name matching a semantic second chance ("the gym one" → your *Gym
     membership* budget). Rules always win, and the models only *read* your
@@ -184,7 +184,7 @@ month picker).
   advice above.
 - **Offline brain models** (only when enabled) are cached by the
   transformers.js runtime in its own IndexedDB caches, and the service worker
-  preserves them on every app update — the ~400 MB download happens once, and
+  preserves them on every app update — the ~250 MB download happens once, and
   afterwards everything works with no connection.
 
 ## Notes
@@ -196,7 +196,7 @@ month picker).
   notes; **Import JSON** restores them (replaces what's on the phone).
 
 ## After redeploying
-- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v40),
+- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v41),
   so the phone picks up the new app shell on its next load — the "New version
   ready" toast offers a one-tap reload. If the app ever looks stale: open the
   Pages URL once in Safari, then relaunch the home-screen icon.

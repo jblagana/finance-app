@@ -1,11 +1,12 @@
-/* FinSmart v40 — offline brain, dedicated worker.
+/* FinSmart v41 — offline brain, dedicated worker.
  *
  * Every model computation happens here so the UI thread never does math:
  *   - all-MiniLM-L6-v2 (q8, ~23 MB)  -> sentence embeddings, which chat.js
  *     uses to match stored names when the word-overlap rules find nothing
- *   - SmolLM2-360M-Instruct (q4, ~370 MB) -> answers open-ended questions in
- *     the coach chat, streamed token by token; falls back to
- *     SmolLM2-135M-Instruct (~182 MB) if the bigger one won't load
+ *   - SmolLM2-135M-Instruct (q4, ~182 MB) -> answers open-ended questions in
+ *     the coach chat, streamed token by token (the smaller model is the
+ *     default: far faster on phones); falls back to
+ *     SmolLM2-360M-Instruct (~370 MB) if the 135M won't load
  *
  * Where the bytes come from:
  *   - the runtime (transformers.js + onnxruntime) is pinned to jsDelivr URLs
@@ -46,10 +47,10 @@ var TF_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/
 var ORT_WASM_PATHS = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0-dev.20250409-89f8206ba4/dist/';
 var EMBED_MODEL = 'Xenova/all-MiniLM-L6-v2';
 var LLM_MODELS = [
-  { id: 'HuggingFaceTB/SmolLM2-360M-Instruct', tag: 'SmolLM2-360M' },
-  { id: 'HuggingFaceTB/SmolLM2-135M-Instruct', tag: 'SmolLM2-135M' }
+  { id: 'HuggingFaceTB/SmolLM2-135M-Instruct', tag: 'SmolLM2-135M' }, // default: fast on phones
+  { id: 'HuggingFaceTB/SmolLM2-360M-Instruct', tag: 'SmolLM2-360M' }  // fallback
 ];
-var LOAD_TIMEOUT = 600000; // 10 min: the one-time ~400 MB download on slow networks
+var LOAD_TIMEOUT = 600000; // 10 min: the one-time ~250 MB download on slow networks
 var EMBED_TIMEOUT = 5000;  // a warm embed takes ~10-50 ms; anything more is broken
 var GEN_TIMEOUT = 60000;   // 128 tokens must stream in under a minute
 
@@ -144,7 +145,7 @@ function load() {
     })
     .then(function () {
       if (!fe) return null;
-      // 2) the coach LLM — try the 360M first, then the 135M
+      // 2) the coach LLM — try the 135M first (the fast default), then the 360M
       var i = 0;
       function tryNext() {
         if (gen || i >= LLM_MODELS.length) return Promise.resolve();

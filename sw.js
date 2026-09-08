@@ -1,5 +1,5 @@
 /* Finance PWA service worker: cache-first app shell, network-only API, and
- * cache-through for the offline-brain runtime (v40).
+ * cache-through for the offline-brain runtime (v41).
  *
  * The offline brain loads transformers.js + onnxruntime from the jsDelivr CDN
  * (pinned versions) and the model weights from the Hugging Face hub:
@@ -7,10 +7,10 @@
  *    offline after the first load;
  *  - the model weights are cached by transformers.js itself in Cache Storage
  *    (the "transformers-cache" caches). That cache must NOT be deleted on
- *    activate, or the phone would re-download ~400 MB on every app update.
+ *    activate, or the phone would re-download ~250 MB on every app update.
  *  - everything else (the Hugging Face hub, …) stays network-only.
  */
-const CACHE = 'finances-pwa-v40';
+const CACHE = 'finances-pwa-v41';
 const SHELL = ['./', './index.html', './app.js', './chat.js', './ai.js', './model-worker.js',
   './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 const RUNTIME_CDN = 'https://cdn.jsdelivr.net';

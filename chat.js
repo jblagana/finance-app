@@ -28,7 +28,7 @@
  * embeddings (all-MiniLM-L6-v2) back the semantic name matching only when the
  * word-overlap rules find nothing (embNameIn, a second chance, never an
  * override), and SmolLM2-Instruct answers the open-ended questions the rules
- * don't own — streamed, text only, no actions, no writes. The ~400 MB first
+ * don't own — streamed, text only, no actions, no writes. The ~250 MB first
  * download starts only from the chat offer card or the Settings toggle; after
  * that everything, model math included, works without signal.
  */
@@ -1318,10 +1318,10 @@
       aiOffer: true,
       html: block('Offline brain',
         line('For open questions like that I can call on a small local coach — a model that lives on this phone and works without signal.') +
-        line('One-time download of <b>~400 MB</b> (about 23 MB is the name-matching brain, the rest is the coach). After that it stays on this phone.'),
+        line('One-time download of <b>~250 MB</b> (about 23 MB is the name-matching brain, the rest is the 135M coach). After that it stays on this phone.'),
         'Your numbers never leave this phone, and the model can’t write anything — the rules and your confirm buttons stay the only writers.', 'good'),
       actions: [
-        { label: 'Download (~400 MB)', act: 'ai_download' },
+        { label: 'Download (~250 MB)', act: 'ai_download' },
         { label: 'Not now', act: 'ai_dismiss' }
       ]
     };
@@ -1377,9 +1377,9 @@
     var p = st.progress || null;
     var body;
     if (p && p.stage === 'llm-fallback') {
-      body = 'The 360M coach didn’t fit — trying the smaller 135M…';
+      body = 'The 135M coach didn’t fit — trying the 360M instead…';
     } else if (p && p.pct != null) {
-      var what = p.stage === 'llm' ? 'the coach model (the big one)' : 'the name-matching brain';
+      var what = p.stage === 'llm' ? 'the coach model' : 'the name-matching brain';
       body = 'Downloading ' + what + ' — <b>' + p.pct + '%</b>' +
         (p.totalMB ? ' · ' + (p.loadedMB || 0).toFixed(0) + '/' + Math.round(p.totalMB) + ' MB' : '');
     } else {
