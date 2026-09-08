@@ -119,6 +119,11 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 #chatHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);flex:0 0 auto}
 #chatTitle{font-size:17px;font-weight:700}
 #chatFresh{font-size:11px;color:var(--mut);margin-top:2px}
+.ai-chip{font-size:10px;font-weight:700;letter-spacing:.3px;padding:2px 7px;border-radius:8px;
+ border:1px solid var(--line);color:var(--mut);text-transform:uppercase;white-space:nowrap}
+.ai-chip.on{color:var(--ok);border-color:rgba(55,211,155,.4)}
+.ai-chip.loading{color:var(--warn);border-color:rgba(255,196,92,.4)}
+.ai-chip.off{color:var(--bad);border-color:rgba(255,107,107,.4)}
 #chatClose{background:var(--card2);border:1px solid var(--line);color:var(--mut);width:36px;height:36px;border-radius:10px;
  font-size:15px;cursor:pointer;flex:0 0 auto}
 #chatClose:active{border-color:var(--bad);color:var(--bad)}
@@ -505,6 +510,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         <div id="chatFresh"></div>
       </div>
     </div>
+    <span id="chatAI" class="ai-chip" style="display:none"></span>
     <button id="chatClose" type="button" aria-label="Close chat">✕</button>
 
   </div>
@@ -566,6 +572,15 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
       <p id="baseMigrated" class="note" style="display:none;margin-top:10px"></p>
     </section>
     <section class="card" style="margin-top:16px">
+      <h2 style="margin-top:0">Offline brain</h2>
+      <p class="note" style="margin-top:2px">A small AI that lives on this phone: it reads your stored names better and answers open questions in its own words. Turning it on downloads about <b>400 MB</b> once (23 MB name brain + 370 MB coach), then everything works without signal. The model never writes anything — the rule engine and your confirm buttons stay the only writers — and your numbers never leave this phone.</p>
+      <label style="display:flex;align-items:center;gap:10px;margin:12px 0 4px;cursor:pointer">
+        <input type="checkbox" id="aiToggle" style="width:auto">
+        <span style="font-size:14px;font-weight:600">Use local AI</span>
+      </label>
+      <p id="aiNote" class="note" style="margin:0"></p>
+    </section>
+    <section class="card" style="margin-top:16px">
       <h2 style="margin-top:0">Backup</h2>
       <p class="note" style="margin:4px 0 10px">Download everything this phone holds — your numbers, every entry, your plans and your owed notes. JSON holds it all; CSV holds the ledger only. Import restores a backup.</p>
       <div class="row">
@@ -577,7 +592,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">FinSmart · fully local · shell v37</p>
+    <p class="note" style="margin:14px 0 0">FinSmart · fully local · shell v39</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>
@@ -606,6 +621,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
 </nav>
 <script src="./app.js"></script>
 <script src="./chat.js"></script>
+<script src="./ai.js"></script>
 </body>
 </html>
 

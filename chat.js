@@ -15,6 +15,22 @@
  * can edit line by line, and only on confirm is it applied through
  * FinApp.applyBaseChanges — with a one-tap undo (FinApp.undoBaseStory) that the
  * app keeps in its own meta store. Chat never mutates the app's base directly.
+ *
+ * v38 ask loop: a "One number short" card remembers its question (pendingAsk).
+ * If the very next message is a bare number ("24k"), a named amount
+ * ("gcash is 4k"), or a bare month ("october"), it is re-parsed as
+ * question + answer through the same story flow and completes the draft;
+ * anything else closes the question and routes normally. Nothing is ever
+ * written without a confirmed draft.
+ *
+ * v39 offline brain: an optional local model runs in model-worker.js (a
+ * dedicated worker — the UI thread never does model math). Its sentence
+ * embeddings (all-MiniLM-L6-v2) back the semantic name matching only when the
+ * word-overlap rules find nothing (embNameIn, a second chance, never an
+ * override), and SmolLM2-Instruct answers the open-ended questions the rules
+ * don't own — streamed, text only, no actions, no writes. The ~400 MB first
+ * download starts only from the chat offer card or the Settings toggle; after
+ * that everything, model math included, works without signal.
  */
 (function () {
   'use strict';
@@ -22,6 +38,30 @@
   if (typeof window === 'undefined' || !window.FinApp) return;
 
   var F = window.FinApp;
+
+  // v38: the last "One number short" card remembers its question so the very
+  // next bare answer can complete it. kind: 'amt' (a number) or 'month'.
+  // Cleared on a non-answer, on any action, and on page reload.
+  var pendingAsk = null; // { t: <normalized question text>, kind: 'amt' | 'month' }
+  // v39: embedding of the message currently being handled. send() embeds the
+  // message before handle() and passes the vector in here, so the semantic
+  // layer can read it synchronously; it is null for the test/dev path (and
+  // without the brain), which keeps the rule engine byte-identical.
+  var currentAiVec = null;
+  var aiCardMsg = null; // the live "downloading the offline brain" card, if open
+  var RX_ANS_AMT = /^(?:it'?s|its|is|about|around|roughly|like|maybe|just|now|total|new)?\s*(?:php|\u20b1|pesos?)?\s*\d[\d,]*(?:\.\d{1,2})?\s*(?:k\b|thousand)?\s*(?:php|\u20b1|pesos?)?[?.!]*$/;
+  var RX_ANS_NAMED = /^[a-z][a-z'&\- ]{0,39}?\s+(?:is|was|at|of|to|equals|running|sits)(?:\s+(?:at|around|about|roughly))?\s+(?:php|\u20b1|pesos?)?\s*\d[\d,]*(?:\.\d{1,2})?\s*(?:k\b|thousand)?\s*(?:php|\u20b1|pesos?)?[?.!]*$/;
+  var RX_ANS_MONTH = /^(?:in|for|of|say|its|it'?s|that'?s|the)?\s*(?:next month|last month|this month|january|february|march|april|may|june|july|august|september|october|november|december|sept|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\b\s*[?.!]*$/;
+  // v38: what the remembered question is about (stored name or 'salary'). A
+  // named answer like "gcash is 4k" only counts if the name fits this entity,
+  // so an off-topic sentence never fills a draft for something else.
+  function askEntity(a) {
+    var m = / for ([a-z0-9'&\-/ ]+?)\?$/i.exec(a || '');
+    if (m) return m[1].trim();
+    m = / the ([a-z0-9'&\-/ ]+?) payment for/i.exec(a || '');
+    if (m) return m[1].trim();
+    return (a || '').indexOf('salary') !== -1 ? 'salary' : null;
+  }
 
   // ---------- small helpers (self-contained; mirror app.js conventions) ----------
   function byId(id) { return document.getElementById(id); }
@@ -385,7 +425,8 @@
       line('• <b>Charge check</b> — “can I charge 2,500 on Maya?”') +
       line('• <b>Urgent expense</b> — tell me something unplanned and I’ll map the options') +
       line('• <b>Spending</b> — what you’ve logged in this app this week / month') +
-      line('• <b>Story mode</b> — tell me changes in plain words: “my salary in october is 25k, water went up to 1,800” — I draft them and you confirm before anything is written'),
+      line('• <b>Story mode</b> — tell me changes in plain words: “my salary in october is 25k, water went up to 1,800” — I draft them and you confirm before anything is written') +
+      line('• <b>Open questions</b> — with the offline brain on (Settings), I can reason about your numbers in my own words; it’s local and works without signal'),
       'Try: “urgent: car repair 8,000 this week”', 'good');
     return { html: h };
   }
@@ -855,6 +896,23 @@
     }
     return bestScore >= 1 ? best : null;
   }
+  // v39: offline-brain name boost. Only reached when the word-overlap rules
+  // found nothing: the stored name with the closest embedding wins, but only
+  // above a confident cosine threshold. Rules always win — this is a second
+  // chance, never an override. currentAiVec is null unless the brain is loaded
+  // and send() embedded this message first, so without it this is a no-op.
+  var SEM_EMB_MIN = 0.75;
+  function embNameIn(pool) {
+    if (!currentAiVec || typeof window === 'undefined' || !window.FinAI) return null;
+    var best = null, bestC = SEM_EMB_MIN;
+    for (var i = 0; i < pool.length; i++) {
+      var nv = window.FinAI.nameVec(pool[i]);
+      if (!nv) continue;
+      var c = window.FinAI.cosine(currentAiVec, nv);
+      if (c > bestC) { bestC = c; best = pool[i]; }
+    }
+    return best;
+  }
 
   // ---------- v37: semantic story layer (local scorer, no cloud) ----------
   // Hand-tuned affinity vocabulary: a "topic" (word bucket or known entity) plus
@@ -918,11 +976,21 @@
     var chg = semHas(cl, SEM.change);
     var weak = semHas(cl, SEM.weak);
 
-    var entBudget = fuzzyNameIn(names.budgets, cl);
-    var entDebt = fuzzyNameIn(names.debts, cl);
+    var entBudget = fuzzyNameIn(names.budgets, cl) || embNameIn(names.budgets);
+    var entDebt = fuzzyNameIn(names.debts, cl) || embNameIn(names.debts);
     var entAccount = null;
     for (var iA = 0; iA < names.accounts.length; iA++) {
       if (nameScore(names.accounts[iA].name, toks) >= 1) { entAccount = names.accounts[iA]; break; }
+    }
+    if (!entAccount) { // v39: embedding second chance for account names
+      var acctNames = [];
+      for (var iAn = 0; iAn < names.accounts.length; iAn++) acctNames.push(names.accounts[iAn].name);
+      var eaN = embNameIn(acctNames);
+      if (eaN) {
+        for (var iA2 = 0; iA2 < names.accounts.length; iA2++) {
+          if (names.accounts[iA2].name === eaN) { entAccount = names.accounts[iA2]; break; }
+        }
+      }
     }
 
     var ai = semAmtIn(r, rs, allAmt, t);
@@ -980,7 +1048,7 @@
     }
     // 5. recurring — recurring word + amount + name (known or extracted)
     if (recw) {
-      var nmR2 = fuzzyNameIn(names.debts.concat(names.budgets), cl);
+      var nmR2 = fuzzyNameIn(names.debts.concat(names.budgets), cl) || embNameIn(names.debts.concat(names.budgets));
       var known = !!nmR2;
       if (!nmR2) {
         var fR2 = cl.match(SEM_RE_RECURRING_NAME);
@@ -998,7 +1066,7 @@
     }
     // 6. one-off — oneoff word + amount + name (known or extracted)
     if (oow) {
-      var nmO2 = fuzzyNameIn(names.oneoffs, cl);
+      var nmO2 = fuzzyNameIn(names.oneoffs, cl) || embNameIn(names.oneoffs);
       if (!nmO2) {
         var fO2 = cl.match(SEM_RE_ONEOFF_NAME);
         if (fO2 && fO2[1].trim().length >= 3 && !isMonthWord(fO2[1].trim())) nmO2 = fO2[1].trim();
@@ -1205,6 +1273,10 @@
       var hq = block('One number short',
         qRows + line('<span class="note">tell me the number and I\'ll draft the change for you</span>'),
         'Nothing is written yet — just answer the question above.', 'good');
+      // v38: remember this question so the next bare answer can complete it.
+      pendingAsk = (asks.length === 1)
+        ? { t: t, kind: asks[0].indexOf('Which month') === 0 ? 'month' : 'amt', ent: askEntity(asks[0]) }
+        : null;
       return { html: hq + freshness(ctx), actions: [], storyLines: [], storyRaw: t, storyAsk: asks.join(' · ') };
     }
     var rows = changes.map(function (l, i) {
@@ -1221,6 +1293,158 @@
       rows + askNote + line('<span class="note">nothing is written yet — tap ✕ to drop a line, or confirm to apply</span>'),
       'Applies to Your numbers through the Settings save path — one-tap undo after.', 'warn');
     return { html: h + freshness(ctx), actions: actions, storyLines: changes, storyRaw: t, storyAsk: asks.join(' · ') };
+  }
+
+  // ---------- v39: offline brain (local LLM coach + embedding signals) ----------
+  // The rule engine above owns every command; only what slips past it reaches
+  // the coach. The coach is text-only: no actions, no writes, no pendingAsk.
+  function aiNamesFor(ctx) {
+    var sn = storyNames(ctx);
+    return sn.budgets.concat(sn.debts, sn.oneoffs, sn.sinks,
+      sn.accounts.map(function (a) { return a.name; }));
+  }
+  function aiCoach(t, ctx) {
+    var FAI = typeof window !== 'undefined' ? window.FinAI : null;
+    if (!FAI || !ctx.eff) return null;
+    var st = FAI.state();
+    if (st.llmReady) return { llm: true, prompt: aiPrompt(t, ctx) };
+    // loading / partial / error / already-offered: the plain fallback stands;
+    // the status chip shows what the brain is doing.
+    if (st.state !== 'idle' || FAI.offered()) return null;
+    // The card IS the consent — it states the size and what the model can and
+    // can't do, and it is shown at most once per phone.
+    FAI.markOffered();
+    return {
+      aiOffer: true,
+      html: block('Offline brain',
+        line('For open questions like that I can call on a small local coach — a model that lives on this phone and works without signal.') +
+        line('One-time download of <b>~400 MB</b> (about 23 MB is the name-matching brain, the rest is the coach). After that it stays on this phone.'),
+        'Your numbers never leave this phone, and the model can’t write anything — the rules and your confirm buttons stay the only writers.', 'good'),
+      actions: [
+        { label: 'Download (~400 MB)', act: 'ai_download' },
+        { label: 'Not now', act: 'ai_dismiss' }
+      ]
+    };
+  }
+  function aiContextText(t, ctx) {
+    var e = ctx.eff;
+    var L = [];
+    L.push('My numbers on this phone (as of ' + (ctx.at ? new Date(ctx.at).toLocaleDateString() : 'today') + '):');
+    L.push('- liquid cash ' + money(e.cash.total) + ', free ' + money(e.cash.free) + ', floor ' + money(e.floor || 0));
+    L.push('- cards owed ' + money(e.card_owed || 0) + ', prepay on the ' + ordinal(e.prepay_day || 14) + ': ' + money(e.total_prepay || 0));
+    var debts = (e.obligations && e.obligations.debts) || [];
+    for (var i = 0; i < Math.min(6, debts.length); i++) {
+      var d = debts[i];
+      L.push('- ' + d.name + ': this month ' + money(d.this_month || 0) + (d.balance != null ? ', left ' + money(d.balance) : ''));
+    }
+    var oo = (e.obligations && e.obligations.one_offs) || [];
+    for (var j = 0; j < Math.min(3, oo.length); j++) L.push('- one-off ' + oo[j].name + ' in ' + (oo[j].month || '') + ': ' + money(oo[j].amount || 0));
+    var sk = e.sinking || [];
+    for (var k = 0; k < Math.min(3, sk.length); k++) L.push('- goal ' + sk[k].name + ': ' + money(sk[k].funded || 0) + ' of ' + money(sk[k].goal || 0));
+    var spend = {}, total = 0;
+    for (var x = 0; x < (ctx.txns || []).length; x++) {
+      var tn = ctx.txns[x];
+      if (e.month && String(tn.date || '').slice(0, 7) !== e.month) continue;
+      var c = tn.category || 'Other';
+      spend[c] = (spend[c] || 0) + (Number(tn.amount) || 0);
+      total += Number(tn.amount) || 0;
+    }
+    var top = [];
+    Object.keys(spend).forEach(function (c2) { top.push([c2, spend[c2]]); });
+    top.sort(function (a, b) { return b[1] - a[1]; });
+    if (top.length) L.push('- logged this month ' + money(total) + ': ' + top.slice(0, 4).map(function (z) { return z[0] + ' ' + money(z[1]); }).join(', '));
+    L.push('');
+    L.push('Question: ' + t);
+    return L.join('\n');
+  }
+  function aiPrompt(t, ctx) {
+    return [
+      { role: 'system', content: 'You are FinSmart, a personal money coach running fully offline on the user\'s phone. Answer only from the numbers provided, in 2-4 short plain sentences, no lists, no markdown, no emojis. Never invent numbers. If the question is outside the provided numbers, say so in one sentence. You can never write, log or change anything - you only explain and advise.' },
+      { role: 'user', content: aiContextText(t, ctx) }
+    ];
+  }
+  function aiAnswerHtml(txt, ctx, err) {
+    var inner = txt
+      ? esc(txt).replace(/\n/g, '<br>')
+      : 'The local coach ' + (err ? 'couldn’t answer that (' + esc(err) + ').' : 'had nothing to add.') +
+        ' I still know your numbers — try <b>status</b>, <b>plans</b> or <b>help</b>.';
+    return '<div class="c-block"><div class="c-t">Coach · local</div>' +
+      '<div class="ins-line">' + inner + '</div>' +
+      '<div class="note">offline model · your numbers never left this phone</div></div>' + freshness(ctx);
+  }
+
+  function aiProgressHtml(st) {
+    var p = st.progress || null;
+    var body;
+    if (p && p.stage === 'llm-fallback') {
+      body = 'The 360M coach didn’t fit — trying the smaller 135M…';
+    } else if (p && p.pct != null) {
+      var what = p.stage === 'llm' ? 'the coach model (the big one)' : 'the name-matching brain';
+      body = 'Downloading ' + what + ' — <b>' + p.pct + '%</b>' +
+        (p.totalMB ? ' · ' + (p.loadedMB || 0).toFixed(0) + '/' + Math.round(p.totalMB) + ' MB' : '');
+    } else {
+      body = 'Starting the offline brain…';
+    }
+    return '<div class="c-block"><div class="c-t">Offline brain</div>' +
+      '<div class="ins-line">' + body + '</div>' +
+      '<div class="note">one-time download · works without signal once done · nothing leaves this phone</div></div>';
+  }
+  function aiCardRefresh() {
+    if (!aiCardMsg) return;
+    var el = msgsEl && msgsEl.querySelector('[data-cid="' + aiCardMsg.id + '"]');
+    if (el) el.innerHTML = aiCardMsg.html;
+  }
+  function aiProgressDone(st) {
+    if (!aiCardMsg) return;
+    var m = aiCardMsg;
+    aiCardMsg = null;
+    var txt, cls = 'warn';
+    if (st.state === 'ready') {
+      cls = 'good';
+      txt = 'Offline brain ready — ' + (st.device === 'webgpu' ? 'WebGPU' : 'WASM') + (st.llm ? ' · ' + st.llm.split('/')[1] : '') +
+        '. I now read your names better and answer open questions in my own words. Ask me anything.';
+    } else if (st.state === 'partial') {
+      txt = 'The name-matching brain is ready, but the coach model didn’t fit on this phone — I’ll keep answering from the rules.';
+    } else {
+      txt = 'The download didn’t finish (' + (st.err || 'unknown error') + '). The rules keep working; try again later from Settings → Offline brain.';
+    }
+    m.html = block('Offline brain', line(txt), null, cls);
+    m.actions = [];
+    saveMsg(m).then(function () { aiCardRefresh(); if (msgsEl) scrollBottom(); });
+  }
+  function updateAiStatus(st) {
+    var FAI = window.FinAI;
+    var el = byId('chatAI');
+    if (el) {
+      if (!FAI || !FAI.enabled()) { el.style.display = 'none'; el.textContent = ''; }
+      else if (st.state === 'loading') {
+        el.style.display = 'inline-block';
+        el.textContent = 'AI ' + (st.progress && st.progress.pct != null ? st.progress.pct + '%' : '…');
+        el.className = 'ai-chip loading';
+      } else if (st.state === 'ready') { el.style.display = 'inline-block'; el.textContent = 'AI on'; el.className = 'ai-chip on'; }
+      else if (st.state === 'partial') { el.style.display = 'inline-block'; el.textContent = 'AI names'; el.className = 'ai-chip on'; }
+      else if (st.state === 'error') { el.style.display = 'inline-block'; el.textContent = 'AI off'; el.className = 'ai-chip off'; }
+      else { el.style.display = 'inline-block'; el.textContent = 'AI standby'; el.className = 'ai-chip'; }
+    }
+    if (aiCardMsg) {
+      if (st.state === 'loading') {
+        aiCardMsg.html = aiProgressHtml(st);
+        saveMsg(aiCardMsg);
+        aiCardRefresh();
+      } else {
+        aiProgressDone(st);
+      }
+    }
+  }
+  function startAiDownload() {
+    var FAI = window.FinAI;
+    if (!FAI) return;
+    FAI.setEnabled(true);
+    FAI.markOffered();
+    var m = { id: chatId(), who: 'bot', html: aiProgressHtml(FAI.state()), actions: [], at: new Date().toISOString(), aiCard: true };
+    saveMsg(m).then(function () { appendMsg(m); });
+    aiCardMsg = m;
+    FAI.ensureLoaded().then(function (st) { aiProgressDone(st); });
   }
 
   // ---------- dispatch ----------
@@ -1248,6 +1472,30 @@
       cardAcct: fa.exact && fa.exact.kind === 'card' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'card'; })[0] || null),
       cashAcct: fa.exact && fa.exact.kind === 'cash' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'cash'; })[0] || null)
     };
+    // v38: a pending "One number short" ask is completed by the very next bare
+    // number, named amount, or bare month — re-parsed as question + answer
+    // through the same validated story flow. Anything else closes the
+    // question and routes normally.
+    if (pendingAsk) {
+      var namedOk = RX_ANS_NAMED.test(t) && pendingAsk.ent && nameScore(pendingAsk.ent, t.split(' ')) >= 1;
+      var ansOk = pendingAsk.kind === 'month'
+        ? RX_ANS_MONTH.test(t)
+        : (RX_ANS_AMT.test(t) || namedOk);
+      if (ansOk) {
+        var joined = pendingAsk.t + ' ' + t;
+        pendingAsk = null;
+        var rj = intentStory(joined, ctx, p);
+        if (rj && rj.storyLines && rj.storyLines.length) return rj; // completed draft
+        if (rj && rj.storyAsk) return rj; // still short — new ask, pendingAsk re-set
+        return {
+          html: block('Didn’t connect that',
+            line('Try one full sentence — e.g. <b>“my salary in october is 24k”</b>. The question is closed.'),
+            null, 'warn'),
+          actions: []
+        };
+      }
+      pendingAsk = null;
+    }
     var order = [intentHelp, intentGreet, intentPlanRemove, intentPlanAdd, intentPlanList,
       intentUrgent, intentLog, intentDeficit, intentSpend, intentStory,
       intentDebt, intentOneOff, intentSinking, intentFuture, intentStatus];
@@ -1255,6 +1503,11 @@
       var r = order[i](t, ctx, p);
       if (r) return r;
     }
+    // v39: nothing the rules own matched — this is an open question. With the
+    // brain loaded, the local coach answers it (text only, no actions, no
+    // writes); otherwise the old fallback card.
+    var aiRes = aiCoach(t, ctx);
+    if (aiRes) return aiRes;
     return intentFallback(t);
   }
 
@@ -1317,6 +1570,7 @@
   }
 
   function runAction(m, a) {
+    pendingAsk = null; // v38: any explicit action closes a pending question
     if (!a || a.act === 'noop') { markDone(m); return; }
     var pl = a.payload || {};
     if (a.act === 'open_tab') {
@@ -1326,6 +1580,15 @@
     }
     if (a.act === 'open_settings') {
       if (F.openSettings) F.openSettings(); else F.setTab('home');
+      markDone(m);
+      return;
+    }
+    if (a.act === 'ai_download') {
+      markDone(m);
+      startAiDownload();
+      return;
+    }
+    if (a.act === 'ai_dismiss') {
       markDone(m);
       return;
     }
@@ -1425,6 +1688,43 @@
       return;
     }
   }
+  // v39: stream the local coach's answer. The rules already rejected this
+  // message first, so this is strictly open-ended chat: plain text, no
+  // actions, nothing written. The bubble appears immediately and fills in as
+  // tokens arrive from the worker; the final text is what gets persisted.
+  function sendLlm(res, ctx, typing) {
+    var FAI = window.FinAI;
+    var sm = {
+      id: chatId(), who: 'bot',
+      html: '<div class="c-block"><div class="c-t">Coach · local</div>' +
+        '<div class="ins-line"><span class="spin"></span> coaching…</div>' +
+        '<div class="note">offline model · your numbers never left this phone</div></div>',
+      actions: [], at: new Date().toISOString(), ai: true, streaming: true
+    };
+    return saveMsg(sm).then(function () {
+      if (typing.parentNode) typing.parentNode.removeChild(typing);
+      appendMsg(sm);
+      return FAI.generate(res.prompt, { maxNew: 128 }, function (txt) {
+        var el = msgsEl && msgsEl.querySelector('[data-cid="' + sm.id + '"] .ins-line');
+        if (el) { el.textContent = txt || '…'; scrollBottom(); }
+      }).then(function (txt) {
+        sm.streaming = false;
+        sm.html = aiAnswerHtml(txt || '', ctx);
+        return saveMsg(sm).then(function () {
+          var el2 = msgsEl && msgsEl.querySelector('[data-cid="' + sm.id + '"]');
+          if (el2) el2.innerHTML = sm.html;
+          scrollBottom();
+        });
+      })['catch'](function (err) {
+        sm.streaming = false;
+        sm.html = aiAnswerHtml('', ctx, String((err && err.message) || err));
+        return saveMsg(sm).then(function () {
+          var el3 = msgsEl && msgsEl.querySelector('[data-cid="' + sm.id + '"]');
+          if (el3) el3.innerHTML = sm.html;
+        });
+      });
+    });
+  }
   function send(text) {
     var v = String(text || '').trim();
     if (!v || !msgsEl) return;
@@ -1436,14 +1736,26 @@
     msgsEl.appendChild(typing);
     scrollBottom();
     loadCtx().then(function (ctx) {
-      var res = handle(v, ctx);
-      var bm = { id: chatId(), who: 'bot', html: res.html, actions: res.actions || [], at: new Date().toISOString() };
-      if (res.storyLines) bm.storyLines = res.storyLines; // v35: the draft lives on the message (persisted in the chat store)
-      if (res.storyRaw) bm.storyRaw = res.storyRaw;
-      return saveMsg(bm).then(function () {
-        if (typing.parentNode) typing.parentNode.removeChild(typing);
-        appendMsg(bm);
-        updateFresh(ctx);
+      // v39: refresh the stored-name vectors and embed this message BEFORE the
+      // rules run, so the semantic layer can use the vector synchronously.
+      // Without the brain (or when it's off) both calls resolve instantly.
+      var FAI = window.FinAI;
+      var pre = (FAI && FAI.enabled())
+        ? FAI.ensureNameVecs(aiNamesFor(ctx)).then(function () { return FAI.prepare(v); })
+        : Promise.resolve(null);
+      return pre.then(function (vec) {
+        currentAiVec = vec || null;
+        var res = handle(v, ctx);
+        currentAiVec = null; // consumed; the dev/test path always runs with null
+        if (res.llm) return sendLlm(res, ctx, typing);
+        var bm = { id: chatId(), who: 'bot', html: res.html, actions: res.actions || [], at: new Date().toISOString() };
+        if (res.storyLines) bm.storyLines = res.storyLines; // v35: the draft lives on the message (persisted in the chat store)
+        if (res.storyRaw) bm.storyRaw = res.storyRaw;
+        return saveMsg(bm).then(function () {
+          if (typing.parentNode) typing.parentNode.removeChild(typing);
+          appendMsg(bm);
+          updateFresh(ctx);
+        });
       });
     }).catch(function (err) {
       if (typing.parentNode) typing.parentNode.removeChild(typing);
@@ -1503,6 +1815,8 @@
     msgsEl = byId('chatMsgs');
     if (!inputEl || !msgsEl) return;
     renderChips();
+    var FAI = window.FinAI;
+    if (FAI) FAI.onStatus(updateAiStatus); // v39: chip + live download card
     var c = byId('chatClose');
     if (c) c.onclick = closeChat;
     var s = byId('chatSend');
@@ -1524,7 +1838,10 @@
     storyMonth: storyMonth,
     fuzzyNameIn: fuzzyNameIn,
     open: openChat,
-    close: closeChat
+    close: closeChat,
+    // v39: inject a message embedding for local tests of the semantic layer
+    setAiVec: function (v) { currentAiVec = v; },
+    getAiVec: function () { return currentAiVec; }
   };
 
   if (typeof document !== 'undefined') {
