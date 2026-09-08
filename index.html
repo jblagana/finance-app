@@ -326,6 +326,18 @@ button.gear{width:44px;height:44px}
 .mini{min-height:32px;padding:4px 10px}
 @media (prefers-reduced-motion:reduce){#snack,#swToast{transition:none}
 #tab-home,#tab-money,#tab-ledger,#tab-owed,.dig,.drow,.ml-row,.tiles.busy .tile::after{animation:none!important}
+}
+/* ---- v34: confirm dialog (destructive deletes ask first) ---- */
+#confirmDlg{position:fixed;inset:0;z-index:45;display:flex;align-items:center;justify-content:center;
+  background:rgba(5,8,14,.66);padding:24px 18px;opacity:0;pointer-events:none;transition:opacity .16s ease}
+#confirmDlg.show{opacity:1;pointer-events:auto}
+.confirm-box{background:var(--card);border:1px solid var(--line);border-radius:16px;max-width:360px;width:100%;
+  padding:18px 16px 14px;box-shadow:0 18px 50px rgba(0,0,0,.55);transform:translateY(10px);transition:transform .16s ease}
+#confirmDlg.show .confirm-box{transform:translateY(0)}
+.confirm-m{margin:0 0 16px;font-size:14px;line-height:1.5;color:var(--ink)}
+.confirm-box .row button{flex:1 1 0;width:auto;min-height:42px}
+button.act.danger{background:var(--bad);border-color:var(--bad)}
+@media (prefers-reduced-motion:reduce){#confirmDlg,.confirm-box{transition:none}}
 </style>
 </head>
 
@@ -565,10 +577,19 @@ button.gear{width:44px;height:44px}
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">FinSmart · fully local · shell v33</p>
+    <p class="note" style="margin:14px 0 0">FinSmart · fully local · shell v34</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>
+<div id="confirmDlg" class="confirm" role="dialog" aria-modal="true" aria-labelledby="confirmMsg">
+  <div class="confirm-box">
+    <p id="confirmMsg" class="confirm-m"></p>
+    <div class="row">
+      <button type="button" id="confirmNo" class="act ghost">Cancel</button>
+      <button type="button" id="confirmYes" class="act danger">Delete</button>
+    </div>
+  </div>
+</div>
 <div id="swToast" role="status" aria-live="polite">
   <span>New version ready</span>
   <button id="swReload" type="button">Reload</button>

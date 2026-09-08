@@ -657,6 +657,45 @@
       });
     });
   }
+  // v34: ledger rows are deletable — confirms first, then removes the txn AND its
+  // money-log row; the undo snack restores both.
+  function askDeleteTxn(tid) {
+    var t = null;
+    for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) t = state.txns[i];
+    var what = t ? money(t.amount) + ' · ' + esc(t.category || t.account || 'entry') : 'this entry';
+    confirmAsk('Delete <b>' + what + '</b> from the ledger? Free cash goes back up and you can undo right after.',
+      'Delete', function () { deleteTxnFromLog(tid); });
+  }
+  function deleteTxnFromLog(tid) {
+    var t = null;
+    for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) t = state.txns[i];
+    var removed = (state.moneyLog || []).filter(function (e) { return e && e.tid === tid; });
+    if (!t && !removed.length) return;
+    if (t) {
+      state.txns = state.txns.filter(function (x) { return x.id !== tid; });
+      addAdj(txnAdj(t), -1);
+    }
+    state.moneyLog = (state.moneyLog || []).filter(function (e) { return !(e && e.tid === tid); });
+    idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
+    var done = t ? Promise.all([idbDel(STORE_TX, tid), saveAdj()]) : Promise.resolve();
+    done.then(function () {
+      emit('txn');
+      snack('Deleted ' + (t ? money(t.amount) + ' · ' + esc(t.category || t.account) : 'entry'), function () {
+        if (t) {
+          state.txns.push(t);
+          addAdj(txnAdj(t), 1);
+          idbPut(STORE_TX, t).catch(function () {});
+        }
+        if (removed.length) {
+          removed.forEach(function (e) { state.moneyLog.push(e); });
+          if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
+          idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
+        }
+        if (t) saveAdj();
+        emit('txn');
+      });
+    });
+  }
 
   // ---------- Phase 6: money log — per-change audit trail so the overview math can be sanity-checked ----------
   var ML_CAP = 30;   // entries kept in the meta store (the card shows all of them)
@@ -666,7 +705,7 @@
     var amt = Number(t.amount) || 0;
     var mp = todayISO().slice(0, 7);
     var e = {
-      at: Date.now(), a: action,
+      at: Date.now(), a: action, tid: t.id,
       l: (t.category || t.account || 'entry') + (t.note ? ' · ' + t.note : ''),
       c: t.category || t.account || 'entry', nt: t.note || '', m: t.account || '',
       n: amt, k: t.kind === 'card_charge' ? 'c' : 'x'
@@ -723,13 +762,17 @@
         if (e.k === 'c') extra = '<span class="ml-x">card ' + money(r2(e.o + (add ? -e.n : e.n))) + ' → ' + money(e.o) + '</span>';
         if (e.s != null) extra += '<span class="ml-x">month spent ' + money(r2(e.s + (add ? -e.n : e.n))) + ' → ' + money(e.s) + '</span>';
         var p = mlParts(e);
+        var delBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-del="' + esc(e.tid) +
+          '" aria-label="Delete this expense" title="Delete this expense">\u2715</button>' : '';
         return '<div class="ml-row' + (add ? '' : ' del') + '">' +
           '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
           (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
           '<div class="ml-meta">' + mlDate(e.at) + (p.m ? ' · ' + esc(p.m) : '') + '</div></div>' +
           '<div class="ml-r"><b class="' + (add ? 'ml-down' : 'ml-up') + '">' + (add ? '−' : '+') + money(e.n) + '</b>' +
-          '<span class="ml-f">free ' + money(before) + ' → ' + money(e.f) + '</span>' + extra + '</div></div>';
+          '<span class="ml-f">free ' + money(before) + ' → ' + money(e.f) + '</span>' + extra + delBtn + '</div></div>';
       }).join('');
+    var dl = body.querySelectorAll('[data-ml-del]');
+    for (var di = 0; di < dl.length; di++) dl[di].onclick = function () { askDeleteTxn(this.getAttribute('data-ml-del')); };
   }
 
   // ---------- bottom sheets (Add, Settings) ----------
@@ -778,6 +821,46 @@
     el.classList.add('show');
     clearTimeout(snackTimer);
     snackTimer = setTimeout(hideSnack, ms || 5200);
+  }
+
+  // ---------- v34: confirm dialog (destructive deletes ask first) ----------
+  var confirmCb = null;
+  function confirmAsk(msg, yesLabel, onYes) {
+    var dlg = byId('confirmDlg');
+    if (!dlg) { if (onYes) onYes(); return; }
+    var m = byId('confirmMsg');
+    if (m) m.innerHTML = msg;
+    var yes = byId('confirmYes');
+    if (yes) yes.textContent = yesLabel || 'Delete';
+    confirmCb = onYes || null;
+    dlg.classList.add('show');
+    var no = byId('confirmNo');
+    if (no && no.focus) { try { no.focus(); } catch (e) {} }
+  }
+  function closeConfirm() {
+    var dlg = byId('confirmDlg');
+    if (dlg) dlg.classList.remove('show');
+    confirmCb = null;
+  }
+  function confirmYes() {
+    var cb = confirmCb;
+    closeConfirm();
+    if (cb) cb();
+  }
+  function bindConfirm() {
+    var dlg = byId('confirmDlg');
+    if (!dlg) return;
+    var no = byId('confirmNo'), yes = byId('confirmYes');
+    if (no) no.onclick = closeConfirm;
+    if (yes) yes.onclick = confirmYes;
+    dlg.onclick = function (ev) { if (ev.target === dlg) closeConfirm(); };
+    // capture phase + stopImmediatePropagation so Esc closes the dialog, not e.g. the coach bubble
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && dlg.classList.contains('show')) {
+        ev.stopImmediatePropagation();
+        closeConfirm();
+      }
+    }, true);
   }
 
   // ---------- "Your numbers" editor (Settings sheet) ----------
@@ -1196,7 +1279,6 @@
       head = hi + 'this week is over budget by ' + money(shortfall) + '.';
       sub = (prepayActive ? 'The card prepay below is the reason: ' : 'This week\'s plans total ') + money(d.weekCost) + ' vs ' + money(d.free) + ' free.';
       if (trim) sub += ' Biggest lever: ' + trim.label + ' (' + money(trim.amt) + ').';
-      if (prepayActive && d.prepayIn > 0) sub += ' Or set aside ' + money(r2(shortfall / d.prepayIn)) + '/day until the ' + ordinal(d.prepayDay) + ' and it\'s covered.';
       if (afterWeek < floor) sub += ' As is, cash dips to ' + money(afterWeek) + ' — under your ' + money(floor) + ' floor.';
       else sub += ' Keep today at zero extras and it stays above the floor.';
     } else if (d.freeAfterPace < 0) {
@@ -2005,11 +2087,37 @@
           }
           return;
         }
-        if (delP) { delOwedPerson(delP); return; }
+        if (delP) {
+          var pp = null;
+          (state.owed.people || []).forEach(function (x) { if (x.id === delP) pp = x; });
+          var pn = pp ? pp.name : 'this person';
+          var pe = pp ? (pp.entries || []).length : 0;
+          var pm = pe === 0
+            ? 'Remove <b>' + esc(pn) + '</b> from the book? You can undo right after.'
+            : 'Remove <b>' + esc(pn) + '</b> and their ' + pe + ' ' + (pe === 1 ? 'entry' : 'entries') +
+              '? You can undo right after.';
+          confirmAsk(pm, 'Remove', function () { delOwedPerson(delP); });
+          return;
+        }
         if (delE) {
           var card = t;
           while (card && card !== body && !(card.getAttribute && card.getAttribute('data-ow-pid'))) card = card.parentNode;
-          if (card && card.getAttribute) delOwedEntry(card.getAttribute('data-ow-pid'), delE);
+          if (card && card.getAttribute) {
+            var pid2 = card.getAttribute('data-ow-pid');
+            var pp2 = null, ee2 = null;
+            (state.owed.people || []).forEach(function (x) {
+              if (x.id === pid2) {
+                pp2 = x;
+                (x.entries || []).forEach(function (y) { if (y.id === delE) ee2 = y; });
+              }
+            });
+            var em = ee2
+              ? (OWED_DIRS[ee2.dir] ? OWED_DIRS[ee2.dir].label : 'entry') + ' ' + money(Number(ee2.amt) || 0) +
+                (ee2.d ? ' · ' + esc(fmtDate(ee2.d)) : '')
+              : 'this entry';
+            confirmAsk('Remove ' + em + ' for <b>' + esc(pp2 ? pp2.name : 'this person') + '</b>? You can undo right after.',
+              'Remove', function () { delOwedEntry(pid2, delE); });
+          }
           return;
         }
         t = t.parentNode;
@@ -2287,6 +2395,7 @@
       });
     };
     owedBindEvents();
+    bindConfirm();
 
     var mealEl = byId('mealEdit');
     if (mealEl) mealEl.onchange = function () {
