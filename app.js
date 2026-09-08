@@ -39,7 +39,8 @@
     adjSig: '',
     adjLoaded: false,
     coachMem: null,
-    moneyLog: []
+    moneyLog: [],
+    owed: { people: [] }
   };
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
@@ -48,7 +49,8 @@
     plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero],
     snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus],
     adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero],
-    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog]
+    owed: [renderOwed],
+    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -139,6 +141,67 @@
     lab.className = 'dlabel';
   }
   function r2(x) { return Math.round((Number(x) || 0) * 100) / 100; }
+  // Safe arithmetic for "quick sums" (Owed tab): 300-125+10 -> 185.
+  // Hand-rolled recursive descent over numbers and + - * / ( ) — no eval,
+  // no Function. Accepts x/× for multiply, ÷ for divide, −/–/— for minus.
+  // Returns the result rounded to 2 decimals, or null when the input is not
+  // a valid expression.
+  function evalExpr(s) {
+    var t = String(s == null ? '' : s)
+      .replace(/[\u00d7xX]/g, '*').replace(/\u00f7/g, '/')
+      .replace(/[\u2212\u2013\u2014]/g, '-');
+    t = t.replace(/\s+/g, ' ');
+    if (!t || !/^[0-9.+\-*/() ]+$/.test(t)) return null;
+    var i = 0;
+    function ws() { while (i < t.length && t.charAt(i) === ' ') i++; }
+    function peek() { ws(); return t.charAt(i); }
+    function num() {
+      var start = i, dots = 0;
+      while (i < t.length && /[0-9.]/.test(t.charAt(i))) {
+        if (t.charAt(i) === '.') dots++;
+        i++;
+      }
+      if (start === i || dots > 1) return NaN;
+      return parseFloat(t.slice(start, i));
+    }
+    function factor() {
+      var c = peek();
+      if (c === '+') { i++; return factor(); }
+      if (c === '-') { i++; return -factor(); }
+      if (c === '(') {
+        i++;
+        var v = expr();
+        ws();
+        if (t.charAt(i) !== ')') return NaN;
+        i++;
+        return v;
+      }
+      return num();
+    }
+    function term() {
+      var v = factor();
+      for (;;) {
+        var c = peek();
+        if (c === '*') { i++; v = v * factor(); }
+        else if (c === '/') { i++; v = v / factor(); }
+        else return v;
+      }
+    }
+    function expr() {
+      var v = term();
+      for (;;) {
+        var c = peek();
+        if (c === '+') { i++; v = v + factor(); }
+        else if (c === '-') { i++; v = v - factor(); }
+        else return v;
+      }
+    }
+    var v = expr();
+    if (!isFinite(v)) return null;
+    ws();
+    if (i !== t.length) return null;
+    return r2(v);
+  }
   function monthLabel(m) {
     var p = String(m || '').split('-');
     if (p.length === 2 && /^\d{4}$/.test(p[0]) && /^\d{2}$/.test(p[1])) {
@@ -1697,6 +1760,269 @@
     }
   }
   // ---------- Phase 4: export (JSON / CSV) ----------
+  // ---------- Owed tracker (v22) — standalone note-keeper, never touches Money math ----------
+  // Per person: balance B = sum over entries of sign(dir) * amt.
+  // B > 0 → the person owes you; B < 0 → you owe them.
+  // "I paid for them" and "I paid them back" both move money out of your
+  // pocket (+); "they paid for me" and "they paid me back" both move money
+  // to you (−). Settlements therefore reduce the balance automatically.
+  var OWED_DIRS = {
+    ipf: { label: 'I paid for them', sign: 1 },
+    itb: { label: 'I paid them back', sign: 1 },
+    tpf: { label: 'They paid for me', sign: -1 },
+    tmb: { label: 'They paid me back', sign: -1 }
+  };
+  function owedSign(dir) { return OWED_DIRS[dir] ? OWED_DIRS[dir].sign : -1; }
+  function owedBal(p) {
+    var b = 0;
+    (p && p.entries || []).forEach(function (e) {
+      if (e && e.dir && OWED_DIRS[e.dir]) b += owedSign(e.dir) * (Number(e.amt) || 0);
+    });
+    return r2(b);
+  }
+  function saveOwed() { return idbPut(STORE_META, { key: 'owed', value: state.owed }); }
+  function emitOwed() { emit('owed'); }
+  function owedUid(pref) { return pref + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function owedBalHTML(b) {
+    if (b > 0.004) return '<span class="ow-bal plus">owes you ' + money(b) + '</span>';
+    if (b < -0.004) return '<span class="ow-bal minus">you owe ' + money(-b) + '</span>';
+    return '<span class="ow-bal zero">settled up</span>';
+  }
+  function owedPersonHTML(p) {
+    var b = owedBal(p);
+    var ents = (p.entries || []).slice().sort(function (a, c) {
+      if (a.d !== c.d) return a.d < c.d ? 1 : -1;
+      return (a.created || '') < (c.created || '') ? 1 : -1;
+    });
+    var rows = '';
+    ents.forEach(function (e) {
+      var dir = OWED_DIRS[e.dir] || OWED_DIRS.ipf;
+      var amt = Number(e.amt) || 0;
+      rows += '<div class="ow-e">' +
+        '<div class="ow-el"><b>' + esc(dir.label) + '</b>' +
+        (e.note ? ' <span class="ow-x">' + esc(e.note) + '</span>' : '') +
+        '<div class="ow-k">' + esc(fmtDate(e.d)) + (e.expr ? ' · ' + esc(e.expr) : '') + '</div></div>' +
+        '<b class="ow-amt ' + (dir.sign > 0 ? 'plus' : 'minus') + '">' + (dir.sign > 0 ? '+' : '\u2212') + money(amt) + '</b>' +
+        '<button type="button" class="ow-xbtn" data-ow-del-e="' + esc(e.id) + '" aria-label="Remove entry">\u2715</button>' +
+        '</div>';
+    });
+    return '<section class="card ow-p" data-ow-pid="' + esc(p.id) + '">' +
+      '<div class="ow-h"><b>' + esc(p.name) + '</b>' + owedBalHTML(b) +
+      '<button type="button" class="sheet-x" data-ow-del="' + esc(p.id) + '" aria-label="Remove person">\u2715</button></div>' +
+      (rows || '<p class="note" style="margin:8px 0 0">No entries yet — add the first one below.</p>') +
+      '<button type="button" class="addrow" data-ow-toggle="' + esc(p.id) + '">+ entry</button>' +
+      '<form class="oent" data-ow-for="' + esc(p.id) + '" style="display:none" autocomplete="off">' +
+      '<div class="oent-grid">' +
+      '<div><label>Date</label><div class="dfield"><input type="date" class="oent-date">' +
+      '<span class="dlabel empty" aria-hidden="true">Pick a date</span></div></div>' +
+      '<div><label>Amount (\u20b1) — number or quick sum</label>' +
+      '<input type="text" inputmode="decimal" class="oent-amt" maxlength="40" placeholder="e.g. 300-125+10" autocomplete="off">' +
+      '<p class="oent-eq" aria-live="polite"></p></div>' +
+      '</div>' +
+      '<label>What happened</label>' +
+      '<div class="seg">' +
+      '<label class="sel"><input type="radio" name="owdir" value="ipf" checked><span>I paid for them</span></label>' +
+      '<label><input type="radio" name="owdir" value="itb"><span>I paid them back</span></label>' +
+      '<label><input type="radio" name="owdir" value="tpf"><span>They paid for me</span></label>' +
+      '<label><input type="radio" name="owdir" value="tmb"><span>They paid me back</span></label>' +
+      '</div>' +
+      '<label>Note (optional)</label>' +
+      '<input type="text" class="oent-note" maxlength="60" placeholder="e.g. lunch, split bill" autocomplete="off">' +
+      '<div style="margin-top:14px"><button class="act" type="submit">Add entry</button></div>' +
+      '</form>' +
+      '</section>';
+  }
+  function renderOwed() {
+    var body = byId('owedBody'); if (!body) return;
+    var sum = byId('owedSum');
+    var people = (state.owed.people || []).slice().sort(function (a, b) {
+      return String(a.name).toLowerCase() < String(b.name).toLowerCase() ? -1 : 1;
+    });
+    if (sum) {
+      if (!people.length) {
+        sum.style.display = 'none';
+      } else {
+        sum.style.display = '';
+        var inT = 0, outT = 0;
+        people.forEach(function (p) {
+          var b = owedBal(p);
+          if (b > 0) inT += b; else if (b < 0) outT -= b;
+        });
+        var net = r2(inT - outT);
+        byId('owedSumIn').textContent = money(r2(inT));
+        byId('owedSumOut').textContent = money(r2(outT));
+        var netEl = byId('owedSumNet');
+        netEl.textContent = (net > 0.004 ? '+' : net < -0.004 ? '\u2212' : '') + money(Math.abs(net));
+        netEl.className = net > 0.004 ? 'pos' : net < -0.004 ? 'neg' : '';
+      }
+    }
+    if (!people.length) {
+      body.innerHTML = '<div class="card"><p class="note" style="margin:2px 0">No one in the book yet. Add a person above, then tap <b>+ entry</b> on their card each time you pay for them — or they pay for you.</p></div>';
+      return;
+    }
+    var html = '';
+    people.forEach(function (p) { html += owedPersonHTML(p); });
+    body.innerHTML = html;
+  }
+  function addOwedPerson(name) {
+    name = String(name || '').trim();
+    if (!name) return;
+    var dupe = (state.owed.people || []).some(function (p) {
+      return p.name.toLowerCase() === name.toLowerCase();
+    });
+    if (dupe) { snack('Already in the book: ' + esc(name)); return; }
+    state.owed.people.push({ id: owedUid('ow'), name: name, entries: [] });
+    saveOwed().then(emitOwed);
+  }
+  function delOwedPerson(id) {
+    var idx = -1;
+    (state.owed.people || []).forEach(function (p, i) { if (p.id === id) idx = i; });
+    if (idx < 0) return;
+    var gone = state.owed.people.splice(idx, 1)[0];
+    saveOwed().then(function () {
+      emitOwed();
+      snack('Removed ' + esc(gone.name), function () {
+        state.owed.people.push(gone);
+        saveOwed().then(emitOwed);
+      });
+    });
+  }
+  function addOwedEntry(pid, data) {
+    var p = null;
+    (state.owed.people || []).forEach(function (x) { if (x.id === pid) p = x; });
+    if (!p) return;
+    if (!p.entries) p.entries = [];
+    var e = {
+      id: owedUid('oe'), d: data.d || todayISO(), amt: r2(data.amt),
+      dir: OWED_DIRS[data.dir] ? data.dir : 'ipf',
+      note: String(data.note || '').trim(), created: new Date().toISOString()
+    };
+    if (data.expr) e.expr = data.expr;
+    p.entries.push(e);
+    saveOwed().then(function () {
+      emitOwed();
+      snack(OWED_DIRS[e.dir].label + ' ' + money(e.amt) + ' · ' + esc(p.name), function () {
+        p.entries = p.entries.filter(function (x) { return x.id !== e.id; });
+        saveOwed().then(emitOwed);
+      });
+    });
+  }
+  function delOwedEntry(pid, eid) {
+    var p = null;
+    (state.owed.people || []).forEach(function (x) { if (x.id === pid) p = x; });
+    if (!p) return;
+    var idx = -1;
+    (p.entries || []).forEach(function (e, i) { if (e.id === eid) idx = i; });
+    if (idx < 0) return;
+    var gone = p.entries.splice(idx, 1)[0];
+    saveOwed().then(function () {
+      emitOwed();
+      snack('Removed ' + money(gone.amt) + ' entry', function () {
+        p.entries.push(gone);
+        saveOwed().then(emitOwed);
+      });
+    });
+  }
+  function owedExprHint(input) {
+    var eq = input && input.parentElement ? input.parentElement.querySelector('.oent-eq') : null;
+    if (!eq) return;
+    var raw = String(input.value || '').trim();
+    if (!raw) { eq.textContent = ''; eq.className = 'oent-eq'; return; }
+    var v = evalExpr(raw);
+    if (v === null) {
+      eq.textContent = 'plain numbers, or quick sums like 300-125+10';
+      eq.className = 'oent-eq bad';
+    } else if (v <= 0) {
+      eq.textContent = '= ' + money(v) + ' · must be more than 0';
+      eq.className = 'oent-eq bad';
+    } else {
+      eq.textContent = '= ' + money(v);
+      eq.className = 'oent-eq';
+    }
+  }
+  function owedSyncDate(input) {
+    var lab = input && input.parentElement ? input.parentElement.querySelector('.dlabel') : null;
+    if (!lab) return;
+    if (!input.value) { lab.textContent = 'Pick a date'; lab.className = 'dlabel empty'; }
+    else { lab.textContent = fmtDate(input.value); lab.className = 'dlabel'; }
+  }
+  function owedBindEvents() {
+    var form = byId('owedForm');
+    if (form) form.onsubmit = function (ev) {
+      ev.preventDefault();
+      var nameEl = byId('owedName');
+      var name = (nameEl.value || '').trim();
+      if (!name) { alert('Give the person a name.'); return; }
+      addOwedPerson(name);
+      nameEl.value = '';
+    };
+    var body = byId('owedBody');
+    if (!body) return;
+    body.addEventListener('submit', function (ev) {
+      var f = ev.target;
+      if (!f || typeof f.className !== 'string' || f.className.indexOf('oent') < 0) return;
+      ev.preventDefault();
+      var pid = f.getAttribute('data-ow-for');
+      var amtEl = f.querySelector('.oent-amt');
+      var raw = String(amtEl.value || '').trim();
+      var amt = evalExpr(raw);
+      if (amt === null || !(amt > 0)) {
+        alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.');
+        return;
+      }
+      var dirEl = f.querySelector('input[name="owdir"]:checked');
+      var expr = (raw !== String(r2(amt))) ? raw : null;
+      addOwedEntry(pid, {
+        d: f.querySelector('.oent-date').value || todayISO(),
+        amt: amt, dir: dirEl ? dirEl.value : 'ipf', expr: expr,
+        note: (f.querySelector('.oent-note').value || '').trim()
+      });
+    });
+    body.addEventListener('click', function (ev) {
+      var t = ev.target;
+      while (t && t !== body) {
+        var tog = t.getAttribute && t.getAttribute('data-ow-toggle');
+        var delP = t.getAttribute && t.getAttribute('data-ow-del');
+        var delE = t.getAttribute && t.getAttribute('data-ow-del-e');
+        if (tog) {
+          var f = body.querySelector('.oent[data-ow-for="' + tog + '"]');
+          if (f) {
+            f.style.display = f.style.display === 'none' ? '' : 'none';
+            var d = f.querySelector('.oent-date');
+            if (d && !d.value) { d.value = todayISO(); owedSyncDate(d); }
+          }
+          return;
+        }
+        if (delP) { delOwedPerson(delP); return; }
+        if (delE) {
+          var card = t;
+          while (card && card !== body && !(card.getAttribute && card.getAttribute('data-ow-pid'))) card = card.parentNode;
+          if (card && card.getAttribute) delOwedEntry(card.getAttribute('data-ow-pid'), delE);
+          return;
+        }
+        t = t.parentNode;
+      }
+    });
+    body.addEventListener('input', function (ev) {
+      var t = ev.target;
+      if (!t || typeof t.className !== 'string') return;
+      if (t.className.indexOf('oent-amt') >= 0) owedExprHint(t);
+      else if (t.className.indexOf('oent-date') >= 0) owedSyncDate(t);
+    });
+    body.addEventListener('change', function (ev) {
+      var t = ev.target;
+      if (t && t.type === 'radio' && t.name === 'owdir' && t.parentElement && t.parentElement.parentElement) {
+        var seg = t.parentElement.parentElement;
+        if (typeof seg.className === 'string' && seg.className.indexOf('seg') >= 0) {
+          var labs = seg.getElementsByTagName('label');
+          for (var i = 0; i < labs.length; i++) {
+            var inp = labs[i].getElementsByTagName('input')[0];
+            labs[i].className = inp && inp.checked ? 'sel' : '';
+          }
+        }
+      }
+    });
+  }
   function csvQ(s) {
     s = String(s == null ? '' : s);
     return '"' + s.replace(/"/g, '""') + '"';
@@ -1719,7 +2045,7 @@
     } else {
       blob = new Blob([JSON.stringify({
         app: 'finances-pwa', exportedAt: new Date().toISOString(),
-        base: state.base, txns: txns, plans: plans
+        base: state.base, txns: txns, plans: plans, owed: state.owed.people
       }, null, 2)], { type: 'application/json' });
       name = 'finances-export-' + stamp + '.json';
     }
@@ -1752,6 +2078,16 @@
         }).then(function () {
           state.txns = data.txns || [];
           state.plans = data.plans || [];
+          var owedPeople = (data.owed || []).filter(function (p) {
+            return p && typeof p.name === 'string' && p.name.trim() &&
+              (p.entries || []).every(function (e) {
+                return e && e.id && OWED_DIRS[e.dir] && (Number(e.amt) || 0) > 0 && e.d;
+              });
+          }).map(function (p) {
+            return { id: p.id || owedUid('ow'), name: p.name.trim(), entries: p.entries || [] };
+          });
+          state.owed = { people: owedPeople };
+          saveOwed();
           refreshLocalSnapshot();
           state.adj = { cash: 0, free: 0, card: 0, prepay: 0 };
           state.adjSig = snapSig(state.snapshot);
@@ -1760,7 +2096,7 @@
           persistSnapshot();
           renderBaseEditor();
           render();
-          snack('Imported ' + (data.txns || []).length + ' entries · ' + (data.plans || []).length + ' plans' + (state.base.migrated_from_snapshot || (data.base && data.base.accounts) ? ' · numbers restored' : ''));
+          snack('Imported ' + (data.txns || []).length + ' entries · ' + (data.plans || []).length + ' plans · ' + owedPeople.length + ' owed people' + (state.base.migrated_from_snapshot || (data.base && data.base.accounts) ? ' · numbers restored' : ''));
         });
       } catch (err) {
         snack('Import failed: ' + esc(String((err && err.message) || err)));
@@ -1777,7 +2113,7 @@
     if (b.edited) parts.push('last edited ' + new Date(b.edited).toLocaleTimeString());
     el.innerHTML = parts.join('<br>');
   }
-  var TABS = ['home', 'money', 'ledger', 'coach'];
+  var TABS = ['home', 'money', 'ledger', 'owed', 'coach'];
   var TAB_MIGRATE = { overview: 'money', add: 'ledger' };
   var shownTab = null;        // pane currently on screen
   var lastCoachTab = 'home';  // where Coach returns to when the tab is tapped again
@@ -1787,7 +2123,7 @@
     if (name === 'coach' && shownTab === 'coach') name = lastCoachTab;  // tapping the Coach tab again closes it
     else if (name !== 'coach') lastCoachTab = name;
     shownTab = name;
-    var panes = { home: byId('tab-home'), money: byId('tab-money'), ledger: byId('tab-ledger'), coach: byId('tab-coach') };
+    var panes = { home: byId('tab-home'), money: byId('tab-money'), ledger: byId('tab-ledger'), owed: byId('tab-owed'), coach: byId('tab-coach') };
     Object.keys(panes).forEach(function (k) {
       if (panes[k]) panes[k].style.display = k === name ? '' : 'none';
     });
@@ -1927,6 +2263,8 @@
         byId('p_name').focus();
       });
     };
+    owedBindEvents();
+
     var mealEl = byId('mealEdit');
     if (mealEl) mealEl.onchange = function () {
       var v = parseFloat(mealEl.value);
@@ -2034,6 +2372,9 @@
         else if (m.key === 'adjSig') { state.adjSig = m.value || ''; }
         else if (m.key === 'coachMem') { state.coachMem = m.value; }
         else if (m.key === 'moneyLog') { state.moneyLog = m.value || []; }
+        else if (m.key === 'owed') {
+          state.owed = (m.value && Array.isArray(m.value.people)) ? m.value : { people: [] };
+        }
       });
       if (!state.base) {
         // First launch: one-time migration from the last cached sheet snapshot (if any).

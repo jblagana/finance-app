@@ -27,10 +27,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 #bottombar{position:fixed;left:0;right:0;bottom:0;z-index:7;background:rgba(15,20,32,.97);
 backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);
 padding-bottom:env(safe-area-inset-bottom)}
-#tabs{display:flex;gap:6px;padding:8px 12px;max-width:640px;margin:0 auto;align-items:stretch}
+#tabs{display:flex;gap:5px;padding:8px 10px;max-width:640px;margin:0 auto;align-items:stretch}
 .tab{flex:1;display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--card);
-border:1px solid var(--line);color:var(--mut);padding:10px 6px;border-radius:10px;font-size:13.5px;
-font-weight:700;line-height:1.2}
+border:1px solid var(--line);color:var(--mut);padding:10px 4px;border-radius:10px;font-size:12.5px;
+font-weight:700;line-height:1.2;white-space:nowrap}
 .tab.active{background:rgba(91,140,255,.16);border-color:var(--acc);color:#fff}
 .tab:active{filter:brightness(1.15)}
 h1{margin:0;font-size:20px;letter-spacing:.2px}
@@ -173,6 +173,37 @@ button.gear:active{border-color:var(--acc);color:var(--acc)}
 .addrow{cursor:pointer;background:transparent;border:1px dashed var(--line);color:var(--mut);border-radius:9px;
  padding:9px 12px;font-size:12.5px;font-weight:700;margin-top:6px;width:100%}
 .addrow:active{border-color:var(--acc);color:var(--acc)}
+/* ---- v22: Owed tab — who owes whom (standalone, never touches Money math) ---- */
+.ow-p{padding-bottom:10px}
+.ow-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.ow-h b{font-size:15px}
+.ow-bal{font-size:12.5px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--line);
+ color:var(--mut);white-space:nowrap}
+.ow-bal.plus{color:var(--ok);border-color:rgba(55,211,155,.4);background:rgba(55,211,155,.08)}
+.ow-bal.minus{color:var(--warn);border-color:rgba(255,196,92,.4);background:rgba(255,196,92,.08)}
+.ow-h .sheet-x{margin-left:auto}
+.ow-e{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.ow-el{flex:1;min-width:0}
+.ow-el b{font-size:13px}
+.ow-x{color:var(--mut);font-size:12.5px}
+.ow-k{color:var(--mut);font-size:11.5px;margin-top:1px}
+.ow-amt{flex:0 0 auto;font-size:13px;white-space:nowrap}
+.ow-amt.plus{color:var(--ok)}
+.ow-amt.minus{color:var(--warn)}
+.ow-xbtn{flex:0 0 auto;background:transparent;border:1px solid var(--line);color:var(--mut);width:26px;height:26px;
+ border-radius:8px;font-size:11px;cursor:pointer;line-height:1;padding:0}
+.ow-xbtn:active{border-color:var(--bad);color:var(--bad)}
+.oent{margin-top:10px}
+.oent-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.oent-eq{margin:6px 0 0;font-size:12.5px;font-weight:600;color:var(--acc);min-height:16px}
+.oent-eq.bad{color:var(--warn)}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.seg label{display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--line);border-radius:10px;
+ padding:9px 10px;font-size:12.5px;font-weight:600;color:var(--mut);cursor:pointer;margin:0}
+.seg input{width:auto;min-width:0;padding:0;margin:0}
+.seg label.sel{border-color:var(--acc);color:#fff;background:rgba(91,140,255,.16)}
+.kv b.pos{color:var(--ok)}
+.kv b.neg{color:var(--warn)}
 input[type="month"]{min-height:44px}
 /* (v21: sync error strip removed — the app is fully local) */
 
@@ -245,7 +276,7 @@ padding:7px 14px;font-size:12.5px}
 @keyframes paneIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes shim{0%{background-position:200% 0}100%{background-position:-200% 0}}
-#tab-home,#tab-money,#tab-ledger,#tab-coach{animation:paneIn .18s ease}
+#tab-home,#tab-money,#tab-ledger,#tab-owed,#tab-coach{animation:paneIn .18s ease}
 .txn,.dig,.drow,.ml-row{animation:rise .18s ease}
 .tile{position:relative;overflow:hidden}
 .tiles.busy .tile::after{content:"";position:absolute;inset:0;pointer-events:none;
@@ -277,7 +308,7 @@ button.gear{width:44px;height:44px}
 .sheet-x{width:44px;height:44px}
 .mini{min-height:32px;padding:4px 10px}
 @media (prefers-reduced-motion:reduce){#snack,#swToast{transition:none}
-#tab-home,#tab-money,#tab-ledger,#tab-coach,.dig,.drow,.ml-row,.tiles.busy .tile::after{animation:none!important}}
+#tab-home,#tab-money,#tab-ledger,#tab-owed,#tab-coach,.dig,.drow,.ml-row,.tiles.busy .tile::after{animation:none!important}
 </style>
 </head>
 
@@ -391,6 +422,30 @@ button.gear{width:44px;height:44px}
     </section>
   </div>
 
+  <div id="tab-owed" style="display:none">
+    <section id="owedSum" class="card" style="display:none">
+      <h2 style="margin-top:0">Owed · totals</h2>
+      <div class="kv"><span class="k">Owed to you</span><b id="owedSumIn">—</b></div>
+      <div class="kv"><span class="k">You owe</span><b id="owedSumOut">—</b></div>
+      <div class="kv"><span class="k">Net</span><b id="owedSumNet">—</b></div>
+    </section>
+
+    <form id="owedForm" class="card" autocomplete="off">
+      <label for="owedName">Add a person</label>
+      <div class="row">
+        <div>
+          <input id="owedName" placeholder="e.g. Ana" maxlength="24" autocomplete="off">
+        </div>
+        <div>
+          <button class="act" type="submit">Add</button>
+        </div>
+      </div>
+      <p class="note" style="margin:10px 0 0">A private book of who owes whom — it never touches your Money numbers. Amounts can be quick sums: <code>300-125+10</code> is saved as 185.</p>
+    </form>
+
+    <div id="owedBody"></div>
+  </div>
+
   <div id="tab-coach" style="display:none">
     <div id="chatHead">
       <div>
@@ -457,7 +512,7 @@ button.gear{width:44px;height:44px}
     </section>
     <section class="card" style="margin-top:16px">
       <h2 style="margin-top:0">Backup</h2>
-      <p class="note" style="margin:4px 0 10px">Download everything this phone holds — your numbers, every entry and your plans. JSON holds it all; CSV holds the ledger only. Import restores a backup.</p>
+      <p class="note" style="margin:4px 0 10px">Download everything this phone holds — your numbers, every entry, your plans and your owed notes. JSON holds it all; CSV holds the ledger only. Import restores a backup.</p>
       <div class="row">
         <div><button class="act" id="expJson" type="button">Export JSON</button></div>
         <div><button class="act" id="expCsv" type="button">Export CSV</button></div>
@@ -467,7 +522,7 @@ button.gear{width:44px;height:44px}
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">Finance PWA · fully local · shell v21</p>
+    <p class="note" style="margin:14px 0 0">Finance PWA · fully local · shell v22</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>
@@ -482,6 +537,7 @@ button.gear{width:44px;height:44px}
     <button type="button" class="tab" data-tab="money">Money</button>
     <button type="button" class="addbtn" id="addBtn" aria-label="Add expense">+</button>
     <button type="button" class="tab" data-tab="ledger">Ledger</button>
+    <button type="button" class="tab" data-tab="owed">Owed</button>
     <button type="button" class="tab" data-tab="coach">Coach</button>
   </div>
 </nav>
