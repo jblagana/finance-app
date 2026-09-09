@@ -30,19 +30,30 @@ function providerKey(env) {
 function providerModel(env) {
   return env.LLM_MODEL || 'qwen/qwen3.8-27b';
 }
+// Reduce a URL/origin to its serialized origin (scheme + host [+ port]). Browsers
+// send the Origin header WITHOUT any path (Origin: https://jblagana.github.io), so
+// matching a full "/finance-app" URL would never work -- compare on origin only.
+function originOf(value) {
+  try { return new URL(value).origin; } catch (e) { return String(value || '').trim(); }
+}
 function allowedOrigins(env) {
   var raw = env.ALLOWED_ORIGIN || DEFAULT_ORIGIN;
-  return String(raw).split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  return String(raw).split(',').map(originOf).filter(Boolean);
 }
-
+function originAllowed(origin, env) {
+  return Boolean(origin) && allowedOrigins(env).indexOf(originOf(origin)) >= 0;
+}
 function corsHeaders(origin, env) {
   var h = new Headers();
-  var allowed = allowedOrigins(env);
-  var match = (origin && allowed.indexOf(origin) >= 0) ? origin : (allowed[0] || DEFAULT_ORIGIN);
-  h.set('Access-Control-Allow-Origin', match);
-  h.set('Vary', 'Origin');
-  h.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  h.set('Access-Control-Allow-Headers', 'content-type');
+  // Echo the request's own origin back, but only when it is on the allow-list. A
+  // matching Access-Control-Allow-Origin is what lets the browser read the reply;
+  // an unmatched (or missing) origin keeps the cross-origin read blocked.
+  if (originAllowed(origin, env)) {
+    h.set('Access-Control-Allow-Origin', origin);
+    h.set('Vary', 'Origin');
+    h.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    h.set('Access-Control-Allow-Headers', 'content-type');
+  }
   return h;
 }
 function jsonHeaders(origin, env) {
@@ -60,7 +71,6 @@ function fail(status, message, origin, env) {
 export default {
   async fetch(request, env) {
     var origin = request.headers.get('Origin') || '';
-    var allowed = allowedOrigins(env);
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(origin, env) });
@@ -68,9 +78,10 @@ export default {
     if (request.method !== 'POST') {
       return fail(405, 'method not allowed', origin, env);
     }
-    // CORS stops the browser from reading a cross-origin reply; the Origin
-    // check below blocks direct / scripted calls from anywhere but the app.
-    if (allowed.indexOf(origin) < 0) {
+    // CORS stops the browser from reading a cross-origin reply; this Origin check
+    // (compared on scheme+host, not path) blocks direct / scripted calls from
+    // anywhere but the app.
+    if (!originAllowed(origin, env)) {
       return fail(403, 'forbidden origin', origin, env);
     }
 
