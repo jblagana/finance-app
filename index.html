@@ -343,6 +343,12 @@ button.gear{width:44px;height:44px}
 .confirm-box .row button{flex:1 1 0;width:auto;min-height:42px}
 button.act.danger{background:var(--bad);border-color:var(--bad)}
 @media (prefers-reduced-motion:reduce){#confirmDlg,.confirm-box{transition:none}}
+.ai-model{flex:1;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 10px;font-weight:600;font-size:12.5px}
+.ai-model.on{border-color:var(--acc);color:#fff;background:var(--acc)}
+.lex-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.lex-row:last-child{border-bottom:none}
+.lex-x{cursor:pointer;border:none;background:transparent;color:var(--mut);font-size:13px;padding:2px 6px}
+.lex-x:active{color:var(--bad)}
 </style>
 </head>
 
@@ -579,6 +585,19 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         <span style="font-size:14px;font-weight:600">Use local AI</span>
       </label>
       <p id="aiNote" class="note" style="margin:0"></p>
+      <div id="aiModelRow" style="display:flex;gap:8px;margin-top:12px;align-items:center">
+        <span style="font-size:12.5px;color:var(--mut)">Coach model</span>
+        <button class="ai-model" id="aiModel135" type="button">135M · fast</button>
+        <button class="ai-model" id="aiModel360" type="button">360M · smarter</button>
+      </div>
+      <div style="margin-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:13px;font-weight:600">What I’ve learned</span>
+          <button class="act ghost" id="aiLexClear" type="button" style="display:none;width:auto;padding:6px 10px;font-size:12px">Forget everything</button>
+        </div>
+        <p id="aiLexEmpty" class="note" style="margin:6px 0 0">The coach remembers how you say things (e.g. “whats my log” → spending). Nothing learned yet.</p>
+        <div id="aiLexList" style="margin-top:4px"></div>
+      </div>
     </section>
     <section class="card" style="margin-top:16px">
       <h2 style="margin-top:0">Backup</h2>
@@ -592,7 +611,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">FinSmart · fully local · shell v42</p>
+    <p class="note" style="margin:14px 0 0">FinSmart · fully local · shell v43</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>

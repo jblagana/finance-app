@@ -48,6 +48,29 @@
   // layer can read it synchronously; it is null for the test/dev path (and
   // without the brain), which keeps the rule engine byte-identical.
   var currentAiVec = null;
+  // v43: personal lexicon — "learns your words." Your phrasings map to known
+  // concepts (canonical questions the rules already answer). A confident match
+  // routes deterministically in under a millisecond; a mid-band or seeded match
+  // asks once, then remembers. Rules always win; this only routes to existing
+  // read intents and never writes money.
+  var lex = [];           // [{norm, phrase, mapsTo, label, vec, count, lastAt}]
+  var lexByNorm = {};     // norm -> record (exact-match fast path)
+  var clarify = null;     // { t, choices: [{id, label}] } a pending clarification
+  var LEX_ACT = 0.80;     // confident similarity -> route straight to the concept
+  var LEX_ASK = 0.62;     // mid band -> ask which concept (then remember the pick)
+  var LEX_MAX = 200;      // cap on stored phrases (drop the least-recently-used)
+  var CONCEPTS = {
+    'spend:month': { label: 'How much I spent this month', q: 'what did i spend this month', kw: 'spend' },
+    'spend:week': { label: 'How much I spent this week', q: 'what did i spend this week', kw: 'week' },
+    'plans': { label: 'My plans / coming up', q: 'show my plans', kw: 'plan' },
+    'status': { label: 'Where I stand (status)', q: 'status', kw: 'status' }
+  };
+  // Known-ambiguous phrasings. When one matches, the rules have not answered, and
+  // there is no confident learned mapping yet, we offer a one-tap choice of the
+  // most likely concepts — then we remember whichever you pick.
+  var AMBIG = [
+    { rx: /\b(?:log|logs|logging|ledger|entries?|receipts?)\b/, concepts: ['spend:month', 'spend:week', 'plans', 'status'] }
+  ];
   var aiCardMsg = null; // the live "downloading the offline brain" card, if open
   var RX_ANS_AMT = /^(?:it'?s|its|is|about|around|roughly|like|maybe|just|now|total|new)?\s*(?:php|\u20b1|pesos?)?\s*\d[\d,]*(?:\.\d{1,2})?\s*(?:k\b|thousand)?\s*(?:php|\u20b1|pesos?)?[?.!]*$/;
   var RX_ANS_NAMED = /^[a-z][a-z'&\- ]{0,39}?\s+(?:is|was|at|of|to|equals|running|sits)(?:\s+(?:at|around|about|roughly))?\s+(?:php|\u20b1|pesos?)?\s*\d[\d,]*(?:\.\d{1,2})?\s*(?:k\b|thousand)?\s*(?:php|\u20b1|pesos?)?[?.!]*$/;
@@ -1333,7 +1356,7 @@
     L.push('- liquid cash ' + money(e.cash.total) + ', free ' + money(e.cash.free) + ', floor ' + money(e.floor || 0));
     L.push('- cards owed ' + money(e.card_owed || 0) + ', prepay on the ' + ordinal(e.prepay_day || 14) + ': ' + money(e.total_prepay || 0));
     var debts = (e.obligations && e.obligations.debts) || [];
-    for (var i = 0; i < Math.min(6, debts.length); i++) {
+    for (var i = 0; i < Math.min(4, debts.length); i++) {
       var d = debts[i];
       L.push('- ' + d.name + ': this month ' + money(d.this_month || 0) + (d.balance != null ? ', left ' + money(d.balance) : ''));
     }
@@ -1359,7 +1382,7 @@
   }
   function aiPrompt(t, ctx) {
     return [
-      { role: 'system', content: 'You are FinSmart, a personal money coach running fully offline on the user\'s phone. Answer only from the numbers provided, in 2-4 short plain sentences, no lists, no markdown, no emojis. Never invent numbers. If the question is outside the provided numbers, say so in one sentence. You can never write, log or change anything - you only explain and advise.' },
+      { role: 'system', content: 'You are FinSmart, a personal money coach, offline on the user\'s phone. Answer only from the numbers given, in 1-2 short plain sentences (under 40 words), no lists, no markdown, no emojis. Never invent numbers. If outside the given numbers, say so in one line. You only explain - never write, log or change anything.' },
       { role: 'user', content: aiContextText(t, ctx) }
     ];
   }
@@ -1447,6 +1470,143 @@
     FAI.ensureLoaded().then(function (st) { aiProgressDone(st); });
   }
 
+  // ---------- v43: personal lexicon + clarification loop ----------
+  // Pull stored phrases from the app's lex store into the in-memory maps.
+  // Re-read on every message, so "Forget everything" in Settings takes effect on
+  // the next send with no cross-module sync.
+  function loadLex(rows) {
+    lex = (rows || []).slice(0, LEX_MAX);
+    lexByNorm = {};
+    for (var i = 0; i < lex.length; i++) { if (lex[i] && lex[i].norm) lexByNorm[lex[i].norm] = lex[i]; }
+  }
+  function lcos(a, b) {
+    if (!a || !b || a.length !== b.length) return 0;
+    var dot = 0, na = 0, nb = 0;
+    for (var i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+    if (!na || !nb) return 0;
+    return dot / (Math.sqrt(na) * Math.sqrt(nb));
+  }
+  // lexMatch: exact (learned) first, then a fuzzy cosine match against stored
+  // phrase vectors. -> {type:'act',id,rec} | {type:'ask',choices} | {type:'none'}.
+  function lexMatch(t) {
+    if (!lex.length) return { type: 'none' };
+    var exact = lexByNorm[t];
+    if (exact) return { type: 'act', id: exact.mapsTo, rec: exact };
+    if (!currentAiVec) return { type: 'none' };
+    var scored = [];
+    for (var i = 0; i < lex.length; i++) {
+      var r = lex[i];
+      if (!r.vec) continue;
+      var c = lcos(currentAiVec, r.vec);
+      if (c >= LEX_ASK) scored.push({ id: r.mapsTo, c: c, rec: r });
+    }
+    if (!scored.length) return { type: 'none' };
+    scored.sort(function (a, b) { return b.c - a.c; });
+    var top = scored[0];
+    if (top.c >= LEX_ACT && (scored.length === 1 || top.c - scored[1].c >= 0.05)) return { type: 'act', id: top.id, rec: top.rec };
+    var seen = {}, choices = [];
+    for (var j = 0; j < scored.length && choices.length < 3; j++) {
+      if (seen[scored[j].id]) continue;
+      seen[scored[j].id] = 1;
+      choices.push({ id: scored[j].id, label: (CONCEPTS[scored[j].id] || {}).label || scored[j].id });
+    }
+    if (choices.length < 2) return { type: 'act', id: top.id, rec: top.rec };
+    return { type: 'ask', choices: choices };
+  }
+  // runRules: run ONLY the deterministic rule engine over a phrase (no story,
+  // lexicon, or LLM) — exactly the intents a normal question would hit.
+  function runRules(t, ctx) {
+    var dm = findDateSpan(t);
+    var amtText = dm ? t.replace(dm.raw, ' ') : t;
+    var am = findAmount(amtText);
+    var fa = findAccounts(t, ctx);
+    var p = {
+      date: dm ? dm.iso : null, amt: am ? am.amt : null, cat: guessCategory(t),
+      what: extractWhat(amtText, am), exactAcct: fa.exact,
+      cardAcct: fa.exact && fa.exact.kind === 'card' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'card'; })[0] || null),
+      cashAcct: fa.exact && fa.exact.kind === 'cash' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'cash'; })[0] || null)
+    };
+    var order = [intentHelp, intentGreet, intentPlanRemove, intentPlanAdd, intentPlanList,
+      intentUrgent, intentLog, intentDeficit, intentSpend, intentStory,
+      intentDebt, intentOneOff, intentSinking, intentFuture, intentStatus];
+    for (var i = 0; i < order.length; i++) { var rr = order[i](t, ctx, p); if (rr) return rr; }
+    return null;
+  }
+
+  function runConcept(cid, ctx) {
+    var c = CONCEPTS[cid];
+    if (!c || !c.q) return null;
+    return runRules(norm(c.q), ctx);
+  }
+  // learn: remember "phrasing -> concept." Embeds the phrase for fuzzy re-match
+  // (best effort — exact matching works without the brain), then persists to the
+  // app's lex store. Never writes money.
+  function learn(phrase, cid, rawText) {
+    var c = CONCEPTS[cid];
+    if (!c) return Promise.resolve(false);
+    var t = norm(phrase);
+    var rec = lexByNorm[t] || { norm: t, count: 0 };
+    rec.phrase = (rawText || phrase || t).replace(/\s+/g, ' ').trim();
+    rec.mapsTo = cid;
+    rec.label = c.label;
+    rec.count = (rec.count || 0) + 1;
+    rec.lastAt = new Date().toISOString();
+    var FAI = window.FinAI;
+    var pre = (FAI && FAI.enabled())
+      ? FAI.prepare(phrase).then(function (v) { if (v) rec.vec = v; return true; })['catch'](function () { return true; })
+      : Promise.resolve(true);
+    return pre.then(function () {
+      var all = [], have = false;
+      for (var k = 0; k < lex.length; k++) {
+        if (lex[k].norm === t) { all.push(rec); have = true; } else { all.push(lex[k]); }
+      }
+      if (!have) all.push(rec);
+      if (all.length > LEX_MAX) {
+        all.sort(function (a, b) { return (a.lastAt || '') < (b.lastAt || '') ? -1 : 1; });
+        all = all.slice(all.length - LEX_MAX);
+      }
+      loadLex(all);
+      return F.lexPut(rec).then(function () { return true; })['catch'](function () { return false; });
+    });
+  }
+  // clarifyPickFor: does the typed message match one of the pending choices?
+  function clarifyPickFor(t) {
+    if (!clarify || !clarify.choices) return null;
+    for (var i = 0; i < clarify.choices.length; i++) {
+      var cc = CONCEPTS[clarify.choices[i].id];
+      if (cc && cc.kw && t.indexOf(cc.kw) >= 0) return clarify.choices[i].id;
+    }
+    return null;
+  }
+  // ambiguousFor: a seeded known-ambiguous phrasing -> its candidate concepts.
+  function ambiguousFor(t) {
+    for (var i = 0; i < AMBIG.length; i++) {
+      if (AMBIG[i].rx.test(t)) {
+        var choices = [];
+        for (var j = 0; j < AMBIG[i].concepts.length; j++) {
+          var cid = AMBIG[i].concepts[j];
+          choices.push({ id: cid, label: (CONCEPTS[cid] || {}).label || cid });
+        }
+        return choices;
+      }
+    }
+    return null;
+  }
+  // clarifyCard: the one-tap "which did you mean?" — each choice is a clarify_pick.
+  function clarifyCard(t, choices, hint) {
+    var acts = [];
+    for (var i = 0; i < choices.length; i++) {
+      acts.push({ label: choices[i].label, act: 'clarify_pick', payload: { pick: choices[i].id } });
+    }
+    acts.push({ label: 'Not one of these', act: 'clarify_ignore' });
+    return {
+      html: block('Just to be sure',
+        line('“' + esc(t) + '” could mean a few things. Tap the one you meant and I’ll remember it.'),
+        hint || null, 'good'),
+      actions: acts
+    };
+  }
+
   // ---------- dispatch ----------
   function handle(raw, ctx) {
     var t = norm(raw);
@@ -1496,6 +1656,20 @@
       }
       pendingAsk = null;
     }
+    // v43: a pending clarification is completed by the very next message that
+    // matches one of its choices; anything else closes it and routes normally.
+    if (clarify) {
+      var cPick = clarifyPickFor(t);
+      if (cPick) {
+        var cPhrase = clarify.t;
+        clarify = null;
+        learn(cPhrase, cPick, cPhrase)['catch'](function () {});
+        var cRes = runConcept(cPick, ctx);
+        if (cRes) return cRes;
+      } else {
+        clarify = null;
+      }
+    }
     var order = [intentHelp, intentGreet, intentPlanRemove, intentPlanAdd, intentPlanList,
       intentUrgent, intentLog, intentDeficit, intentSpend, intentStory,
       intentDebt, intentOneOff, intentSinking, intentFuture, intentStatus];
@@ -1506,6 +1680,26 @@
     // v39: nothing the rules own matched — this is an open question. With the
     // brain loaded, the local coach answers it (text only, no actions, no
     // writes); otherwise the old fallback card.
+    // v43: the rules didn't own it. Before the LLM, give the personal lexicon a
+    // shot — a confident learned match answers deterministically (sub-millisecond),
+    // an ambiguous known phrasing asks once and then remembers the pick. Neither
+    // ever writes; both route only to read intents the rules already answer.
+    var lx = lexMatch(t);
+    if (lx.type === 'act') {
+      var ra = runConcept(lx.id, ctx);
+      if (ra) {
+        if (lx.rec) { lx.rec.count = (lx.rec.count || 0) + 1; lx.rec.lastAt = new Date().toISOString(); F.lexPut(lx.rec)['catch'](function () {}); }
+        return ra;
+      }
+    } else if (lx.type === 'ask') {
+      clarify = { t: t, choices: lx.choices };
+      return clarifyCard(t, lx.choices);
+    }
+    var amb = ambiguousFor(t);
+    if (amb) {
+      clarify = { t: t, choices: amb };
+      return clarifyCard(t, amb, 'Tap the one you meant — I’ll remember it next time.');
+    }
     var aiRes = aiCoach(t, ctx);
     if (aiRes) return aiRes;
     return intentFallback(t);
@@ -1571,6 +1765,7 @@
 
   function runAction(m, a) {
     pendingAsk = null; // v38: any explicit action closes a pending question
+    var pendingClarify = clarify; clarify = null; // v43: any action closes a pending clarification
     if (!a || a.act === 'noop') { markDone(m); return; }
     var pl = a.payload || {};
     if (a.act === 'open_tab') {
@@ -1590,6 +1785,29 @@
     }
     if (a.act === 'ai_dismiss') {
       markDone(m);
+      return;
+    }
+    if (a.act === 'clarify_pick') {
+      var cid = pl.pick;
+      var cSel = CONCEPTS[cid];
+      var cPhrase = pendingClarify ? pendingClarify.t : '';
+      markDone(m);
+      if (!cSel || !cPhrase) { pushBot('Pick one of the options above and I’ll remember it next time.'); return; }
+      loadCtx().then(function (ctx) {
+        var rc = runConcept(cid, ctx);
+        var gotIt = block('Got it — I remember that now',
+          line('“' + esc(cPhrase) + '” → <b>' + esc(cSel.label) + '</b>. Next time you ask, I’ll jump straight to it.'),
+          null, 'good');
+        learn(cPhrase, cid, cPhrase).then(function () {
+          var um2 = { id: chatId(), who: 'bot', html: gotIt + (rc ? rc.html : ''), actions: [], at: new Date().toISOString() };
+          saveMsg(um2).then(function () { appendMsg(um2); });
+        });
+      });
+      return;
+    }
+    if (a.act === 'clarify_ignore') {
+      markDone(m);
+      pushBot('No problem — ask it another way and I’ll take my best guess.');
       return;
     }
     if (a.act === 'add_plan') {
@@ -1704,7 +1922,7 @@
     return saveMsg(sm).then(function () {
       if (typing.parentNode) typing.parentNode.removeChild(typing);
       appendMsg(sm);
-      return FAI.generate(res.prompt, { maxNew: 128 }, function (txt) {
+      return FAI.generate(res.prompt, { maxNew: 48 }, function (txt) {
         var el = msgsEl && msgsEl.querySelector('[data-cid="' + sm.id + '"] .ins-line');
         if (el) { el.textContent = txt || '…'; scrollBottom(); }
       }).then(function (txt) {
@@ -1743,6 +1961,11 @@
       var pre = (FAI && FAI.enabled())
         ? FAI.ensureNameVecs(aiNamesFor(ctx)).then(function () { return FAI.prepare(v); })
         : Promise.resolve(null);
+      // v43: load the personal lexicon before the rules, so a learned phrasing can
+      // route deterministically (the exact match works even with the brain off).
+      if (typeof F.lexAll === 'function') {
+        pre = pre.then(function (vec) { return F.lexAll().then(loadLex)['catch'](function () {}).then(function () { return vec; }); });
+      }
       return pre.then(function (vec) {
         currentAiVec = vec || null;
         var res = handle(v, ctx);

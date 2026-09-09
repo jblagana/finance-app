@@ -1,4 +1,4 @@
-/* FinSmart v42 — offline brain, dedicated worker.
+/* FinSmart v43 — offline brain, dedicated worker.
  *
  * Every model computation happens here so the UI thread never does math:
  *   - all-MiniLM-L6-v2 (q8, ~23 MB)  -> sentence embeddings, which chat.js
@@ -164,7 +164,7 @@ function progress(stage) {
   };
 }
 
-function load() {
+function load(pref) {
   if (loading) return loading;
   if (state === 'ready' || state === 'partial') return Promise.resolve(state);
   pickDevice();
@@ -189,11 +189,15 @@ function load() {
     })
     .then(function () {
       if (!fe) return null;
-      // 2) the coach LLM — try the 135M first (the fast default), then the 360M
+      // 2) the coach LLM — the selected model first, the other as fallback.
+      // LLM_MODELS stays 135M-first (the default and the smoke-test contract);
+      // a '360' preference only reorders which one loads first. WebKit still
+      // runs the same non-JSEP kernel — only the model choice changes.
+      var llmOrder = (pref === '360') ? [LLM_MODELS[1], LLM_MODELS[0]] : LLM_MODELS;
       var i = 0;
       function tryNext() {
-        if (gen || i >= LLM_MODELS.length) return Promise.resolve();
-        var m = LLM_MODELS[i++];
+        if (gen || i >= llmOrder.length) return Promise.resolve();
+        var m = llmOrder[i++];
         return withTimeout(
           T.pipeline('text-generation', m.id, {
             device: device, dtype: 'q4', progress_callback: progress('llm')
@@ -244,7 +248,7 @@ function embed(texts) {
 
 function generate(id, messages, opts) {
   if (!gen) { post({ type: 'gen-error', id: id, err: 'coach model not ready' }); return; }
-  var maxNew = Math.min(128, Math.max(16, Number(opts && opts.maxNew) || 128));
+  var maxNew = Math.min(48, Math.max(16, Number(opts && opts.maxNew) || 48));
   var stopped = false;
   var to = setTimeout(function () { stopped = true; }, GEN_TIMEOUT);
   gen(messages, {
@@ -275,7 +279,7 @@ function generate(id, messages, opts) {
 self.onmessage = function (e) {
   var m = e.data || {};
   if (m.type === 'load') {
-    load()['catch'](function (e2) {
+    load(m.model)['catch'](function (e2) {
       state = 'error';
       loadErr = String((e2 && e2.message) || e2);
       post({ type: 'status', state: 'error', device: device, embedReady: !!fe, llmReady: !!gen, llm: llmId, err: loadErr });

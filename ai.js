@@ -23,6 +23,7 @@
   var VEC_KEY = 'fin.ai.vecs.v1';  // cached embeddings of the stored names
   var NAME_LIMIT = 48;             // cap on how many names we embed
   var FLOAT_DP = 1e4;              // rounding keeps the localStorage blob small
+  var MODEL_KEY = 'fin.ai.model.v1'; // '135' (fast, default) or '360' (smarter)
 
   var worker = null;
   var seq = 0;
@@ -45,6 +46,29 @@
   }
   function offered() { try { return localStorage.getItem(OFFER_KEY) === '1'; } catch (e) { return false; } }
   function markOffered() { try { localStorage.setItem(OFFER_KEY, '1'); } catch (e) {} }
+
+  // --- coach model preference (135M fast vs 360M smarter) -------------------
+  function modelPref() { try { return localStorage.getItem(MODEL_KEY) === '360' ? '360' : '135'; } catch (e) { return '135'; } }
+  function modelName() {
+    var s = String(state.llm || '');
+    if (s.indexOf('360M') >= 0) return '360M';
+    if (s.indexOf('135M') >= 0) return '135M';
+    return modelPref() === '360' ? '360M' : '135M';
+  }
+  // Switching the model tears down the current worker and re-loads with the new
+  // preference so exactly one coach model is resident. The weights stay cached,
+  // so a repeat switch is a local load, not a re-download. WebKit still runs the
+  // non-JSEP single-threaded kernel — only the model choice changes.
+  function setModel(which) {
+    var pick = (which === '360') ? '360' : '135';
+    try { localStorage.setItem(MODEL_KEY, pick); } catch (e) {}
+    if (worker) { try { worker.terminate(); } catch (e) {} worker = null; }
+    pending = {}; genCbs = {}; vecCache = {};
+    state = { state: 'idle', device: 'wasm', embedReady: false, llmReady: false, llm: null, progress: null, err: null };
+    refreshNote();
+    refreshModelSel();
+    if (enabled()) ensureLoaded();
+  }
 
   function emitStatus() {
     for (var i = 0; i < statusCbs.length; i++) { try { statusCbs[i](state); } catch (e) {} }
@@ -123,7 +147,7 @@
   function ensureLoaded() {
     var w = getWorker();
     if (!w) return Promise.reject(new Error('no model worker'));
-    w.postMessage({ type: 'load' }); // the worker ignores it when already loaded
+    w.postMessage({ type: 'load', model: modelPref() }); // the worker ignores it when already loaded
     if (state.state !== 'idle' && state.state !== 'loading') return Promise.resolve(state);
     return new Promise(function (resolve) {
       var done = function (s) {
@@ -233,19 +257,21 @@
     if (!note) return;
     if (!on) { note.textContent = 'Off — the coach answers from the rule engine only.'; return; }
     var s = state;
+    var mm = modelName(); // '135M' | '360M'
+    var mMB = mm === '360M' ? '180 MB' : '130 MB';
     if (s.state === 'loading') {
       var p = s.progress || null;
       note.textContent = 'Downloading… ' + (p && p.pct != null ? p.pct + '%' : 'starting') +
-        (p && p.stage === 'llm' ? ' (the big coach model)' : '');
+        (p && p.stage === 'llm' ? ' (the ' + mm + ' coach)' : '');
     } else if (s.state === 'ready') {
       note.textContent = 'Ready on this phone · ' + (s.device === 'webgpu' ? 'WebGPU' : 'WASM') +
-        (s.llm ? ' · ' + s.llm.split('/')[1] : '') + ' · works offline';
+        ' · ' + mm + ' coach · works offline';
     } else if (s.state === 'partial') {
       note.textContent = 'Name-matching is ready; the coach model didn’t fit on this phone.';
     } else if (s.state === 'error') {
       note.textContent = 'Couldn’t load (' + (s.err || 'unknown error') + '). Flip this off and on to retry.';
     } else {
-      note.textContent = 'On — downloads about 250 MB the first time you use it, then works without signal.';
+      note.textContent = 'On — downloads about ' + mMB + ' for the ' + mm + ' coach the first time, then works without signal.';
     }
   }
   function bindSettings() {
@@ -255,11 +281,66 @@
       setEnabled(cb.checked);
       if (cb.checked) ensureLoaded(); // starting it here is consent — the size is stated above
     });
+    var m135 = byId('aiModel135'), m360 = byId('aiModel360');
+    if (m135) m135.addEventListener('click', function () { setModel('135'); });
+    if (m360) m360.addEventListener('click', function () { setModel('360'); });
     refreshNote();
+    refreshModelSel();
+    var lexClr = byId('aiLexClear');
+    if (lexClr) lexClr.addEventListener('click', function () {
+      if (typeof window.FinApp !== 'undefined' && typeof window.FinApp.lexClear === 'function') window.FinApp.lexClear().then(renderLex);
+    });
+    // re-render the learned list each time the Settings sheet opens
+    var sh = byId('setSheet');
+    if (sh && typeof MutationObserver !== 'undefined') {
+      new MutationObserver(function (muts) {
+        for (var i = 0; i < muts.length; i++) { if (muts[i].target === sh && sh.classList.contains('show')) renderLex(); }
+      }).observe(sh, { attributes: true, attributeFilter: ['class'] });
+    }
+    renderLex();
     // the flag persists across sessions: an opted-in phone re-loads the brain
     // on page load (after the first download the weights are cached, so this
     // is free and works offline)
     if (enabled()) ensureLoaded();
+  }
+  function refreshModelSel() {
+    var pick = modelPref(), m135 = byId('aiModel135'), m360 = byId('aiModel360');
+    if (m135) m135.className = 'ai-model' + (pick === '135' ? ' on' : '');
+    if (m360) m360.className = 'ai-model' + (pick === '360' ? ' on' : '');
+  }
+  function hexc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  // "What I've learned" — the coach's stored phrasings, editable in Settings.
+  // Reads/writes the app's lex store only; never touches money.
+  function renderLex() {
+    var list = byId('aiLexList'), empty = byId('aiLexEmpty'), clr = byId('aiLexClear');
+    if (!list || typeof window.FinApp === 'undefined' || typeof window.FinApp.lexAll !== 'function') return;
+    window.FinApp.lexAll().then(function (rows) {
+      rows = rows || [];
+      if (!rows.length) {
+        list.innerHTML = '';
+        if (empty) empty.style.display = '';
+        if (clr) clr.style.display = 'none';
+        return;
+      }
+      if (empty) empty.style.display = 'none';
+      if (clr) clr.style.display = '';
+      rows.sort(function (a, b) { return (a.lastAt || '') < (b.lastAt || '') ? 1 : -1; });
+      var h = '';
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        h += '<div class="lex-row"><span>“' + hexc(r.phrase || r.norm) + '” → ' + hexc(r.label || r.mapsTo) + '</span>' +
+          '<button class="lex-x" type="button" data-norm="' + hexc(r.norm) + '" aria-label="Forget this">✕</button></div>';
+      }
+      list.innerHTML = h;
+      var xs = list.querySelectorAll('.lex-x');
+      for (var j = 0; j < xs.length; j++) {
+        (function (b) {
+          b.addEventListener('click', function () {
+            if (typeof window.FinApp.lexDel === 'function') window.FinApp.lexDel(b.getAttribute('data-norm')).then(renderLex);
+          });
+        })(xs[j]);
+      }
+    })['catch'](function () {});
   }
 
   window.FinAI = {
@@ -275,7 +356,10 @@
     ensureNameVecs: ensureNameVecs,
     nameVec: nameVec,
     cosine: cosine,
-    generate: generate
+    generate: generate,
+    modelName: modelName,
+    modelPref: modelPref,
+    setModel: setModel
   };
 
   loadNameVecs();

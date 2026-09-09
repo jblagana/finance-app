@@ -3,11 +3,12 @@
   'use strict';
 
   var DB_NAME = 'finances-pwa';
-  var DB_VERSION = 3;
+  var DB_VERSION = 4;
   var STORE_TX = 'txns';
   var STORE_PLANS = 'plans';
   var STORE_META = 'meta';
   var STORE_CHAT = 'chat';
+  var STORE_LEX = 'lex';
   var LS_MEAL = 'fin.mealBudget';
   var LS_NAME = 'fin.name';
   var LS_TAB = 'fin.tab';
@@ -76,6 +77,7 @@
         if (!db.objectStoreNames.contains(STORE_PLANS)) db.createObjectStore(STORE_PLANS, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META, { keyPath: 'key' });
         if (!db.objectStoreNames.contains(STORE_CHAT)) db.createObjectStore(STORE_CHAT, { keyPath: 'id' });
+        if (!db.objectStoreNames.contains(STORE_LEX)) db.createObjectStore(STORE_LEX, { keyPath: 'norm' });
       };
       req.onsuccess = function () { resolve(req.result); };
       req.onerror = function () { reject(req.error); };
@@ -106,6 +108,25 @@
       return new Promise(function (resolve, reject) {
         var tx = db.transaction(store, 'readwrite');
         tx.objectStore(store).delete(key);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  // ---------- personal lexicon (v43) — the coach learns YOUR phrasings ----------
+  // Stored on this phone in the 'lex' store. A record maps a normalized
+  // phrasing to a known concept (a canonical question the rule engine already
+  // answers) plus an optional embedding for fuzzy re-matches. The coach only
+  // ever routes to these deterministic intents — it never writes money.
+  function lexAll() { return idbAll(STORE_LEX).then(function (rows) { return rows || []; }); }
+  function lexPut(rec) { if (!rec || !rec.norm) return Promise.resolve(); return idbPut(STORE_LEX, rec).then(function () {}); }
+  function lexDel(norm) { return idbDel(STORE_LEX, norm); }
+  function lexClear() {
+    return openDB().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(STORE_LEX, 'readwrite');
+        tx.objectStore(STORE_LEX).clear();
         tx.oncomplete = function () { resolve(); };
         tx.onerror = function () { reject(tx.error); };
       });
@@ -2396,6 +2417,11 @@
     idbPut: idbPut,
     idbDel: idbDel,
     STORE_CHAT: STORE_CHAT,
+    STORE_LEX: STORE_LEX,
+    lexAll: lexAll,
+    lexPut: lexPut,
+    lexDel: lexDel,
+    lexClear: lexClear,
     STORE_PLANS: STORE_PLANS,
     STORE_TX: STORE_TX,
     STORE_META: STORE_META
