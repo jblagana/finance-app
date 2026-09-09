@@ -290,8 +290,7 @@
   }
   function coachName(s) {
     var n = '';
-    try { n = (localStorage.getItem(LS_NAME) || '').trim(); } catch (e) {}
-    if (!n && s) n = String(s.display_name || '').trim();
+    if (s) n = String(s.display_name || '').trim();
     return n;
   }
 
@@ -1468,8 +1467,6 @@
     if (!d) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
     var s = d.s, free = d.free, daysLeft = d.daysLeft, meal = d.meal;
-    var nameEl = byId('nameEdit');
-    if (nameEl && !nameEl.value) nameEl.value = coachName(d.s);
     var blocks = '';
 
     // ---- Today: daily headroom + treat check
@@ -2509,12 +2506,6 @@
       var v = parseFloat(mealEl.value);
       if (v > 0) { try { localStorage.setItem(LS_MEAL, String(v)); } catch (e2) {} }
       else mealEl.value = mealBudget();
-      render();
-    };
-    var nameEl = byId('nameEdit');
-    if (nameEl) nameEl.onchange = function () {
-      var v = nameEl.value.trim();
-      try { if (v) localStorage.setItem(LS_NAME, v); else localStorage.removeItem(LS_NAME); } catch (e2) {}
       render();
     };
     var amtEl = byId('f_amount');
