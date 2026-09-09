@@ -599,6 +599,21 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
       </div>
     </section>
     <section class="card" style="margin-top:16px">
+      <h2 style="margin-top:0">Remote coach (online)</h2>
+      <p class="note" style="margin-top:2px">A smarter, faster coach for when you're online, from a free LLM behind your own Cloudflare Worker. The Worker holds the API key — only your question leaves this phone, never your numbers. When you're offline, or the remote is down, the local coach above takes over automatically. Free, no card.</p>
+      <label style="display:flex;align-items:center;gap:10px;margin:12px 0 4px;cursor:pointer">
+        <input type="checkbox" id="aiRemoteToggle" style="width:auto">
+        <span style="font-size:14px;font-weight:600">Use remote coach when online (free)</span>
+      </label>
+      <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+        <input type="url" id="aiRemoteUrl" inputmode="url" placeholder="https://finsmart-coach.your-subdomain.workers.dev"
+          style="flex:1;min-width:0;font-size:12.5px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
+        <button class="act ghost" id="aiRemoteTest" type="button" style="width:auto;padding:7px 10px;font-size:12px">Test</button>
+      </div>
+      <p id="aiRemoteNote" class="note" style="margin:8px 0 0" aria-live="polite"></p>
+    </section>
+    
+    <section class="card" style="margin-top:16px">
       <h2 style="margin-top:0">Backup</h2>
       <p class="note" style="margin:4px 0 10px">Download everything this phone holds — your numbers, every entry, your plans and your owed notes. JSON holds it all; CSV holds the ledger only. Import restores a backup.</p>
       <div class="row">
@@ -610,7 +625,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">FinSmart · fully local · shell v44</p>
+    <p class="note" style="margin:14px 0 0">FinSmart · local-first · shell v45</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>

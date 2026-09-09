@@ -1386,14 +1386,20 @@
       { role: 'user', content: aiContextText(t, ctx) }
     ];
   }
-  function aiAnswerHtml(txt, ctx, err) {
+  function aiAnswerHtml(txt, ctx, err, src) {
+    src = src === 'remote' ? 'remote' : 'local';
+    var who = src === 'remote' ? 'remote coach' : 'local coach';
+    var head = src === 'remote' ? 'Coach · remote' : 'Coach · local';
+    var foot = src === 'remote'
+      ? 'online free coach · your prompt went to the model via your worker'
+      : 'offline model · your numbers never left this phone';
     var inner = txt
       ? esc(txt).replace(/\n/g, '<br>')
-      : 'The local coach ' + (err ? 'couldn’t answer that (' + esc(err) + ').' : 'had nothing to add.') +
+      : 'The ' + who + ' ' + (err ? 'couldn’t answer that (' + esc(err) + ').' : 'had nothing to add.') +
         ' I still know your numbers — try <b>status</b>, <b>plans</b> or <b>help</b>.';
-    return '<div class="c-block"><div class="c-t">Coach · local</div>' +
+    return '<div class="c-block"><div class="c-t">' + head + '</div>' +
       '<div class="ins-line">' + inner + '</div>' +
-      '<div class="note">offline model · your numbers never left this phone</div></div>' + freshness(ctx);
+      '<div class="note">' + foot + '</div></div>' + freshness(ctx);
   }
 
   function aiProgressHtml(st) {
@@ -1912,11 +1918,14 @@
   // tokens arrive from the worker; the final text is what gets persisted.
   function sendLlm(res, ctx, typing) {
     var FAI = window.FinAI;
+    var src0 = (FAI.remoteEnabled() && FAI.remoteConfigured() && (typeof navigator === 'undefined' || navigator.onLine !== false)) ? 'remote' : 'local';
+    var rHead = src0 === 'remote' ? 'Coach · remote' : 'Coach · local';
+    var rNote = src0 === 'remote' ? 'online free coach · your prompt goes to the model via your worker' : 'offline model · your numbers never left this phone';
     var sm = {
       id: chatId(), who: 'bot',
-      html: '<div class="c-block"><div class="c-t">Coach · local</div>' +
+      html: '<div class="c-block"><div class="c-t">' + rHead + '</div>' +
         '<div class="ins-line"><span class="spin"></span> coaching…</div>' +
-        '<div class="note">offline model · your numbers never left this phone</div></div>',
+        '<div class="note">' + rNote + '</div></div>',
       actions: [], at: new Date().toISOString(), ai: true, streaming: true
     };
     return saveMsg(sm).then(function () {
@@ -1927,7 +1936,7 @@
         if (el) { el.textContent = txt || '…'; scrollBottom(); }
       }).then(function (txt) {
         sm.streaming = false;
-        sm.html = aiAnswerHtml(txt || '', ctx);
+        sm.html = aiAnswerHtml(txt || '', ctx, null, FAI.lastSource());
         return saveMsg(sm).then(function () {
           var el2 = msgsEl && msgsEl.querySelector('[data-cid="' + sm.id + '"]');
           if (el2) el2.innerHTML = sm.html;
@@ -1935,7 +1944,7 @@
         });
       })['catch'](function (err) {
         sm.streaming = false;
-        sm.html = aiAnswerHtml('', ctx, String((err && err.message) || err));
+        sm.html = aiAnswerHtml('', ctx, String((err && err.message) || err), FAI.lastSource());
         return saveMsg(sm).then(function () {
           var el3 = msgsEl && msgsEl.querySelector('[data-cid="' + sm.id + '"]');
           if (el3) el3.innerHTML = sm.html;

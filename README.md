@@ -31,6 +31,12 @@ The GitHub repo only ever holds this app code, **no balances or transactions**.
      the standard (non-jsep) WASM kernel instead of the faster jsep one —
      WebKit 26.2+'s new JIT crashes on jsep ("A problem repeatedly occurred
      on ...", onnxruntime#26827); see `model-worker.js`.
+   - **Remote coach (opt-in, online, v45)** — when you're online, open
+     questions can also go to a free hosted LLM behind your own Cloudflare
+     Worker (Settings → "Remote coach (online)"). Only the question leaves the
+     phone; the API key lives on the Worker, never in the app. Offline, or if the
+     remote is down, the local brain answers instead. Rules still write
+     everything — the LLM only chats. See `worker/`.
 - **Backup**: export/import a JSON file with your numbers + entries + plans
   + owed notes.
 
@@ -189,6 +195,30 @@ month picker).
   preserves them on every app update — the ~250 MB download happens once, and
   afterwards everything works with no connection.
 
+## Remote coach (optional, online)
+The local brain is great offline but small and slow. When you're **online**,
+open questions can instead go to a free, hosted LLM (default: Groq) through
+**your own Cloudflare Worker** in `worker/` — a smarter, faster coach with short
+answers, without paying or giving the app any key.
+
+- **Your key never leaves Cloudflare.** The provider API key is a Worker *secret*.
+  The app only knows the Worker URL and sends the question; the Worker adds CORS,
+  restricts the origin to your app, caps tokens (at most 96) and prompt size, and
+  returns one short answer.
+- **Honest, graceful fallback.** Online + configured + healthy → `Coach · remote`.
+  Offline, unconfigured, or if the call fails/times out → the local brain
+  (`Coach · local`). If both are unavailable → the rule engine. A 30-second
+  circuit-breaker means a dead remote doesn't hang every question.
+- **Privacy.** Only the question prompt leaves the device, only to the Worker,
+  only when online and enabled. Transaction parsing and every money action stay
+  100% deterministic and on-device. Turn it off in Settings and the app is fully
+  local again.
+
+**To enable:** deploy `worker/` with Wrangler (full steps in `worker/README.md`),
+store the provider key as a Worker secret, point `ALLOWED_ORIGIN` at your app,
+then paste the Worker URL into **Settings → Remote coach (online)** and press
+**Test**.
+
 ## Notes
 - **Free / unallocated** = liquid cash − this month's committed outflows
   (the math was ported 1:1 from the original Apps Script into `app.js`).
@@ -198,7 +228,7 @@ month picker).
   notes; **Import JSON** restores them (replaces what's on the phone).
 
 ## After redeploying
-- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v43),
+- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v45),
   so the phone picks up the new app shell on its next load — the "New version
   ready" toast offers a one-tap reload. If the app ever looks stale: open the
   Pages URL once in Safari, then relaunch the home-screen icon.

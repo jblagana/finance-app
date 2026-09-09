@@ -1,0 +1,25 @@
+{
+  // FinSmart remote coach — deploy this folder with Wrangler (Cloudflare free plan).
+  // The provider API key is a SECRET (set with `wrangler secret put LLM_API_KEY`)
+  // and must NEVER be committed. Only the non-secret defaults live here.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "finsmart-coach",
+  "main": "worker.js",
+  "compatibility_date": "2024-11-01",
+  "observability": { "enabled": true },
+  "vars": {
+    // Your app's exact origin (the GitHub Pages URL, or custom domain).
+    // Comma-separate several if you have both http/https or a localhost test.
+    "ALLOWED_ORIGIN": "https://jblagana.github.io/finance-app",
+    // Any OpenAI-compatible chat model. Groq free default shown.
+    "LLM_MODEL": "llama-3.1-8b-instant"
+  },
+  // Optional managed rate limit (free plan). If `wrangler deploy` says your
+  // plan can't use rate limiting, delete this whole block — the Worker still
+  // caps tokens/prompt size and is origin-locked.
+  "rate_limit": {
+    "requests_per_period": 60,
+    "period": 60,
+    "dimension": "ip"
+  }
+}

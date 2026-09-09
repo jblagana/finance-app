@@ -231,7 +231,79 @@
   }
 
   // --- coach generation (streamed text only — never an action) -------------
-  function generate(messages, opts, onToken) {
+  // --- v45: remote coach (a free hosted LLM behind the user's Cloudflare Worker).
+  // The Worker holds the provider API key + CORS; the app only knows the Worker
+  // URL (stored on this phone, never a secret). Online + configured -> remote;
+  // offline / unconfigured / failed -> the local brain; both down -> rules-only.
+  var REMOTE_KEY = 'fin.ai.remote.v1';
+  var REMOTE_URL_KEY = 'fin.ai.remote.url.v1';
+  var lastSource = 'local';        // 'remote' | 'local' -- the UI labels by this
+  var remoteFailAt = 0;            // circuit breaker: skip remote right after a failure
+  var REMOTE_COOL_MS = 30000;      // ...for 30 s so a dead endpoint can't hang every reply
+  var REMOTE_TIMEOUT_MS = 20000;   // a free API is fast; longer than this is a failure
+
+  function remoteEnabled() { var k = null; try { k = localStorage.getItem(REMOTE_KEY); } catch (e) {} return k === '1'; }
+  function setRemoteEnabled(v) {
+    try { if (v) localStorage.setItem(REMOTE_KEY, '1'); else localStorage.removeItem(REMOTE_KEY); } catch (e) {}
+    refreshNote();
+  }
+  function remoteUrl() { var u = null; try { u = localStorage.getItem(REMOTE_URL_KEY); } catch (e) {} return String(u || '').trim(); }
+  function setRemoteUrl(u) {
+    u = String(u || '').trim();
+    try { if (u) localStorage.setItem(REMOTE_URL_KEY, u); else localStorage.removeItem(REMOTE_URL_KEY); } catch (e) {}
+    refreshNote();
+  }
+  function remoteConfigured() { var u = remoteUrl(); return !!u && /^https:\/\//i.test(u); }
+  function remoteGenerate(messages, opts, onToken) {
+    return new Promise(function (resolve, reject) {
+      var url = remoteUrl();
+      if (!remoteConfigured()) { reject(new Error('remote coach not configured')); return; }
+      if (typeof fetch !== 'function') { reject(new Error('fetch unavailable')); return; }
+      var done = false, timer = null;
+      function finish(fn, val) { if (done) return; done = true; if (timer) clearTimeout(timer); fn(val); }
+      timer = setTimeout(function () { remoteFailAt = Date.now(); finish(reject, new Error('remote coach timed out')); }, REMOTE_TIMEOUT_MS);
+      fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ messages: messages, max_tokens: Math.min(96, (opts && opts.maxNew) || 48) })
+      }).then(function (res) {
+        if (!res || !res.ok) { remoteFailAt = Date.now(); finish(reject, new Error('remote coach error ' + (res ? res.status : 'net'))); return; }
+        return res.json().then(function (data) {
+          var text = (data && typeof data.text === 'string') ? data.text : '';
+          if (!text) { remoteFailAt = Date.now(); finish(reject, new Error('remote coach returned no text')); return; }
+          remoteFailAt = 0; lastSource = 'remote';
+          if (onToken) { try { onToken(text); } catch (e) {} }
+          finish(resolve, text);
+        });
+      })['catch'](function (err) { remoteFailAt = Date.now(); finish(reject, err || new Error('remote coach network error')); });
+    });
+  }
+
+  function testRemote() {
+    var note = byId('aiRemoteNote');
+    function show(msg, ok) { if (note) { note.textContent = msg; note.style.color = ok === null ? '' : (ok ? 'var(--ok)' : 'var(--bad)'); } }
+    if (!remoteConfigured()) { show('Paste your Worker URL first (see README, "Remote coach").', false); return; }
+    if (typeof fetch !== 'function') { show('fetch is unavailable in this browser.', false); return; }
+    show('Testing...', null);
+    var timer = setTimeout(function () { show('Timed out -- is the Worker deployed?', false); }, REMOTE_TIMEOUT_MS);
+    fetch(remoteUrl(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 })
+    }).then(function (res) {
+      clearTimeout(timer);
+      if (!res || !res.ok) { show('Worker replied ' + (res ? res.status : 'net') + ' -- check deploy + secret.', false); return; }
+      return res.json().then(function (d) { var ok = !!(d && d.text); show(ok ? 'Remote coach is working' : 'No reply text -- check the provider API key.', ok); });
+    })['catch'](function () { clearTimeout(timer); show('Could not reach ' + remoteUrl() + ' -- check the URL + network.', false); });
+  }
+  function refreshRemoteNote() {
+    var rc = byId('aiRemoteToggle'), rn = byId('aiRemoteNote');
+    if (rc) { try { rc.checked = remoteEnabled(); } catch (e) {} }
+    if (rn) { rn.style.color = ''; rn.textContent = remoteEnabled() ? 'On -- when online, open questions go to the free remote coach via your Worker; offline or on failure the local coach takes over.' : 'Off -- open questions use the local coach (or the rule engine) on this phone.'; }
+  }
+
+  // The on-device brain, unchanged. Extracted so the dispatcher can fall back.
+  function localGenerate(messages, opts, onToken) {
     return new Promise(function (resolve, reject) {
       var w = getWorker();
       if (!w) { reject(new Error('no model worker')); return; }
@@ -247,9 +319,27 @@
       w.postMessage({ type: 'generate', id: id, messages: messages, opts: opts || {} });
     });
   }
+  function localReady() {
+    return enabled() && state.llmReady === true;
+  }
+  // v45: remote first (online + configured + out of cooldown), local fallback.
+  function generate(messages, opts, onToken) {
+    lastSource = 'local';
+    var online = typeof navigator === 'undefined' || navigator.onLine !== false;
+    var inCooldown = remoteFailAt !== 0 && (Date.now() - remoteFailAt < REMOTE_COOL_MS);
+    if (!(remoteEnabled() && remoteConfigured() && online && !inCooldown)) {
+      return localGenerate(messages, opts, onToken);
+    }
+    return remoteGenerate(messages, opts, onToken)['catch'](function (err) {
+      if (localReady()) { lastSource = 'local'; return localGenerate(messages, opts, onToken); }
+      lastSource = 'remote'; // we did call the remote; the error is about it
+      throw err;
+    });
+  }
 
   // --- settings UI (the toggle lives in index.html's Settings sheet) -------
   function refreshNote() {
+    refreshRemoteNote();
     var cb = byId('aiToggle'), note = byId('aiNote');
     if (!cb && !note) return;
     var on = enabled();
@@ -275,6 +365,16 @@
     }
   }
   function bindSettings() {
+    // v45: remote coach (independent of the local brain)
+    var rc = byId('aiRemoteToggle');
+    if (rc) rc.addEventListener('change', function () { setRemoteEnabled(rc.checked); });
+    var ru = byId('aiRemoteUrl');
+    if (ru) {
+      if (!ru.value) ru.value = remoteUrl();
+      ru.addEventListener('change', function () { setRemoteUrl(ru.value); });
+    }
+    var rt = byId('aiRemoteTest');
+    if (rt) rt.addEventListener('click', testRemote);
     var cb = byId('aiToggle');
     if (!cb) return;
     cb.addEventListener('change', function () {
@@ -359,7 +459,14 @@
     generate: generate,
     modelName: modelName,
     modelPref: modelPref,
-    setModel: setModel
+    setModel: setModel,
+    remoteEnabled: remoteEnabled,
+    setRemoteEnabled: setRemoteEnabled,
+    remoteUrl: remoteUrl,
+    setRemoteUrl: setRemoteUrl,
+    remoteConfigured: remoteConfigured,
+    lastSource: function () { return lastSource; },
+    testRemote: testRemote
   };
 
   loadNameVecs();
