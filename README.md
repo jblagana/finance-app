@@ -260,7 +260,7 @@ for anything else), and press **Test** — no Worker needed.
   notes; **Import JSON** restores them (replaces what's on the phone).
 
 ## After redeploying
-- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v47),
+- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v48),
   so the phone picks up the new app shell on its next load — the "New version
   ready" toast offers a one-tap reload. If the app ever looks stale: open the
   Pages URL once in Safari, then relaunch the home-screen icon.

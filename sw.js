@@ -10,9 +10,9 @@
  *    activate, or the phone would re-download ~250 MB on every app update.
  *  - everything else (the Hugging Face hub, …) stays network-only.
  */
-const CACHE = 'finances-pwa-v47';
+const CACHE = 'finances-pwa-v48';
 const SHELL = ['./', './index.html', './app.js', './chat.js', './ai.js', './model-worker.js',
-  './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+  './manifest.webmanifest', './icon-192.png', './icon-512.png', './favicon.png'];
 const RUNTIME_CDN = 'https://cdn.jsdelivr.net';
 
 self.addEventListener('install', (e) => {
