@@ -1,0 +1,3 @@
+# Local Wrangler state + any local-only secrets. Never commit these.
+.wrangler/
+.dev.vars

@@ -17,6 +17,7 @@
  */
 
 var MAX_TOKENS = 96;      // hard cap regardless of what the client requests
+var MIN_TOKENS = 16;      // floor: a 1-token reply can be empty/whitespace (the in-app Test pings with max_tokens:1)
 var MAX_INPUT = 4000;     // characters of prompt JSON we will forward
 var DEFAULT_ORIGIN = 'https://jblagana.github.io/finance-app';
 
@@ -27,7 +28,7 @@ function providerKey(env) {
   return env.LLM_API_KEY || env.GROQ_API_KEY || env.OPENAI_API_KEY || '';
 }
 function providerModel(env) {
-  return env.LLM_MODEL || 'llama-3.1-8b-instant';
+  return env.LLM_MODEL || 'qwen/qwen3.8-27b';
 }
 function allowedOrigins(env) {
   var raw = env.ALLOWED_ORIGIN || DEFAULT_ORIGIN;
@@ -86,7 +87,7 @@ export default {
       return fail(413, 'prompt too large', origin, env);
     }
     var maxTokens = Number(body.max_tokens) || 48;
-    if (maxTokens < 1) maxTokens = 1;
+    if (maxTokens < MIN_TOKENS) maxTokens = MIN_TOKENS;
     if (maxTokens > MAX_TOKENS) maxTokens = MAX_TOKENS;
 
     var key = providerKey(env);

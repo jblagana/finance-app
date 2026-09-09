@@ -12,14 +12,7 @@
     // Comma-separate several if you have both http/https or a localhost test.
     "ALLOWED_ORIGIN": "https://jblagana.github.io/finance-app",
     // Any OpenAI-compatible chat model. Groq free default shown.
-    "LLM_MODEL": "llama-3.1-8b-instant"
-  },
-  // Optional managed rate limit (free plan). If `wrangler deploy` says your
-  // plan can't use rate limiting, delete this whole block — the Worker still
-  // caps tokens/prompt size and is origin-locked.
-  "rate_limit": {
-    "requests_per_period": 60,
-    "period": 60,
-    "dimension": "ip"
+    // Verified against the live /v1/models list — pick a chat model your key can use.
+    "LLM_MODEL": "qwen/qwen3.8-27b"
   }
 }
