@@ -436,11 +436,9 @@
     try { var n = (localStorage.getItem('fin.name') || '').trim(); if (n) return n; } catch (e) {}
     return '';
   }
-  function freshness(ctx) {
-    if (!ctx) return '';
-    var when = ctx.at ? new Date(ctx.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'today';
-    return '<div class="note">numbers as of ' + esc(when) + ' · on this phone</div>';
-  }
+  // v47: the per-message "numbers as of …" note is gone — the main chat header
+  // (chatFresh) shows the data's as-of time for the whole conversation instead.
+  function freshness(ctx) { return ''; }
 
   // ---------- intents ----------
   function intentHelp(t) {
@@ -730,7 +728,7 @@
       return { html: block('Plans', line('Nothing planned yet.'), 'Try: “plan: shoes 1,500 on the 20th”', 'good') + freshness(ctx) };
     }
     var total = plans.reduce(function (s, p) { return s + (Number(p.amount) || 0); }, 0);
-    var monthP = ctx.eff.month || todayISO().slice(0, 7);
+    var monthP = (ctx.eff && ctx.eff.month) || todayISO().slice(0, 7);
     var thisM = plans.filter(function (p) { return String(p.date).slice(0, 7) === monthP; })
       .reduce(function (s, p) { return s + (Number(p.amount) || 0); }, 0);
     var h = block('Your plans',
@@ -1318,7 +1316,7 @@
     var askNote = asks.length ? line('<span class="note">also missing: ' + esc(asks.join(' — ')) + '</span>') : '';
     var h = block('Draft: base-data changes',
       rows + askNote + line('<span class="note">nothing is written yet — tap ✕ to drop a line, or confirm to apply</span>'),
-      'Applies to Your numbers through the Settings save path — one-tap undo after.', 'warn');
+      null);
     return { html: h + freshness(ctx), actions: actions, storyLines: changes, storyRaw: t, storyAsk: asks.join(' · ') };
   }
 
@@ -1408,12 +1406,37 @@
   // user asks to add/change something. The app validates the JSON against the
   // story-mode shapes and the existing confirm/undo flow — the model itself
   // still writes nothing.
-  var AI_REMOTE_SYSTEM = 'You are FinSmart, a personal money coach. Answer only from the numbers given, in 1-2 short plain sentences (under 45 words), no lists, no markdown, no emojis. Never invent numbers. If the user asks to add or change a number, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. Use only names from the numbers list or a new name the user stated. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
+  var AI_REMOTE_SYSTEM = 'You are FinSmart, a personal money coach. Answer only from the numbers given, in 1-2 short plain sentences (under 45 words), no lists, no markdown, no emojis. Never invent numbers. If the user asks to add or change a number, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. Use only names from the numbers list or a new name the user stated. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
   function aiPrompt(t, ctx, remote, hist) {
     return [
       { role: 'system', content: remote ? AI_REMOTE_SYSTEM : AI_LOCAL_SYSTEM },
       { role: 'user', content: aiContextText(t, ctx, hist) }
     ];
+  }
+
+  // v47: guided first-time setup. With an empty base the normal number intents
+  // can't answer, so (when the online coach is available) we route to a setup
+  // prompt: the coach walks the user through a generic checklist and drafts the
+  // numbers as strict JSON — the same confirm/undo flow as a story. The local
+  // brain is text-only, so setup needs a remote path (Worker or bring-your-own).
+  var AI_SETUP_SYSTEM = 'You are FinSmart, a personal money coach helping a user set up their numbers for the first time. Their phone has NO numbers stored yet. Be warm and brief (under 35 words), no markdown, no emojis. Ask for 1-2 things at a time, in this order: (1) cash accounts, (2) cards (name, balance and limit), (3) monthly salary, (4) debts / monthly payments, (5) monthly budgets, (6) goals / sinking funds, (7) one-offs this month. Use ONLY the exact names and amounts the user gives — never invent or assume a number. When the user has given you specific numbers, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card","value":123,"limit":123} (limit only for cards) | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. If the user has not given a specific number yet, reply plain text asking for the next thing — never JSON.';
+  function setupPrompt(t, ctx, hist) {
+    var L = [];
+    L.push('Setup mode: the user is building their numbers from scratch on this phone. Nothing is stored yet.');
+    L.push('Suggested order: cash accounts → cards (balance + limit) → monthly salary → debts / monthly payments → budgets → goals → one-offs this month.');
+    L.push('Ask 1-2 things at a time. Use only the user\'s own names and amounts; never invent a number.');
+    var hLines = (hist || []).map(function (h) { return (h.who === 'user' ? 'You: ' : 'Coach: ') + h.txt; });
+    if (hLines.length) { L.push('Recent conversation (short, for context):'); L.push(hLines.join('\n')); L.push(''); }
+    L.push('Question: ' + t);
+    return [{ role: 'system', content: AI_SETUP_SYSTEM }, { role: 'user', content: L.join('\n') }];
+  }
+  function aiSetup(t, ctx) {
+    var FAI = typeof window !== 'undefined' ? window.FinAI : null;
+    if (!FAI) return null;
+    if (!(FAI.remoteEnabled() && FAI.remoteConfigured() && (typeof navigator === 'undefined' || navigator.onLine !== false))) return null;
+    var pr = setupPrompt(t, ctx, recentHist);
+    if (JSON.stringify(pr).length > 3800) pr = setupPrompt(t, ctx, []);
+    return { llm: true, prompt: pr };
   }
   // v46: the coach's short memory — the last few turns, tag-stripped and capped,
   // so the prompt stays under the Worker's input cap even on a busy phone.
@@ -1454,7 +1477,11 @@
     switch (c.type) {
       case 'account': {
         var name = nm(c.name), kind = COACH_KINDS[c.kind] ? c.kind : 'cash', value = num(c.value);
-        return name && value != null && value >= 0 ? { type: 'account', name: name, kind: kind, value: value } : null;
+        if (!name || value == null || value < 0) return null;
+        var limit = (kind === 'card') ? num(c.limit) : null;
+        return (limit != null && limit > 0)
+          ? { type: 'account', name: name, kind: kind, value: value, limit: limit }
+          : { type: 'account', name: name, kind: kind, value: value };
       }
       case 'salary_base': {
         var a0 = num(c.amount);
@@ -1507,17 +1534,14 @@
     if (!say && !changes.length) return null;
     return { say: say, changes: changes };
   }
+  // v47: plain answer — no "Coach"/source line in the reply (the availability LED
+  // in the main header now carries that), and the per-message as-of note is gone.
   function aiAnswerHtml(txt, ctx, err, src) {
-    src = src === 'remote' ? 'remote' : 'local';
-    var who = src === 'remote' ? 'remote coach' : 'local coach';
     var inner = txt
       ? esc(txt).replace(/\n/g, '<br>')
-      : 'The ' + who + ' ' + (err ? 'couldn’t answer that (' + esc(err) + ').' : 'had nothing to add.') +
+      : (err ? 'I couldn’t answer that (' + esc(err) + ').' : 'I had nothing to add.') +
         ' I still know your numbers — try <b>status</b>, <b>plans</b> or <b>help</b>.';
-    // v46: plain header — "Coach" with the source on its own line below it.
-    // The old remote-coach caption and the "numbers as of …" note are gone.
-    return '<div class="c-block"><div class="c-t">Coach</div><div class="c-src">' + src + '</div>' +
-      '<div class="ins-line">' + inner + '</div></div>';
+    return '<div class="c-block"><div class="ins-line">' + inner + '</div></div>';
   }
 
   function aiProgressHtml(st) {
@@ -1736,11 +1760,27 @@
     var t = norm(raw);
     if (!t) return intentFallback('');
     if (!ctx.eff) {
+      // v47: a few intents work with no numbers yet (greet, help, plans) — those
+      // run first. Anything else is setup: it goes to the online coach when one is
+      // available, otherwise the "No numbers yet" card with the setup entry points.
+      var emptySafe = [intentGreet, intentHelp, intentPlanRemove, intentPlanAdd, intentPlanList];
+      for (var ei = 0; ei < emptySafe.length; ei++) {
+        var er = emptySafe[ei](t, ctx);
+        if (er) return er;
+      }
+      var setup = aiSetup(t, ctx);
+      if (setup) return setup;
+      var setupWanted = /set ?up|build (my )?(the )?numbers|start (from|over|setting)/.test(t);
       return {
-        html: block('No numbers yet',
-          line('Add your accounts, salary, debts, budgets and one-offs in <b>Settings → Your numbers</b> and I can answer money questions. Until then you can still add and view plans.'),
+        html: block(setupWanted ? 'Online coach needed' : 'No numbers yet',
+          line(setupWanted
+            ? 'I build your numbers with you using the online coach. Turn it on in Settings → Remote coach (a Worker URL or your own key), then ask me again.'
+            : 'Tell me your accounts, salary, debts and budgets and I’ll set them up with you — or add them yourself.'),
           'Everything is stored on this phone — no sheet needed.', 'warn'),
-        actions: [{ label: 'Open Settings', act: 'open_settings' }]
+        actions: [
+          { label: 'Set up with the coach', act: 'start_setup' },
+          { label: 'Open Settings', act: 'open_settings' }
+        ]
       };
     }
     var dm = findDateSpan(t);
@@ -1902,6 +1942,11 @@
       markDone(m);
       return;
     }
+    if (a.act === 'start_setup') {
+      markDone(m);
+      send('Let’s set up my numbers');
+      return;
+    }
     if (a.act === 'ai_download') {
       markDone(m);
       startAiDownload();
@@ -2036,11 +2081,9 @@
   // tokens arrive from the worker; the final text is what gets persisted.
   function sendLlm(res, ctx, typing) {
     var FAI = window.FinAI;
-    var src0 = (FAI.remoteEnabled() && FAI.remoteConfigured() && (typeof navigator === 'undefined' || navigator.onLine !== false)) ? 'remote' : 'local';
     var sm = {
       id: chatId(), who: 'bot',
-      html: '<div class="c-block"><div class="c-t">Coach</div><div class="c-src">' + src0 + '</div>' +
-        '<div class="ins-line"><span class="spin"></span> coaching…</div></div>',
+      html: '<div class="c-block"><div class="ins-line"><span class="spin"></span> coaching…</div></div>',
       actions: [], at: new Date().toISOString(), ai: true, streaming: true
     };
     return saveMsg(sm).then(function () {
@@ -2064,11 +2107,10 @@
           sm.actions = lines.map(function (l, i) { return { label: '✕ ' + l.label, act: 'story_drop_line', payload: { i: i } }; });
           sm.actions.push({ label: 'Confirm ' + lines.length + ' change' + (lines.length > 1 ? 's' : ''), act: 'confirm_story', payload: { lines: lines } });
           sm.actions.push({ label: 'Discard', act: 'discard_story' });
-          sm.html = '<div class="c-block"><div class="c-t">Coach</div><div class="c-src">remote</div>' +
-            (draft.say ? '<div class="ins-line">' + esc(draft.say) + '</div>' : '') + '</div>' +
+          sm.html = (draft.say ? '<div class="c-block"><div class="ins-line">' + esc(draft.say) + '</div></div>' : '') +
             block('Draft: base-data changes',
               rowsHtml + line('<span class="note">nothing is written yet — tap ✕ to drop a line, or confirm to apply</span>'),
-              'Applies to Your numbers through the Settings save path — one-tap undo after.', 'warn');
+              null);
         } else {
           sm.html = aiAnswerHtml(draft && draft.say ? draft.say : (txt || ''), ctx, null, FAI.lastSource());
         }
@@ -2147,6 +2189,7 @@
       '<div class="ins-line">Try: <b>“how much is free?”</b> · <b>“plan: shoes 1,500 on the 20th”</b> · <b>“urgent: car repair 8,000 this week”</b> · <b>“my salary in october is 25k, water went up to 1,800”</b></div></div>';
   }
   function openChat() {
+    if (window.FinAI && window.FinAI.refreshLed) window.FinAI.refreshLed();
     loadChat().then(function (rows) {
       if (!rows.length) {
         var m = { id: chatId(), who: 'bot', html: welcomeHtml(), at: new Date().toISOString() };
@@ -2211,6 +2254,9 @@
     fuzzyNameIn: fuzzyNameIn,
     open: openChat,
     close: closeChat,
+    // v47: kick off the guided "set up my numbers" conversation (used by the
+    // empty-state buttons in the app shell)
+    startSetup: function () { send('Let’s set up my numbers'); },
     // v39: inject a message embedding for local tests of the semantic layer
     setAiVec: function (v) { currentAiVec = v; },
     getAiVec: function () { return currentAiVec; }

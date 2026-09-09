@@ -6,10 +6,12 @@ A **fully local**, installable web app for your personal finances. All numbers
 The GitHub repo only ever holds this app code, **no balances or transactions**.
 
 ## What it does
-- **Your numbers** (Settings ⚙ → Your numbers): edit accounts, salary (+
-  per-month overrides), liquidity floor, emergency cap, prepay/cutoff days,
-  monthly budgets (+ one-month overrides), debts (monthly + per-month payments),
-  one-offs and sinking goals — everything recomputes instantly as you type.
+- **Your numbers** (its own sheet — open it from Settings, or the Home
+  empty-state before you've added numbers): edit accounts, salary (+ per-month
+  overrides), liquidity floor, emergency cap, prepay/cutoff days, monthly budgets
+  (+ one-month overrides), debts (monthly + per-month payments), one-offs and
+  sinking goals — everything recomputes instantly as you type and saves to the
+  phone as you go.
 - **Add expense** (date, paid-with = card or cash, category, amount, note) —
   entries overlay the base numbers live (cash-outs lower liquid cash, card
   charges raise cards owed / the prepay, both lower free cash).
@@ -21,6 +23,11 @@ The GitHub repo only ever holds this app code, **no balances or transactions**.
   in plain language: status, debt/one-off/sinking details, cash in any month,
   add/list/remove plans, charge checks, and urgent-expense advice. Rule-based
   and fully local (no made-up numbers); see `chat.js`.
+  - **First-time setup + availability (v47)** — with no numbers yet, the coach
+    walks you through them step by step (cash → cards → salary → debts → budgets
+    → goals → one-offs), drafting each as the same confirm/undo cards; you can
+    also start it from the Home empty-state. A small **availability LED** in the
+    chat header shows when the online coach is reachable (green) or not (amber).
   - **Offline brain (opt-in, v39)** — open questions the rules can't answer can
     be coached by a small local LLM (SmolLM2, ~250 MB one-time download,
     Settings → "Offline brain"), and sentence embeddings (all-MiniLM-L6-v2)
@@ -31,14 +38,17 @@ The GitHub repo only ever holds this app code, **no balances or transactions**.
      the standard (non-jsep) WASM kernel instead of the faster jsep one —
      WebKit 26.2+'s new JIT crashes on jsep ("A problem repeatedly occurred
      on ...", onnxruntime#26827); see `model-worker.js`.
-   - **Remote coach (opt-in, online, v45; memory + drafts in v46)** — when
-     you're online, open questions can also go to a free hosted LLM behind your
-     own Cloudflare Worker (Settings → "Remote coach (online)"). The last few
-     chat turns travel with the question so the coach remembers the
-     conversation, and when you ask it to add or change a number it proposes a
-     validated draft you confirm (same draft card + one-tap undo as story mode).
-     Works even without the ~250 MB local brain downloaded. The API key lives on
-     the Worker, never in the app. Offline, or if the remote is down, the local
+   - **Remote coach (opt-in, online, v45; memory + drafts in v46; bring-your-own
+     key in v47)** — when you're online, open questions can also go to a free
+     hosted LLM behind your own Cloudflare Worker (Settings → "Remote coach
+     (online)"), **or straight to a provider with your own API key** (Groq by
+     default, or any OpenAI-compatible endpoint). The last few chat turns travel
+     with the question so the coach remembers the conversation, and when you ask
+     it to add or change a number it proposes a validated draft you confirm (same
+     draft card + one-tap undo as story mode). Works even without the ~250 MB
+     local brain downloaded. On the Worker path the key lives on the Worker; on
+     the bring-your-own path it stays in your phone's local storage and goes only
+     to the provider you chose. Offline, or if the remote is down, the local
      brain answers instead. Rules still write everything — the LLM only drafts.
      See `worker/`.
 - **Backup**: export/import a JSON file with your numbers + entries + plans
@@ -78,7 +88,8 @@ The **Add** sheet's amount accepts the same quick sums — the Home coach card's
 > It contains **no personal data** — your numbers live only on your phone.
 
 ## 2) Enter your numbers once
-1. Open the app → **Settings (⚙ top right) → Your numbers**.
+1. Open the app → the **Your numbers** sheet (from the Home empty-state, or
+   Settings → "Open").
 2. Add your accounts (cash, cards with limits, debts, loans), salary, budgets,
    debts, one-offs and sinking goals. The whole app (tiles, coach, projection,
    6-month matrix, bridge advisor) recomputes from this data **on the phone**.
@@ -88,7 +99,7 @@ The **Add** sheet's amount accepts the same quick sums — the Home coach card's
 > Older builds synced to a Google Sheet instead; that path was removed in the
 > local-first release, and the app no longer talks to any Sheet.
 
-## What each input means (Settings ⚙ → Your numbers)
+## What each input means (the Your numbers sheet)
 
 Everything on this sheet **saves to the phone automatically** — there is no
 Save button. The form commits about half a second after you stop typing and the
@@ -172,7 +183,7 @@ month picker).
 ## 3) Install on your iPhone 11
 1. On the iPhone, open your Pages URL in **Safari**.
 2. **Share** button → **Add to Home Screen** → **Add**.
-3. Open the app → **Settings (⚙) → Your numbers** → enter your numbers once.
+3. Open the app → the **Your numbers** sheet → enter your numbers once.
 4. Add your first expense — everything works with **no signal at all**.
 
 ## How the local data works
@@ -189,7 +200,7 @@ month picker).
 - **Insights** (below the tiles) give daily / weekly / monthly advice, opened by a
   short **coach note** ("Hey Jan — keep today around ₱X" / "this week is over
   budget by ₱Y") with one concrete number to act on today or this week. The name
-  comes from the **name** field in Settings → Your numbers. The treat amount is in
+  comes from the **name** field in the **Your numbers** sheet. The treat amount is in
   the Insights header.
 - **Plans** (bottom of the app) are things coming up — eat out, bills, gifts.
   They're stored only on the phone (not written to the Sheet) and drive the
@@ -205,28 +216,40 @@ open questions can instead go to a free, hosted LLM (default: Groq) through
 **your own Cloudflare Worker** in `worker/` — a smarter, faster coach with short
 answers, without paying or giving the app any key.
 
-- **Your key never leaves Cloudflare.** The provider API key is a Worker *secret*.
-  The app only knows the Worker URL and sends the question; the Worker adds CORS,
-  restricts the origin to your app, caps tokens (at most 96) and prompt size, and
-  returns one short answer.
-- **Honest, graceful fallback.** Online + configured + healthy → **Coach** with
-  `remote` under the title. Offline, unconfigured, or if the call fails/times
-  out → the local brain (`local`). If both are unavailable → the rule engine. A
-  30-second circuit-breaker means a dead remote doesn't hang every question.
+- **Your key never leaves Cloudflare (Worker path).** The provider API key is a
+  Worker *secret*. The app only knows the Worker URL and sends the question; the
+  Worker adds CORS, restricts the origin to your app, caps tokens (at most 96)
+  and prompt size, and returns one short answer.
+- **Bring-your-own key (v47, direct path).** In Settings you can instead put your
+  own provider key in the app — **Groq** by default, or any OpenAI-compatible
+  endpoint (base URL + model). The key stays in your phone's local storage and is
+  sent only to that provider. The app still tries the **Worker first** and a
+  direct BYO call second, so the Worker remains the recommended path (no browser
+  CORS needed, and it hides the key). Direct browser calls need a provider that
+  allows them (Groq does).
+- **Availability LED + graceful fallback (v47).** The **LED** in the chat header
+  shows the state live: green when online + configured + healthy, amber
+  otherwise. Online + configured + healthy → the online coach. Offline,
+  unconfigured, or if the call fails/times out → the local brain. If both are
+  unavailable → the rule engine. A 30-second circuit-breaker means a dead remote
+  doesn't hang every question.
 - **Change requests (v46).** "Add 5,000 to GCash" doesn't just get chatted
   about: the remote model answers with a strict-JSON draft, the app validates it
   against the same shapes the rule engine uses, and you confirm it like a story
   draft (per-line ✕, Confirm, one-tap undo). The model itself still writes
   nothing — the confirm button does.
 - **Privacy.** The question, your stored numbers summary and the last few chat
-  turns leave the device — only to the Worker, only when online and enabled.
-  Transaction parsing and every money action stay 100% deterministic and
-  on-device. Turn it off in Settings and the app is fully local again.
+  turns leave the device — only to the Worker (or your chosen provider on the
+  bring-your-own path), only when online and enabled. Transaction parsing and
+  every money action stay 100% deterministic and on-device. Turn it off in
+  Settings and the app is fully local again.
 
-**To enable:** deploy `worker/` with Wrangler (full steps in `worker/README.md`),
-store the provider key as a Worker secret, point `ALLOWED_ORIGIN` at your app,
-then paste the Worker URL into **Settings → Remote coach (online)** and press
-**Test**.
+**To enable (Worker):** deploy `worker/` with Wrangler (full steps in
+`worker/README.md`), store the provider key as a Worker secret, point
+`ALLOWED_ORIGIN` at your app, then paste the Worker URL into **Settings → Remote
+coach (online)** and press **Test**. **To enable (bring-your-own key):** in the
+same panel set the provider to **Groq**, paste your key (plus base URL and model
+for anything else), and press **Test** — no Worker needed.
 
 ## Notes
 - **Free / unallocated** = liquid cash − this month's committed outflows
@@ -237,7 +260,7 @@ then paste the Worker URL into **Settings → Remote coach (online)** and press
   notes; **Import JSON** restores them (replaces what's on the phone).
 
 ## After redeploying
-- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v46),
+- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v47),
   so the phone picks up the new app shell on its next load — the "New version
   ready" toast offers a one-tap reload. If the app ever looks stale: open the
   Pages URL once in Safari, then relaunch the home-screen icon.

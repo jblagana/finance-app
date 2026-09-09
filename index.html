@@ -124,6 +124,11 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 .ai-chip.on{color:var(--ok);border-color:rgba(55,211,155,.4)}
 .ai-chip.loading{color:var(--warn);border-color:rgba(255,196,92,.4)}
 .ai-chip.off{color:var(--bad);border-color:rgba(255,107,107,.4)}
+/* v47: online-coach availability LED in the main chat header (green = ready,
+   amber = not ready: remote off / not configured / offline / cooling down) */
+.coach-led{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--warn);
+  box-shadow:0 0 0 1px rgba(255,196,92,.4) inset;vertical-align:middle;margin-left:2px}
+.coach-led.on{background:var(--ok);box-shadow:0 0 8px 1px rgba(55,211,155,.8), 0 0 0 1px rgba(55,211,155,.5) inset}
 #chatClose{background:var(--card2);border:1px solid var(--line);color:var(--mut);width:36px;height:36px;border-radius:10px;
  font-size:15px;cursor:pointer;flex:0 0 auto}
 #chatClose:active{border-color:var(--bad);color:var(--bad)}
@@ -368,8 +373,11 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
 <main>
   <div id="tab-home">
     <div id="homeEmpty" class="card" style="display:none">
-      <p class="note" style="margin:2px 0">Add your numbers (accounts, salary, debts, budgets) in <b>Settings ⚙ → Your numbers</b> — the coach note and insights appear here once they exist.</p>
-      <button class="act" id="homeOpenSet" type="button" style="margin-top:12px">Open Settings &amp; add your numbers</button>
+      <p class="note" style="margin:2px 0">You haven’t added your numbers yet. Set them up with the coach, or add your accounts, salary, debts and budgets yourself — the insights appear here once they exist.</p>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="act" id="homeCoach" type="button">Set up with the coach</button>
+        <button class="act ghost" id="homeOpenSet" type="button">Add them yourself</button>
+      </div>
     </div>
 
     <section id="hero" class="card hero" style="display:none">
@@ -515,7 +523,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
     <div class="chat-id">
       <span class="chat-avatar"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#botFace"/></svg></span>
       <div>
-        <div id="chatTitle">Coach</div>
+        <div id="chatTitle">Coach <span id="coachLed" class="coach-led" aria-hidden="true" title="Online coach: not available"></span></div>
         <div id="chatFresh"></div>
       </div>
     </div>
@@ -567,18 +575,35 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
     </form>
   </div>
 </div>
+<div id="numSheet" class="sheet" role="dialog" aria-label="Your numbers">
+  <div class="sheet-h">
+    <div class="t">Your numbers</div>
+    <button id="numClose" class="sheet-x" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-b">
+    <p id="baseStatus" class="note" style="margin:10px 0 14px" aria-live="polite"></p>
+    <p class="note" style="margin-top:2px">Everything is stored on this phone — edit it here and the whole app (tiles, coach, projection) recomputes instantly. Changes save as you type.</p>
+    <div id="baseBody"></div>
+    <p id="baseMigrated" class="note" style="display:none;margin-top:10px"></p>
+    <div style="margin-top:16px">
+      <button class="act ghost" id="numCoachBtn" type="button">Set up with the coach</button>
+    </div>
+  </div>
+</div>
 <div id="setSheet" class="sheet" role="dialog" aria-label="Settings">
   <div class="sheet-h">
     <div class="t">Settings</div>
     <button id="setClose" class="sheet-x" type="button" aria-label="Close">✕</button>
   </div>
   <div class="sheet-b">
-    <p id="baseStatus" class="note" style="margin:10px 0 14px" aria-live="polite"></p>
     <section class="card">
       <h2 style="margin-top:0">Your numbers</h2>
-      <p class="note" style="margin-top:2px">Everything is stored on this phone — edit it here and the whole app (tiles, coach, projection) recomputes instantly. Changes save as you type.</p>
-      <div id="baseBody"></div>
-      <p id="baseMigrated" class="note" style="display:none;margin-top:10px"></p>
+      <p id="setBaseSum" class="note" style="margin-top:2px">…</p>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="act" id="setNumOpen" type="button">Open</button>
+        <button class="act ghost" id="setNumCoach" type="button">Set up with the coach</button>
+      </div>
+      <p class="note" style="margin:10px 0 0">Everything is stored on this phone. Open the <b>Your numbers</b> sheet to edit it — the whole app (tiles, coach, projection) recomputes instantly as you type.</p>
     </section>
     <section class="card" style="margin-top:16px">
       <h2 style="margin-top:0">Offline brain</h2>
@@ -614,6 +639,30 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
           style="flex:1;min-width:0;font-size:12.5px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
         <button class="act ghost" id="aiRemoteTest" type="button" style="width:auto;padding:7px 10px;font-size:12px">Test</button>
       </div>
+      <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+        <div style="font-size:13px;font-weight:700">Bring your own key (direct)</div>
+        <p class="note" style="margin:4px 0 8px">No Worker needed — the coach calls the provider straight from this phone. The key is stored only on this device and sent only to that provider. <b>Groq</b> allows browser calls (recommended); for providers that block the browser, use the Worker URL above instead.</p>
+        <label style="font-size:12px;color:var(--mut);font-weight:600" for="aiByoProvider">Provider</label>
+        <select id="aiByoProvider" style="width:100%;font-size:13px;padding:8px;margin:4px 0 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
+          <option value="groq">Groq (recommended)</option>
+          <option value="openai">OpenAI-compatible</option>
+        </select>
+        <label style="font-size:12px;color:var(--mut);font-weight:600" for="aiByoKey">API key</label>
+        <input type="password" id="aiByoKey" inputmode="text" placeholder="gsk_…" autocomplete="off" spellcheck="false"
+          style="width:100%;font-size:12.5px;padding:8px;margin:4px 0 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;min-width:0">
+            <label style="font-size:12px;color:var(--mut);font-weight:600" for="aiByoBase">Base URL</label>
+            <input type="url" id="aiByoBase" inputmode="url" placeholder="https://api.groq.com/openai/v1"
+              style="width:100%;font-size:12.5px;padding:8px;margin-top:4px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
+          </div>
+          <div style="flex:1;min-width:0">
+            <label style="font-size:12px;color:var(--mut);font-weight:600" for="aiByoModel">Model</label>
+            <input type="text" id="aiByoModel" inputmode="text" placeholder="qwen/qwen3.8-27b"
+              style="width:100%;font-size:12.5px;padding:8px;margin-top:4px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
+          </div>
+        </div>
+      </div>
       <p id="aiRemoteNote" class="note" style="margin:8px 0 0" aria-live="polite"></p>
     </section>
     
@@ -629,7 +678,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">FinSmart · local-first · shell v46</p>
+    <p class="note" style="margin:14px 0 0">FinSmart · local-first · shell v47</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>

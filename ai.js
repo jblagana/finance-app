@@ -241,6 +241,18 @@
   var remoteFailAt = 0;            // circuit breaker: skip remote right after a failure
   var REMOTE_COOL_MS = 30000;      // ...for 30 s so a dead endpoint can't hang every reply
   var REMOTE_TIMEOUT_MS = 20000;   // a free API is fast; longer than this is a failure
+  // v47: bring-your-own key — the coach calls the provider straight from this
+  // phone. The key + settings live only in this device's localStorage and are
+  // sent only to that provider (never to a Worker). Default: Groq, which allows
+  // browser calls. The Worker URL above stays as the fallback for providers
+  // that block the browser.
+  var BYO_PROVIDER_KEY = 'fin.ai.by.provider.v1';
+  var BYO_KEY = 'fin.ai.by.key.v1';
+  var BYO_BASE_KEY = 'fin.ai.by.base.v1';
+  var BYO_MODEL_KEY = 'fin.ai.by.model.v1';
+  var GROQ_BASE = 'https://api.groq.com/openai/v1';
+  var GROQ_MODEL = 'qwen/qwen3.8-27b';
+  var OPENAI_BASE = 'https://api.openai.com/v1';
 
   function remoteEnabled() { var k = null; try { k = localStorage.getItem(REMOTE_KEY); } catch (e) {} return k === '1'; }
   function setRemoteEnabled(v) {
@@ -253,53 +265,147 @@
     try { if (u) localStorage.setItem(REMOTE_URL_KEY, u); else localStorage.removeItem(REMOTE_URL_KEY); } catch (e) {}
     refreshNote();
   }
-  function remoteConfigured() { var u = remoteUrl(); return !!u && /^https:\/\//i.test(u); }
-  function remoteGenerate(messages, opts, onToken) {
+  function workerConfigured() { var u = remoteUrl(); return !!u && /^https:\/\//i.test(u); }
+  // v47: bring-your-own key (direct provider calls). The key + settings live
+  // only in this device's localStorage and are sent only to that provider.
+  function byoProvider() { var p = null; try { p = localStorage.getItem(BYO_PROVIDER_KEY); } catch (e) {} return p === 'openai' ? 'openai' : 'groq'; }
+  function setByoProvider(p) {
+    try { localStorage.setItem(BYO_PROVIDER_KEY, p === 'openai' ? 'openai' : 'groq'); } catch (e) {}
+    refreshNote();
+  }
+  function byoKey() { var k = null; try { k = localStorage.getItem(BYO_KEY); } catch (e) {} return String(k || '').trim(); }
+  function setByoKey(k) {
+    k = String(k || '').trim();
+    try { if (k) localStorage.setItem(BYO_KEY, k); else localStorage.removeItem(BYO_KEY); } catch (e) {}
+    refreshNote();
+  }
+  function byoBase() { var b = null; try { b = localStorage.getItem(BYO_BASE_KEY); } catch (e) {} return String(b || '').trim(); }
+  function setByoBase(b) {
+    b = String(b || '').trim();
+    try { if (b) localStorage.setItem(BYO_BASE_KEY, b); else localStorage.removeItem(BYO_BASE_KEY); } catch (e) {}
+    refreshNote();
+  }
+  function byoModel() { var m = null; try { m = localStorage.getItem(BYO_MODEL_KEY); } catch (e) {} return String(m || '').trim(); }
+  function setByoModel(m) {
+    m = String(m || '').trim();
+    try { if (m) localStorage.setItem(BYO_MODEL_KEY, m); else localStorage.removeItem(BYO_MODEL_KEY); } catch (e) {}
+    refreshNote();
+  }
+  function byoConfigured() { return !!byoKey() && !!byoBase(); }
+  // A remote backend is configured if either path has what it needs.
+  function remoteConfigured() { return workerConfigured() || byoConfigured(); }
+  // v47: a remote failure/fix updates the cooldown AND the header LED.
+  function noteRemote(ok) { remoteFailAt = ok ? 0 : Date.now(); refreshLed(); }
+  // The Worker path (v45): the app only ever knows the Worker URL.
+  function workerGenerate(messages, opts, onToken) {
     return new Promise(function (resolve, reject) {
       var url = remoteUrl();
-      if (!remoteConfigured()) { reject(new Error('remote coach not configured')); return; }
+      if (!workerConfigured()) { reject(new Error('remote coach not configured')); return; }
       if (typeof fetch !== 'function') { reject(new Error('fetch unavailable')); return; }
       var done = false, timer = null;
       function finish(fn, val) { if (done) return; done = true; if (timer) clearTimeout(timer); fn(val); }
-      timer = setTimeout(function () { remoteFailAt = Date.now(); finish(reject, new Error('remote coach timed out')); }, REMOTE_TIMEOUT_MS);
+      timer = setTimeout(function () { noteRemote(false); finish(reject, new Error('remote coach timed out')); }, REMOTE_TIMEOUT_MS);
       fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ messages: messages, max_tokens: Math.min(96, (opts && opts.maxNew) || 48) })
       }).then(function (res) {
-        if (!res || !res.ok) { remoteFailAt = Date.now(); finish(reject, new Error('remote coach error ' + (res ? res.status : 'net'))); return; }
+        if (!res || !res.ok) { noteRemote(false); finish(reject, new Error('remote coach error ' + (res ? res.status : 'net'))); return; }
         return res.json().then(function (data) {
           var text = (data && typeof data.text === 'string') ? data.text : '';
-          if (!text) { remoteFailAt = Date.now(); finish(reject, new Error('remote coach returned no text')); return; }
-          remoteFailAt = 0; lastSource = 'remote';
+          if (!text) { noteRemote(false); finish(reject, new Error('remote coach returned no text')); return; }
+          noteRemote(true); lastSource = 'remote';
           if (onToken) { try { onToken(text); } catch (e) {} }
           finish(resolve, text);
         });
-      })['catch'](function (err) { remoteFailAt = Date.now(); finish(reject, err || new Error('remote coach network error')); });
+      })['catch'](function (err) { noteRemote(false); finish(reject, err || new Error('remote coach network error')); });
     });
+  }
+  // v47: bring-your-own key — the same request, but the browser calls the
+  // provider directly with the user's own key (OpenAI chat/completions shape).
+  function byoGenerate(messages, opts, onToken) {
+    return new Promise(function (resolve, reject) {
+      var key = byoKey();
+      if (!key) { reject(new Error('bring-your-own key not set')); return; }
+      var base = byoBase().replace(/\/+$/, '');
+      if (!base) { reject(new Error('bring-your-own base URL not set')); return; }
+      if (typeof fetch !== 'function') { reject(new Error('fetch unavailable')); return; }
+      var done = false, timer = null;
+      function finish(fn, val) { if (done) return; done = true; if (timer) clearTimeout(timer); fn(val); }
+      timer = setTimeout(function () { noteRemote(false); finish(reject, new Error('coach timed out')); }, REMOTE_TIMEOUT_MS);
+      fetch(base + '/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + key },
+        body: JSON.stringify({ model: byoModel() || GROQ_MODEL, messages: messages, max_tokens: Math.min(96, (opts && opts.maxNew) || 48), temperature: 0.2 })
+      }).then(function (res) {
+        if (!res || !res.ok) { noteRemote(false); finish(reject, new Error('coach error ' + (res ? res.status : 'net'))); return; }
+        return res.json().then(function (data) {
+          var text = (data && data.choices && data.choices[0] && data.choices[0].message && typeof data.choices[0].message.content === 'string') ? data.choices[0].message.content : '';
+          if (!text) { noteRemote(false); finish(reject, new Error('coach returned no text')); return; }
+          noteRemote(true); lastSource = 'remote';
+          if (onToken) { try { onToken(text); } catch (e) {} }
+          finish(resolve, text);
+        });
+      })['catch'](function (err) { noteRemote(false); finish(reject, err || new Error('coach network error')); });
+    });
+  }
+  // Dispatch: Worker first, then bring-your-own, else not configured.
+  function remoteGenerate(messages, opts, onToken) {
+    if (workerConfigured()) return workerGenerate(messages, opts, onToken);
+    if (byoConfigured()) return byoGenerate(messages, opts, onToken);
+    return Promise.reject(new Error('remote coach not configured'));
+  }
+  // v47: is the online coach usable right now? (the header LED)
+  function remoteAvailable() {
+    var online = typeof navigator === 'undefined' || navigator.onLine !== false;
+    var inCooldown = remoteFailAt !== 0 && (Date.now() - remoteFailAt < REMOTE_COOL_MS);
+    return remoteEnabled() && remoteConfigured() && online && !inCooldown;
+  }
+  function refreshLed() {
+    var led = byId('coachLed');
+    if (!led) return;
+    var on = remoteAvailable();
+    led.className = 'coach-led' + (on ? ' on' : '');
+    led.setAttribute('title', on ? 'Online coach: available' : 'Online coach: not available');
   }
 
   function testRemote() {
     var note = byId('aiRemoteNote');
     function show(msg, ok) { if (note) { note.textContent = msg; note.style.color = ok === null ? '' : (ok ? 'var(--ok)' : 'var(--bad)'); } }
-    if (!remoteConfigured()) { show('Paste your Worker URL first (see README, "Remote coach").', false); return; }
+    if (!workerConfigured() && !byoConfigured()) { show('Set a Worker URL or a bring-your-own key first.', false); return; }
     if (typeof fetch !== 'function') { show('fetch is unavailable in this browser.', false); return; }
+    var useWorker = workerConfigured();
+    var url, headers = { 'content-type': 'application/json' }, body;
+    if (useWorker) {
+      url = remoteUrl();
+      body = JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 });
+    } else {
+      url = byoBase().replace(/\/+$/, '') + '/chat/completions';
+      headers['authorization'] = 'Bearer ' + byoKey();
+      body = JSON.stringify({ model: byoModel() || GROQ_MODEL, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 });
+    }
     show('Testing...', null);
-    var timer = setTimeout(function () { show('Timed out -- is the Worker deployed?', false); }, REMOTE_TIMEOUT_MS);
-    fetch(remoteUrl(), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 })
-    }).then(function (res) {
+    var timer = setTimeout(function () { show('Timed out -- check the ' + (useWorker ? 'Worker deploy' : 'key / URL / network') + '.', false); }, REMOTE_TIMEOUT_MS);
+    fetch(url, { method: 'POST', headers: headers, body: body }).then(function (res) {
       clearTimeout(timer);
-      if (!res || !res.ok) { show('Worker replied ' + (res ? res.status : 'net') + ' -- check deploy + secret.', false); return; }
-      return res.json().then(function (d) { var ok = !!(d && d.text); show(ok ? 'Remote coach is working' : 'No reply text -- check the provider API key.', ok); });
-    })['catch'](function () { clearTimeout(timer); show('Could not reach ' + remoteUrl() + ' -- check the URL + network.', false); });
+      if (!res || !res.ok) { show('Replied ' + (res ? res.status : 'net') + ' -- check ' + (useWorker ? 'deploy + secret' : 'key + model') + '.', false); return; }
+      return res.json().then(function (d) {
+        var ok = useWorker ? !!(d && d.text) : !!(d && d.choices && d.choices[0]);
+        show(ok ? 'Online coach is working' : 'No reply -- check the ' + (useWorker ? 'provider API key' : 'model name') + '.', ok);
+      });
+    })['catch'](function () { clearTimeout(timer); show('Could not reach ' + url + ' -- check the URL + network (browser calls need a CORS-enabled provider, e.g. Groq).', false); });
   }
   function refreshRemoteNote() {
     var rc = byId('aiRemoteToggle'), rn = byId('aiRemoteNote');
     if (rc) { try { rc.checked = remoteEnabled(); } catch (e) {} }
-    if (rn) { rn.style.color = ''; rn.textContent = remoteEnabled() ? 'On -- when online, open questions go to the free remote coach via your Worker; offline or on failure the local coach takes over.' : 'Off -- open questions use the local coach (or the rule engine) on this phone.'; }
+    var backend = workerConfigured() ? 'your Worker' : (byoConfigured() ? 'your own key (direct)' : 'not configured yet');
+    if (rn) {
+      rn.style.color = '';
+      rn.textContent = remoteEnabled()
+        ? 'On -- when online, open questions go to the online coach via ' + backend + '; offline or on failure the local coach takes over.'
+        : 'Off -- open questions use the local coach (or the rule engine) on this phone.';
+    }
+    refreshLed();
   }
 
   // The on-device brain, unchanged. Extracted so the dispatcher can fall back.
@@ -381,6 +487,28 @@
     }
     var rt = byId('aiRemoteTest');
     if (rt) rt.addEventListener('click', testRemote);
+    // v47: bring-your-own key (direct provider calls)
+    var bp = byId('aiByoProvider');
+    if (bp) {
+      bp.value = byoProvider();
+      bp.addEventListener('change', function () {
+        setByoProvider(bp.value);
+        var bb = byId('aiByoBase'), bm = byId('aiByoModel');
+        if (bp.value === 'groq') { if (bb) bb.value = GROQ_BASE; if (bm) bm.value = GROQ_MODEL; }
+        else if (bb) bb.value = OPENAI_BASE;
+      });
+    }
+    var bk = byId('aiByoKey');
+    if (bk) bk.addEventListener('change', function () { setByoKey(bk.value); });
+    var bb2 = byId('aiByoBase');
+    if (bb2) { bb2.value = byoBase() || (byoProvider() === 'openai' ? OPENAI_BASE : GROQ_BASE); bb2.addEventListener('change', function () { setByoBase(bb2.value); }); }
+    var bm2 = byId('aiByoModel');
+    if (bm2) { bm2.value = byoModel(); bm2.addEventListener('change', function () { setByoModel(bm2.value); }); }
+    // the online-coach LED reacts to connectivity whenever the page is up
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', refreshLed);
+      window.addEventListener('offline', refreshLed);
+    }
     var cb = byId('aiToggle');
     if (!cb) return;
     cb.addEventListener('change', function () {
@@ -471,6 +599,17 @@
     remoteUrl: remoteUrl,
     setRemoteUrl: setRemoteUrl,
     remoteConfigured: remoteConfigured,
+    remoteAvailable: remoteAvailable,
+    refreshLed: refreshLed,
+    byoProvider: byoProvider,
+    setByoProvider: setByoProvider,
+    byoKey: byoKey,
+    setByoKey: setByoKey,
+    byoBase: byoBase,
+    setByoBase: setByoBase,
+    byoModel: byoModel,
+    setByoModel: setByoModel,
+    byoConfigured: byoConfigured,
     lastSource: function () { return lastSource; },
     testRemote: testRemote
   };

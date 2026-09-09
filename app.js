@@ -695,6 +695,7 @@
       idbPut(STORE_META, { key: STORY_UNDO_KEY, value: { base: prev, at: Date.now() } }).catch(function () {});
       emit('snap');
       renderFooter();
+      renderBaseStatus();
       return nb;
     });
   }
@@ -708,6 +709,7 @@
         idbDel(STORE_META, STORY_UNDO_KEY).catch(function () {});
         emit('snap');
         renderFooter();
+        renderBaseStatus();
         return nb;
       });
     });
@@ -893,11 +895,13 @@
     sc.classList.add('show');
     sh.classList.add('show');
     openSheetEl = sh;
-    if (id === 'setSheet') renderBaseEditor();
+    if (id === 'numSheet') renderBaseEditor();
+    else if (id === 'setSheet') renderBaseStatus();
     // a11y: move focus into the sheet (first field, else first control).
-    // The Settings sheet is skipped: it has many text inputs and focus would pop the keyboard.
+    // The Settings and Your-numbers sheets are skipped: they hold many text
+    // inputs and an auto-focus would pop the keyboard on open.
     try {
-      if (id === 'setSheet') return;
+      if (id === 'setSheet' || id === 'numSheet') return;
       var f = sh.querySelectorAll('input,select,textarea');
       if (!f.length) f = sh.querySelectorAll('button');
       if (f && f.length) f[0].focus();
@@ -1205,6 +1209,7 @@
     saveBase(nb).then(function () {
       emit('snap');
       renderFooter();
+      renderBaseStatus();
       var bb = byId('baseBody');
       if (bb) bb.querySelectorAll('#rowsAcc .brow').forEach(function (row) {
         var ki = row.querySelector('[data-r="kind"]'); var li = row.querySelector('[data-r="limit"]');
@@ -1214,22 +1219,41 @@
   }
   function renderBaseStatus() {
     var el = byId('baseStatus');
-    if (!el) return;
     var b = state.base;
     var mg = byId('baseMigrated');
-    if (!b || baseIsEmpty(b)) {
-      el.innerHTML = '<span class="pill warn">no numbers yet</span>&nbsp; · everything is stored on this phone';
-      if (mg) mg.style.display = 'none';
-      return;
+    if (el) {
+      if (!b || baseIsEmpty(b)) {
+        el.innerHTML = '<span class="pill warn">no numbers yet</span>&nbsp; · everything is stored on this phone';
+      } else {
+        el.innerHTML = '<span class="pill ok">local</span>&nbsp; · as of ' + esc(fmtDate(b.as_of)) +
+          (b.edited ? '&nbsp; · saved ' + new Date(b.edited).toLocaleTimeString() : '');
+      }
     }
-    el.innerHTML = '<span class="pill ok">local</span>&nbsp; · as of ' + esc(fmtDate(b.as_of)) +
-      (b.edited ? '&nbsp; · saved ' + new Date(b.edited).toLocaleTimeString() : '');
     if (mg) {
-      if (b.migrated_from_snapshot) {
+      if (b && b.migrated_from_snapshot) {
         mg.innerHTML = 'Imported from your last sheet snapshot (' + esc(b.migrated_from_snapshot) + ') — review the numbers below; from now on they live only in this app.';
         mg.style.display = '';
       } else mg.style.display = 'none';
     }
+    renderSetBaseSum();
+  }
+  // v47: compact "Your numbers" summary in Settings (the editor is its own sheet now)
+  function renderSetBaseSum() {
+    var el = byId('setBaseSum');
+    if (!el) return;
+    var b = state.base;
+    if (!b || baseIsEmpty(b)) {
+      el.innerHTML = 'Nothing set up yet. Add your accounts, salary, debts and budgets — or build them with the coach.';
+      return;
+    }
+    var nAcc = (b.accounts || []).length;
+    var bits = ['As of ' + esc(fmtDate(b.as_of)), nAcc + ' account' + (nAcc === 1 ? '' : 's')];
+    if ((Number(b.salary) || 0) > 0) bits.push('salary ' + money(b.salary));
+    var nBud = Object.keys(b.budgets || {}).length;
+    if (nBud) bits.push(nBud + ' budget' + (nBud === 1 ? '' : 's'));
+    var nDebt = Object.keys(b.debts || {}).length;
+    if (nDebt) bits.push(nDebt + ' debt' + (nDebt === 1 ? '' : 's'));
+    el.innerHTML = bits.join(' · ');
   }
   // ---- render ----
   function tile(k, v, n, cls) {
@@ -2305,15 +2329,20 @@
           });
           state.owed = { people: owedPeople };
           saveOwed();
-          refreshLocalSnapshot();
           state.adj = { cash: 0, free: 0, card: 0, prepay: 0 };
-          state.adjSig = snapSig(state.snapshot);
           state.adjLoaded = true;
-          saveAdj();
-          persistSnapshot();
-          renderBaseEditor();
-          render();
-          snack('Imported ' + (data.txns || []).length + ' entries · ' + (data.plans || []).length + ' plans · ' + owedPeople.length + ' owed people' + (state.base.migrated_from_snapshot || (data.base && data.base.accounts) ? ' · numbers restored' : ''));
+          // v47: persist the base too. The old code re-derived the snapshot from
+          // the imported base in memory (and saved the snapshot) but never wrote
+          // the base back to IndexedDB, so on the next launch the stale stored
+          // base won and the imported accounts / salary / debts disappeared.
+          // saveBase() writes base + snapshot + adj through the same path the
+          // Settings editor uses, so an import sticks.
+          return saveBase(state.base).then(function () {
+            renderBaseEditor();
+            renderBaseStatus();
+            render();
+            snack('Imported ' + (data.txns || []).length + ' entries · ' + (data.plans || []).length + ' plans · ' + owedPeople.length + ' owed people' + (state.base.migrated_from_snapshot || (data.base && data.base.accounts) ? ' · numbers restored' : ''));
+          });
         });
       } catch (err) {
         snack('Import failed: ' + esc(String((err && err.message) || err)));
@@ -2365,6 +2394,16 @@
     var sc = byId('scrim');
     if (sc && !openSheetEl) sc.classList.remove('show');
   }
+  // v47: open the coach and kick off the guided "set up my numbers" conversation.
+  // Used by the empty-state "Set up with the coach" buttons (Home, Your numbers,
+  // Settings). The chat itself owns the prompt; here we just bring the coach up.
+  function startSetup() {
+    closeSheets();
+    openCoach();
+    if (window.__financeChat && typeof window.__financeChat.startSetup === 'function') {
+      window.__financeChat.startSetup();
+    }
+  }
   function currentTab() {
     if (!state.snapshot) return 'home';
     try {
@@ -2410,6 +2449,8 @@
     setTab: setTab,
     closeCoach: closeCoach,
     openSettings: function () { openSheet('setSheet'); },
+    openNumbers: function () { openSheet('numSheet'); },
+    startSetup: startSetup,
     idbAll: idbAll,
     idbPut: idbPut,
     idbDel: idbDel,
@@ -2478,7 +2519,9 @@
         byId('f_categoryCustom').style.display = 'none';
         byId('f_note').value = '';
         seedCategories();
-        byId('f_amount').focus();
+        // v47: the sheet used to stay open with the fields cleared — close it
+        // instead; the "Added …" snackbar (with Undo) confirms the add.
+        closeSheets();
       });
     };
 
@@ -2532,6 +2575,14 @@
     if (ac) ac.onclick = closeSheets;
     var scb = byId('setClose');
     if (scb) scb.onclick = closeSheets;
+    var ncb = byId('numClose');
+    if (ncb) ncb.onclick = closeSheets;
+    var sno = byId('setNumOpen');
+    if (sno) sno.onclick = function () { openSheet('numSheet'); };
+    var snc = byId('setNumCoach');
+    if (snc) snc.onclick = function () { startSetup(); };
+    var nco = byId('numCoachBtn');
+    if (nco) nco.onclick = function () { startSetup(); };
     var scrim = byId('scrim');
     if (scrim) scrim.onclick = function () { closeCoach(); closeSheets(); };
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeCoach(); closeSheets(); } });
@@ -2577,7 +2628,9 @@
       });
     }
     var hob = byId('homeOpenSet');
-    if (hob) hob.onclick = function () { openSheet('setSheet'); };
+    if (hob) hob.onclick = function () { openSheet('numSheet'); };
+    var hcb = byId('homeCoach');
+    if (hcb) hcb.onclick = function () { startSetup(); };
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
