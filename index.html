@@ -136,6 +136,7 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 .msg .ins-line{font-size:12.5px}
 .msg .kv{font-size:12.5px}
 .msg .note{margin:5px 0 0;font-size:11.5px}
+.msg .c-src{color:var(--mut);font-size:11px;font-weight:600;margin:-4px 0 6px;letter-spacing:.3px}
 .a-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
 .c-act{cursor:pointer;background:var(--card);border:1px solid var(--acc);color:var(--ink);border-radius:9px;padding:7px 11px;font-size:12.5px;font-weight:700}
 .c-act:active{background:var(--acc);color:#fff}
@@ -242,11 +243,14 @@ box-shadow:0 8px 24px rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:o
 #snack button{cursor:pointer;background:transparent;border:0;color:var(--acc);font-weight:800;font-size:13px;
 padding:2px 4px;flex:0 0 auto}
 /* ---- service worker update toast ---- */
+/* Hidden by opacity/visibility too, not just the transform: Android's recents
+   (screen switcher) can re-render the page with a different viewport/safe-area,
+   and a transform-only hide then peeks through as a "ghost" pill at the top. */
 #swToast{position:fixed;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translate(-50%,-160%);
 z-index:40;background:var(--card2);border:1px solid var(--acc);border-radius:999px;padding:9px 9px 9px 16px;
 display:flex;align-items:center;gap:12px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.5);
-transition:transform .22s ease}
-#swToast.show{transform:translate(-50%,0)}
+transition:transform .22s ease,opacity .22s ease;opacity:0;visibility:hidden}
+#swToast.show{transform:translate(-50%,0);opacity:1;visibility:visible}
 #swToast button{cursor:pointer;background:var(--acc);border:0;color:#fff;font-weight:800;border-radius:999px;
 padding:7px 14px;font-size:12.5px}
 /* ---- Phase 3: hero + cash sparkline ---- */
@@ -625,7 +629,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">FinSmart · local-first · shell v45</p>
+    <p class="note" style="margin:14px 0 0">FinSmart · local-first · shell v46</p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>

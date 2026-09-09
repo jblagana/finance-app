@@ -31,12 +31,16 @@ The GitHub repo only ever holds this app code, **no balances or transactions**.
      the standard (non-jsep) WASM kernel instead of the faster jsep one —
      WebKit 26.2+'s new JIT crashes on jsep ("A problem repeatedly occurred
      on ...", onnxruntime#26827); see `model-worker.js`.
-   - **Remote coach (opt-in, online, v45)** — when you're online, open
-     questions can also go to a free hosted LLM behind your own Cloudflare
-     Worker (Settings → "Remote coach (online)"). Only the question leaves the
-     phone; the API key lives on the Worker, never in the app. Offline, or if the
-     remote is down, the local brain answers instead. Rules still write
-     everything — the LLM only chats. See `worker/`.
+   - **Remote coach (opt-in, online, v45; memory + drafts in v46)** — when
+     you're online, open questions can also go to a free hosted LLM behind your
+     own Cloudflare Worker (Settings → "Remote coach (online)"). The last few
+     chat turns travel with the question so the coach remembers the
+     conversation, and when you ask it to add or change a number it proposes a
+     validated draft you confirm (same draft card + one-tap undo as story mode).
+     Works even without the ~250 MB local brain downloaded. The API key lives on
+     the Worker, never in the app. Offline, or if the remote is down, the local
+     brain answers instead. Rules still write everything — the LLM only drafts.
+     See `worker/`.
 - **Backup**: export/import a JSON file with your numbers + entries + plans
   + owed notes.
 
@@ -205,14 +209,19 @@ answers, without paying or giving the app any key.
   The app only knows the Worker URL and sends the question; the Worker adds CORS,
   restricts the origin to your app, caps tokens (at most 96) and prompt size, and
   returns one short answer.
-- **Honest, graceful fallback.** Online + configured + healthy → `Coach · remote`.
-  Offline, unconfigured, or if the call fails/times out → the local brain
-  (`Coach · local`). If both are unavailable → the rule engine. A 30-second
-  circuit-breaker means a dead remote doesn't hang every question.
-- **Privacy.** Only the question prompt leaves the device, only to the Worker,
-  only when online and enabled. Transaction parsing and every money action stay
-  100% deterministic and on-device. Turn it off in Settings and the app is fully
-  local again.
+- **Honest, graceful fallback.** Online + configured + healthy → **Coach** with
+  `remote` under the title. Offline, unconfigured, or if the call fails/times
+  out → the local brain (`local`). If both are unavailable → the rule engine. A
+  30-second circuit-breaker means a dead remote doesn't hang every question.
+- **Change requests (v46).** "Add 5,000 to GCash" doesn't just get chatted
+  about: the remote model answers with a strict-JSON draft, the app validates it
+  against the same shapes the rule engine uses, and you confirm it like a story
+  draft (per-line ✕, Confirm, one-tap undo). The model itself still writes
+  nothing — the confirm button does.
+- **Privacy.** The question, your stored numbers summary and the last few chat
+  turns leave the device — only to the Worker, only when online and enabled.
+  Transaction parsing and every money action stay 100% deterministic and
+  on-device. Turn it off in Settings and the app is fully local again.
 
 **To enable:** deploy `worker/` with Wrangler (full steps in `worker/README.md`),
 store the provider key as a Worker secret, point `ALLOWED_ORIGIN` at your app,
@@ -228,7 +237,7 @@ then paste the Worker URL into **Settings → Remote coach (online)** and press
   notes; **Import JSON** restores them (replaces what's on the phone).
 
 ## After redeploying
-- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v45),
+- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v46),
   so the phone picks up the new app shell on its next load — the "New version
   ready" toast offers a one-tap reload. If the app ever looks stale: open the
   Pages URL once in Safari, then relaunch the home-screen icon.

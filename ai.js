@@ -323,11 +323,17 @@
     return enabled() && state.llmReady === true;
   }
   // v45: remote first (online + configured + out of cooldown), local fallback.
+  // v46: fail fast (with a readable message) when the remote is unavailable and
+  // the local brain isn't ready either — otherwise the local path would hang
+  // for its 65 s timeout on a phone that never downloaded the model.
   function generate(messages, opts, onToken) {
     lastSource = 'local';
     var online = typeof navigator === 'undefined' || navigator.onLine !== false;
     var inCooldown = remoteFailAt !== 0 && (Date.now() - remoteFailAt < REMOTE_COOL_MS);
     if (!(remoteEnabled() && remoteConfigured() && online && !inCooldown)) {
+      if (!localReady()) {
+        return Promise.reject(new Error('the offline brain isn’t ready (Settings → Offline brain) and the remote coach is unavailable right now'));
+      }
       return localGenerate(messages, opts, onToken);
     }
     return remoteGenerate(messages, opts, onToken)['catch'](function (err) {

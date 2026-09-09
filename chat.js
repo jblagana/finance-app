@@ -48,6 +48,10 @@
   // layer can read it synchronously; it is null for the test/dev path (and
   // without the brain), which keeps the rule engine byte-identical.
   var currentAiVec = null;
+  // v46: short coach memory — the last few turns (user text + tag-stripped bot
+  // text), rebuilt on every send and folded into the coach prompt so the coach
+  // follows the conversation instead of answering each message in isolation.
+  var recentHist = [];
   // v43: personal lexicon — "learns your words." Your phrasings map to known
   // concepts (canonical questions the rules already answer). A confident match
   // routes deterministically in under a millisecond; a mid-band or seeded match
@@ -1330,7 +1334,17 @@
     var FAI = typeof window !== 'undefined' ? window.FinAI : null;
     if (!FAI || !ctx.eff) return null;
     var st = FAI.state();
-    if (st.llmReady) return { llm: true, prompt: aiPrompt(t, ctx) };
+    // v46: with a Worker configured, the remote coach works even without the
+    // local brain downloaded (the ~250 MB download only matters when the
+    // remote path can't be used).
+    var remoteOn = FAI.remoteEnabled() && FAI.remoteConfigured() && (typeof navigator === 'undefined' || navigator.onLine !== false);
+    if (st.llmReady || remoteOn) {
+      var pr = aiPrompt(t, ctx, remoteOn, recentHist);
+      // the Worker caps prompt JSON at 4000 chars — if the numbers + memory
+      // push it over, send the same prompt without the conversation memory
+      if (JSON.stringify(pr).length > 3800) pr = aiPrompt(t, ctx, remoteOn, []);
+      return { llm: true, prompt: pr };
+    }
     // loading / partial / error / already-offered: the plain fallback stands;
     // the status chip shows what the brain is doing.
     if (st.state !== 'idle' || FAI.offered()) return null;
@@ -1349,12 +1363,18 @@
       ]
     };
   }
-  function aiContextText(t, ctx) {
+  function aiContextText(t, ctx, hist) {
     var e = ctx.eff;
     var L = [];
     L.push('My numbers on this phone (as of ' + (ctx.at ? new Date(ctx.at).toLocaleDateString() : 'today') + '):');
     L.push('- liquid cash ' + money(e.cash.total) + ', free ' + money(e.cash.free) + ', floor ' + money(e.floor || 0));
     L.push('- cards owed ' + money(e.card_owed || 0) + ', prepay on the ' + ordinal(e.prepay_day || 14) + ': ' + money(e.total_prepay || 0));
+    // v46: exact stored names, so a remote draft can name an existing
+    // account/budget instead of inventing one.
+    var sn = storyNames(ctx);
+    var accs = sn.accounts.map(function (a) { return a.name + ' (' + a.kind + ')'; });
+    if (accs.length) L.push('- accounts: ' + accs.slice(0, 8).join(', '));
+    if (sn.budgets.length) L.push('- budgets: ' + sn.budgets.slice(0, 6).join(', '));
     var debts = (e.obligations && e.obligations.debts) || [];
     for (var i = 0; i < Math.min(4, debts.length); i++) {
       var d = debts[i];
@@ -1377,29 +1397,127 @@
     top.sort(function (a, b) { return b[1] - a[1]; });
     if (top.length) L.push('- logged this month ' + money(total) + ': ' + top.slice(0, 4).map(function (z) { return z[0] + ' ' + money(z[1]); }).join(', '));
     L.push('');
+    // v46: the last few turns, so "and next month?" knows what we just talked about
+    var hLines = (hist || []).map(function (h) { return (h.who === 'user' ? 'You: ' : 'Coach: ') + h.txt; });
+    if (hLines.length) { L.push('Recent conversation (short, for context):'); L.push(hLines.join('\n')); L.push(''); }
     L.push('Question: ' + t);
     return L.join('\n');
   }
-  function aiPrompt(t, ctx) {
+  var AI_LOCAL_SYSTEM = 'You are FinSmart, a personal money coach, offline on the user\'s phone. Answer only from the numbers given, in 1-2 short plain sentences (under 40 words), no lists, no markdown, no emojis. Never invent numbers. If outside the given numbers, say so in one line. You only explain - never write, log or change anything.';
+  // v46: the remote coach can also DRAFT a number change as strict JSON when the
+  // user asks to add/change something. The app validates the JSON against the
+  // story-mode shapes and the existing confirm/undo flow — the model itself
+  // still writes nothing.
+  var AI_REMOTE_SYSTEM = 'You are FinSmart, a personal money coach. Answer only from the numbers given, in 1-2 short plain sentences (under 45 words), no lists, no markdown, no emojis. Never invent numbers. If the user asks to add or change a number, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. Use only names from the numbers list or a new name the user stated. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
+  function aiPrompt(t, ctx, remote, hist) {
     return [
-      { role: 'system', content: 'You are FinSmart, a personal money coach, offline on the user\'s phone. Answer only from the numbers given, in 1-2 short plain sentences (under 40 words), no lists, no markdown, no emojis. Never invent numbers. If outside the given numbers, say so in one line. You only explain - never write, log or change anything.' },
-      { role: 'user', content: aiContextText(t, ctx) }
+      { role: 'system', content: remote ? AI_REMOTE_SYSTEM : AI_LOCAL_SYSTEM },
+      { role: 'user', content: aiContextText(t, ctx, hist) }
     ];
+  }
+  // v46: the coach's short memory — the last few turns, tag-stripped and capped,
+  // so the prompt stays under the Worker's input cap even on a busy phone.
+  function coachHist(rows, skipId) {
+    var out = [];
+    var rs = (rows || []).slice().sort(function (a, b) { return a.at < b.at ? -1 : 1; });
+    for (var i = rs.length - 1; i >= 0 && out.length < 6; i--) {
+      var m = rs[i];
+      if (!m || m.id === skipId) continue;
+      var txt = m.who === 'user' ? String(m.text || '') : String(m.html || '').replace(/<[^>]+>/g, ' ');
+      txt = txt.replace(/\s+/g, ' ').trim();
+      if (!txt) continue;
+      out.unshift({ who: m.who, txt: txt.slice(0, 160) });
+    }
+    return out;
+  }
+  // v46: parse + validate a remote reply that should be a change draft.
+  // Returns null for plain-text answers (or broken JSON), so a bad model reply
+  // degrades to a normal text answer instead of a broken card.
+  var COACH_KINDS = { cash: 1, card: 1, debt: 1, loan: 1 };
+  function coachChangeLabel(ch) {
+    if (ch.type === 'account') return 'Account · ' + ch.name + (ch.kind && ch.kind !== 'cash' ? ' (' + ch.kind + ')' : '');
+    if (ch.type === 'salary_base') return 'Base salary';
+    if (ch.type === 'salary') return 'Salary · ' + (ch.month || '');
+    if (ch.type === 'budget' || ch.type === 'budget_override') return 'Budget · ' + ch.name + (ch.month ? ' · ' + ch.month : '');
+    if (ch.type === 'debt_payment') return 'Debt payment · ' + ch.name + ' · ' + (ch.month || '');
+    if (ch.type === 'one_off') return 'One-off · ' + ch.name + ' · ' + (ch.month || '');
+    if (ch.type === 'recurring') return 'Recurring · ' + ch.name + ' · 6 months';
+    return ch.type;
+  }
+  // Sanitize one model-emitted change into the exact shape applyBaseChange
+  // validates (mirrors the story-mode rules: same types, same required fields).
+  function coachSanitizeChange(c) {
+    if (!c || typeof c !== 'object' || typeof c.type !== 'string') return null;
+    function num(x) { var n = Number(x); return isFinite(n) && Math.abs(n) <= 1e9 ? n : null; }
+    function mon(x) { return /^\d{4}-\d{2}$/.test(String(x || '')) ? String(x) : null; }
+    function nm(x) { var s = String(x || '').trim().slice(0, 40); return s || null; }
+    switch (c.type) {
+      case 'account': {
+        var name = nm(c.name), kind = COACH_KINDS[c.kind] ? c.kind : 'cash', value = num(c.value);
+        return name && value != null && value >= 0 ? { type: 'account', name: name, kind: kind, value: value } : null;
+      }
+      case 'salary_base': {
+        var a0 = num(c.amount);
+        return a0 != null && a0 >= 0 ? { type: 'salary_base', amount: a0 } : null;
+      }
+      case 'salary': {
+        var m1 = mon(c.month), a1 = num(c.amount);
+        return m1 && a1 != null && a1 >= 0 ? { type: 'salary', month: m1, amount: a1 } : null;
+      }
+      case 'budget': {
+        var n2 = nm(c.name), a2 = num(c.amount);
+        return n2 && a2 != null && a2 >= 0 ? { type: 'budget', name: n2, amount: a2 } : null;
+      }
+      case 'budget_override': {
+        var m2 = mon(c.month), n3 = nm(c.name), a3 = num(c.amount);
+        return m2 && n3 && a3 != null && a3 >= 0 ? { type: 'budget_override', month: m2, name: n3, amount: a3 } : null;
+      }
+      case 'debt_payment': {
+        var m3 = mon(c.month), n4 = nm(c.name), a4 = num(c.amount);
+        return m3 && n4 && a4 != null && a4 >= 0 ? { type: 'debt_payment', month: m3, name: n4, amount: a4 } : null;
+      }
+      case 'one_off': {
+        var m4 = mon(c.month), n5 = nm(c.name), a5 = num(c.amount);
+        return m4 && n5 && a5 != null && a5 >= 0 ? { type: 'one_off', month: m4, name: n5, amount: a5 } : null;
+      }
+      case 'recurring': {
+        var n6 = nm(c.name), a6 = num(c.amount);
+        if (!n6 || a6 == null || a6 <= 0) return null;
+        var months = [];
+        for (var k = 0; k < 6; k++) months.push(addMonthsKey(k));
+        return { type: 'recurring', name: n6, amount: a6, months: months };
+      }
+      default:
+        return null;
+    }
+  }
+  function parseCoachDraft(txt) {
+    var s = String(txt || '').replace(/^\s+|\s+$/g, '');
+    if (!s || s.charCodeAt(0) !== 123) return null; // 123 = opening brace
+    var d = null;
+    try { d = JSON.parse(s); } catch (e) { return null; }
+    if (!d || typeof d !== 'object') return null;
+    var say = typeof d.say === 'string' ? d.say.slice(0, 300) : '';
+    var raw = Array.isArray(d.changes) ? d.changes : [];
+    var changes = [];
+    for (var i = 0; i < raw.length && changes.length < 4; i++) {
+      var ch = coachSanitizeChange(raw[i]);
+      if (ch) changes.push(ch);
+    }
+    if (!say && !changes.length) return null;
+    return { say: say, changes: changes };
   }
   function aiAnswerHtml(txt, ctx, err, src) {
     src = src === 'remote' ? 'remote' : 'local';
     var who = src === 'remote' ? 'remote coach' : 'local coach';
-    var head = src === 'remote' ? 'Coach · remote' : 'Coach · local';
-    var foot = src === 'remote'
-      ? 'online free coach · your prompt went to the model via your worker'
-      : 'offline model · your numbers never left this phone';
     var inner = txt
       ? esc(txt).replace(/\n/g, '<br>')
       : 'The ' + who + ' ' + (err ? 'couldn’t answer that (' + esc(err) + ').' : 'had nothing to add.') +
         ' I still know your numbers — try <b>status</b>, <b>plans</b> or <b>help</b>.';
-    return '<div class="c-block"><div class="c-t">' + head + '</div>' +
-      '<div class="ins-line">' + inner + '</div>' +
-      '<div class="note">' + foot + '</div></div>' + freshness(ctx);
+    // v46: plain header — "Coach" with the source on its own line below it.
+    // The old remote-coach caption and the "numbers as of …" note are gone.
+    return '<div class="c-block"><div class="c-t">Coach</div><div class="c-src">' + src + '</div>' +
+      '<div class="ins-line">' + inner + '</div></div>';
   }
 
   function aiProgressHtml(st) {
@@ -1919,13 +2037,10 @@
   function sendLlm(res, ctx, typing) {
     var FAI = window.FinAI;
     var src0 = (FAI.remoteEnabled() && FAI.remoteConfigured() && (typeof navigator === 'undefined' || navigator.onLine !== false)) ? 'remote' : 'local';
-    var rHead = src0 === 'remote' ? 'Coach · remote' : 'Coach · local';
-    var rNote = src0 === 'remote' ? 'online free coach · your prompt goes to the model via your worker' : 'offline model · your numbers never left this phone';
     var sm = {
       id: chatId(), who: 'bot',
-      html: '<div class="c-block"><div class="c-t">' + rHead + '</div>' +
-        '<div class="ins-line"><span class="spin"></span> coaching…</div>' +
-        '<div class="note">' + rNote + '</div></div>',
+      html: '<div class="c-block"><div class="c-t">Coach</div><div class="c-src">' + src0 + '</div>' +
+        '<div class="ins-line"><span class="spin"></span> coaching…</div></div>',
       actions: [], at: new Date().toISOString(), ai: true, streaming: true
     };
     return saveMsg(sm).then(function () {
@@ -1936,10 +2051,30 @@
         if (el) { el.textContent = txt || '…'; scrollBottom(); }
       }).then(function (txt) {
         sm.streaming = false;
-        sm.html = aiAnswerHtml(txt || '', ctx, null, FAI.lastSource());
+        // v46: the remote coach may answer a change request with a validated JSON
+        // draft — render it through the same story-mode card (confirm/undo).
+        var draft = FAI.lastSource() === 'remote' ? parseCoachDraft(txt) : null;
+        if (draft && draft.changes.length) {
+          var lines = draft.changes.map(function (ch) { return { label: coachChangeLabel(ch), change: ch }; });
+          var rowsHtml = lines.map(function (l, i) {
+            var v = l.change.amount != null ? l.change.amount : l.change.value;
+            return '<div class="ins-line"><b>' + (i + 1) + '.</b> ' + esc(l.label) + ' — ' + esc(money(v)) + '</div>';
+          }).join('');
+          sm.storyLines = lines;
+          sm.actions = lines.map(function (l, i) { return { label: '✕ ' + l.label, act: 'story_drop_line', payload: { i: i } }; });
+          sm.actions.push({ label: 'Confirm ' + lines.length + ' change' + (lines.length > 1 ? 's' : ''), act: 'confirm_story', payload: { lines: lines } });
+          sm.actions.push({ label: 'Discard', act: 'discard_story' });
+          sm.html = '<div class="c-block"><div class="c-t">Coach</div><div class="c-src">remote</div>' +
+            (draft.say ? '<div class="ins-line">' + esc(draft.say) + '</div>' : '') + '</div>' +
+            block('Draft: base-data changes',
+              rowsHtml + line('<span class="note">nothing is written yet — tap ✕ to drop a line, or confirm to apply</span>'),
+              'Applies to Your numbers through the Settings save path — one-tap undo after.', 'warn');
+        } else {
+          sm.html = aiAnswerHtml(draft && draft.say ? draft.say : (txt || ''), ctx, null, FAI.lastSource());
+        }
         return saveMsg(sm).then(function () {
           var el2 = msgsEl && msgsEl.querySelector('[data-cid="' + sm.id + '"]');
-          if (el2) el2.innerHTML = sm.html;
+          if (el2) { el2.innerHTML = sm.html + actionsHtml(sm); bindActions(el2, sm); }
           scrollBottom();
         });
       })['catch'](function (err) {
@@ -1975,6 +2110,11 @@
       if (typeof F.lexAll === 'function') {
         pre = pre.then(function (vec) { return F.lexAll().then(loadLex)['catch'](function () {}).then(function () { return vec; }); });
       }
+      // v46: rebuild the coach's short memory (the last few turns, excluding the
+      // message just sent) so the LLM prompt can carry the conversation.
+      pre = pre.then(function (vec) {
+        return loadChat().then(function (rows) { recentHist = coachHist(rows, um.id); return vec; })['catch'](function () { return vec; });
+      });
       return pre.then(function (vec) {
         currentAiVec = vec || null;
         var res = handle(v, ctx);
