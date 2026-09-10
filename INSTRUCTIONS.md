@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-11 (night, after v64) — user edit: change the stored kind too ('cash' → 'debit', with migration)
-Status: in progress
-Progress: 25% — ETA ~00:45
+Status: done
+Progress: 100% — completed with v65 (code `eb58175`, log `1302fe6`) → origin/main
 
 ### Instruction (verbatim)
 > (user edit to the Interpretation of the v65 entry below — the inserted text, quoted verbatim in place:)
@@ -26,8 +26,8 @@ Progress: 25% — ETA ~00:45
 - [ ] Implementation is owned by the v65 entry below — see its subtasks
 
 ## 2026-09-10 (night, after v64) — Paid-with names drop "(card)"/"(cash)"; base type option cash → debit
-Status: in progress
-Progress: 90% — ETA ~01:00 (code pushed, log + live verify left)
+Status: done
+Progress: 100% — shipped as v65 (code `eb58175`, log `1302fe6`) → origin/main
 
 ### Instruction (verbatim)
 > in 'paid with', remove the 'card' or'cash' in name, example: 'MariBank CC (card)' -> 'MariBank CC'
@@ -52,8 +52,10 @@ Progress: 90% — ETA ~01:00 (code pushed, log + live verify left)
 - [x] README: cache v64 → v65, "card/cash" → "card/debit … as bare names", setup order wording
 - [x] Gates: check_site.py "all checks passed" (incl. new v65 section — one assertion typo fixed in the check itself) + parser "all parser checks passed" (incl. new legacy-cash-entity case) + node --check clean (5 JS files)
 - [x] Push code commit — `eb58175` → origin/main
-- [ ] Push log commit
-- [ ] verify_live.ps1 -Tag v65
+- [x] Push log commit — `1302fe6` → origin/main (final update in the next log push)
+- [x] verify_live.ps1 -Tag v65 — live: "sw cache v65: True" + live app.js `SHELL_RELEASE = { v: 65` → True (the ps1's "index shell v65" line is legacy-False: the stamp renders at runtime from app.js, not from static index.html)
+
+User action: on the phone, reload → accept the "New version ready" SW update → footer "Fin.AI · shell v65". Add sheet: **Paid with** shows **Cash** (pre-selected) plus your account names bare (no "(card)"/"(cash)" suffix). Your numbers → Accounts: the type options now read **debit / card / debt / loan** — previously stored accounts are migrated to kind "debit" automatically on next load, and coach-recorded details follow them to "name:account" keys.
 
 ## 2026-09-10 (night, after v63) — user edit to the "paid with" entry's Interpretation
 Status: done
