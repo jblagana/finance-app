@@ -6,6 +6,49 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-10 ~13:45 — Logging discipline: log verbatim FIRST, live progress %, never clobber user edits
+
+Status: **done** (pushed in this commit; hash = top of `git log`)
+Progress: 100% — ETA was ~10 min (verify file state, patch v54 entry, harden the AGENTS.md rule, push)
+
+### Instruction (verbatim)
+> -when i tell u something, log it first verbatim in the instruction.md before thinking or doing anything
+> -i noticed ur not regularly updating the progres % i instructions.md
+> -also, u did not check my edit in ur interpretation and just overwrote it
+
+### Interpretation (agent — user may edit this section)
+- My three slips in the v54 task, and the fixes (edit freely):
+  1. **Log first.** "the greeting block is directly adjacent to the chart"
+     was an instruction; I edited code before logging it. Fix: the
+     INSTRUCTIONS.md edit is the **first tool call** on every user
+     instruction — before analysis, reads, or code.
+  2. **Live progress.** v54 jumped 10% → 90% with no updates between.
+     Fix: bump Status/Progress/ETA at every milestone (each subtask, gate
+     run, commit, push).
+  3. **The interpretation is yours to edit.** I re-read the log only
+     mid-task (after already making all the code edits) and I rewrote the
+     "positioning" bullet as a block replacement instead of appending.
+     Fix: re-read the file immediately before acting and before any edit
+     to it; never replace a bullet the user may have touched — append new
+     agent notes as separate, clearly agent-owned bullets; if an edit
+     fails to match, stop and re-read instead of forcing it.
+- Agent verification (done): git shows no pending user edits — the only
+  uncommitted change was the new entry above, and the pushed file contains
+  your answer ("add the full keyboard there too"), which WAS acted on (plan
+  amount `p_amount` got the full keyboard + quick-sum parsing). I found no
+  other user edit in the file or git history that I replaced; if you mean a
+  specific edit that is now missing, tell me the words/spot and I will
+  restore it. Process fix stands regardless: re-read before acting, and in
+  the interpretation the agent only appends clearly agent-owned notes —
+  never rewrites a block the user may have touched.
+
+### Subtasks
+- [x] Log this instruction verbatim as the first action
+- [x] Re-read INSTRUCTIONS.md + git state; confirm which edit I clobbered (or that none was)
+- [x] Add the unlogged verbatim ("greeting block … add some distance") to the v54 entry
+- [x] Harden the workspace AGENTS.md log rule (first action, milestones, no clobber) — workspace AGENTS.md rules 6–8
+- [x] Push the log update; record the hash
+
 ## 2026-09-10 ~13:05 — Quick-sum revert (operators on keyboard) + Home positioning fix
 Status: **done**
 Progress: 100% — v54 pushed as `083a734` → origin/main (2026-09-10 ~13:35)
@@ -13,6 +56,9 @@ Progress: 100% — v54 pushed as `083a734` → origin/main (2026-09-10 ~13:35)
 ### Instruction (verbatim)
 > -revert back the quicksum, i never wanted it gone. my problem was that when i type in the phone, i cant do quicksum because the keyboard that appears is numeric so there are no operators. now make the keyboard add operators.
 > -see img, positioning is awkward
+>
+> (follow-up during the task, ~13:10 — acted on before being logged; logged now)
+> the greeting block is directly adjacent to the chart, add some distance between them
 
 ### Interpretation (agent — user may edit this section)
 - Quick-sum is **reverted, not removed**: my v53 cut was based on a
