@@ -8,7 +8,7 @@ commit is not done.
 
 ## 2026-09-10 ~20:25 — v58 live re-test: "Shall I record that?" lands, "yes" still dropped
 
-Status: **done** — code `8b4e90e` on origin/main; re-test on the phone after the v59 shell loads
+Status: **done** — code `8b4e90e` on origin/main, log `d767d6a`; re-test on the phone after the v59 shell loads
 Progress: 100% — done (v59 code pushed; log commit follows)
 
 ### Instruction (verbatim)
@@ -33,7 +33,7 @@ Progress: 100% — done (v59 code pushed; log commit follows)
 - [x] check_site.py: v59 guard phrases + version bumps (sw/app/README/check_site)
 - [x] Gates (check_site + parser + node --check) — check_site "all checks passed" (v59 STATE guard included), parser "all parser checks passed" (run from `finances/`, not the repo dir), node --check clean on all five JS files
 - [x] Push code + log — code **`8b4e90e`** pushed → origin/main (pre-push log re-read: no user edits); log commit next
-- [x] Log done with hash — log commit pushed (this entry); log-hash back-reference in a small follow-up log commit, same pattern as v58
+- [x] Log done with hash — log commit `d767d6a` pushed (this entry); entry marked done
 
 ## 2026-09-10 ~19:35 — Live test: coach fumbles the limit flow ("poor response")
 
