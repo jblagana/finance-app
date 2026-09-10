@@ -120,9 +120,10 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 #chatTitle{font-size:17px;font-weight:700}
 #chatFresh{font-size:11px;color:var(--mut);margin-top:2px}
 /* v47: online-coach availability LED in the main chat header (green = ready,
-   amber = not ready: remote off / not configured / offline / cooling down) */
-.coach-led{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--warn);
-  box-shadow:0 0 0 1px rgba(255,196,92,.4) inset;vertical-align:middle;margin-left:2px}
+   grey = not ready: remote off / not configured / offline / cooling down;
+   v53: grey instead of amber) */
+.coach-led{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--mut);
+  box-shadow:0 0 0 1px rgba(147,161,189,.45) inset;vertical-align:middle;margin-left:2px}
 .coach-led.on{background:var(--ok);box-shadow:0 0 8px 1px rgba(55,211,155,.8), 0 0 0 1px rgba(55,211,155,.5) inset}
 #chatClose{background:var(--card2);border:1px solid var(--line);color:var(--mut);width:36px;height:36px;border-radius:10px;
  font-size:15px;cursor:pointer;flex:0 0 auto}
@@ -217,9 +218,9 @@ button.gear:active{border-color:var(--acc);color:var(--acc)}
 .oent-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .oent-eq{margin:6px 0 0;font-size:12.5px;font-weight:600;color:var(--acc);min-height:16px}
 .oent-eq.bad{color:var(--warn)}
-/* v23: quick-sum hint under the Add-sheet amount (the prepay path) */
-.amtEq{margin:8px 0 0;font-size:12.5px;font-weight:600;color:var(--acc)}
-.amtEq.bad{color:var(--warn)}
+/* v53: ledger category filter bar (All / Unsorted / per category) */
+.ml-fbar{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+.ml-fbar select{flex:0 1 180px;width:auto;font-size:12.5px;padding:7px 30px 7px 10px;border-radius:9px}
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .seg label{display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--line);border-radius:10px;
  padding:9px 10px;font-size:12.5px;font-weight:600;color:var(--mut);cursor:pointer;margin:0}
@@ -469,7 +470,10 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
     </section>
 
     <section class="card" id="txnCard">
-      <h2 style="margin-top:0">Your expenses</h2>
+      <div class="ml-fbar">
+        <h2 style="margin:0;flex:1">Your expenses</h2>
+        <select id="mlFilter" aria-label="Filter by category"></select>
+      </div>
       <div id="moneyLog">
         <div id="mlBody"></div>
       </div>
@@ -488,13 +492,13 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
       <label for="owedName">Add a person</label>
       <div class="row">
         <div>
-          <input id="owedName" maxlength="24" autocomplete="off">
+          <input id="owedName" maxlength="24" placeholder="e.g. Vhal" autocomplete="off">
         </div>
         <div>
           <button class="act" type="submit">Add</button>
         </div>
       </div>
-      <p class="note" style="margin:10px 0 0">A private book of who owes whom — it never touches your Money numbers. Amounts can be quick sums: <code>300-125+10</code> is saved as 185.</p>
+      <p class="note" style="margin:10px 0 0">A private book of who owes whom — it never touches your Money numbers.</p>
     </form>
 
     <div id="owedBody"></div>
@@ -536,7 +540,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
   <div id="chatMsgs"></div>
   <div id="chatChips"></div>
   <div id="chatInRow">
-    <input id="chatInput" type="text" placeholder="Ask, plan, or tell me about an expense…" autocomplete="off" spellcheck="false">
+    <input id="chatInput" type="text" placeholder="Ask the coach…" autocomplete="off" spellcheck="false">
 
     <button id="chatSend" type="button">Send</button>
   </div>
@@ -550,8 +554,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
   <div class="sheet-b">
     <form id="addForm" autocomplete="off">
       <label for="f_amount" style="margin-top:6px">Amount (₱)</label>
-      <input id="f_amount" type="text" inputmode="decimal" placeholder="0.00, or a quick sum like 300-125+10">
-      <p id="amtEq" class="amtEq" style="display:none"></p>
+      <input id="f_amount" type="text" inputmode="decimal" placeholder="0.00">
       <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
       <label for="f_category">Category</label>
       <select id="f_category"><option value="" disabled selected>Pick a category…</option></select>
@@ -613,6 +616,10 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
       <label style="display:flex;align-items:center;gap:10px;margin:12px 0 4px;cursor:pointer">
         <input type="checkbox" id="aiRemoteToggle" style="width:auto">
         <span style="font-size:14px;font-weight:600">Use remote coach when online (free)</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;margin:8px 0 4px;cursor:pointer">
+        <input type="checkbox" id="aiForceOnline" style="width:auto">
+        <span style="font-size:14px;font-weight:600">Force online coach — send every question online (no local handling)</span>
       </label>
       <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
         <input type="url" id="aiRemoteUrl" inputmode="url" placeholder="https://your-worker.your-subdomain.workers.dev"

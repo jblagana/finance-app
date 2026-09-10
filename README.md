@@ -11,13 +11,15 @@ Either way the coach only *drafts*: every money change is a card you confirm,
 with one-tap undo — the rule engine stays the only writer.
 
 ## Tabs
-- **Home** — time-of-day greeting + date, free/unallocated cash with a 6-month
+- **Home** — time-of-day greeting with your name ("Good morning, Jan!" —
+  "Hooman" until you set one) + date, free/unallocated cash with a 6-month
   projection sparkline (dated x-axis, liquidity-floor line), the coach's
   attention card, and insights (category donut, budget pace).
 - **Money** — live summary (liquid cash, free, cards owed, prepay), the month's
   Obligations and Sinking funds, the 6-month projection, and upcoming plans.
-- **Ledger** — add expense (Amount, optional Category, then Card / cash beside Date, plus
-  a note; quick sums like "40+35.5" work) and the full transaction list.
+- **Ledger** — add expense (Amount, optional Category — a blank one saves and
+  shows as Unsorted — then Card / cash beside Date, plus a note) and the full
+  transaction list with a category filter (All / Unsorted / per category).
   Entries overlay the base numbers live; deletes confirm first, and the last
   add/delete is undoable from the toast.
 - **Owed** — people and entries with a live = total.
@@ -38,7 +40,7 @@ add/list/remove plans, urgent-expense advice.
 - **First-time setup** — with no numbers yet, the coach walks you through them
   step by step (cash → cards → salary → debts → budgets → goals → one-offs)
   using the same confirm/undo cards; also startable from the Home empty-state
-  ("Set up with the coach"). A green/amber **availability LED** in the chat
+  ("Set up with the coach"). A green/grey **availability LED** in the chat
   header shows when the online coach is reachable.
 
 ## Online coach (optional)
@@ -50,6 +52,8 @@ Connect in **Settings → Coach (online)**, either way:
 - **Bring-your-own key (direct)** — the phone calls the provider with your own
   key (**Groq** default, or any OpenAI-compatible base URL + model); the key
   stays in this device's localStorage and is sent only to that provider.
+- **Force online** (Settings → Coach (online)) — while on, every question goes
+  to the online coach, even ones the rule engine could answer locally.
 
 Worker first, direct second, with a 30-second circuit breaker so a dead remote
 never hangs the chat. Change requests ("add 5,000 to GCash") come back as a
@@ -65,7 +69,7 @@ and on-device — the LLM only drafts.
 - **Backup** (Settings → Backup): Export JSON (everything) / Export CSV (ledger
   only) / Import JSON to restore.
 - Both footers show the shell version + when this build went live. Releases
-  bump the SW cache (`finances-pwa-v52`) and the `SHELL_RELEASE` stamp in
+  bump the SW cache (`finances-pwa-v53`) and the `SHELL_RELEASE` stamp in
   `app.js` together — the "New version ready" toast offers a one-tap reload.
   If the app ever looks stale: open the Pages URL once in Safari, then
   relaunch the home-screen icon.

@@ -142,67 +142,6 @@
     lab.className = 'dlabel';
   }
   function r2(x) { return Math.round((Number(x) || 0) * 100) / 100; }
-  // Safe arithmetic for "quick sums" (Owed tab): 300-125+10 -> 185.
-  // Hand-rolled recursive descent over numbers and + - * / ( ) — no eval,
-  // no Function. Accepts x/× for multiply, ÷ for divide, −/–/— for minus.
-  // Returns the result rounded to 2 decimals, or null when the input is not
-  // a valid expression.
-  function evalExpr(s) {
-    var t = String(s == null ? '' : s)
-      .replace(/[\u00d7xX]/g, '*').replace(/\u00f7/g, '/')
-      .replace(/[\u2212\u2013\u2014]/g, '-');
-    t = t.replace(/\s+/g, ' ');
-    if (!t || !/^[0-9.+\-*/() ]+$/.test(t)) return null;
-    var i = 0;
-    function ws() { while (i < t.length && t.charAt(i) === ' ') i++; }
-    function peek() { ws(); return t.charAt(i); }
-    function num() {
-      var start = i, dots = 0;
-      while (i < t.length && /[0-9.]/.test(t.charAt(i))) {
-        if (t.charAt(i) === '.') dots++;
-        i++;
-      }
-      if (start === i || dots > 1) return NaN;
-      return parseFloat(t.slice(start, i));
-    }
-    function factor() {
-      var c = peek();
-      if (c === '+') { i++; return factor(); }
-      if (c === '-') { i++; return -factor(); }
-      if (c === '(') {
-        i++;
-        var v = expr();
-        ws();
-        if (t.charAt(i) !== ')') return NaN;
-        i++;
-        return v;
-      }
-      return num();
-    }
-    function term() {
-      var v = factor();
-      for (;;) {
-        var c = peek();
-        if (c === '*') { i++; v = v * factor(); }
-        else if (c === '/') { i++; v = v / factor(); }
-        else return v;
-      }
-    }
-    function expr() {
-      var v = term();
-      for (;;) {
-        var c = peek();
-        if (c === '+') { i++; v = v + factor(); }
-        else if (c === '-') { i++; v = v - factor(); }
-        else return v;
-      }
-    }
-    var v = expr();
-    if (!isFinite(v)) return null;
-    ws();
-    if (i !== t.length) return null;
-    return r2(v);
-  }
   function monthLabel(m) {
     var p = String(m || '').split('-');
     if (p.length === 2 && /^\d{4}$/.test(p[0]) && /^\d{2}$/.test(p[1])) {
@@ -811,7 +750,7 @@
   function mlParts(e) {
     var lab, note = '';
     if (e.c != null) {
-      lab = e.c || '—';
+      lab = e.c || 'Unsorted';
       note = e.nt || '';
     } else {
       // legacy entry (pre-v17): only the merged "Category · note" label was stored
@@ -823,12 +762,35 @@
     if (m && lab === m) m = '';
     return { lab: lab, note: note, m: m };
   }
+  // v53: ledger category filter. '' = all; '__unsorted__' = entries with no
+  // category (shown as Unsorted); anything else matches the category exactly.
+  var mlFilterCat = '';
+  function renderMlFilter() {
+    var sel = byId('mlFilter');
+    if (!sel) return;
+    var log = state.moneyLog || [];
+    var cats = [];
+    var hasUnsorted = false;
+    log.forEach(function (e) {
+      if (!e) return;
+      if (e.c) { if (cats.indexOf(e.c) < 0) cats.push(e.c); }
+      else hasUnsorted = true;
+    });
+    cats.sort();
+    var html = '<option value="">All</option>';
+    if (hasUnsorted) html += '<option value="__unsorted__">Unsorted</option>';
+    cats.forEach(function (c) { html += '<option value="' + esc(c) + '">' + esc(c) + '</option>'; });
+    sel.innerHTML = html;
+    sel.value = mlFilterCat;
+    if (sel.value !== mlFilterCat) mlFilterCat = sel.value; // filtered category no longer present
+  }
   function renderMoneyLog() {
     var el = byId('moneyLog');
     if (!el) return;
     var noteEl = byId('mlNote');
     var body = byId('mlBody');
     var log = state.moneyLog || [];
+    renderMlFilter();
     if (!log.length) {
       if (noteEl) noteEl.style.display = 'none';
       body.innerHTML = '<p class="note" style="margin:2px 0">' + (state.txns.length
@@ -836,8 +798,20 @@
         : 'No entries yet — tap + to add your first expense.') + '</p>';
       return;
     }
+    var shown = log.slice().reverse().filter(function (e) {
+      if (!mlFilterCat) return true;
+      if (mlFilterCat === '__unsorted__') return !e.c;
+      return e.c === mlFilterCat;
+    });
+    if (!shown.length) {
+      if (noteEl) noteEl.style.display = 'none';
+      body.innerHTML = '<p class="note" style="margin:2px 0">No ' +
+        (mlFilterCat === '__unsorted__' ? 'unsorted' : esc(mlFilterCat)) +
+        ' entries — clear the filter to see the rest.</p>';
+      return;
+    }
     if (noteEl) noteEl.style.display = '';
-    body.innerHTML = log.slice().reverse().map(function (e) {
+    body.innerHTML = shown.map(function (e) {
         var add = e.a === 'add';
         var before = r2(e.f + (add ? e.n : -e.n));
         var extra = '';
@@ -958,26 +932,26 @@
   function brow(inner) { return '<div class="brow">' + inner + '</div>'; }
   function delBtn(label, blk) { return '<button type="button" class="mini" data-rm="' + (blk ? 'blk' : '1') + '" aria-label="' + esc(label || 'Remove') + '">✕</button>'; }
   function payRow(m, a) {
-    return brow('<input data-r="m" type="month" placeholder="YYYY-MM" value="' + esc(m || '') + '">' +
+    return brow('<input data-r="m" type="month" value="' + esc(m || '') + '">' +
       '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (a != null ? a : '') + '">' +
       delBtn('Remove payment'));
   }
   function accRow(a) {
     a = a || {};
     var kinds = ['cash', 'card', 'debt', 'loan'];
-    return brow('<input class="grow" data-r="name" placeholder="name" value="' + esc(a.name || '') + '" autocomplete="off">' +
+    return brow('<input class="grow" data-r="name" value="' + esc(a.name || '') + '" autocomplete="off">' +
       '<select data-r="kind">' + kinds.map(function (k) {
         return '<option value="' + k + '"' + (a.kind === k ? ' selected' : '') + '>' + k + '</option>';
       }).join('') + '</select>' +
-      '<input data-r="value" type="number" inputmode="decimal" step="0.01" placeholder="value" value="' + (a.value != null ? a.value : '') + '">' +
-      '<input data-r="limit" type="number" inputmode="decimal" step="0.01" placeholder="limit" value="' + (a.limit ? a.limit : '') + '"' + (a.kind === 'card' ? '' : ' disabled') + '>' +
+      '<input data-r="value" type="number" inputmode="decimal" step="0.01" value="' + (a.value != null ? a.value : '') + '">' +
+      '<input data-r="limit" type="number" inputmode="decimal" step="0.01" value="' + (a.limit ? a.limit : '') + '"' + (a.kind === 'card' ? '' : ' disabled') + '>' +
       delBtn('Remove account'));
   }
   function debtBlock(d) {
     d = d || {};
     var pays = d.payments ? Object.keys(d.payments).map(function (m) { return payRow(m, d.payments[m]); }).join('') : '';
     return '<div class="bblk" data-sec="debt">' +
-      brow('<input class="grow" data-r="name" placeholder="debt name" value="' + esc(d.name || '') + '" autocomplete="off">' + delBtn('Remove debt', true)) +
+      brow('<input class="grow" data-r="name" value="' + esc(d.name || '') + '" autocomplete="off">' + delBtn('Remove debt', true)) +
       brow('<span class="bnote">monthly</span><input data-r="monthly" type="number" inputmode="decimal" step="0.01" value="' + (d.monthly != null ? d.monthly : '') + '">' +
         '<span class="bnote">active</span><input class="grow" data-r="active" value="' + esc((d.active_months || []).join(', ')) + '" autocomplete="off">') +
       '<div data-r="pays">' + pays + '</div>' +
@@ -988,7 +962,7 @@
     s = s || {};
     var pays = s.payments ? Object.keys(s.payments).map(function (m) { return payRow(m, s.payments[m]); }).join('') : '';
     return '<div class="bblk" data-sec="sink">' +
-      brow('<input class="grow" data-r="name" placeholder="goal name" value="' + esc(s.name || '') + '" autocomplete="off">' + delBtn('Remove goal', true)) +
+      brow('<input class="grow" data-r="name" value="' + esc(s.name || '') + '" autocomplete="off">' + delBtn('Remove goal', true)) +
       brow('<span class="bnote">goal</span><input data-r="goal" type="number" inputmode="decimal" step="0.01" value="' + (s.goal != null ? s.goal : '') + '">' +
         '<span class="bnote">funded</span><input data-r="funded" type="number" inputmode="decimal" step="0.01" value="' + (s.funded != null ? s.funded : '') + '>') +
       brow('<span class="bnote">by</span><input data-r="deadline" type="date" value="' + esc(s.deadline || '') + '">') +
@@ -1001,11 +975,11 @@
     if (!bb) return;
     var b = state.base || defaultBase();
     var h = '';
-    h += brow('<span class="bnote">name</span><input class="grow" id="b_name" type="text" placeholder="e.g. Jan" value="' + esc(b.name || '') + '" autocomplete="off">');
+    h += brow('<span class="bnote">your name</span><input class="grow" id="b_name" type="text" placeholder="e.g. Jan" value="' + esc(b.name || '') + '" autocomplete="off">');
     h += brow('<span class="bnote">as of</span><input class="grow" id="b_asof" type="date" value="' + esc(b.as_of || '') + '">');
     h += brow('<span class="bnote">salary / month</span><input class="grow" id="b_salary" type="number" inputmode="decimal" step="0.01" value="' + (b.salary || '') + '">');
     h += brow('<span class="bnote">liquidity floor</span><input class="grow" id="b_floor" type="number" inputmode="decimal" step="0.01" value="' + (b.liquidity_floor || '') + '">');
-    h += brow('<span class="bnote">prepay day</span><input class="grow" id="b_pday" type="number" inputmode="numeric" min="1" max="31" value="' + (b.prepay_day || 14) + '">' +
+    h += brow('<span class="bnote">cc prepay day</span><input class="grow" id="b_pday" type="number" inputmode="numeric" min="1" max="31" value="' + (b.prepay_day || 14) + '">' +
       '<span class="bnote">cutoff</span><input class="grow" id="b_cday" type="number" inputmode="numeric" min="1" max="31" value="' + (b.cutoff_day || 15) + '">');
     h += brow('<span class="bnote">card target util</span><input class="grow" id="b_util" type="number" inputmode="decimal" step="0.001" value="' + (b.card_util_target || '') + '" title="0.099 = just under 10%">');
     var salRows = '';
@@ -1028,7 +1002,7 @@
         var opts = Object.keys(b.budgets || {}).map(function (bk) {
           return '<option value="' + esc(bk) + '"' + (bk === k ? ' selected' : '') + '>' + esc(bk) + '</option>';
         }).join('') || '<option value="">—</option>';
-        bovRows += brow('<input data-r="m" type="month" placeholder="YYYY-MM" value="' + esc(m) + '">' +
+        bovRows += brow('<input data-r="m" type="month" value="' + esc(m) + '">' +
           '<select data-r="cat">' + opts + '</select>' +
           '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (Number(b.budget_overrides[m][k]) || '') + '">' + delBtn('Remove override'));
       });
@@ -1045,8 +1019,8 @@
     var oneRows = '';
     Object.keys(b.one_offs || {}).forEach(function (m) {
       Object.keys(b.one_offs[m] || {}).forEach(function (k) {
-        oneRows += brow('<input data-r="m" type="month" placeholder="YYYY-MM" value="' + esc(m) + '">' +
-          '<input class="grow" data-r="name" placeholder="what" value="' + esc(k) + '" autocomplete="off">' +
+        oneRows += brow('<input data-r="m" type="month" value="' + esc(m) + '">' +
+          '<input class="grow" data-r="name" value="' + esc(k) + '" autocomplete="off">' +
           '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (Number(b.one_offs[m][k]) || '') + '">' + delBtn('Remove one-off'));
       });
     });
@@ -1157,11 +1131,11 @@
       var opts = Object.keys((state.base && state.base.budgets) || {}).map(function (k) {
         return '<option value="' + esc(k) + '">' + esc(k) + '</option>';
       }).join('') || '<option value="">—</option>';
-      html = brow('<input data-r="m" type="month" placeholder="YYYY-MM"><select data-r="cat">' + opts + '</select>' +
+      html = brow('<input data-r="m" type="month"><select data-r="cat">' + opts + '</select>' +
         '<input data-r="a" type="number" inputmode="decimal" step="0.01">' + delBtn('Remove override'));
     } else if (kind === 'one') {
       host = byId('rowsOne');
-      html = brow('<input data-r="m" type="month" placeholder="YYYY-MM"><input class="grow" data-r="name" placeholder="what" autocomplete="off">' +
+      html = brow('<input data-r="m" type="month"><input class="grow" data-r="name" autocomplete="off">' +
         '<input data-r="a" type="number" inputmode="decimal" step="0.01">' + delBtn('Remove one-off'));
     } else if (kind === 'debt') { host = byId('rowsDebt'); html = debtBlock({}); }
     else if (kind === 'sink') { host = byId('rowsSink'); html = sinkBlock({}); }
@@ -1779,7 +1753,7 @@
     state.txns.forEach(function (t) {
       if (String(t.date).slice(0, 7) !== mp) return;
       var a = Number(t.amount) || 0;
-      var c = t.category || 'Other';
+      var c = t.category || 'Unsorted';
       totals[c] = (totals[c] || 0) + a;
       grand += a;
     });
@@ -1915,22 +1889,10 @@
       });
     });
   }
-  // v23: quick-sums in the Add sheet (the prepay path) - live = total hint
-  function addAmtEq(input) {
-    var eq = byId('amtEq'); if (!eq) return;
-    var raw = String(input.value || '').trim();
-    if (!raw) { eq.style.display = 'none'; eq.className = 'amtEq'; return; }
-    var v = evalExpr(raw);
-    eq.style.display = '';
-    if (v === null) { eq.textContent = 'plain number, or a quick sum like 300-125+10'; eq.className = 'amtEq bad'; }
-    else if (v <= 0) { eq.textContent = '= ' + money(v) + ' · must be more than 0'; eq.className = 'amtEq bad'; }
-    else { eq.textContent = '= ' + money(v); eq.className = 'amtEq'; }
-  }
   function updateChargeHint() {
     var el = byId('chargeHint'); if (!el) return;
     var amtEl = byId('f_amount');
-    var amt = amtEl ? evalExpr(amtEl.value) : null;
-    if (amt === null) amt = NaN;
+    var amt = amtEl ? parseFloat(amtEl.value) : NaN;
     var s = effectiveSnap();
     if (!s || !(amt > 0)) { el.style.display = 'none'; return; }
     var free = s.cash ? s.cash.free : 0;
@@ -2000,7 +1962,7 @@
       '<div class="oent-grid">' +
       '<div><label>Date</label><div class="dfield"><input type="date" class="oent-date">' +
       '<span class="dlabel empty" aria-hidden="true">Pick a date</span></div></div>' +
-      '<div><label>Amount (\u20b1) — number or quick sum</label>' +
+      '<div><label>Amount (\u20b1)</label>' +
       '<input type="text" inputmode="decimal" class="oent-amt" maxlength="40" autocomplete="off">' +
       '<p class="oent-eq" aria-live="polite"></p></div>' +
       '</div>' +
@@ -2113,9 +2075,9 @@
     if (!eq) return;
     var raw = String(input.value || '').trim();
     if (!raw) { eq.textContent = ''; eq.className = 'oent-eq'; return; }
-    var v = evalExpr(raw);
-    if (v === null) {
-      eq.textContent = 'plain numbers, or quick sums like 300-125+10';
+    var v = parseFloat(raw);
+    if (!isFinite(v)) {
+      eq.textContent = 'a plain number';
       eq.className = 'oent-eq bad';
     } else if (v <= 0) {
       eq.textContent = '= ' + money(v) + ' · must be more than 0';
@@ -2150,16 +2112,15 @@
       var pid = f.getAttribute('data-ow-for');
       var amtEl = f.querySelector('.oent-amt');
       var raw = String(amtEl.value || '').trim();
-      var amt = evalExpr(raw);
-      if (amt === null || !(amt > 0)) {
-        alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.');
+      var amt = parseFloat(raw);
+      if (!(amt > 0)) {
+        alert('Enter an amount greater than 0.');
         return;
       }
       var dirEl = f.querySelector('input[name="owdir"]:checked');
-      var expr = (raw !== String(r2(amt))) ? raw : null;
       addOwedEntry(pid, {
         d: f.querySelector('.oent-date').value || todayISO(),
-        amt: amt, dir: dirEl ? dirEl.value : 'ipf', expr: expr,
+        amt: amt, dir: dirEl ? dirEl.value : 'ipf', expr: null,
         note: (f.querySelector('.oent-note').value || '').trim()
       });
     });
@@ -2325,7 +2286,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 52, live: new Date(2026, 8, 10, 11, 31) };
+  var SHELL_RELEASE = { v: 53, live: new Date(2026, 8, 10, 12, 12) };
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2350,8 +2311,10 @@
     var h = byId('greetHello'), d = byId('greetDate');
     var now = new Date();
     var hr = now.getHours();
-    if (h) h.textContent = hr < 5 ? 'Up late' : hr < 12 ? 'Good morning' :
+    var who = (state.base && state.base.name && String(state.base.name).trim()) || 'Hooman';
+    var greet = hr < 5 ? 'Up late' : hr < 12 ? 'Good morning' :
       hr < 17 ? 'Good afternoon' : hr < 21 ? 'Good evening' : 'Good night';
+    if (h) h.textContent = greet + ', ' + who + '!';
     if (d) d.textContent =
       ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()] + ', ' +
       ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][now.getMonth()] + ' ' +
@@ -2489,8 +2452,8 @@
       var sep = raw.indexOf('::');
       var type = raw.slice(0, sep), name = raw.slice(sep + 2);
       var amtRaw = String(byId('f_amount').value || '').trim();
-      var amount = evalExpr(amtRaw);
-      if (amount === null || !(amount > 0)) { alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.'); return; }
+      var amount = parseFloat(amtRaw);
+      if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
       var catVal = byId('f_category').value;
       var category = (catVal === CAT_CUSTOM ? byId('f_categoryCustom').value : catVal) || '';
       category = category.trim();
@@ -2508,9 +2471,10 @@
         byId('f_categoryCustom').style.display = 'none';
         byId('f_note').value = '';
         seedCategories();
-        // v47: the sheet used to stay open with the fields cleared — close it
-        // instead; the "Added …" snackbar (with Undo) confirms the add.
+        // v53: close the sheet and land on the Ledger — the new entry is at the
+        // top of the list; the "Added …" snackbar (with Undo) confirms the add.
         closeSheets();
+        setTab('ledger');
       });
     };
 
@@ -2541,12 +2505,14 @@
       render();
     };
     var amtEl = byId('f_amount');
-    if (amtEl) amtEl.addEventListener('input', function () { addAmtEq(amtEl); updateChargeHint(); });
+    if (amtEl) amtEl.addEventListener('input', updateChargeHint);
     var catEl = byId('f_category');
     if (catEl) catEl.onchange = function () {
       var c = byId('f_categoryCustom');
       if (c) { c.style.display = catEl.value === CAT_CUSTOM ? '' : 'none'; if (catEl.value === CAT_CUSTOM) c.focus(); }
     };
+    var mlf = byId('mlFilter');
+    if (mlf) mlf.onchange = function () { mlFilterCat = mlf.value; renderMoneyLog(); };
 
     window.addEventListener('online', function () { state.online = true; });
     window.addEventListener('offline', function () { state.online = false; });

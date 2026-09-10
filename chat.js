@@ -1298,7 +1298,7 @@
     for (var x = 0; x < (ctx.txns || []).length; x++) {
       var tn = ctx.txns[x];
       if (e.month && String(tn.date || '').slice(0, 7) !== e.month) continue;
-      var c = tn.category || 'Other';
+      var c = tn.category || 'Unsorted';
       spend[c] = (spend[c] || 0) + (Number(tn.amount) || 0);
       total += Number(tn.amount) || 0;
     }
