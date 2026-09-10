@@ -46,8 +46,8 @@ add/list/remove plans, urgent-expense advice.
   under the row in Settings → Your numbers (tap to remove), ride along in
   exports/imports, and land in the coach's context — so "util rate for my
   maribank cc" is answered from stored data (balance ÷ recorded limit).
-  Offline, "…limit is N" on a stored card sets the card's limit column.
 
+- **Rule engine (always, offline — the only writer)** — deterministic, no
   made-up numbers, and the automatic fallback whenever the coach is off,
   offline or down. **Story mode** parses casual updates ("my salary in
   october is 25k, water went up to 1800") locally into a draft of validated
@@ -96,7 +96,7 @@ it: `npx wrangler deploy`.)
 - **Backup** (Settings → Backup): Export JSON (everything) / Export CSV (ledger
   only) / Import JSON to restore.
 - Both footers show the shell version + when this build went live. Releases
-  bump the SW cache (`finances-pwa-v56`) and the `SHELL_RELEASE` stamp in
+  bump the SW cache (`finances-pwa-v57`) and the `SHELL_RELEASE` stamp in
   `app.js` together — the "New version ready" toast offers a one-tap reload.
   If the app ever looks stale: open the Pages URL once in Safari, then
   relaunch the home-screen icon.

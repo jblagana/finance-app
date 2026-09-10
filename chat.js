@@ -1593,30 +1593,6 @@
       cardAcct: fa.exact && fa.exact.kind === 'card' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'card'; })[0] || null),
       cashAcct: fa.exact && fa.exact.kind === 'cash' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'cash'; })[0] || null)
     };
-    // v56: "<card> limit is N" offline — set the card's limit column (the
-    // online coach usually takes this first; the rule engine stays the
-    // offline fallback and the only writer either way).
-    if (/\blimit\b/i.test(t) && p.amt != null && p.cardAcct && !/\bbudget\b/i.test(t)) {
-      pendingAsk = null;
-      var limAcc = p.cardAcct, limBal = 0;
-      ((ctx.base && ctx.base.accounts) || []).forEach(function (a) {
-        if (a.name === limAcc.name && a.kind === 'card') limBal = Number(a.value) || 0;
-      });
-      var limLine = { label: 'Card limit · ' + limAcc.name, change: { type: 'account', name: limAcc.name, kind: 'card', value: limBal, limit: p.amt } };
-      var limH = block('Draft: base-data changes',
-        '<div class="ins-line"><b>1.</b> ' + esc(limLine.label) + ' — ' + esc(storyRowVal(limLine)) + '</div>' +
-        line('<span class="note">nothing is written yet — tap ✕ to drop a line, or confirm to apply</span>'),
-        null);
-      return {
-        html: limH + freshness(ctx),
-        actions: [
-          { label: '✕ ' + limLine.label, act: 'story_drop_line', payload: { i: 0 } },
-          { label: 'Confirm 1 change', act: 'confirm_story', payload: { lines: [limLine] } },
-          { label: 'Discard', act: 'discard_story' }
-        ],
-        storyLines: [limLine], storyRaw: t, storyAsk: ''
-      };
-    }
     // v38: a pending "One number short" ask is completed by the very next bare
     // number, named amount, or bare month — re-parsed as question + answer
     // through the same validated story flow. Anything else closes the

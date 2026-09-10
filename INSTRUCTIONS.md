@@ -6,10 +6,35 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
-## 2026-09-10 ~17:35 — v56 scope revision: coach-extensible data table (custom "details" fields)
+## 2026-09-10 ~18:20 — v56 follow-up (user edit): no hardcoded limit rule in the rule engine
 
 Status: **in progress**
-Progress: 90% — ETA ~15 min (gates done → commit + push)
+Progress: 10% — ETA ~20 min (remove hardcode → gates → v57 bump → push)
+
+### Instruction (verbatim)
+> (user edit appended to the ~17:35 entry's interpretation, bullet 4, after "(no freeform NL parsing)."):
+> (user - try not to hard code this in rule engine to test if the ai coach can actually do this on its own.)
+
+### Interpretation (agent — user may edit this section)
+- The ~17:35 interpretation was edited **after** v56 shipped (`070b15b`) — this edit is the new instruction (log rule 2). It was not seen before the push; the hardcode ships in `070b15b` and now comes out.
+- Remove the offline "<card> limit is N" hardcode from the chat.js rule engine. Offline, that phrase falls through to the generic coach-unavailable fallback, same as any other custom detail.
+- Kept: the `field`/limit draft machinery (sanitizer, apply, chips, snapshot, undo, import) and the worker prompt line that teaches the coach how to record limits — that's guidance to the LLM, not a deterministic rule; the coach still has to parse the message itself (which is exactly what's being tested).
+- Shell changed → bump to v57 (sw cache + SHELL_RELEASE + check_site version assertions).
+- Post-push finding (agent): the v56 README bullet insertion (previous session) actually **replaced** the first line of the "- **Rule engine (always, offline…)" bullet, so `070b15b`'s README shipped missing that header line. This commit restores it (verified against `0ac7f63:README.md`).
+
+### Subtasks
+- [x] Log the user edit verbatim (first action)
+- [ ] Remove the limit block from chat.js
+- [ ] check_site.py: flip the offline check into a no-hardcode guard
+- [ ] test_chat_parser.py: drop the offline-rule checks
+- [ ] README: drop the offline sentence from the v56 bullet
+- [ ] v57: sw cache + SHELL_RELEASE + README + check_site version
+- [ ] Gates → commit + push, log done with hash
+
+## 2026-09-10 ~17:35 — v56 scope revision: coach-extensible data table (custom "details" fields)
+
+Status: **done**
+Progress: 100% — completed 2026-09-10 ~18:05 — pushed as `070b15b` → origin/main
 
 Supersedes the ~17:00 entry's scope ("record limit and other details" = just a `limit` column).
 Agent note (2026-09-10): implemented as the `base.details` side-map keyed
@@ -41,7 +66,7 @@ migration — the flat `budgets` map stays untouched).
 - [x] Import sanitize + tests (parser mirror + engine patterns)
 - [x] check_site.py v56 assertions
 - [x] v56: sw cache + SHELL_RELEASE + README (+ worker MAX_INPUT 4000→8000, snapshot cap 1300)
-- [ ] Gates pass → commit + push, log done with hash (gates: check_site + parser tests all green)
+- [x] Gates pass → commit + push, log done with hash — `070b15b` (check_site.py "all checks passed" + parser tests "all parser checks passed")
 
 ## 2026-09-10 ~17:00 — v56: record the credit limit (+ other card details) so util rate is computable
 
