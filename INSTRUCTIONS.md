@@ -8,7 +8,7 @@ commit is not done.
 
 ## 2026-09-10 (evening) — v61: simplify the coach confirm flow (Option A) — draft the moment the change is clear; confirm by button
 
-Status: **done** — code `d459b0b` on origin/main (log commit follows); phone re-test pending (user)
+Status: **done** — code `d459b0b`, log `a027971`, both on origin/main; phone re-test pending (user: reload → footer shows shell v61 → "update maribank cc limit to 70k" → expect immediate one-field credit_limit draft card → Confirm button)
 Progress: 100% — done (v61 code pushed; log hash recorded in the final polish commit)
 
 ### Instruction (verbatim)
@@ -37,7 +37,7 @@ Progress: 100% — done (v61 code pushed; log hash recorded in the final polish 
 - [x] check_site.py: v61 guard phrases + version bumps (sw/app/README/check_site)
 - [x] Gates: check_site + parser tests + node --check
 - [x] Push code commit, then log commit — code pushed as `d459b0b` (chat.js prompt + STATE removal, sw.js cache v61, app.js stamp v61, README)
-- [ ] Log done with hashes
+- [x] Log done with hashes — log commit `a027971` pushed (code `d459b0b`)
 
 
 ## 2026-09-10 ~18:53 — v59 live re-test: "yes" now emits JSON, but the draft is a full-snapshot dump rendered as raw text
