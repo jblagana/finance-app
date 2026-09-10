@@ -6,6 +6,34 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-10 (evening) — base screen: account/budget name fields all render empty ("why no detail names")
+
+Status: in progress
+Progress: 95% — ETA ~22:30
+
+### Instruction (verbatim)
+> why no detail names
+
+(With screenshots of the base editor: every "Accounts (cash, cards, debts, loans)" row shows kind + value (+ limit for cards) but a blank name field; every "Monthly budgets" row shows an amount but a blank name field.)
+
+### Interpretation (agent — user may edit this section)
+- Diagnosis request: figure out why the name/detail fields on the base screen are empty for all rows. Candidate causes: (a) data genuinely has no names (dropped by a migration, e.g. snapshotToBase, or by an AI-setup/parse path that never stored names), (b) row renderer binds the name input to the wrong/missing key, (c) names were never collected on setup.
+- v61 only changed the coach prompt (chat.js) + shell stamp — no base rendering or data migration touched — so the cause is likely pre-existing; verify in the code.
+- DIAGNOSIS (confirmed in code): the names ARE in the data — the v61 re-test's "update maribank cc limit to 70k" resolved the card BY NAME and the screenshot's first card row shows the applied 70000 limit. The editor renders every name into a ~22px sliver: global `input,select{width:100%}` (index.html L50) gives each `.brow` sibling a 100%-of-row flex-basis, while the name input is `.brow .grow{flex:1;min-width:0}` (basis 0). Flex shrink is distributed by shrink×basis, so the basis-0 name absorbs none of the overflow and no free space is left for its grow → content width 0, text clipped invisible. Both CSS rules predate v21-era editor (global width: SW-v2 commit 4124583; `.grow`: v21 commit 7e74d7e) — the bug is ~20 releases old; the sheet just wasn't opened until today.
+- Plan: v62, CSS-only fix in index.html — row inputs/selects share the row with `flex:1 1 0;min-width:0` and the name (`.grow`) gets double share `flex:2 1 0` (account row ≈ name 40% / kind / value / limit 20% each; budget row ≈ name 67% / amount 33%; rows without `.grow` keep today's equal-split look). No JS change → coach flow (the in-progress v61 phone re-test) is byte-identical; only the footer stamp moves to v62.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Read base row rendering + data path in app.js (baseBody, account/budget rows, snapshotToBase)
+- [x] Diagnose and report the cause of empty names (CSS flex collapse, data intact)
+- [x] index.html: `.brow` flex-share fix (name `.grow` double share)
+- [x] v62 bump: sw.js cache, app.js SHELL_RELEASE (+live date), check_site.py assertions, README
+- [x] Gates: check_site.py "all checks passed" + parser "all parser checks passed" + node --check clean (5 JS files)
+- [x] Push code commit — `e1fc4d1` → origin/main (index.html CSS fix, sw.js v62, app.js stamp v62, README)
+- [ ] Push log commit
+- [ ] Verify live serves v62 (verify_live.ps1; Pages needs ~1 min)
+
+
 ## 2026-09-10 (evening) — v61 live check: is the pushed shell actually served on the Pages URL?
 
 Status: **done** — live site confirmed serving v61 (log commit pushed)
