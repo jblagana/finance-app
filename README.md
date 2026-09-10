@@ -22,7 +22,8 @@ with one-tap undo — the rule engine stays the only writer.
 - **Ledger** — add expense (Amount — plain number or a quick sum like
   300-125+10 with a live = total; Category — the options are the monthly
   budgets from Your numbers, Unsorted by default; no budgets yet → Unsorted
-  only — then Card / cash beside Date, plus a note) and the full
+  only — then Paid with beside Date — Cash by default, plus the card/cash
+  accounts from Your numbers — plus a note) and the full
   transaction list with a category filter (All / Unsorted / per category).
   Entries overlay the base numbers live; deletes confirm first, and the last
   add/delete is undoable from the toast.
@@ -97,7 +98,7 @@ it: `npx wrangler deploy`.)
 - **Backup** (Settings → Backup): Export JSON (everything) / Export CSV (ledger
   only) / Import JSON to restore.
 - Both footers show the shell version + when this build went live. Releases
-  bump the SW cache (`finances-pwa-v63`) and the `SHELL_RELEASE` stamp in
+  bump the SW cache (`finances-pwa-v64`) and the `SHELL_RELEASE` stamp in
   `app.js` together — the "New version ready" toast offers a one-tap reload.
   If the app ever looks stale: open the Pages URL once in Safari, then
   relaunch the home-screen icon.

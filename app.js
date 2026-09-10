@@ -13,14 +13,6 @@
   var LS_TAB = 'fin.tab';
   var MEAL_DEFAULT = 400;
 
-  var DEFAULT_ACCOUNTS = [
-    { name: 'MariBank CC', type: 'card' },
-    { name: 'Maya CC', type: 'card' },
-    { name: 'MariBank', type: 'cash' },
-    { name: 'Maya Savings', type: 'cash' },
-    { name: 'LandBank', type: 'cash' }
-  ];
-
   // v63: no fixed category list — the add-expense options come from "Your
   // numbers" (the base monthly budgets). catSig guards redundant re-seeds.
   var catSig = '';
@@ -1964,6 +1956,10 @@
     var el = byId('addEmpty');
     if (el) el.style.display = (state.base && !baseIsEmpty(state.base)) ? 'none' : '';
   }
+  // v64: same treatment as the v63 categories — the Paid-with options come
+  // from "Your numbers" (the card + cash accounts). A plain Cash default is
+  // always present and pre-selected; no hardcoded account list, so an empty
+  // base shows Cash only. Re-seeds on base change via the snap render list.
   function seedAccounts() {
     var sel = byId('f_account');
     if (!sel) return;
@@ -1971,11 +1967,10 @@
     var accounts = (b && b.accounts || [])
       .filter(function (a) { return a.kind === 'card' || a.kind === 'cash'; })
       .map(function (a) { return { name: a.name, type: a.kind === 'card' ? 'card' : 'cash' }; });
-    if (!accounts.length) accounts = DEFAULT_ACCOUNTS;
-    if (!accounts.length) return;
     var prev = sel.value;
-    var html = '<option value="" disabled selected>Pick…</option>';
+    var html = '<option value="CASH::Cash" selected>Cash</option>';
     accounts.forEach(function (a) {
+      if (a.type === 'cash' && a.name === 'Cash') return; // the default option is already it
       var v = (a.type === 'card' ? 'CARD' : 'CASH') + '::' + a.name;
       html += '<option value="' + esc(v) + '">' + esc(a.name) + (a.type === 'card' ? ' (card)' : ' (cash)') + '</option>';
     });
@@ -2470,7 +2465,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 63, live: new Date(2026, 8, 10, 23, 30) };
+  var SHELL_RELEASE = { v: 64, live: new Date(2026, 8, 10, 23, 55) };
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2628,8 +2623,9 @@
     var form = byId('addForm');
     if (form) form.onsubmit = function (e) {
       e.preventDefault();
-      var raw = byId('f_account').value;
-      if (!raw) { alert('Pick an account (card or cash).'); return; }
+      // v64: Cash is the default pick — if the select ever comes back empty
+      // (it can't: the Cash option is always present), map it to the same value.
+      var raw = byId('f_account').value || 'CASH::Cash';
       var sep = raw.indexOf('::');
       var type = raw.slice(0, sep), name = raw.slice(sep + 2);
       var amtRaw = String(byId('f_amount').value || '').trim();
