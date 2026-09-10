@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-10 (night) — add-expense categories must come from "Your numbers"
-Status: in progress
-Progress: 85% — ETA ~23:55
+Status: done
+Progress: 100% — completed 2026-09-10 ~23:55
 
 ### Instruction (verbatim)
 > -in add expense, the category options must be empty if 'Your numbers' is not yet setup, otherwise it must come from there, automotacillay. example, if i setup in 'your numbers' a monthly expense for food only, then the category options in 'add expense' only shows food (and 'unsorted' by default)
@@ -28,8 +28,10 @@ Progress: 85% — ETA ~23:55
 - [x] v63 bump: sw.js cache, app.js SHELL_RELEASE (+live date), check_site.py assertions, README
 - [x] Gates: check_site.py "all checks passed" (incl. new v63 section) + parser "all parser checks passed" + node --check clean (5 JS files)
 - [x] Push code commit — `22be768` → origin/main
-- [ ] Push log commit
-- [ ] Verify live serves v63
+- [x] Push log commit — `2dc9e47` → origin/main
+- [x] Verify live serves v63 — verify_live.ps1 -Tag v63: "sw cache v63: True" + live app.js matches `SHELL_RELEASE = { v: 63` → True (the ps1's "index shell vNN" line is legacy-False: the stamp renders at runtime from app.js, not index.html)
+
+User action: on the phone, reload → accept the SW update → footer "Fin.AI · shell v63" → open the Add sheet: the Category select now lists only the monthly budgets from Your numbers with Unsorted pre-selected (no budgets yet → Unsorted only). Coach: "log 500 food" categorizes by the stored budget name (e.g. a "Food" budget), otherwise Unsorted — the old fixed list (Food / Gym Nutrition, …, Other) is gone.
 
 ## 2026-09-10 (evening) — base screen: account/budget name fields all render empty ("why no detail names")
 
