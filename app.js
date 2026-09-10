@@ -21,12 +21,8 @@
     { name: 'LandBank', type: 'cash' }
   ];
 
-  var CATEGORY_DEFAULTS = [
-    'Food / Gym Nutrition', 'Gym Membership', 'Rent', 'Water', 'Wi-Fi', 'Spotify',
-    "Parents' Utilities Support", 'Laundry', 'Personal Treats / Gear', 'Transport',
-    'Debt payment', 'Savings / Sinking', 'Other'
-  ];
-  var CAT_CUSTOM = '__custom__';
+  // v63: no fixed category list — the add-expense options come from "Your
+  // numbers" (the base monthly budgets). catSig guards redundant re-seeds.
   var catSig = '';
 
   var state = {
@@ -47,7 +43,7 @@
   var RENDER_BY_KEY = {
     txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote],
     plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote],
-    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote],
+    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories],
     adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote],
     owed: [renderOwed],
     ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote]
@@ -2474,7 +2470,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 62, live: new Date(2026, 8, 10, 21, 40) };
+  var SHELL_RELEASE = { v: 63, live: new Date(2026, 8, 10, 23, 30) };
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2560,26 +2556,23 @@
     } catch (e) {}
     return 'home';
   }
+  // v63: the category options come from "Your numbers" — the base monthly
+  // budgets, in the order they are listed there. No budgets yet → the options
+  // are empty and "Unsorted" (value '' = no category) is the default choice.
   function seedCategories() {
     var sel = byId('f_category');
     if (!sel) return;
-    var seen = {};
-    CATEGORY_DEFAULTS.forEach(function (c) { seen[c] = true; });
-    (state.txns || []).forEach(function (t) { if (t && t.category) seen[t.category] = true; });
-    var extra = Object.keys(seen).filter(function (c) { return CATEGORY_DEFAULTS.indexOf(c) < 0; }).sort();
-    var names = CATEGORY_DEFAULTS.concat(extra);
+    var names = Object.keys((state.base && state.base.budgets) || {})
+      .filter(function (n) { return String(n).trim(); });
     var sig = names.join('|');
     if (sig === catSig) return;
     catSig = sig;
     var cur = sel.value;
-    var html = '<option value="" disabled' + (cur ? '' : ' selected') + '>Pick a category…</option>';
+    var html = '<option value=""' + (cur ? '' : ' selected') + '>Unsorted</option>';
     names.forEach(function (c) {
       html += '<option value="' + esc(c) + '"' + (cur === c ? ' selected' : '') + '>' + esc(c) + '</option>';
     });
-    html += '<option value="' + CAT_CUSTOM + '"' + (cur === CAT_CUSTOM ? ' selected' : '') + '>Custom…</option>';
     sel.innerHTML = html;
-    var c = byId('f_categoryCustom');
-    if (c) c.style.display = sel.value === CAT_CUSTOM ? '' : 'none';
   }
   function render() { emit('ui'); }
 
@@ -2642,8 +2635,7 @@
       var amtRaw = String(byId('f_amount').value || '').trim();
       var amount = evalExpr(amtRaw);
       if (amount === null || !(amount > 0)) { alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.'); return; }
-      var catVal = byId('f_category').value;
-      var category = (catVal === CAT_CUSTOM ? byId('f_categoryCustom').value : catVal) || '';
+      var category = byId('f_category').value || '';
       category = category.trim();
       addTxn({
         date: byId('f_date').value || todayISO(),
@@ -2655,8 +2647,6 @@
       }).then(function () {
         byId('f_amount').value = '';
         byId('f_category').value = '';
-        byId('f_categoryCustom').value = '';
-        byId('f_categoryCustom').style.display = 'none';
         byId('f_note').value = '';
         seedCategories();
         // v53: close the sheet and land on the Ledger — the new entry is at the
@@ -2695,11 +2685,6 @@
     };
     var amtEl = byId('f_amount');
     if (amtEl) amtEl.addEventListener('input', function () { addAmtEq(amtEl); updateChargeHint(); });
-    var catEl = byId('f_category');
-    if (catEl) catEl.onchange = function () {
-      var c = byId('f_categoryCustom');
-      if (c) { c.style.display = catEl.value === CAT_CUSTOM ? '' : 'none'; if (catEl.value === CAT_CUSTOM) c.focus(); }
-    };
     var mlf = byId('mlFilter');
     if (mlf) mlf.onchange = function () { mlFilterCat = mlf.value; renderMoneyLog(); };
 

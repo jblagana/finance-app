@@ -350,26 +350,17 @@
     }
     return false;
   }
-  var CAT_HINTS = [
-    [/food|meal|eat|lunch|dinner|brunch|grocer|nutrition|makan/, 'Food / Gym Nutrition'],
-    [/\bgym\b|workout/, 'Gym Membership'],
-    [/\brent\b/, 'Rent'],
-    [/\bwater\b/, 'Water'],
-    [/wifi|wi-fi|internet/, 'Wi-Fi'],
-    [/spotify|music/, 'Spotify'],
-    [/parent|inay|tatay/, 'Parents\u2019 Utilities Support'],
-    [/laundry|laundromat/, 'Laundry'],
-    [/treat|gear|\bshoe|\bgift|birthday/, 'Personal Treats / Gear'],
-    [/transport|jeep|tricycle|uber|grab|\bgas\b|fuel/, 'Transport'],
-    [/spaylater|paylater|pay[- ]?late|installment|in[- ]house/, 'Debt payment'],
-    [/\bdebt\b|\bloan\b/, 'Debt payment'],
-    [/savings|sinking|christmas|\bsave/, 'Savings / Sinking'],
-    [/repair|fix|doctor|meds|pharm|hospital/, 'Other']
-  ];
-  function guessCategory(text) {
-    var t = ' ' + String(text || '') + ' ';
-    for (var i = 0; i < CAT_HINTS.length; i++) if (CAT_HINTS[i][0].test(t)) return CAT_HINTS[i][1];
-    return 'Other';
+  // v63: expense categories come from "Your numbers" — the stored monthly
+  // budgets. No fixed list, nothing invented: the message is matched against
+  // the budget names (longest match wins); none mentioned → '' (Unsorted).
+  function mentionedBudget(t, ctx) {
+    var names = Object.keys((ctx && ctx.base && ctx.base.budgets) || {});
+    var best = null;
+    for (var i = 0; i < names.length; i++) {
+      var n = names[i];
+      if (mentionOf(n, t) && (!best || n.length > best.length)) best = n;
+    }
+    return best;
   }
   function mentionedCategory(t, txns) {
     var seen = {};
@@ -778,9 +769,9 @@
         ? 'OK — cash backed. ' + money(r2(free - A)) + ' stays free.'
         : 'DEFICIT — short by ' + money(r2(A - free)) + '. Back it in cash first, or cut a plan.',
       okv ? 'good' : 'bad');
-    var actions = [{ label: 'Log it · cash', act: 'log_expense', payload: { amount: A, kind: 'cash_out', category: p.cat || 'Other', note: 'charge check' } }];
-    if (card) actions.push({ label: 'Log it · ' + esc(card.name), act: 'log_expense', payload: { amount: A, kind: 'card_charge', account: card.name, category: p.cat || 'Other', note: 'charge check' } });
-    else actions.push({ label: 'Log it · card', act: 'log_expense', payload: { amount: A, kind: 'card_charge', category: p.cat || 'Other', note: 'charge check' } });
+    var actions = [{ label: 'Log it · cash', act: 'log_expense', payload: { amount: A, kind: 'cash_out', category: p.cat || '', note: 'charge check' } }];
+    if (card) actions.push({ label: 'Log it · ' + esc(card.name), act: 'log_expense', payload: { amount: A, kind: 'card_charge', account: card.name, category: p.cat || '', note: 'charge check' } });
+    else actions.push({ label: 'Log it · card', act: 'log_expense', payload: { amount: A, kind: 'card_charge', category: p.cat || '', note: 'charge check' } });
     return { html: h + freshness(ctx), actions: actions };
   }
 
@@ -794,11 +785,11 @@
       return { html: block('Log an expense', line('How much, paid with what?'), 'e.g. “log expense 500 food maya” or “log 8,000 car repair cash”', 'good') + freshness(ctx) };
     }
     var acct = p.exactAcct || p.cashAcct || p.cardAcct || biggestCash(ctx) || { name: '', kind: 'cash' };
-    var cat = p.cat || 'Other';
+    var cat = p.cat || '';
     var date = p.date || todayISO();
     var h = block('Log expense',
       kv(esc(acct.name || 'Cash'), money(A)) +
-      kv('Category', esc(cat)) +
+      kv('Category', esc(cat || 'Unsorted')) +
       kv('Date', esc(fmtDate(date))),
       'Tap to log it — it lands in the Ledger on this phone.', 'good');
     return {
@@ -1603,7 +1594,7 @@
     var p = {
       date: dm ? dm.iso : null,
       amt: am ? am.amt : null,
-      cat: guessCategory(t),
+      cat: mentionedBudget(t, ctx),
       what: extractWhat(amtText, am),
       exactAcct: fa.exact,
       cardAcct: fa.exact && fa.exact.kind === 'card' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'card'; })[0] || null),
@@ -1743,12 +1734,12 @@
         date: pl.date || todayISO(),
         account: pl.account || '',
         kind: pl.kind,
-        category: pl.category || 'Other',
+        category: pl.category || '',
         amount: pl.amount,
         note: pl.note || ''
       }).then(function () {
         markDone(m);
-        pushBot('Logged <b>' + esc(money(pl.amount)) + '</b> · ' + esc(pl.category || 'Other') + ' · ' + esc(pl.account || 'cash') +
+        pushBot('Logged <b>' + esc(money(pl.amount)) + '</b> · ' + esc(pl.category || 'Unsorted') + ' · ' + esc(pl.account || 'cash') +
           '. It’s in the Ledger on this phone.');
       });
       return;
