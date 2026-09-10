@@ -8,7 +8,7 @@ commit is not done.
 
 ## 2026-09-10 ~18:53 — v59 live re-test: "yes" now emits JSON, but the draft is a full-snapshot dump rendered as raw text
 
-Status: **done** — code `c8af0e2` on origin/main
+Status: **done** — code `c8af0e2` on origin/main, log `9ef962d`; re-test on the phone after the v60 shell loads
 Progress: 100% — done (v60 code pushed; log commit follows)
 
 ### Instruction (verbatim)
@@ -34,7 +34,7 @@ Progress: 100% — done (v60 code pushed; log commit follows)
 - [x] check_site.py v60 guard + version bumps (sw/app/README/check_site)
 - [x] Gates (check_site + parser + node --check) — check_site "all checks passed" (v60 guard: draft holds ONLY that change), parser "all parser checks passed", node --check clean on all five JS files
 - [x] Push code + log — code pushed as `c8af0e2` (chat.js prompt, sw.js cache, app.js stamp, README)
-- [ ] Log done with hash
+- [x] Log done with hash — log commit `9ef962d` pushed
 
 ## 2026-09-10 ~20:25 — v58 live re-test: "Shall I record that?" lands, "yes" still dropped
 
