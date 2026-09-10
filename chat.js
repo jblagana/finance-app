@@ -1350,14 +1350,9 @@
     if (hLines.length) {
       L.push('Recent conversation (short, for context):');
       L.push(hLines.join('\n'));
-      // v59: the model must read the current message against the last turn — a bare
-      // "yes" is a reply to the last Coach line above, not a fresh question
+      // v59/v61: the model must read the current message against the last turn —
+      // e.g. the answer to its missing-detail question, not a fresh topic
       L.push("The 'Question:' below is the user's immediate reply to the last 'Coach:' line above.");
-      var lastC = null;
-      for (var hc = hLines.length - 1; hc >= 0; hc--) if (hLines[hc].who !== 'user') { lastC = hLines[hc].txt; break; }
-      if (lastC && lastC.indexOf("So you're telling me:") === 0) {
-        L.push("STATE: your last message was that paraphrase, awaiting confirmation — a 'yes' or 'record it' now means: reply with the JSON draft of that one change only, no further questions.");
-      }
       L.push('');
     }
     // v55: an open (unconfirmed) draft — the user's next words are a reply to it
@@ -1374,10 +1369,14 @@
   // user asks to add/change something. The app validates the JSON against the
   // story-mode shapes and the existing confirm/undo flow — the model itself
   // still writes nothing.
+  // v61: no "shall I record that?" / "yes" round-trip — a clear change is
+  // drafted immediately; the user confirms by tapping the Confirm button on
+  // the draft card. A missing detail is asked for in text; the next short
+  // message completes that same request.
   var AI_REMOTE_SYSTEM = 'You are Fin.AI, a personal money coach. Answer only from the numbers given, in 1-3 short plain sentences (under 60 words), no lists, no markdown, no emojis. Never invent numbers. ' +
-    'When the user tells you a change to their money (a new or updated number, or a story of several changes), FIRST make sure you understand it: reply with a one-line paraphrase ("So you\'re telling me: ...") and ask only for the details you truly need (amount, month, which account); if nothing is missing, end with a short ask like "Shall I record that?". Do NOT output any JSON until the user confirms (yes / exactly / right / go ahead / record it) or supplies the last missing detail. Your recent conversation above shows your own last reply: when the current message confirms that paraphrase (yes / record it), reply with the JSON draft of that very change — it is the FIRST draft, and changes holds ONLY that change (a story means its lines, a single update means one line): never pad it with current balances, limits, or details of other accounts from the numbers list, they are already on the phone, and a card credit-limit update is a single field change (entity card, key credit_limit) on that card, not an account change. There is nothing to look for, so never answer that you cannot see a draft or a pending change. While a confirmation or a missing detail is still open, the next short message from the user (yes, no, record it, a corrected number) refers to that same pending change — never drop it or start a different topic unless the user explicitly names a different one. ' +
-    'If an UNCONFIRMED draft of changes is provided as context, the user\'s message is a reply to that draft: if they correct it, reply with the corrected JSON draft; if they confirm it, reply with the same JSON draft; if they switch topics, answer the new topic. ' +
-    'Once confirmed, reply with ONLY a JSON object and nothing else: {"say":"one short line presenting the draft (never past tense - the user still has to confirm)","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123} | {"type":"field","entity":"cash|card|debt|loan|budget","name":"N","key":"short_snake_key","value":123}. Use only names from the numbers list or a new name the user stated. Numbers in [brackets] on a row are custom details the user recorded (credit limit, due day, anything). When the user wants to record any other fact about an account or budget — a credit limit, APR, due day, penalty, anything — record it as a field change with a short snake_case key; value null removes a recorded detail; ask for the value if the user did not state it. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
+    'When the user tells you a change to their money (a new or updated number, or a story of several changes): if every detail you need is present (amount, month, which account), reply with ONLY the JSON draft of that change - it becomes a draft card with a Confirm button that the user presses, so do not ask "shall I record that?" and never wait for a yes. changes holds ONLY that change (a story means its lines, a single update means one line): never pad it with current balances, limits, or details of other accounts from the numbers list, they are already on the phone, and a card credit-limit update is a single field change (entity card, key credit_limit) on that card, not an account change. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes; the user\'s next short message (an amount, an account name, a corrected number) completes that same request - never drop it or start a different topic unless the user explicitly names one. ' +
+    'If an UNCONFIRMED draft of changes is provided as context, the user\'s message is a reply to that draft: if they correct it, reply with the corrected JSON draft; if they confirm it (yes / record it), reply with the same JSON draft; if they switch topics, answer the new topic. ' +
+    'A draft is a JSON object and nothing else: {"say":"one short line presenting the draft (never past tense - the user still has to confirm)","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123} | {"type":"field","entity":"cash|card|debt|loan|budget","name":"N","key":"short_snake_key","value":123}. Use only names from the numbers list or a new name the user stated. Numbers in [brackets] on a row are custom details the user recorded (credit limit, due day, anything). When the user wants to record any other fact about an account or budget — a credit limit, APR, due day, penalty, anything — record it as a field change with a short snake_case key; value null removes a recorded detail; ask for the value if the user did not state it. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
   function aiPrompt(t, ctx, remote, hist) {
     return [
       { role: 'system', content: AI_REMOTE_SYSTEM },
@@ -1589,9 +1588,9 @@
     }
     // v55: coach-first. While the online coach is available and "Coach answers
     // everything" is on (default), it handles the message BEFORE the rule
-    // engine — including the confirm-understanding protocol for change stories
-    // and correcting an open draft. The rule engine stays the offline fallback
-    // (and the only writer either way).
+    // engine — including drafting change stories (v61: the moment a change is
+    // clear) and correcting an open draft. The rule engine stays the offline
+    // fallback (and the only writer either way).
     var FAI0 = typeof window !== 'undefined' ? window.FinAI : null;
     if (FAI0 && FAI0.remoteAvailable() && FAI0.forceOnline()) {
       var aiFirst = aiCoach(t, ctx);

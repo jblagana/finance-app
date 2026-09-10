@@ -34,11 +34,11 @@ add/list/remove plans, urgent-expense advice.
 
 - **Coach-first (v55, default)** — while the online coach is available
   ("Coach answers everything" in Settings → Coach (online), default ON), it
-  answers every message. For a money story it talks first: it paraphrases
-  ("So you're telling me: …") and asks only what it truly needs — and it may
-  propose the change as a draft card only after you confirm or fill the last
-  detail. A reply to an open draft **corrects that draft** instead of stacking
-  a new one.
+  answers every message. For a money change (v61) it drafts it as a draft card
+  the moment the change is clear — you confirm by tapping the card's Confirm
+  button; when a detail is missing it asks first, and your short answer
+  completes that same change. A reply to an open draft **corrects that draft**
+  instead of stacking a new one.
 - **Extensible table (v56)** — the numbers table grows with you: ask the coach
   to record any other fact about an account or budget (a card's credit limit,
   APR, due day, penalty, anything) and it proposes a **detail** change — same
@@ -96,7 +96,7 @@ it: `npx wrangler deploy`.)
 - **Backup** (Settings → Backup): Export JSON (everything) / Export CSV (ledger
   only) / Import JSON to restore.
 - Both footers show the shell version + when this build went live. Releases
-  bump the SW cache (`finances-pwa-v60`) and the `SHELL_RELEASE` stamp in
+  bump the SW cache (`finances-pwa-v61`) and the `SHELL_RELEASE` stamp in
   `app.js` together — the "New version ready" toast offers a one-tap reload.
   If the app ever looks stale: open the Pages URL once in Safari, then
   relaunch the home-screen icon.
