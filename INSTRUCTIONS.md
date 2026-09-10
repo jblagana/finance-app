@@ -6,6 +6,40 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-10 (evening) — v61: simplify the coach confirm flow (Option A) — draft the moment the change is clear; confirm by button
+
+Status: **done** — code `d459b0b` on origin/main (log commit follows); phone re-test pending (user)
+Progress: 100% — done (v61 code pushed; log hash recorded in the final polish commit)
+
+### Instruction (verbatim)
+> Option A (recommended): drop “Shall I record that?” — coach emits the draft card the moment the change is clear; you confirm by tapping the Confirm button. Coach still asks when a detail is missing.
+
+(Chosen from my plan-mode A/B question after the session-resumption context summary, which reported the v60 phone failure — bare "yes" after the paraphrase produced no JSON draft, model said it saw no pending change — and asked to "recommend a simpler design" / "go simpler" if prompt-only fixes are unstable.)
+
+### Interpretation (agent — user may edit this section)
+- Diagnosis from the plan-mode review of `chat.js`: the fragile step in every prompt-only version (v58/v59/v60) is the same — after "Shall I record that?", a bare "yes" goes to the LLM, which must *remember* the pending change across turns and *re-emit* it as JSON. Small model + flattened history + 256-token cap ⇒ three different failure modes (no JSON / full-snapshot dump truncated to raw text / "no pending change"). Prompt-only is not robust here.
+- The app already has deterministic state (`openDraft`) and a draft card with a **Confirm** button that writes via `applyBaseChanges` — Option A removes the "LLM remembers and re-emits" step instead of re-prompting around it.
+- Plan (agent — edit me): v61, prompt-led in `chat.js`:
+  1. `AI_REMOTE_SYSTEM`: new protocol — when the user states a change and every detail is present, reply with ONLY the JSON draft of that change (draft card + Confirm button; never ask "shall I record that?", never wait for a yes); keep the single-change-only rule, the "never pad with other accounts' balances" rule, and the single-field `credit_limit` rule (a card limit update is `{type:"field",entity:"card",key:"credit_limit"}`); missing detail → `{"say":"ask"}` with no changes and the next short message completes that same request; the UNCONFIRMED-draft-context paragraph stays (a typed "yes" after a card still re-emits the same draft); "not asking to change anything" → plain text only.
+  2. Delete the now-dead v59 STATE block in `aiPrompt`'s coach history section (`lastC` / "So you're telling me:" check + STATE line); keep the "immediate reply to the last Coach line" framing line (still needed for the missing-detail ask loop).
+  3. `openDraft` / `parseCoachDraft` / draft card / `applyBaseChanges` all reused as-is — no new app logic.
+  4. `check_site.py`: swap the v59/v60 guard phrases for the new wording, keep the single-field credit-limit assertion; version bumps v61 in sw.js cache, app.js SHELL_RELEASE, README, check_site.
+  5. Gates: check_site.py, test_chat_parser.py (update any stale pre-confirm-paraphrase assertion), `node --check` on the five JS files; then push code + log.
+  6. No worker change (prompt is app-side) → no redeploy.
+- UX consequence (accepted by choosing A): the coach no longer says "Shall I record that?" and waits — a clear change goes straight to a draft card; confirmation is the Confirm button tap. README protocol line gets reworded to match.
+- Open check during implementation: `parseCoachDraft` behaviour for `{"say":...}` with zero changes must still fall back to a plain-text bubble (the ask flow); verify when re-reading.
+- Verified during implementation: `parseCoachDraft` returns `{say, changes: []}` for a zero-change `{"say":...}` (chat.js 1549–1550) and `sendLlm` renders `draft.say` as a plain bubble (1851/1866) — the missing-detail ask renders as text, no card. Gates: check_site "all checks passed" (v61 draft-on-clear guard), parser "all parser checks passed", node --check clean on all five JS files (incl. untouched worker).
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Re-read chat.js: aiPrompt history block, AI_REMOTE_SYSTEM, parseCoachDraft, openDraft/draft-card render path
+- [x] chat.js: Option A prompt rewrite + STATE block removal
+- [x] check_site.py: v61 guard phrases + version bumps (sw/app/README/check_site)
+- [x] Gates: check_site + parser tests + node --check
+- [x] Push code commit, then log commit — code pushed as `d459b0b` (chat.js prompt + STATE removal, sw.js cache v61, app.js stamp v61, README)
+- [ ] Log done with hashes
+
+
 ## 2026-09-10 ~18:53 — v59 live re-test: "yes" now emits JSON, but the draft is a full-snapshot dump rendered as raw text
 
 Status: **done** — code `c8af0e2` on origin/main, log `9ef962d`; re-test on the phone after the v60 shell loads
