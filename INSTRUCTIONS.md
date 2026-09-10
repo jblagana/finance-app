@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-10 (night, after v63) — user edit to the "paid with" entry's Interpretation
-Status: in progress
-Progress: 90% — logged + followed; becomes done with the next log push (no separate code work)
+Status: done
+Progress: 100% — completed with the v64 log push (code `0d5bc4e`, log `acc5e8a` + final) → origin/main
 
 ### Instruction (verbatim)
 > the 'card/cash' i meant is at the 'add expense'
@@ -27,8 +27,8 @@ Progress: 90% — logged + followed; becomes done with the next log push (no sep
 - [x] Confirm the Add-sheet `f_account` field is the one being changed
 
 ## 2026-09-10 (night, after v63) — add-expense "paid with" label + Cash default
-Status: in progress
-Progress: 80% — code pushed (`0d5bc4e`); log push + live verify remain — ETA ~00:15
+Status: done
+Progress: 100% — completed 2026-09-10 ~00:15; code `0d5bc4e`, log `acc5e8a` (+ this final log push) → origin/main
 
 ### Instruction (verbatim)
 > do the same for the 'paid with' in add expense, change from 'card/cash' to 'paid with', which defaults at 'Cash'
@@ -67,8 +67,10 @@ Progress: 80% — code pushed (`0d5bc4e`); log push + live verify remain — ETA
 - [x] README: "Card / cash beside Date" → Paid with wording; cache v63 → v64
 - [x] Gates: check_site.py "all checks passed" (incl. new v64 section) + parser "all parser checks passed" + node --check clean (5 JS files)
 - [x] Push code commit — `0d5bc4e` → origin/main
-- [ ] Push log commit
-- [ ] verify_live.ps1 -Tag v64
+- [x] Push log commit — `acc5e8a` → origin/main (final update in the next log push)
+- [x] Verify live serves v64 — verify_live.ps1 -Tag v64: "sw cache v64: True" + live app.js `SHELL_RELEASE = { v: 64` → True + live index.html "Paid with" label → True (the ps1's "index shell vNN" line is legacy-False: the stamp renders at runtime from app.js, not index.html)
+
+User action: on the phone, reload → accept the SW update → footer "Fin.AI · shell v64" → open the Add sheet: the **Paid with** select now shows **Cash** (pre-selected) plus the card/cash accounts from Your numbers (no accounts yet → Cash only). Entries logged on the default store account "Cash" / kind cash_out and read "Cash" in the ledger meta.
 
 ## 2026-09-10 (night) — add-expense categories must come from "Your numbers"
 Status: done
