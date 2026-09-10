@@ -6,6 +6,35 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-10 ~20:25 — v58 live re-test: "Shall I record that?" lands, "yes" still dropped
+
+Status: **done** — code `8b4e90e` on origin/main; re-test on the phone after the v59 shell loads
+Progress: 100% — done (v59 code pushed; log commit follows)
+
+### Instruction (verbatim)
+> [TASK RESUMPTION] Please continue where you left off.
+
+(plus a screenshot of a new live coach test — the exchange, transcribed in the Interpretation)
+
+### Interpretation (agent — user may edit this section)
+- Screenshot exchange, verbatim:
+  1. User: "update maribank cc limit to 70k"
+  2. Coach: "So you're telling me: you want to update the credit limit for MariBank CC to 70,000. Shall I record that?"
+  3. User: "yes"
+  4. Coach: "I don't see a pending change to confirm. What would you like to update or record?"
+- **v58 is in effect on the phone** — the "Shall I record that?" ask is the new prompt text; the paraphrase step now works.
+- Remaining failure, same family as before: the model does not connect "Question: yes" to its last paraphrase. Root cause is prompt *structure*: history is flattened into one user-role message ("Recent conversation … Coach: …"), so "confirms your own paraphrase" doesn't match what the model sees — the "Coach:" line is quoted context, not its own turn. It falls back to the no-draft answer again (now even echoing the new "pending change" wording).
+- Fix (agent's plan — edit me): deterministic annotation in chat.js `aiPrompt` — always: "The 'Question:' below is the user's immediate reply to the last 'Coach:' line above"; plus, when the last coach line starts with "So you're telling me:", a STATE line: your last message was that paraphrase awaiting confirmation — a 'yes'/'record it' now means reply with the JSON draft of that change. Protocol sentence reworded to match the structure: the post-confirm JSON "is the FIRST draft; there is nothing to look for, so never answer that you cannot see a draft or a pending change". Shell change → v59 bump; check_site guard switches to the new phrases; worker untouched (the prompt is app-side) → no redeploy needed.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Verify aiPrompt hLines line + who shape (line 1350 = hLines join, `{who, txt}` confirmed; protocol line = 1366)
+- [x] chat.js: STATE annotation + protocol reword (coach path: framing + STATE line; setup path: framing line; protocol sentence now says the post-confirm JSON "is the FIRST draft")
+- [x] check_site.py: v59 guard phrases + version bumps (sw/app/README/check_site)
+- [x] Gates (check_site + parser + node --check) — check_site "all checks passed" (v59 STATE guard included), parser "all parser checks passed" (run from `finances/`, not the repo dir), node --check clean on all five JS files
+- [x] Push code + log — code **`8b4e90e`** pushed → origin/main (pre-push log re-read: no user edits); log commit next
+- [x] Log done with hash — log commit pushed (this entry); log-hash back-reference in a small follow-up log commit, same pattern as v58
+
 ## 2026-09-10 ~19:35 — Live test: coach fumbles the limit flow ("poor response")
 
 Status: **done** — code `4283d7c` on origin/main, log `5063ed1`; re-test on the phone after the v58 shell loads
