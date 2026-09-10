@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-11 (night, after v67) — ok: sync local, bump gate, add coordination rules
-Status: in progress
-Progress: 10% — ETA ~8 min
+Status: done
+Progress: 100% — sync pushed as `220ca2c` (both entries kept, mine on top), local gate at v67 "all checks passed", coordination rules pushed as `5f24c2c`
 
 ### Instruction (verbatim)
 > ok
@@ -19,10 +19,10 @@ Progress: 10% — ETA ~8 min
 
 ### Subtasks
 - [x] Log the instruction verbatim (first action)
-- [ ] Commit my log entries → `pull --rebase` → keep both entries → push
-- [ ] Bump local `check_site.py` to v67 (docstring, sw-cache line, stamp line) + run it (must pass)
-- [ ] Append coordination rules to repo-root `AGENTS.md` → docs-only commit + push
-- [ ] Mark this entry done (after pushes) + final log commit + push
+- [x] Commit my log entries → `pull --rebase` → keep both entries (mine on top) → push (`220ca2c`)
+- [x] Bump local `check_site.py` to v67 (docstring, sw-cache line, stamp line) + run it → "all checks passed"
+- [x] Append coordination rules to repo-root `AGENTS.md` → docs-only commit + push (`5f24c2c`)
+- [x] Mark this entry done (after pushes) + final log commit + push (this commit)
 
 ## 2026-09-11 (night, after v66) — check: did the HPC agent change anything?
 Status: done
