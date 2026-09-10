@@ -8,8 +8,8 @@ commit is not done.
 
 ## 2026-09-10 ~19:35 — Live test: coach fumbles the limit flow ("poor response")
 
-Status: **in progress** (code shipped — log close-out next)
-Progress: 90% — ETA ~2 min (log commit + push)
+Status: **done** — code `4283d7c` on origin/main, log `5063ed1`; re-test on the phone after the v58 shell loads
+Progress: 100% — done (v58 pushed + worker re-deployed)
 
 ### Instruction (verbatim)
 > poor response
@@ -33,7 +33,7 @@ Progress: 90% — ETA ~2 min (log commit + push)
 - [x] Fix the prompt (post-confirm draft; pending intent never silently switches) — `AI_REMOTE_SYSTEM` loop-closer: paraphrase ends with "Shall I record that?" when nothing is missing; "The moment the user confirms your own paraphrase, reply with the JSON draft of that very change — … never answer that you cannot see a previous draft"; while a confirmation is open, short replies refer to the pending change and never switch topics
 - [x] Gates (check_site.py + test_chat_parser.py) → commit + push — check_site "all checks passed" (now also asserts the loop-closer phrase, v58), parser tests "all parser checks passed", `node --check` clean on all five JS files (Node v24 available). Code pushed as **`4283d7c`** (v58: chat.js prompt + sw.js/app.js/README bump) → origin/main
 - [x] Deploy path — resolved without asking: `npx wrangler deploy` ran from `finance-app/worker/` — `finsmart-coach` → https://finsmart-coach.jblagana.workers.dev, version `d9a8fac8-0397-4be3-93eb-cdfed6451dd4`. This also clears the open question: the hosted worker now provably carries the v56 code (MAX_INPUT 8000 / MAX_TOKENS 512). Worker code was unchanged by v58 itself (the prompt lives in chat.js), so the phone only needs the v58 shell via the Pages cache bump
-- [ ] Log done with hash
+- [x] Log done with hash — log commit `5063ed1` pushed (this entry); entry marked done
 
 ## 2026-09-10 ~19:05 — Process: catch interpretation edits + per-subtask log updates
 
