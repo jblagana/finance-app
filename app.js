@@ -45,12 +45,12 @@
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
   var RENDER_BY_KEY = {
-    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog],
-    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero],
-    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus],
-    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero],
+    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote],
+    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote],
+    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote],
+    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote],
     owed: [renderOwed],
-    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed]
+    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -1636,6 +1636,67 @@
   }
   // ---------- Phase 3: hero free-cash card + SVG cash sparkline ----------
   var heroVal = null;
+  // ---------- v55: the Coach's note (Home Overview) ----------
+  // A short read-only AI paragraph about the user's money right now, built
+  // from the SAME locally-computed snapshot that feeds the chat coach (chat.js
+  // coachSnapshot, via the __financeChat hooks) — one source of numbers. The
+  // reply is cached in localStorage keyed by the snapshot fingerprint: zero
+  // API calls while the numbers are unchanged. Hidden when there are no
+  // numbers yet; when the coach is unreachable the last note is kept with a
+  // note, or the card hides. The coach only writes chat text — never data.
+  var NOTE_KEY = 'fin.ai.coachnote.v1';
+  var noteInFlight = false;
+  function readNoteCache() {
+    try { return JSON.parse(localStorage.getItem(NOTE_KEY) || 'null'); } catch (e) { return null; }
+  }
+  function paintCoachNote(el, txt, stale) {
+    if (!txt) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    var body = byId('coachNoteBody');
+    if (body) body.textContent = txt;
+    var sub = byId('coachNoteSub');
+    if (sub) sub.textContent = stale
+      ? 'the online coach is not reachable right now — this is the last note'
+      : 'the online coach reads your numbers — it changes nothing';
+  }
+  function renderCoachNote() {
+    var el = byId('coachNote');
+    if (!el) return;
+    var FAI = typeof window !== 'undefined' ? window.FinAI : null;
+    var chat = typeof window !== 'undefined' ? window.__financeChat : null;
+    if (!FAI || typeof FAI.note !== 'function' || !chat || typeof chat.ctx !== 'function' || typeof chat.coachSnapshot !== 'function') {
+      el.style.display = 'none';
+      return;
+    }
+    chat.ctx().then(function (ctx) {
+      var snap = chat.coachSnapshot(ctx);
+      if (!snap.text) { el.style.display = 'none'; return; } // no numbers yet
+      var cache = readNoteCache();
+      if (cache && cache.fp === snap.fp && cache.txt) { paintCoachNote(el, cache.txt, false); return; }
+      if (!FAI.remoteAvailable()) {
+        if (cache && cache.txt) paintCoachNote(el, cache.txt, true); // keep the last note
+        else el.style.display = 'none';
+        return;
+      }
+      if (noteInFlight) return;
+      noteInFlight = true;
+      FAI.note(snap.text).then(function (txt) {
+        var t = String(txt || '').replace(/^\s+|\s+$/g, '').slice(0, 400);
+        if (t) {
+          try { localStorage.setItem(NOTE_KEY, JSON.stringify({ fp: snap.fp, txt: t, at: Date.now() })); } catch (e) {}
+          paintCoachNote(el, t, false);
+        } else if (cache && cache.txt) {
+          paintCoachNote(el, cache.txt, true);
+        } else {
+          el.style.display = 'none';
+        }
+      })['catch'](function () {
+        if (cache && cache.txt) paintCoachNote(el, cache.txt, true);
+        else el.style.display = 'none';
+      })['then'](function () { noteInFlight = false; });
+    })['catch'](function () { el.style.display = 'none'; });
+  }
+
   function renderHero() {
     var el = byId('hero'); if (!el) return;
     var s = effectiveSnap();
@@ -2360,7 +2421,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 54, live: new Date(2026, 8, 10, 13, 25) };
+  var SHELL_RELEASE = { v: 55, live: new Date(2026, 8, 10, 15, 40) };
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2661,6 +2722,8 @@
     if (hob) hob.onclick = function () { openSheet('numSheet'); };
     var hcb = byId('homeCoach');
     if (hcb) hcb.onclick = function () { startSetup(); };
+    var cnr = byId('coachNoteRefresh'); // v55: re-ask the coach for a fresh note
+    if (cnr) cnr.onclick = function () { try { localStorage.removeItem(NOTE_KEY); } catch (e) {} renderCoachNote(); };
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {

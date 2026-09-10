@@ -6,6 +6,67 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-10 ~15:30 — v55: coach-first, online-driven app + confirm-understanding before drafts + Coach's note on Overview
+
+Status: **in progress**
+Progress: 90% — ETA ~15 min (gates done; commit + push + log)
+
+### Instruction (verbatim)
+> (message 1 of this thread — context summary, Goal + State, quoting the prior session's ask)
+> Make the AI coach clarify and confirm the user's money narrative before generating any draft base/rule change.
+> User clarified the real issue: the coach should talk to them first and confirm understanding before a draft is created.
+>
+> (message 2, plan mode)
+> i want this app to be mostly online now, ai coach driven so everything is smart
+>
+> (message 3, plan mode)
+> -include that ai summary card on overview, i like that
+
+(The exact original failing-story sentence came in the prior session; the context summary above is the canonical record of it. The plan presented on messages 2–3 was approved by the switch to Act mode.)
+
+### Interpretation (agent — user may edit this section)
+- One release (v55), five parts:
+  1. **Coach-first routing:** online coach becomes the default brain for every chat
+     message when available (configured + enabled + online + not in cooldown);
+     the local rule engine stays as the automatic offline fallback. The v49
+     "Force online coach" toggle becomes "Coach answers everything", default ON.
+  2. **Confirm-understanding protocol:** the LLM system prompt changes — for a
+     money story the coach first paraphrases ("So you're telling me: …") and
+     asks targeted questions; it may emit the {say, changes} JSON draft only
+     after the user confirms/corrects. Local validation + the existing draft
+     card (✕ / Confirm / Discard / undo) are unchanged; the rule engine stays
+     the only writer.
+  3. **Open-draft correction:** a reply to an unconfirmed draft card routes to
+     the coach with the open draft + the user's words as context → revised
+     proposal (supersedes the old card) or a follow-up question. Kills the
+     "stack of wrong drafts" behavior.
+  4. **Coach's note card on the home landing tab** (the overview screen with
+     the greeting + hero + insights): a read-only AI paragraph (2–3 sentences,
+     <50 words) built from a locally-computed month snapshot (F.coachSnapshot,
+     shared with the chat prompts). Cached in localStorage keyed by the
+     snapshot fingerprint → zero API calls while the numbers are unchanged;
+     hidden when coach unavailable / no numbers yet. ↻ refresh button forces.
+     (Agent scope call: "overview" = the home landing tab. If the user meant
+     the Money tab, the card moves there — same code.)
+  5. **Token caps:** ai.js 96 → 512 (both remote paths), sendLlm maxNew 48 →
+     256, worker MAX_TOKENS 96 → 512 (user must redeploy the worker; BYO key
+     unaffected).
+- Deliberately unchanged: rule engine math, all writes, draft confirm/undo,
+  storage, views' determinism, backup. ai.js still never calls a write action.
+
+### Subtasks
+- [x] Log this instruction verbatim (first action)
+- [x] app.js: F.coachSnapshot(ctx) + #coachNote render / cache / refresh
+- [x] ai.js: FAI.note(), caps 96→512, settings rework (default ON), offline copy
+- [x] chat.js: system prompt + confirm protocol, coach-first gate, open-draft correction, richer aiContextText
+- [x] worker/worker.js: MAX_TOKENS 96 → 512 (+ redeploy note to user)
+- [x] index.html: #coachNote card + CSS
+- [x] sw.js → finances-pwa-v55, app.js SHELL_RELEASE v55, README rewrite
+- [x] test_chat_parser.py: new cases (protocol output, routing gate, snapshot/fingerprint)
+- [x] check_site.py: v55 assertions
+- [x] Gates: check_site.py + parser tests pass
+- [ ] Commit + push, record hash, log done
+
 ## 2026-09-10 ~13:45 — Logging discipline: log verbatim FIRST, live progress %, never clobber user edits
 
 Status: **done** (pushed in this commit; hash = top of `git log`)

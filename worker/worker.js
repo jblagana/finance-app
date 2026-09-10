@@ -16,7 +16,7 @@
  * the key is set with:   wrangler secret put LLM_API_KEY
  */
 
-var MAX_TOKENS = 96;      // hard cap regardless of what the client requests
+var MAX_TOKENS = 512;     // hard cap regardless of what the client requests (v55: raised for the confirm-first coach protocol)
 var MIN_TOKENS = 16;      // floor: a 1-token reply can be empty/whitespace (the in-app Test pings with max_tokens:1)
 var MAX_INPUT = 4000;     // characters of prompt JSON we will forward
 var DEFAULT_ORIGIN = 'https://jblagana.github.io/finance-app';

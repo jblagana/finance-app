@@ -23,11 +23,14 @@
  * anything else closes the question and routes normally. Nothing is ever
  * written without a confirmed draft.
  *
- * The rule engine owns every command; an open question the rules can't
- * answer goes to the ONLINE coach (a hosted LLM the user connects in
- * Settings) via sendLlm, or to the fallback card when it's off / offline /
- * not configured. The deterministic story/semantic scorer (v37) stays —
- * it's part of the rule engine.
+ * The rule engine owns every command and stays the only writer. v55: while
+ * the ONLINE coach (a hosted LLM the user connects in Settings) is available
+ * and "Coach answers everything" is on (default), it answers first — talking
+ * and confirming understanding before proposing any change; a reply to an
+ * open draft corrects it instead of stacking a new one. When the coach is
+ * off / offline / not configured, the rule engine answers (with the fallback
+ * card when even it can't). The deterministic story/semantic scorer (v37)
+ * stays — it's part of the rule engine.
  */
 (function () {
   'use strict';
@@ -40,6 +43,11 @@
   // next bare answer can complete it. kind: 'amt' (a number) or 'month'.
   // Cleared on a non-answer, on any action, and on page reload.
   var pendingAsk = null; // { t: <normalized question text>, kind: 'amt' | 'month' }
+  // v55: the latest UNCONFIRMED change draft (local story or coach JSON). While
+  // it's open, the user's next words are a reply to that draft — the coach
+  // corrects or confirms it instead of the engine stacking a new draft.
+  // Cleared on confirm / discard / last line dropped; restored on open.
+  var openDraft = null; // { say: <coach line>, lines: [<draft row label>, ...] }
   // v46: short coach memory — the last few turns (user text + tag-stripped bot
   // text), rebuilt on every send and folded into the coach prompt so the coach
   // follows the conversation instead of answering each message in isolation.
@@ -1273,13 +1281,19 @@
     if (JSON.stringify(pr).length > 3800) pr = aiPrompt(t, ctx, true, []);
     return { llm: true, prompt: pr };
   }
-  function aiContextText(t, ctx, hist) {
-    var e = ctx.eff;
+  // v55: the shared, locally-computed month snapshot. ONE source of the
+  // coach's numbers: it feeds the chat prompts (aiContextText) AND the Home
+  // "Coach's note" card (app.js renderCoachNote, via the __financeChat hooks).
+  // fp is a cheap fingerprint of the numbers for the note cache: same numbers
+  // → same fp, so the card only calls the coach when something changed.
+  function coachSnapshot(ctx) {
+    var e = ctx && ctx.eff;
+    if (!e) return { text: '', fp: '' };
     var L = [];
     L.push('My numbers on this phone (as of ' + (ctx.at ? new Date(ctx.at).toLocaleDateString() : 'today') + '):');
     L.push('- liquid cash ' + money(e.cash.total) + ', free ' + money(e.cash.free) + ', floor ' + money(e.floor || 0));
     L.push('- cards owed ' + money(e.card_owed || 0) + ', prepay on the ' + ordinal(e.prepay_day || 14) + ': ' + money(e.total_prepay || 0));
-    // v46: exact stored names, so a remote draft can name an existing
+    // exact stored names, so a remote draft can name an existing
     // account/budget instead of inventing one.
     var sn = storyNames(ctx);
     var accs = sn.accounts.map(function (a) { return a.name + ' (' + a.kind + ')'; });
@@ -1306,10 +1320,24 @@
     Object.keys(spend).forEach(function (c2) { top.push([c2, spend[c2]]); });
     top.sort(function (a, b) { return b[1] - a[1]; });
     if (top.length) L.push('- logged this month ' + money(total) + ': ' + top.slice(0, 4).map(function (z) { return z[0] + ' ' + money(z[1]); }).join(', '));
+    var text = L.join('\n');
+    return { text: text, fp: (ctx.at || '') + '|' + text };
+  }
+  function aiContextText(t, ctx, hist) {
+    var L = [];
+    // v55: the shared snapshot above, not a second hand-built numbers list
+    L.push(coachSnapshot(ctx).text || 'My numbers on this phone: nothing stored yet.');
     L.push('');
-    // v46: the last few turns, so "and next month?" knows what we just talked about
+    // the last few turns, so "and next month?" knows what we just talked about
     var hLines = (hist || []).map(function (h) { return (h.who === 'user' ? 'You: ' : 'Coach: ') + h.txt; });
     if (hLines.length) { L.push('Recent conversation (short, for context):'); L.push(hLines.join('\n')); L.push(''); }
+    // v55: an open (unconfirmed) draft — the user's next words are a reply to it
+    if (openDraft && openDraft.lines && openDraft.lines.length) {
+      L.push('An UNCONFIRMED draft of base-data changes is on screen:');
+      for (var od = 0; od < openDraft.lines.length; od++) L.push('- ' + openDraft.lines[od]);
+      if (openDraft.say) L.push('You said: ' + openDraft.say);
+      L.push('');
+    }
     L.push('Question: ' + t);
     return L.join('\n');
   }
@@ -1317,7 +1345,10 @@
   // user asks to add/change something. The app validates the JSON against the
   // story-mode shapes and the existing confirm/undo flow — the model itself
   // still writes nothing.
-  var AI_REMOTE_SYSTEM = 'You are Fin.AI, a personal money coach. Answer only from the numbers given, in 1-2 short plain sentences (under 45 words), no lists, no markdown, no emojis. Never invent numbers. If the user asks to add or change a number, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. Use only names from the numbers list or a new name the user stated. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
+  var AI_REMOTE_SYSTEM = 'You are Fin.AI, a personal money coach. Answer only from the numbers given, in 1-3 short plain sentences (under 60 words), no lists, no markdown, no emojis. Never invent numbers. ' +
+    'When the user tells you a change to their money (a new or updated number, or a story of several changes), FIRST make sure you understand it: reply with a one-line paraphrase ("So you\'re telling me: ...") and ask only for the details you truly need (amount, month, which account). Do NOT output any JSON until the user confirms (yes / exactly / right / go ahead) or supplies the last missing detail. ' +
+    'If an UNCONFIRMED draft of changes is provided as context, the user\'s message is a reply to that draft: if they correct it, reply with the corrected JSON draft; if they confirm it, reply with the same JSON draft; if they switch topics, answer the new topic. ' +
+    'Once confirmed, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. Use only names from the numbers list or a new name the user stated. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
   function aiPrompt(t, ctx, remote, hist) {
     return [
       { role: 'system', content: AI_REMOTE_SYSTEM },
@@ -1483,6 +1514,16 @@
         ]
       };
     }
+    // v55: coach-first. While the online coach is available and "Coach answers
+    // everything" is on (default), it handles the message BEFORE the rule
+    // engine — including the confirm-understanding protocol for change stories
+    // and correcting an open draft. The rule engine stays the offline fallback
+    // (and the only writer either way).
+    var FAI0 = typeof window !== 'undefined' ? window.FinAI : null;
+    if (FAI0 && FAI0.remoteAvailable() && FAI0.forceOnline()) {
+      var aiFirst = aiCoach(t, ctx);
+      if (aiFirst) return aiFirst;
+    }
     var dm = findDateSpan(t);
     var amtText = dm ? t.replace(dm.raw, ' ') : t;
     var am = findAmount(amtText);
@@ -1647,6 +1688,9 @@
       sl.splice(si, 1);
       m.storyLines = sl;
       saveMsg(m);
+      openDraft = sl && sl.length // v55: keep the open-draft tracker in sync
+        ? { say: '', lines: sl.map(function (l) { return l.label; }) }
+        : null;
       var el = msgsEl ? msgsEl.querySelector('[data-cid="' + m.id + '"]') : null;
       if (!sl.length) {
         if (el) { var ar0 = el.querySelector('.a-row'); if (ar0) ar0.innerHTML = '<span class="c-done">✓ discarded</span>'; }
@@ -1669,11 +1713,12 @@
         pushBot('This phone needs the latest app version to apply a story — pull to refresh.');
         return;
       }
-      if (!cl2.length) { markDone(m); return; }
+      if (!cl2.length) { markDone(m); openDraft = null; return; }
       var nCh = cl2.length;
       F.applyBaseChanges(cl2.map(function (l3) { return l3.change; })).then(function () {
         m.storyLines = [];
         markDone(m);
+        openDraft = null; // v55: the draft was confirmed — nothing open
         var um = {
           id: chatId(), who: 'bot',
           html: '<div class="c-block"><div class="c-t">Story applied</div>' +
@@ -1690,6 +1735,7 @@
     if (a.act === 'discard_story') {
       m.storyLines = [];
       markDone(m);
+      openDraft = null; // v55: the draft was discarded — nothing open
       pushBot('Discarded — nothing was changed.');
       return;
     }
@@ -1721,7 +1767,7 @@
     return saveMsg(sm).then(function () {
       if (typing.parentNode) typing.parentNode.removeChild(typing);
       appendMsg(sm);
-      return FAI.generate(res.prompt, { maxNew: 48 }, function (txt) {
+      return FAI.generate(res.prompt, { maxNew: 256 }, function (txt) {
         var el = msgsEl && msgsEl.querySelector('[data-cid="' + sm.id + '"] .ins-line');
         if (el) { el.textContent = txt || '…'; scrollBottom(); }
       }).then(function (txt) {
@@ -1736,6 +1782,7 @@
             return '<div class="ins-line"><b>' + (i + 1) + '.</b> ' + esc(l.label) + ' — ' + esc(money(v)) + '</div>';
           }).join('');
           sm.storyLines = lines;
+          openDraft = { say: draft.say || '', lines: lines.map(function (l) { return l.label; }) }; // v55: open draft for correction
           sm.actions = lines.map(function (l, i) { return { label: '✕ ' + l.label, act: 'story_drop_line', payload: { i: i } }; });
           sm.actions.push({ label: 'Confirm ' + lines.length + ' change' + (lines.length > 1 ? 's' : ''), act: 'confirm_story', payload: { lines: lines } });
           sm.actions.push({ label: 'Discard', act: 'discard_story' });
@@ -1784,6 +1831,9 @@
         var bm = { id: chatId(), who: 'bot', html: res.html, actions: res.actions || [], at: new Date().toISOString() };
         if (res.storyLines) bm.storyLines = res.storyLines; // v35: the draft lives on the message (persisted in the chat store)
         if (res.storyRaw) bm.storyRaw = res.storyRaw;
+        if (res.storyLines && res.storyLines.length) {
+          openDraft = { say: '', lines: res.storyLines.map(function (l) { return l.label; }) }; // v55: open draft for correction
+        }
         return saveMsg(bm).then(function () {
           if (typing.parentNode) typing.parentNode.removeChild(typing);
           appendMsg(bm);
@@ -1815,6 +1865,17 @@
         saveMsg(m).then(function () { rows.push(m); renderMsgs(rows); });
       } else {
         renderMsgs(rows);
+      }
+      // v55: restore the open draft after a reload so a follow-up reply still
+      // corrects it instead of stacking a new draft
+      openDraft = null;
+      for (var ri = rows.length - 1; ri >= 0; ri--) {
+        var rm = rows[ri];
+        if (!rm || rm.who !== 'bot') continue;
+        if (rm.storyLines && rm.storyLines.length && !rm.done) {
+          openDraft = { say: '', lines: rm.storyLines.map(function (l) { return l.label; }) };
+        }
+        break;
       }
     });
     loadCtx().then(function (c) { updateFresh(c); }).catch(function () {});
@@ -1873,7 +1934,11 @@
     close: closeChat,
     // v47: kick off the guided "set up my numbers" conversation (used by the
     // empty-state buttons in the app shell)
-    startSetup: function () { send('Let’s set up my numbers'); }
+    startSetup: function () { send('Let’s set up my numbers'); },
+    // v55: the shared month snapshot + ctx loader — the Home "Coach's note"
+    // card (app.js) uses these instead of a second numbers computation
+    coachSnapshot: coachSnapshot,
+    ctx: loadCtx
   };
 
   if (typeof document !== 'undefined') {

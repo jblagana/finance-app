@@ -6,8 +6,9 @@
  *  - the rule engine stays the only writer; the coach produces chat text
  *  - open questions the rules can't answer go to the online coach, or to a
  *    "needs the online coach" card when it's off / offline / not configured
- *  - "Force online coach" (Settings) routes EVERY question to the online
- *    coach while enabled, with no local handling
+ *  - "Coach answers everything" (Settings, default ON — v55): while the coach
+ *    is available, EVERY question goes to the online coach first; the rule
+ *    engine stays the offline fallback and the only writer
  *  - all remote settings persist in this device's localStorage; a BYO key is
  *    sent only to its own provider
  */
@@ -20,7 +21,7 @@
   // --- the online coach: a Cloudflare Worker URL, or bring-your-own key ----
   var REMOTE_KEY = 'fin.ai.remote.v1';
   var REMOTE_URL_KEY = 'fin.ai.remote.url.v1';
-  var FORCE_KEY = 'fin.ai.forceonline.v1'; // '1' = force EVERY question online
+  var FORCE_KEY = 'fin.ai.forceonline.v1'; // v55: "Coach answers everything" — ON unless explicitly '0'
   var lastSource = 'remote';        // always 'remote' — the coach is online-only
   var remoteFailAt = 0;             // circuit breaker: skip remote right after a failure
   var REMOTE_COOL_MS = 30000;
@@ -50,12 +51,13 @@
   }
   function workerConfigured() { var u = remoteUrl(); return !!u && /^https:\/\//i.test(u); }
 
-  // v49: force the online coach. When on, EVERY question — even the ones the
-  // rule engine would normally handle — is sent to the online coach, with no
-  // local handling while enabled. Persisted like the other remote settings.
-  function forceOnline() { try { return localStorage.getItem(FORCE_KEY) === '1'; } catch (e) { return false; } }
+  // v55: "Coach answers everything" — DEFAULT ON. While the online coach is
+  // available, EVERY question goes to it first (the rule engine stays the
+  // offline fallback and the only writer). Only an explicit '0' turns it off;
+  // the value is always written so a cleared key can't flip the default.
+  function forceOnline() { try { return localStorage.getItem(FORCE_KEY) !== '0'; } catch (e) { return true; } }
   function setForceOnline(v) {
-    try { if (v) localStorage.setItem(FORCE_KEY, '1'); else localStorage.removeItem(FORCE_KEY); } catch (e) {}
+    try { localStorage.setItem(FORCE_KEY, v ? '1' : '0'); } catch (e) {}
     refreshRemoteNote();
   }
 
@@ -100,7 +102,7 @@
       fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ messages: messages, max_tokens: Math.min(96, (opts && opts.maxNew) || 48) })
+        body: JSON.stringify({ messages: messages, max_tokens: Math.min(512, (opts && opts.maxNew) || 256) })
       }).then(function (res) {
         if (!res || !res.ok) { noteRemote(false); finish(reject, new Error('remote coach error ' + (res ? res.status : 'net'))); return; }
         return res.json().then(function (data) {
@@ -128,7 +130,7 @@
       fetch(base + '/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + key },
-        body: JSON.stringify({ model: byoModel() || GROQ_MODEL, messages: messages, max_tokens: Math.min(96, (opts && opts.maxNew) || 48), temperature: 0.2 })
+        body: JSON.stringify({ model: byoModel() || GROQ_MODEL, messages: messages, max_tokens: Math.min(512, (opts && opts.maxNew) || 256), temperature: 0.2 })
       }).then(function (res) {
         if (!res || !res.ok) { noteRemote(false); finish(reject, new Error('coach error ' + (res ? res.status : 'net'))); return; }
         return res.json().then(function (data) {
@@ -169,6 +171,18 @@
     return remoteGenerate(messages, opts, onToken);
   }
 
+  // v55: the read-only "Coach's note" for the Home Overview card. The app sends
+  // the locally-computed snapshot (chat.js coachSnapshot) and gets back a short
+  // plain paragraph. Same availability rules as chat; it never writes anything.
+  function note(snapshotText, opts, onToken) {
+    if (!remoteAvailable()) return Promise.reject(new Error('coach unavailable'));
+    var pr = [
+      { role: 'system', content: 'You are Fin.AI, a personal money coach. Below are the user\'s current numbers, computed on their phone. Write ONE short, warm, plain note (2-3 sentences, under 50 words) about their money right now: what looks healthy, what needs attention, and one concrete next step. Use only the numbers given. No questions, no lists, no markdown, no emojis, no numbers that are not in the list.' },
+      { role: 'user', content: String(snapshotText || '').slice(0, 3300) }
+    ];
+    return remoteGenerate(pr, { maxNew: 128 }, onToken);
+  }
+
   function testRemote() {
     var note = byId('aiRemoteNote');
     function show(msg, ok) { if (note) { note.textContent = msg; note.style.color = ok === null ? '' : (ok ? 'var(--ok)' : 'var(--bad)'); } }
@@ -203,8 +217,8 @@
     if (rn) {
       rn.style.color = '';
       rn.textContent = remoteEnabled()
-        ? 'On — when online, open questions go to the online coach via ' + backend + '.'
-        : 'Off — open questions wait for the online coach (commands the rules handle still work).';
+        ? 'On — the coach answers from your numbers via ' + backend + ' (online only).'
+        : 'Off — the on-device rule engine answers. Connect a Worker URL or your own key below for the online coach.';
     }
     refreshLed();
   }
@@ -264,7 +278,8 @@
     byoModel: byoModel,
     setByoModel: setByoModel,
     byoConfigured: byoConfigured,
-    testRemote: testRemote
+    testRemote: testRemote,
+    note: note
   };
 
   if (typeof document !== 'undefined') {

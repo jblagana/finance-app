@@ -75,6 +75,10 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--in
 /* v23: the home coach card no longer carries a colored vertical left bar */
 .coach-h{font-size:15px;font-weight:700;margin:0 0 4px}
 .coach-s{color:var(--mut);font-size:13px;margin:0}
+.coachnote-h{font-size:15px;font-weight:700;margin:0 0 6px}
+.coachnote-r{float:right;margin-top:-2px;border:0;background:none;color:var(--mut);font-size:15px;line-height:1;cursor:pointer;padding:2px 4px}
+.coachnote-r:active{color:var(--ink)}
+.coachnote-t{font-size:14px;line-height:1.45;margin:0;color:var(--ink)}
 input:focus,select:focus{outline:none;border-color:var(--acc)}
 select{appearance:none;-webkit-appearance:none;
 background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2393a1bd' viewBox='0 0 16 16'><path d='M8 11L3 6h10z'/></svg>");
@@ -395,6 +399,14 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
       <div class="spark" id="sparkBox"></div>
     </section>
 
+    <section id="coachNote" class="card coachnote" style="display:none">
+      <div class="coachnote-h">Coach’s note
+        <button type="button" id="coachNoteRefresh" class="coachnote-r" title="Ask the coach again" aria-label="Refresh coach’s note">↻</button>
+      </div>
+      <p class="coachnote-t" id="coachNoteBody"></p>
+      <p class="note" id="coachNoteSub" style="margin:6px 0 0"></p>
+    </section>
+
     <section id="coach" class="card coach" style="display:none">
       <p class="coach-h" id="coachHead"></p>
       <p class="coach-s" id="coachSub"></p>
@@ -623,7 +635,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
       </label>
       <label style="display:flex;align-items:center;gap:10px;margin:8px 0 4px;cursor:pointer">
         <input type="checkbox" id="aiForceOnline" style="width:auto">
-        <span style="font-size:14px;font-weight:600">Force online coach — send every question online (no local handling)</span>
+        <span style="font-size:14px;font-weight:600">Coach answers everything — every question goes to the online coach while it’s available (the rule engine stays the offline fallback and the only writer)</span>
       </label>
       <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
         <input type="url" id="aiRemoteUrl" inputmode="url" placeholder="https://your-worker.your-subdomain.workers.dev"
