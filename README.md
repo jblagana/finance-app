@@ -22,8 +22,8 @@ with one-tap undo — the rule engine stays the only writer.
 - **Ledger** — add expense (Amount — plain number or a quick sum like
   300-125+10 with a live = total; Category — the options are the monthly
   budgets from Your numbers, Unsorted by default; no budgets yet → Unsorted
-  only — then Paid with beside Date — Cash by default, plus the card/cash
-  accounts from Your numbers — plus a note) and the full
+  only — then Paid with beside Date — Cash by default, plus the card/debit
+  accounts from Your numbers as bare names — plus a note) and the full
   transaction list with a category filter (All / Unsorted / per category).
   Entries overlay the base numbers live; deletes confirm first, and the last
   add/delete is undoable from the toast.
@@ -58,7 +58,7 @@ add/list/remove plans, urgent-expense advice.
   ("the gym one" → *Gym membership*); when a detail is missing the coach asks,
   so a bare follow-up ("24k") completes the draft.
 - **First-time setup** — with no numbers yet, the coach walks you through them
-  step by step (cash → cards → salary → debts → budgets → goals → one-offs)
+  step by step (debit → cards → salary → debts → budgets → goals → one-offs)
   using the same confirm/undo cards; also startable from the Home empty-state
   ("Set up with the coach"). A green/grey **availability LED** in the chat
   header shows when the online coach is reachable.

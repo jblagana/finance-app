@@ -364,7 +364,7 @@
     });
     if (target > 0) b.card_util_target = r2(target);
     ((s.cash && s.cash.accounts) || []).forEach(function (a) {
-      b.accounts.push({ name: a.name, kind: 'cash', value: Number(a.value) || 0, limit: 0, note: '' });
+      b.accounts.push({ name: a.name, kind: 'debit', value: Number(a.value) || 0, limit: 0, note: '' }); // v65
     });
     var ob = s.obligations || {};
     var month = String(s.month || '');
@@ -409,7 +409,7 @@
 
   // ---------- local math (ported 1:1 from google/Code.gs — the sheet is no longer in the loop) ----------
   function baseCashTotal(b) {
-    return r2((b.accounts || []).filter(function (a) { return a.kind === 'cash'; })
+    return r2((b.accounts || []).filter(function (a) { return a.kind === 'debit'; }) // v65
       .reduce(function (s, a) { return s + (Number(a.value) || 0); }, 0));
   }
   function baseCardTotal(b) {
@@ -512,7 +512,7 @@
       var d = pp.per[name];
       cards.push({ name: name, balance: d.balance, limit: d.limit, util_pct: d.util_pct, prepay: d.prepay });
     });
-    var cashAccounts = (b.accounts || []).filter(function (a) { return a.kind === 'cash'; })
+    var cashAccounts = (b.accounts || []).filter(function (a) { return a.kind === 'debit'; }) // v65
       .map(function (a) { return { name: a.name, value: Number(a.value) || 0 }; });
     var ovM = (b.budget_overrides || {})[month] || {};
     var budget = {}, bkeys = {};
@@ -593,9 +593,26 @@
   function persistSnapshot() {
     return idbPut(STORE_META, { key: 'snapshot', value: state.snapshot, at: (state.base && state.base.edited) || null }).catch(function () {});
   }
+  // v65: the account kind 'cash' is now 'debit'. A one-time, idempotent rewrite
+  // applied at every data-in path (IDB load, import, every save) so data stored
+  // before v65 never shows the old kind — and detail keys "cash:Name" follow
+  // their account to "debit:Name". The boot path re-persists state.base right
+  // after loading, so it lands in IndexedDB on the next save.
+  function migrateBaseKinds(b) {
+    if (!b) return b;
+    (b.accounts || []).forEach(function (a) { if (a.kind === 'cash') a.kind = 'debit'; });
+    var d = b.details;
+    if (d) Object.keys(d).forEach(function (k) {
+      if (k.indexOf('cash:') === 0) {
+        var nk = 'debit:' + k.slice(5);
+        if (!d[nk]) { d[nk] = d[k]; delete d[k]; }
+      }
+    });
+    return b;
+  }
   function saveBase(b) {
     b.edited = new Date().toISOString();
-    state.base = b;
+    state.base = migrateBaseKinds(b); // v65
     refreshLocalSnapshot();
     return Promise.all([
       idbPut(STORE_META, { key: 'base', value: b }).catch(function () {}),
@@ -643,7 +660,10 @@
       b.debts[name].payments[month] = Number(ch.amount) || 0;
     } else if (ch.type === 'account') {
       if (!name) throw new Error('account needs a name');
-      var kind = ['cash', 'card', 'debt', 'loan'].indexOf(ch.kind) >= 0 ? ch.kind : 'cash';
+      // v65: 'cash' kind renamed to 'debit' — a legacy 'cash' is still
+      // accepted and normalized.
+      var kind = ['debit', 'cash', 'card', 'debt', 'loan'].indexOf(ch.kind) >= 0 ? ch.kind : 'debit';
+      if (kind === 'cash') kind = 'debit';
       var hit = null;
       (b.accounts || []).forEach(function (a) { if (a.name === name && a.kind === kind) hit = a; });
       if (hit) {
@@ -655,10 +675,13 @@
     } else if (ch.type === 'field') {
       // v56: a custom detail on an existing row — base.details side-map keyed
       // "kind:name", so no per-entity schema change (budgets stay a flat map).
-      var fEnt = { cash: 1, card: 1, debt: 1, loan: 1, budget: 1 }[ch.entity];
+      // v65: fEnt is the entity string (mirrors chat.js + the parser test);
+      // 'cash' renamed 'debit', a legacy 'cash' normalized.
+      var fEnt = ['cash', 'debit', 'card', 'debt', 'loan', 'budget'].indexOf(ch.entity) >= 0 ? ch.entity : null;
       if (!fEnt || !name || !ch.key) throw new Error('field change needs entity, name and key');
+      if (fEnt === 'cash') fEnt = 'debit';
       b.details = b.details || {};
-      var dk = ch.entity + ':' + name;
+      var dk = fEnt + ':' + name;
       if (ch.value === null) {
         if (b.details[dk]) {
           delete b.details[dk][ch.key];
@@ -1016,7 +1039,7 @@
   }
   function accRow(a) {
     a = a || {};
-    var kinds = ['cash', 'card', 'debt', 'loan'];
+    var kinds = ['debit', 'card', 'debt', 'loan']; // v65: 'cash' renamed to 'debit'
     return brow('<input class="grow" data-r="name" value="' + esc(a.name || '') + '" autocomplete="off">' +
       '<select data-r="kind">' + kinds.map(function (k) {
         return '<option value="' + k + '"' + (a.kind === k ? ' selected' : '') + '>' + k + '</option>';
@@ -1065,7 +1088,7 @@
     h += bsec('Salary overrides') + '<div id="rowsSal">' + salRows + '</div>' +
       '<button type="button" class="addrow" data-add="sal">+ override month</button>';
     var accRows = (b.accounts || []).map(accRow).join('');
-    h += bsec('Accounts (cash, cards, debts, loans)') + '<div id="rowsAcc">' + accRows + '</div>' +
+    h += bsec('Accounts (debit, cards, debts, loans)') + '<div id="rowsAcc">' + accRows + '</div>' +
       '<button type="button" class="addrow" data-add="acc">+ account</button>';
     var budRows = '';
     Object.keys(b.budgets || {}).forEach(function (k) {
@@ -1140,7 +1163,7 @@
       var ni = row.querySelector('[data-r="name"]'); var ki = row.querySelector('[data-r="kind"]');
       var vi = row.querySelector('[data-r="value"]'); var li = row.querySelector('[data-r="limit"]');
       var name = ni ? ni.value.trim() : '';
-      var kind = ki ? ki.value : 'cash';
+      var kind = ki ? ki.value : 'debit'; // v65
       var value = numVal(vi);
       if (!name && !value) return;
       b.accounts.push({ name: name || '(unnamed)', kind: kind, value: value, limit: kind === 'card' ? numVal(li) : 0, note: '' });
@@ -1957,22 +1980,23 @@
     if (el) el.style.display = (state.base && !baseIsEmpty(state.base)) ? 'none' : '';
   }
   // v64: same treatment as the v63 categories — the Paid-with options come
-  // from "Your numbers" (the card + cash accounts). A plain Cash default is
+  // from "Your numbers" (the card + debit accounts). A plain Cash default is
   // always present and pre-selected; no hardcoded account list, so an empty
   // base shows Cash only. Re-seeds on base change via the snap render list.
+  // v65: option labels are the bare account names (no kind suffix).
   function seedAccounts() {
     var sel = byId('f_account');
     if (!sel) return;
     var b = state.base;
     var accounts = (b && b.accounts || [])
-      .filter(function (a) { return a.kind === 'card' || a.kind === 'cash'; })
-      .map(function (a) { return { name: a.name, type: a.kind === 'card' ? 'card' : 'cash' }; });
+      .filter(function (a) { return a.kind === 'card' || a.kind === 'debit'; })
+      .map(function (a) { return { name: a.name, type: a.kind === 'card' ? 'card' : 'debit' }; });
     var prev = sel.value;
     var html = '<option value="CASH::Cash" selected>Cash</option>';
     accounts.forEach(function (a) {
-      if (a.type === 'cash' && a.name === 'Cash') return; // the default option is already it
+      if (a.type === 'debit' && a.name === 'Cash') return; // the default option is already it
       var v = (a.type === 'card' ? 'CARD' : 'CASH') + '::' + a.name;
-      html += '<option value="' + esc(v) + '">' + esc(a.name) + (a.type === 'card' ? ' (card)' : ' (cash)') + '</option>';
+      html += '<option value="' + esc(v) + '">' + esc(a.name) + '</option>';
     });
     sel.innerHTML = html;
     if (prev) sel.value = prev;
@@ -2416,7 +2440,7 @@
         if (data.base && (data.base.accounts || data.base.salary)) {
           Object.keys(nb).forEach(function (k) { if (data.base[k] !== undefined) nb[k] = data.base[k]; });
           nb.details = sanitizeDetails(nb.details); // v56
-          state.base = nb;
+          state.base = migrateBaseKinds(nb); // v65
         }
         var saves = [];
         state.txns.forEach(function (t) { saves.push(idbDel(STORE_TX, t.id)); });
@@ -2465,7 +2489,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 64, live: new Date(2026, 8, 10, 23, 55) };
+  var SHELL_RELEASE = { v: 65, live: new Date(2026, 8, 11, 0, 30) };
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2793,7 +2817,7 @@
       state.plans = res[2] || [];
       var cachedSnap = null, hasAdj = false;
       (res[1] || []).forEach(function (m) {
-        if (m.key === 'base') { state.base = m.value; }
+        if (m.key === 'base') { state.base = migrateBaseKinds(m.value); } // v65
         else if (m.key === 'snapshot') { cachedSnap = m.value; }
         else if (m.key === 'adj') { state.adj = m.value; hasAdj = true; }
         else if (m.key === 'adjSig') { state.adjSig = m.value || ''; }

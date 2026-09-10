@@ -313,7 +313,7 @@
     var e = ctx.eff;
     var list = [];
     (e.cards || []).forEach(function (c) { list.push({ name: c.name, kind: 'card', balance: c.balance, limit: c.limit }); });
-    (e.cash.accounts || []).forEach(function (a) { list.push({ name: a.name, kind: 'cash', balance: a.value, limit: null }); });
+    (e.cash.accounts || []).forEach(function (a) { list.push({ name: a.name, kind: 'debit', balance: a.value, limit: null }); }); // v65
     var t = ' ' + String(text || '') + ' ';
     var exact = null, words = [];
     for (var i = 0; i < list.length; i++) {
@@ -372,7 +372,7 @@
   function biggestCash(ctx) {
     var best = null;
     (ctx.eff.cash.accounts || []).forEach(function (a) { if (!best || a.value > best.value) best = a; });
-    return best ? { name: best.name, kind: 'cash' } : null;
+    return best ? { name: best.name, kind: 'debit' } : null; // v65
   }
   function extractWhat(text, am) {
     var t = String(text || '');
@@ -784,7 +784,7 @@
     if (!A || A <= 0) {
       return { html: block('Log an expense', line('How much, paid with what?'), 'e.g. “log expense 500 food maya” or “log 8,000 car repair cash”', 'good') + freshness(ctx) };
     }
-    var acct = p.exactAcct || p.cashAcct || p.cardAcct || biggestCash(ctx) || { name: '', kind: 'cash' };
+    var acct = p.exactAcct || p.cashAcct || p.cardAcct || biggestCash(ctx) || { name: '', kind: 'debit' }; // v65
     var cat = p.cat || '';
     var date = p.date || todayISO();
     var h = block('Log expense',
@@ -1367,7 +1367,7 @@
   var AI_REMOTE_SYSTEM = 'You are Fin.AI, a personal money coach. Answer only from the numbers given, in 1-3 short plain sentences (under 60 words), no lists, no markdown, no emojis. Never invent numbers. ' +
     'When the user tells you a change to their money (a new or updated number, or a story of several changes): if every detail you need is present (amount, month, which account), reply with ONLY the JSON draft of that change - it becomes a draft card with a Confirm button that the user presses, so do not ask "shall I record that?" and never wait for a yes. changes holds ONLY that change (a story means its lines, a single update means one line): never pad it with current balances, limits, or details of other accounts from the numbers list, they are already on the phone, and a card credit-limit update is a single field change (entity card, key credit_limit) on that card, not an account change. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes; the user\'s next short message (an amount, an account name, a corrected number) completes that same request - never drop it or start a different topic unless the user explicitly names one. ' +
     'If an UNCONFIRMED draft of changes is provided as context, the user\'s message is a reply to that draft: if they correct it, reply with the corrected JSON draft; if they confirm it (yes / record it), reply with the same JSON draft; if they switch topics, answer the new topic. ' +
-    'A draft is a JSON object and nothing else: {"say":"one short line presenting the draft (never past tense - the user still has to confirm)","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123} | {"type":"field","entity":"cash|card|debt|loan|budget","name":"N","key":"short_snake_key","value":123}. Use only names from the numbers list or a new name the user stated. Numbers in [brackets] on a row are custom details the user recorded (credit limit, due day, anything). When the user wants to record any other fact about an account or budget — a credit limit, APR, due day, penalty, anything — record it as a field change with a short snake_case key; value null removes a recorded detail; ask for the value if the user did not state it. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
+    'A draft is a JSON object and nothing else: {"say":"one short line presenting the draft (never past tense - the user still has to confirm)","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"debit|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123} | {"type":"field","entity":"debit|card|debt|loan|budget","name":"N","key":"short_snake_key","value":123}. Use only names from the numbers list or a new name the user stated. Numbers in [brackets] on a row are custom details the user recorded (credit limit, due day, anything). When the user wants to record any other fact about an account or budget — a credit limit, APR, due day, penalty, anything — record it as a field change with a short snake_case key; value null removes a recorded detail; ask for the value if the user did not state it. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
   function aiPrompt(t, ctx, remote, hist) {
     return [
       { role: 'system', content: AI_REMOTE_SYSTEM },
@@ -1380,7 +1380,7 @@
   // prompt: the coach walks the user through a generic checklist and drafts the
   // numbers as strict JSON — the same confirm/undo flow as a story. Setup
   // needs a remote path (Worker or bring-your-own).
-  var AI_SETUP_SYSTEM = 'You are Finance, a personal money coach helping a user set up their numbers for the first time. Their phone has NO numbers stored yet. Be warm and brief (under 35 words), no markdown, no emojis. Ask for 1-2 things at a time, in this order: (1) cash accounts, (2) cards (name, balance and limit), (3) monthly salary, (4) debts / monthly payments, (5) monthly budgets, (6) goals / sinking funds, (7) one-offs this month. Use ONLY the exact names and amounts the user gives — never invent or assume a number. When the user has given you specific numbers, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card","value":123,"limit":123} (limit only for cards) | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. If the user has not given a specific number yet, reply plain text asking for the next thing — never JSON.';
+  var AI_SETUP_SYSTEM = 'You are Finance, a personal money coach helping a user set up their numbers for the first time. Their phone has NO numbers stored yet. Be warm and brief (under 35 words), no markdown, no emojis. Ask for 1-2 things at a time, in this order: (1) debit accounts, (2) cards (name, balance and limit), (3) monthly salary, (4) debts / monthly payments, (5) monthly budgets, (6) goals / sinking funds, (7) one-offs this month. Use ONLY the exact names and amounts the user gives — never invent or assume a number. When the user has given you specific numbers, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"debit|card","value":123,"limit":123} (limit only for cards) | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. If the user has not given a specific number yet, reply plain text asking for the next thing — never JSON.';
   function setupPrompt(t, ctx, hist) {
     var L = [];
     L.push('Setup mode: the user is building their numbers from scratch on this phone. Nothing is stored yet.');
@@ -1422,7 +1422,7 @@
   // v46: parse + validate a remote reply that should be a change draft.
   // Returns null for plain-text answers (or broken JSON), so a bad model reply
   // degrades to a normal text answer instead of a broken card.
-  var COACH_KINDS = { cash: 1, card: 1, debt: 1, loan: 1 };
+  var COACH_KINDS = { debit: 1, cash: 1, card: 1, debt: 1, loan: 1 }; // v65: legacy 'cash' still parses (normalized below)
   // v56: what a draft row shows — money by default; raw text for a custom
   // detail, "(remove)" for a detail deletion, and the limit alongside the
   // balance when a card change carries both.
@@ -1434,7 +1434,7 @@
     return money(v);
   }
   function coachChangeLabel(ch) {
-    if (ch.type === 'account') return 'Account · ' + ch.name + (ch.kind && ch.kind !== 'cash' ? ' (' + ch.kind + ')' : '');
+    if (ch.type === 'account') return 'Account · ' + ch.name + (ch.kind && ch.kind !== 'debit' ? ' (' + ch.kind + ')' : ''); // v65
     if (ch.type === 'field') return 'Detail · ' + ch.name + ' — ' + ch.key;
     if (ch.type === 'salary_base') return 'Base salary';
     if (ch.type === 'salary') return 'Salary · ' + (ch.month || '');
@@ -1453,7 +1453,8 @@
     function nm(x) { var s = String(x || '').trim().slice(0, 40); return s || null; }
     switch (c.type) {
       case 'account': {
-        var name = nm(c.name), kind = COACH_KINDS[c.kind] ? c.kind : 'cash', value = num(c.value);
+        var name = nm(c.name), kind = COACH_KINDS[c.kind] ? c.kind : 'debit', value = num(c.value);
+        if (kind === 'cash') kind = 'debit'; // v65: legacy 'cash' -> 'debit'
         if (!name || value == null || value < 0) return null;
         var limit = (kind === 'card') ? num(c.limit) : null;
         return (limit != null && limit > 0)
@@ -1494,9 +1495,12 @@
       case 'field': {
         // v56: grow the data table — a custom detail on an existing row.
         // The coach picks the key; the app keeps it to a safe shape.
-        var fEnt = { cash: 1, card: 1, debt: 1, loan: 1, budget: 1 }[c.entity];
+        // v65: fEnt is the entity STRING (the old map-of-1s made the found-
+        // check below impossible); 'cash' renamed 'debit', legacy normalized.
+        var fEnt = ['cash', 'debit', 'card', 'debt', 'loan', 'budget'].indexOf(c.entity) >= 0 ? c.entity : null;
         var fName = nm(c.name);
         if (!fEnt || !fName) return null;
+        if (fEnt === 'cash') fEnt = 'debit';
         var fKey = String(c.key || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24);
         if (!fKey) return null;
         var fResv = ['name', 'kind', 'value', 'limit', 'note', 'amount', 'monthly', 'balance', 'goal', 'funded', 'deadline', 'month', 'id'];
@@ -1598,7 +1602,7 @@
       what: extractWhat(amtText, am),
       exactAcct: fa.exact,
       cardAcct: fa.exact && fa.exact.kind === 'card' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'card'; })[0] || null),
-      cashAcct: fa.exact && fa.exact.kind === 'cash' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'cash'; })[0] || null)
+      cashAcct: fa.exact && fa.exact.kind === 'debit' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'debit'; })[0] || null) // v65
     };
     // v38: a pending "One number short" ask is completed by the very next bare
     // number, named amount, or bare month — re-parsed as question + answer
