@@ -6,6 +6,45 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-10 ~13:05 — Quick-sum revert (operators on keyboard) + Home positioning fix
+Status: **in progress**
+Progress: 90% — ETA ~10 min (gate passed; commit + push left)
+
+### Instruction (verbatim)
+> -revert back the quicksum, i never wanted it gone. my problem was that when i type in the phone, i cant do quicksum because the keyboard that appears is numeric so there are no operators. now make the keyboard add operators.
+> -see img, positioning is awkward
+
+### Interpretation (agent — user may edit this section)
+- Quick-sum is **reverted, not removed**: my v53 cut was based on a
+  misreading — the user wants it back. The real problem was the **keyboard**:
+  the amount inputs had `inputmode="decimal"` → phone shows a numeric-only
+  pad with no operators. Fix: drop the numeric inputmode so the full
+  keyboard (with operators) appears and quick-sum expressions can be typed.
+  Agent scope: add-sheet amount + owed-entry inputs (the plan amount has no
+  quick-sum button — tell me if you want the full keyboard there too) (user's answer: add the full keyboard there too.).
+- "See img, positioning is awkward" — user clarified: the greeting block sits
+  directly adjacent to the hero card. Fixed: `.greet` bottom padding 0 → 14px
+  (the `.card` has no top margin, so the date was touching the card border).
+- Restoring v52's evalExpr as-is exposed a precedence bug: v52's expr() added
+  factor() (a single signed number), not term(), so 10-2*3 evaluated to 8,
+  not 4. Restored with the fix (expr() → term()); all + - * / ( ) now honor
+  standard precedence.
+- Plan amount (p_amount): per the user's answer above, it gets the full
+  keyboard too — and now parses via the same evalExpr, so expressions work
+  there (label updated; the plan sheet has no live = hint, only on submit).
+- Verified, no changes needed: chat.js (v52 chat.js has no quick-sum text)
+  and check_owed.py (no quick-sum test cases — owedBal math only).
+- v54 shell bump + gate + push when done.
+
+### Subtasks
+- [x] Log the instruction
+- [x] Revert quick-sum from v52 (git `b156616`): evalExpr (+precedence fix), addAmtEq + live = hint, owed entry expr — app.js, index.html (chat.js / check_owed.py verified: nothing to revert)
+- [x] Full keyboard on the amount inputs (f_amount, oent-amt, p_amount — numeric inputmode / type=number dropped)
+- [x] Home positioning fix (.greet 14px bottom padding)
+- [x] v54 bump: sw.js, SHELL_RELEASE, check_site.py (quick-sum checks back + keyboard check), READMEs
+- [x] Gate: all checks passed (check_site.py + check_owed.py)
+- [ ] Commit + push
+
 ## 2026-09-10 ~12:45 — Instruction log: verbatim + interpretation + status/percent/ETA
 Status: **done** (pushed in this commit; hash = top of `git log`)
 Progress: 100% — ETA was "minutes" (only commit + push left)

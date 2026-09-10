@@ -17,12 +17,14 @@ with one-tap undo — the rule engine stays the only writer.
   attention card, and insights (category donut, budget pace).
 - **Money** — live summary (liquid cash, free, cards owed, prepay), the month's
   Obligations and Sinking funds, the 6-month projection, and upcoming plans.
-- **Ledger** — add expense (Amount, optional Category — a blank one saves and
+- **Ledger** — add expense (Amount — plain number or a quick sum like
+  300-125+10 with a live = total; optional Category — a blank one saves and
   shows as Unsorted — then Card / cash beside Date, plus a note) and the full
   transaction list with a category filter (All / Unsorted / per category).
   Entries overlay the base numbers live; deletes confirm first, and the last
   add/delete is undoable from the toast.
-- **Owed** — people and entries with a live = total.
+- **Owed** — people and entries with a live = total; amounts take plain
+  numbers or quick sums.
 
 ## Coach (floating bot)
 Plain language: status, debts, one-offs, sinking funds, cash in any month,
@@ -63,13 +65,17 @@ and on-device — the LLM only drafts.
 
 ## Notes
 - **Free / unallocated** = liquid cash − this month's committed outflows.
+- **Quick sums** — amount inputs (Add sheet, Owed entries, plans) accept
+  expressions like 300-125+10 with a live = total (where shown); they keep
+  the phone's full keyboard (no numeric-only inputmode) so operators can
+  actually be typed.
 - The 6-month window derives from your **as of** date (first month = as-of
   month), not hardcoded; prepay day (default 14th) and budgets are editable in
   Settings.
 - **Backup** (Settings → Backup): Export JSON (everything) / Export CSV (ledger
   only) / Import JSON to restore.
 - Both footers show the shell version + when this build went live. Releases
-  bump the SW cache (`finances-pwa-v53`) and the `SHELL_RELEASE` stamp in
+  bump the SW cache (`finances-pwa-v54`) and the `SHELL_RELEASE` stamp in
   `app.js` together — the "New version ready" toast offers a one-tap reload.
   If the app ever looks stale: open the Pages URL once in Safari, then
   relaunch the home-screen icon.

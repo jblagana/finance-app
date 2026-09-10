@@ -142,6 +142,67 @@
     lab.className = 'dlabel';
   }
   function r2(x) { return Math.round((Number(x) || 0) * 100) / 100; }
+  // Safe arithmetic for "quick sums" (Add sheet + Owed): 300-125+10 -> 185.
+  // Hand-rolled recursive descent over numbers and + - * / ( ) — no eval,
+  // no Function. Accepts x/× for multiply, ÷ for divide, −/–/— for minus.
+  // Returns the result rounded to 2 decimals, or null when the input is not
+  // a valid expression.
+  function evalExpr(s) {
+    var t = String(s == null ? '' : s)
+      .replace(/[\u00d7xX]/g, '*').replace(/\u00f7/g, '/')
+      .replace(/[\u2212\u2013\u2014]/g, '-');
+    t = t.replace(/\s+/g, ' ');
+    if (!t || !/^[0-9.+\-*/() ]+$/.test(t)) return null;
+    var i = 0;
+    function ws() { while (i < t.length && t.charAt(i) === ' ') i++; }
+    function peek() { ws(); return t.charAt(i); }
+    function num() {
+      var start = i, dots = 0;
+      while (i < t.length && /[0-9.]/.test(t.charAt(i))) {
+        if (t.charAt(i) === '.') dots++;
+        i++;
+      }
+      if (start === i || dots > 1) return NaN;
+      return parseFloat(t.slice(start, i));
+    }
+    function factor() {
+      var c = peek();
+      if (c === '+') { i++; return factor(); }
+      if (c === '-') { i++; return -factor(); }
+      if (c === '(') {
+        i++;
+        var v = expr();
+        ws();
+        if (t.charAt(i) !== ')') return NaN;
+        i++;
+        return v;
+      }
+      return num();
+    }
+    function term() {
+      var v = factor();
+      for (;;) {
+        var c = peek();
+        if (c === '*') { i++; v = v * factor(); }
+        else if (c === '/') { i++; v = v / factor(); }
+        else return v;
+      }
+    }
+    function expr() {
+      var v = term();
+      for (;;) {
+        var c = peek();
+        if (c === '+') { i++; v = v + term(); }
+        else if (c === '-') { i++; v = v - term(); }
+        else return v;
+      }
+    }
+    var v = expr();
+    if (!isFinite(v)) return null;
+    ws();
+    if (i !== t.length) return null;
+    return r2(v);
+  }
   function monthLabel(m) {
     var p = String(m || '').split('-');
     if (p.length === 2 && /^\d{4}$/.test(p[0]) && /^\d{2}$/.test(p[1])) {
@@ -1889,10 +1950,22 @@
       });
     });
   }
+  // v23: quick-sums in the Add sheet (the prepay path) - live = total hint
+  function addAmtEq(input) {
+    var eq = byId('amtEq'); if (!eq) return;
+    var raw = String(input.value || '').trim();
+    if (!raw) { eq.style.display = 'none'; eq.className = 'amtEq'; return; }
+    var v = evalExpr(raw);
+    eq.style.display = '';
+    if (v === null) { eq.textContent = 'plain number, or a quick sum like 300-125+10'; eq.className = 'amtEq bad'; }
+    else if (v <= 0) { eq.textContent = '= ' + money(v) + ' · must be more than 0'; eq.className = 'amtEq bad'; }
+    else { eq.textContent = '= ' + money(v); eq.className = 'amtEq'; }
+  }
   function updateChargeHint() {
     var el = byId('chargeHint'); if (!el) return;
     var amtEl = byId('f_amount');
-    var amt = amtEl ? parseFloat(amtEl.value) : NaN;
+    var amt = amtEl ? evalExpr(amtEl.value) : null;
+    if (amt === null) amt = NaN;
     var s = effectiveSnap();
     if (!s || !(amt > 0)) { el.style.display = 'none'; return; }
     var free = s.cash ? s.cash.free : 0;
@@ -1962,8 +2035,8 @@
       '<div class="oent-grid">' +
       '<div><label>Date</label><div class="dfield"><input type="date" class="oent-date">' +
       '<span class="dlabel empty" aria-hidden="true">Pick a date</span></div></div>' +
-      '<div><label>Amount (\u20b1)</label>' +
-      '<input type="text" inputmode="decimal" class="oent-amt" maxlength="40" autocomplete="off">' +
+      '<div><label>Amount (\u20b1) — number or quick sum</label>' +
+      '<input type="text" class="oent-amt" maxlength="40" autocomplete="off">' +
       '<p class="oent-eq" aria-live="polite"></p></div>' +
       '</div>' +
       '<label>What happened</label>' +
@@ -2075,9 +2148,9 @@
     if (!eq) return;
     var raw = String(input.value || '').trim();
     if (!raw) { eq.textContent = ''; eq.className = 'oent-eq'; return; }
-    var v = parseFloat(raw);
-    if (!isFinite(v)) {
-      eq.textContent = 'a plain number';
+    var v = evalExpr(raw);
+    if (v === null) {
+      eq.textContent = 'plain numbers, or quick sums like 300-125+10';
       eq.className = 'oent-eq bad';
     } else if (v <= 0) {
       eq.textContent = '= ' + money(v) + ' · must be more than 0';
@@ -2112,15 +2185,16 @@
       var pid = f.getAttribute('data-ow-for');
       var amtEl = f.querySelector('.oent-amt');
       var raw = String(amtEl.value || '').trim();
-      var amt = parseFloat(raw);
-      if (!(amt > 0)) {
-        alert('Enter an amount greater than 0.');
+      var amt = evalExpr(raw);
+      if (amt === null || !(amt > 0)) {
+        alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.');
         return;
       }
       var dirEl = f.querySelector('input[name="owdir"]:checked');
+      var expr = (raw !== String(r2(amt))) ? raw : null;
       addOwedEntry(pid, {
         d: f.querySelector('.oent-date').value || todayISO(),
-        amt: amt, dir: dirEl ? dirEl.value : 'ipf', expr: null,
+        amt: amt, dir: dirEl ? dirEl.value : 'ipf', expr: expr,
         note: (f.querySelector('.oent-note').value || '').trim()
       });
     });
@@ -2286,7 +2360,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 53, live: new Date(2026, 8, 10, 12, 12) };
+  var SHELL_RELEASE = { v: 54, live: new Date(2026, 8, 10, 13, 25) };
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2452,8 +2526,8 @@
       var sep = raw.indexOf('::');
       var type = raw.slice(0, sep), name = raw.slice(sep + 2);
       var amtRaw = String(byId('f_amount').value || '').trim();
-      var amount = parseFloat(amtRaw);
-      if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
+      var amount = evalExpr(amtRaw);
+      if (amount === null || !(amount > 0)) { alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.'); return; }
       var catVal = byId('f_category').value;
       var category = (catVal === CAT_CUSTOM ? byId('f_categoryCustom').value : catVal) || '';
       category = category.trim();
@@ -2482,7 +2556,8 @@
     if (pform) pform.onsubmit = function (e) {
       e.preventDefault();
       var name = (byId('p_name').value || '').trim();
-      var amount = parseFloat(byId('p_amount').value);
+      var amount = evalExpr(byId('p_amount').value);
+      if (amount === null) amount = NaN;
       if (!name) { alert('Give the plan a name.'); return; }
       if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
       var repEl = byId('p_repeat');
@@ -2505,7 +2580,7 @@
       render();
     };
     var amtEl = byId('f_amount');
-    if (amtEl) amtEl.addEventListener('input', updateChargeHint);
+    if (amtEl) amtEl.addEventListener('input', function () { addAmtEq(amtEl); updateChargeHint(); });
     var catEl = byId('f_category');
     if (catEl) catEl.onchange = function () {
       var c = byId('f_categoryCustom');

@@ -218,6 +218,9 @@ button.gear:active{border-color:var(--acc);color:var(--acc)}
 .oent-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .oent-eq{margin:6px 0 0;font-size:12.5px;font-weight:600;color:var(--acc);min-height:16px}
 .oent-eq.bad{color:var(--warn)}
+/* v23: quick-sum hint under the Add-sheet amount (the prepay path) */
+.amtEq{margin:8px 0 0;font-size:12.5px;font-weight:600;color:var(--acc)}
+.amtEq.bad{color:var(--warn)}
 /* v53: ledger category filter bar (All / Unsorted / per category) */
 .ml-fbar{display:flex;align-items:center;gap:10px;margin:0 0 10px}
 .ml-fbar select{flex:0 1 180px;width:auto;font-size:12.5px;padding:7px 30px 7px 10px;border-radius:9px}
@@ -262,7 +265,7 @@ padding:7px 14px;font-size:12.5px}
 .hero-sub{color:var(--mut);font-size:12.5px;margin-top:6px;line-height:1.5}
 .hero-sub b{color:var(--ink)}
 /* ---- v51: home welcome (greeting + date) ---- */
-.greet{padding:12px 18px 0}
+.greet{padding:12px 18px 14px}
 .greet-h{margin:0;font-size:18px;font-weight:800;letter-spacing:.2px}
 .greet-d{margin:3px 0 0;color:var(--mut);font-size:12.5px}
 .spark{margin-top:12px}
@@ -427,8 +430,8 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
       <input id="p_name">
       <div class="row">
         <div>
-          <label for="p_amount">Amount (₱)</label>
-          <input id="p_amount" type="number" inputmode="decimal" min="0" step="0.01">
+          <label for="p_amount">Amount (₱) — number or quick sum</label>
+          <input id="p_amount" type="text">
         </div>
         <div>
           <label for="p_date">Date</label>
@@ -554,7 +557,8 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
   <div class="sheet-b">
     <form id="addForm" autocomplete="off">
       <label for="f_amount" style="margin-top:6px">Amount (₱)</label>
-      <input id="f_amount" type="text" inputmode="decimal" placeholder="0.00">
+      <input id="f_amount" type="text" placeholder="0.00, or a quick sum like 300-125+10">
+      <p id="amtEq" class="amtEq" style="display:none"></p>
       <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
       <label for="f_category">Category</label>
       <select id="f_category"><option value="" disabled selected>Pick a category…</option></select>
