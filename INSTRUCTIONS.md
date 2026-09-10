@@ -6,6 +6,39 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-11 (night, after v66) — iPhone home-screen icon: can it render transparent? + enlarge the bot
+Status: done
+Progress: 100% — shipped as v67 (this commit) → origin/main
+
+### Instruction (verbatim)
+> before u do that, the web app icon appearing in my iphone is still the old cute green bot with white background. can the iphone render the transparent background of the cute bot as a webapp installed? if yes, enlarge the bot icon a little
+
+(Scale picked by the user from the options offered: "+14% (bot ~80% wide, my recommendation, 10% margins)".)
+
+### Interpretation (agent — user may edit this section)
+- Transparency answer: **No** — iOS renders home-screen icons (PWA or native) as opaque squircles; transparent PNG pixels are composited over white, so the bot can never float over the wallpaper. The app icons (`icon-192/512`) are opaque anyway with a baked-in `#eef3fb` background — that is the "white background" seen. Only `favicon.png` (browser tab) has a transparent background (d0028df), and there transparency works because the browser supplies the backdrop.
+- Staleness finding: iOS never refreshes an installed home-screen icon when the web app updates; the phone's icon may predate the repo's current one (last icon change in git = v51 branding commit 119a788). To see any new icon the user must long-press → Remove App → re-add from Safari. Numbers are safe: data lives in origin-keyed IndexedDB, not in the icon.
+- "Enlarge a little" calibration from repo history: v30 (ae07034) pushed the bot to 98% of the tile ("nearly fill the tile") and v31 (a5ff172) reverted to the current 70%. Chosen +14% → bot ≈ 80% wide / ~70% tall, margins ≈ 10% sides — inside the maskable 10–90% safe zone and clear of the iOS squircle corner clip.
+- Implementation (PIL, Lanczos, ×1.14 about the same optical center 50%/45.5%):
+  - `icon-512.png` — crop the bot region, scale, paste on a fresh `#eef3fb` canvas (new master)
+  - `icon-192.png` — re-exported from the new master (the `apple-touch-icon` iPhone uses)
+  - `icon-maskable-512.png` — same ×1.14 on its own art (54% → ~62% wide, deep in the safe zone)
+  - `favicon.png` — keeps the transparent background: its existing alpha IS the bot layer (eye-whites fully opaque in it), so crop the alpha layer, scale ×1.14, re-center on a transparent 192 canvas
+  - Filenames unchanged → no `index.html` / `manifest.webmanifest` edits.
+- v67 bump: sw.js `finances-pwa-v67` (the icons sit in the SW shell list), app.js `SHELL_RELEASE` v67, README release line.
+- Gate note: `check_site.py` / `test_chat_parser.py` / `verify_live.ps1` are not in this workspace (user's local env) — gates here are `node --check`, a geometry re-measure of the outputs, and a visual read-back of a new-vs-old preview.
+- Sequencing: parallel sessions shipped v65 (Paid-with bare names + stored kind cash→debit, `eb58175`) and v66 (re-stamp, `e1585c9`) while this work was in flight — this icon release therefore lands as **v67** on main; the previously planned Option B (rules-first routing) moves to v68 on its own branch.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Regenerate the 4 icons (×1.14 per file strategy above)
+- [x] Verify: geometry re-measure (icon-512 bot 79.9%w × 70.1%h, center 50.0/45.5 unchanged; maskable 62.1%w, no safe-zone breach; favicon keeps transparency) + visual read-back of new-vs-old preview
+- [x] v67 bump: sw.js cache + app.js SHELL_RELEASE + README version line (renumbered v65 → v66 → v67 as parallel releases landed)
+- [x] Gates: node --check clean (app.js, sw.js); PNG validity (correct dims, RGB/RGBA); md5 tmp==repo; git diff limited to the intended files
+- [x] Push to origin/main
+
+User action: on the iPhone, long-press the Fin.AI icon → Remove App (numbers are safe — they live in origin-keyed IndexedDB, not the icon) → open the app URL in Safari → Share → Add to Home Screen. The old icon can never update in place — iOS only fetches it at install time.
+
 ## 2026-09-11 (night, after v65) — footer stamp time = the moment right before push
 Status: done
 Progress: 100% — shipped as v66 (code `e1585c9`, log `9c9b22a` + final) → origin/main
