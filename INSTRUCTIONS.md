@@ -6,6 +6,25 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-10 ~19:05 — Process: catch interpretation edits + per-subtask log updates
+
+Status: **in progress**
+Progress: 70% — ETA ~5 min (AGENTS.md amended → commit + push)
+
+### Instruction (verbatim)
+> how can u prevent that oversight in my instructions edit in the future? also, i want u to update the instructions every subtask done
+
+### Interpretation (agent — user may edit this section)
+- Two asks: (1) a mechanism so a user edit to an Interpretation section can't be acted past again (the v56 slip: edited after I'd shipped, seen only when asked), (2) standing rule: update this log **on every subtask done**, not in a batch at the end.
+- Mechanism (agent's proposal — edit me): make the existing rules into mechanical checkpoints — re-read the current entry's Instruction + Interpretation (a) when starting work on it, (b) immediately before **every** log update, (c) again right before `git push` (the point of no return). Compare against the text the agent last wrote: any difference = user edit = the new instruction — stop, log it as its own entry quoting the edit verbatim, follow it. Per-subtask updates double as heartbeats: each one forces a re-read, which is exactly where an edit surfaces.
+- Where it lives: the workspace `AGENTS.md` → "Instruction log rule" (rules 2 & 3 tightened). They already said "re-read" / "keep current" — the v56 failure was compliance, not missing rules, so the fix is explicit checkpoints + a diff test.
+- Limit (agent): an edit made mid-run is only visible at the next checkpoint; the pre-push re-read is the last gate because push is what makes work visible to the user. An interruption (as happened) always beats the schedule.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Amend workspace AGENTS.md: rule 2 (re-read checkpoints incl. pre-push + diff test), rule 3 (per-subtask updates)
+- [ ] Commit + push, log done with hash
+
 ## 2026-09-10 ~18:20 — v56 follow-up (user edit): no hardcoded limit rule in the rule engine
 
 Status: **done**
