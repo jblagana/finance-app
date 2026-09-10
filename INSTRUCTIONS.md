@@ -8,8 +8,8 @@ commit is not done.
 
 ## 2026-09-10 ~18:20 — v56 follow-up (user edit): no hardcoded limit rule in the rule engine
 
-Status: **in progress**
-Progress: 10% — ETA ~20 min (remove hardcode → gates → v57 bump → push)
+Status: **done**
+Progress: 100% — completed 2026-09-10 ~18:50 — pushed as `8dd9214` → origin/main
 
 ### Instruction (verbatim)
 > (user edit appended to the ~17:35 entry's interpretation, bullet 4, after "(no freeform NL parsing)."):
@@ -24,12 +24,12 @@ Progress: 10% — ETA ~20 min (remove hardcode → gates → v57 bump → push)
 
 ### Subtasks
 - [x] Log the user edit verbatim (first action)
-- [ ] Remove the limit block from chat.js
-- [ ] check_site.py: flip the offline check into a no-hardcode guard
-- [ ] test_chat_parser.py: drop the offline-rule checks
-- [ ] README: drop the offline sentence from the v56 bullet
-- [ ] v57: sw cache + SHELL_RELEASE + README + check_site version
-- [ ] Gates → commit + push, log done with hash
+- [x] Remove the limit block from chat.js
+- [x] check_site.py: flip the offline check into a no-hardcode guard
+- [x] test_chat_parser.py: drop the offline-rule checks
+- [x] README: drop the offline sentence from the v56 bullet
+- [x] v57: sw cache + SHELL_RELEASE + README + check_site version
+- [x] Gates → commit + push, log done with hash — `8dd9214` (check_site.py "all checks passed" + parser tests "all parser checks passed"); README Rule-engine header line restored in the same commit
 
 ## 2026-09-10 ~17:35 — v56 scope revision: coach-extensible data table (custom "details" fields)
 
