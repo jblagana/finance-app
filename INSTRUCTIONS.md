@@ -6,6 +6,55 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-11 (night, after v64) — user edit: change the stored kind too ('cash' → 'debit', with migration)
+Status: in progress
+Progress: 25% — ETA ~00:45
+
+### Instruction (verbatim)
+> (user edit to the Interpretation of the v65 entry below — the inserted text, quoted verbatim in place:)
+> Whether the stored `kind` value also changes ('cash' → 'debit'**(yes, change too)**, with a migration of already-stored accounts) or only the visible label — settled after reading the code; the choice will be noted here.
+
+### Interpretation (agent — user may edit this section)
+- Label-only is void: the stored account kind changes 'cash' → 'debit' end to end.
+- Blast radius: app.js (accRow option values, baseCashTotal, baseMonthComponents, seedAccounts, readBaseForm default, Accounts section header) + chat.js (COACH_KINDS, coach draft label, AI setup/story prompts, account matcher) + a one-time migration of already-stored accounts (load / import / snapshot→base) + check_site.py + parser tests.
+- Stays as is: the `CASH::` f_account value prefix and the `cash_out` txn kind (they encode "paid with a non-card account", not the account kind); the static **Cash** default (`CASH::Cash`); the coach draft-label suffix logic, retargeted so a debit account shows no suffix, a card still shows "(card)".
+- **Latent bug found + fixed (v56 field path)**: `coachSanitizeChange`'s `field` case built `fEnt` from a map of `1`s, so `fEnt === 'budget'` was never true and the `a.kind === fEnt` found-check could never match — every AI-recorded detail (credit limits, due days, budget facts) was silently rejected, while the Python test mirror (string entity) passed. The rename touches this exact line, so `fEnt` becomes the entity string (mirroring the test), accepting `debit` + legacy `cash` (normalized to `debit`). Net effect: the v56 detail feature actually works now. Veto in this section if you want the old (broken) behavior kept.
+
+### Subtasks
+- [x] Log the user edit verbatim (first action)
+- [x] Comprehensive sweep of every 'cash' kind touch point (app.js, chat.js, tests) — full map in the implementation below
+- [ ] Implementation is owned by the v65 entry below — see its subtasks
+
+## 2026-09-10 (night, after v64) — Paid-with names drop "(card)"/"(cash)"; base type option cash → debit
+Status: in progress
+Progress: 90% — ETA ~01:00 (code pushed, log + live verify left)
+
+### Instruction (verbatim)
+> in 'paid with', remove the 'card' or'cash' in name, example: 'MariBank CC (card)' -> 'MariBank CC'
+> -in your numbers under accounts, in the options replace 'cash' -> 'debit'
+
+### Interpretation (agent — user may edit this section)
+- **Part 1 — Paid with**: the Add-sheet select renders each stored account as `Name (kind)`; drop the ` (card)` / ` (cash)` suffix so the option label is just the account name (e.g. "MariBank CC"). The static **Cash** default is already suffix-free — untouched.
+- **Part 2 — Your numbers → Accounts**: in the account-type select's options, the word "cash" becomes "debit". Whether the stored `kind` value also changes ('cash' → 'debit'(yes, change too), with a migration of already-stored accounts) or only the visible label — settled after reading the code; the choice will be noted here.
+- Shell change → **v65** bump: sw.js `finances-pwa-v65`, `SHELL_RELEASE` v65, check_site.py version asserts + updated checks, README, verify_live -Tag v65.
+- **Scope change**: the user edit logged in the entry above makes Part 2 a stored-value rename ('cash' → 'debit') **with a migration of already-stored accounts**, not a label swap — subtasks below updated accordingly.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Read the code: where the "(card)"/"(cash)" suffix is rendered + the base-editor type options (index.html, app.js; chat.js if account kinds reach the coach)
+- [x] Part 1: strip the kind suffix from Paid-with option labels (app.js seedAccounts)
+- [x] Part 2: stored kind 'cash' → 'debit' everywhere it is user data (accRow option values, baseCashTotal + baseMonthComponents filters, seedAccounts, readBaseForm default, Accounts section header)
+- [x] Migration: stored accounts kind 'cash' → 'debit', one-time, at every data-in path (IDB load / import / every saveBase — `migrateBaseKinds` also rewrites `cash:Name` detail keys to `debit:Name`; boot re-persists base so it lands in IndexedDB)
+- [x] chat.js: COACH_KINDS + draft label + AI prompts + account matcher → 'debit' (still accept a legacy 'cash' from AI replies, normalize to 'debit') + the fEnt string fix in the field sanitize
+- [x] test_chat_parser.py: SAMPLE_BASE GCash → debit, DET_ENTS + mirror normalization, new legacy-cash-entity case
+- [x] v65 bump: sw.js cache + app.js SHELL_RELEASE (live 2026-09-11 00:30)
+- [x] check_site.py: docstring + sw/SHELL asserts → v65, stale v64 filter flipped, new v65 section (5 checks)
+- [x] README: cache v64 → v65, "card/cash" → "card/debit … as bare names", setup order wording
+- [x] Gates: check_site.py "all checks passed" (incl. new v65 section — one assertion typo fixed in the check itself) + parser "all parser checks passed" (incl. new legacy-cash-entity case) + node --check clean (5 JS files)
+- [x] Push code commit — `eb58175` → origin/main
+- [ ] Push log commit
+- [ ] verify_live.ps1 -Tag v65
+
 ## 2026-09-10 (night, after v63) — user edit to the "paid with" entry's Interpretation
 Status: done
 Progress: 100% — completed with the v64 log push (code `0d5bc4e`, log `acc5e8a` + final) → origin/main
