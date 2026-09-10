@@ -8,8 +8,8 @@ commit is not done.
 
 ## 2026-09-10 ~19:05 — Process: catch interpretation edits + per-subtask log updates
 
-Status: **in progress**
-Progress: 70% — ETA ~5 min (AGENTS.md amended → commit + push)
+Status: **done**
+Progress: 100% — completed 2026-09-10 ~19:20 — pushed as `d42eeb0` → origin/main
 
 ### Instruction (verbatim)
 > how can u prevent that oversight in my instructions edit in the future? also, i want u to update the instructions every subtask done
@@ -23,7 +23,7 @@ Progress: 70% — ETA ~5 min (AGENTS.md amended → commit + push)
 ### Subtasks
 - [x] Log the instruction verbatim (first action)
 - [x] Amend workspace AGENTS.md: rule 2 (re-read checkpoints incl. pre-push + diff test), rule 3 (per-subtask updates)
-- [ ] Commit + push, log done with hash
+- [x] Commit + push, log done with hash — `d42eeb0` (AGENTS.md lives outside the repo; the commit carries the log entry)
 
 ## 2026-09-10 ~18:20 — v56 follow-up (user edit): no hardcoded limit rule in the rule engine
 
