@@ -6,6 +6,25 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-10 (evening) — v61 live check: is the pushed shell actually served on the Pages URL?
+
+Status: **done** — live site confirmed serving v61 (log commit pushed)
+Progress: 100% — done
+
+### Instruction (verbatim)
+> verify if live
+
+### Interpretation (agent — user may edit this section)
+- Follow-up to the v61 push (code `d459b0b`, log `a027971`/`7490583`, all on origin/main): verify the GitHub Pages site is serving the v61 shell — live `sw.js` must say `finances-pwa-v61` and live `app.js` must carry `SHELL_RELEASE = { v: 61` — so the phone can pick it up on reload.
+- Method: the repo-external helper `finances/verify_live.ps1` if that is the established path; otherwise fetch the Pages assets directly (sw.js + app.js) and grep for the markers.
+- Success = v61 markers on the live site. If it still serves v60, wait/retry (Pages propagation) and report — no code edits for this instruction.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Check the live site for the v61 markers — fetched live sw.js/app.js/chat.js from `https://jblagana.github.io/finance-app/`; marker pass: sw `finances-pwa-v61` True, app `v: 61` True, live chat.js has no `STATE:`/paraphrase-ask; first grep for "ONLY this JSON draft" was a wrong ad-hoc phrase (check_site asserts different canonical phrases) — settled by byte-diff: **sw.js, app.js and chat.js all IDENTICAL to the pushed local files** (CRLF/LF-normalized)
+- [x] Report the result, log done
+
+
 ## 2026-09-10 (evening) — v61: simplify the coach confirm flow (Option A) — draft the moment the change is clear; confirm by button
 
 Status: **done** — code `d459b0b`, log `a027971`, both on origin/main; phone re-test pending (user: reload → footer shows shell v61 → "update maribank cc limit to 70k" → expect immediate one-field credit_limit draft card → Confirm button)
