@@ -189,8 +189,11 @@ button.gear:active{border-color:var(--acc);color:var(--acc)}
 .bnote{color:var(--mut);font-size:12px;font-weight:600}
 .brow{display:flex;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--line)}
 .brow:first-of-type{border-top:0}
-.brow input,.brow select{padding:9px 10px;font-size:14px}
-.brow .grow{flex:1;min-width:0}
+/* v62: explicit flex shares per row — the global input{width:100%} made every sibling's
+   flex-basis 100% of the row, so the basis-0 name (.grow) absorbed none of the shrink
+   and collapsed to a 0px sliver (its text clipped invisible). Name gets double share. */
+.brow input,.brow select{padding:9px 10px;font-size:14px;flex:1 1 0;min-width:0}
+.brow .grow{flex:2 1 0;min-width:0}
 .brow .bnote{flex:0 0 auto}
 .brow .mini{flex:0 0 auto}
 .bblk{padding:8px 0;border-top:1px solid var(--line)}
