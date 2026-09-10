@@ -6,6 +6,30 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-11 (night, after v65) — footer stamp time = the moment right before push
+Status: in progress
+Progress: 75% — ETA ~3 min (code pushed; log push + live verify left)
+
+### Instruction (verbatim)
+> in the footer, make sure the date and time used is right before push, if push is confirmed possible
+
+### Interpretation (agent — user may edit this section)
+- **Process rule (all releases)**: `SHELL_RELEASE.live` is not set at edit time — it is set at the last possible moment, i.e. right before `git push`, once the push is confirmed possible (gates green, commit ready). The v65 stamp (00:30, edit time) predates the actual push (~00:55), so the live footer shows a wrong "went live" time.
+- **Applied now**: a re-stamp-only release **v66** — sw cache + stamp bumped, `live` set in the seconds before this fix's push; nothing else changes. If you only wanted the process rule (no v66 re-release), say so in this section.
+- The rule is also added to the workspace AGENTS.md Fin.AI PWA notes so future sessions follow it.
+- **Found mid-task**: after the v65 push, `check_site.py` had been rewritten (compact form, OK/FAIL output, negative version assertions) and the README reworded — the v66 bump was applied on top of the rewritten files, all their checks kept; the README's cache example was still `finances-pwa-v64` and is now v66.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] v66 bump: sw.js cache + app.js SHELL_RELEASE (v only; `live` set later, right before push)
+- [x] check_site.py (rewritten file, on top of it) + README: → v66
+- [x] AGENTS.md: process rule line in the Fin.AI PWA notes
+- [x] Gates: check_site.py "all checks passed" + node --check 5/5 OK
+- [x] Set SHELL_RELEASE.live to 2026-09-11 01:11 (fetched with Get-Date seconds before the commit)
+- [x] Push code commit — `e1585c9` → origin/main (re-stamp only: sw.js + app.js + README, 3 files / 3 lines)
+- [ ] Push log commit
+- [ ] verify_live.ps1 -Tag v66
+
 ## 2026-09-11 (night, after v64) — user edit: change the stored kind too ('cash' → 'debit', with migration)
 Status: done
 Progress: 100% — completed with v65 (code `eb58175`, log `1302fe6`) → origin/main
