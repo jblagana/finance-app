@@ -6,6 +6,70 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-10 (night, after v63) — user edit to the "paid with" entry's Interpretation
+Status: in progress
+Progress: 90% — logged + followed; becomes done with the next log push (no separate code work)
+
+### Instruction (verbatim)
+> the 'card/cash' i meant is at the 'add expense'
+
+### Interpretation (agent — user may edit this section)
+- User edit (a bullet added to the entry below's Interpretation while work
+  was in flight; refined once by the user — quoted as it stands now), read
+  as a clarification: the "card/cash" being renamed is the field in the
+  **Add expense** sheet — exactly where it was found (`f_account` in
+  `index.html`) and where the change is landing.
+- Plan impact: **none** — confirms the target; implementation continues as
+  scoped in the entry below.
+
+### Subtasks
+- [x] Log the user edit verbatim (its own entry)
+- [x] Confirm the Add-sheet `f_account` field is the one being changed
+
+## 2026-09-10 (night, after v63) — add-expense "paid with" label + Cash default
+Status: in progress
+Progress: 80% — code pushed (`0d5bc4e`); log push + live verify remain — ETA ~00:15
+
+### Instruction (verbatim)
+> do the same for the 'paid with' in add expense, change from 'card/cash' to 'paid with', which defaults at 'Cash'
+
+### Interpretation (agent — user may edit this section)
+- "do the same" = the v63 treatment for the Add sheet's card/cash select
+  (`f_account`):
+  1. **Label**: `Card / cash` → `Paid with` (index.html).
+  2. **Default**: a plain **Cash** option (value `CASH::Cash` → kind
+     `cash_out`, account `Cash`) that is always present and pre-selected —
+     the "Pick…" placeholder and the "Pick an account" alert go away; an
+     empty pick maps to Cash.
+  3. **Options from Your numbers only**: the base's card + cash accounts,
+     like v63's categories — the hardcoded `DEFAULT_ACCOUNTS` fallback is
+     deleted; empty base → Cash only.
+  4. **Re-seed on base change**: `seedAccounts` is already in the snap/ui
+     render lists — kept as is.
+- A base cash account literally named "Cash" collides with the default
+  option's value → deduped (the default option IS that account).
+- Ledger consistency: the coach already shows account-less cash as "Cash"
+  (`intentLog` fallback), so entries logged on the default store account
+  `Cash` / kind `cash_out` and read "Cash" in the ledger meta.
+- chat.js / parser: no change (the coach already matches base accounts).
+- v64 bump: sw.js `finances-pwa-v64`, `SHELL_RELEASE` v64, check_site.py
+  (three stale "Card / cash" / "no 'Paid with'" checks flipped, new v64
+  section, version asserts), finance-app README.
+- the 'card/cash' i meant is at the 'add expense'
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Read the "card/cash" field of the Add sheet (index.html, app.js, chat.js) + gates
+- [x] index.html: label "Paid with" + static Cash default option
+- [x] app.js: seedAccounts (Cash default, base accounts only, DEFAULT_ACCOUNTS gone, dedupe) + submit maps empty → CASH::Cash
+- [x] v64 bump: sw.js cache + app.js SHELL_RELEASE
+- [x] check_site.py: flip 3 stale checks + new v64 section + version asserts
+- [x] README: "Card / cash beside Date" → Paid with wording; cache v63 → v64
+- [x] Gates: check_site.py "all checks passed" (incl. new v64 section) + parser "all parser checks passed" + node --check clean (5 JS files)
+- [x] Push code commit — `0d5bc4e` → origin/main
+- [ ] Push log commit
+- [ ] verify_live.ps1 -Tag v64
+
 ## 2026-09-10 (night) — add-expense categories must come from "Your numbers"
 Status: done
 Progress: 100% — completed 2026-09-10 ~23:55
