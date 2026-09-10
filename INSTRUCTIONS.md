@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-11 (night, after v65) — footer stamp time = the moment right before push
-Status: in progress
-Progress: 75% — ETA ~3 min (code pushed; log push + live verify left)
+Status: done
+Progress: 100% — shipped as v66 (code `e1585c9`, log `9c9b22a` + final) → origin/main
 
 ### Instruction (verbatim)
 > in the footer, make sure the date and time used is right before push, if push is confirmed possible
@@ -27,8 +27,10 @@ Progress: 75% — ETA ~3 min (code pushed; log push + live verify left)
 - [x] Gates: check_site.py "all checks passed" + node --check 5/5 OK
 - [x] Set SHELL_RELEASE.live to 2026-09-11 01:11 (fetched with Get-Date seconds before the commit)
 - [x] Push code commit — `e1585c9` → origin/main (re-stamp only: sw.js + app.js + README, 3 files / 3 lines)
-- [ ] Push log commit
-- [ ] verify_live.ps1 -Tag v66
+- [x] Push log commit — `9c9b22a` → origin/main (final update in the next log push)
+- [x] verify_live.ps1 -Tag v66 — live: "sw cache v66: True" + live app.js `SHELL_RELEASE = { v: 66` → True (ps1's "index shell v66" line is legacy-False: the stamp renders at runtime from app.js, not from static index.html)
+
+User action: on the phone, reload → accept the "New version ready" SW update → footer should read **Fin.AI · shell v66 (Sep 11, 2026 | 1:11 AM)** — the time of this build's push, not of its editing. Everything else (Paid-with bare names, debit kind, migration) is unchanged from v65 — if you hadn't reloaded for v65 yet, this update delivers both at once.
 
 ## 2026-09-11 (night, after v64) — user edit: change the stored kind too ('cash' → 'debit', with migration)
 Status: done
