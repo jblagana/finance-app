@@ -8,8 +8,8 @@ commit is not done.
 
 ## 2026-09-10 (evening) — base screen: account/budget name fields all render empty ("why no detail names")
 
-Status: in progress
-Progress: 95% — ETA ~22:30
+Status: done
+Progress: 100% — completed 2026-09-10 ~22:55
 
 ### Instruction (verbatim)
 > why no detail names
@@ -30,8 +30,10 @@ Progress: 95% — ETA ~22:30
 - [x] v62 bump: sw.js cache, app.js SHELL_RELEASE (+live date), check_site.py assertions, README
 - [x] Gates: check_site.py "all checks passed" + parser "all parser checks passed" + node --check clean (5 JS files)
 - [x] Push code commit — `e1fc4d1` → origin/main (index.html CSS fix, sw.js v62, app.js stamp v62, README)
-- [ ] Push log commit
-- [ ] Verify live serves v62 (verify_live.ps1; Pages needs ~1 min)
+- [x] Push log commit — `a5152fc` → origin/main
+- [x] Verify live serves v62 — verify_live.ps1 -Tag v62: "sw cache v62: True"; live app.js matches `SHELL_RELEASE = { v: 62` → True (the ps1's "index shell vNN" line is legacy-False: the stamp renders at runtime from app.js, not index.html)
+
+User action: on the phone, reload → accept the SW update → footer "Fin.AI · shell v62" → reopen Your numbers: the name fields now own most of each row (account names ~40%, budget names ~67%). The v61 coach re-test is unaffected (no JS changed).
 
 
 ## 2026-09-10 (evening) — v61 live check: is the pushed shell actually served on the Pages URL?
