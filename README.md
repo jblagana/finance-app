@@ -1,266 +1,73 @@
-# FinSmart (iPhone)
+# Fin.AI (iPhone)
 
-A **fully local**, installable web app for your personal finances. All numbers
-(accounts, salary, debts, budgets, one-offs, sinking funds) and all math live
-**on the phone** — no Google Sheet, no Apps Script, no network needed at all.
-The GitHub repo only ever holds this app code, **no balances or transactions**.
+A **local-first**, installable web app for your personal finances (iPhone Home
+Screen, full-screen). All numbers (accounts, salary, debts, budgets, one-offs,
+sinking funds) and all math live **on the phone** (IndexedDB) — no backend. The
+GitHub repo holds app code only, **never balances or transactions**.
 
-## What it does
-- **Your numbers** (its own sheet — open it from Settings, or the Home
-  empty-state before you've added numbers): edit accounts, salary (+ per-month
-  overrides), liquidity floor, emergency cap, prepay/cutoff days, monthly budgets
-  (+ one-month overrides), debts (monthly + per-month payments), one-offs and
-  sinking goals — everything recomputes instantly as you type and saves to the
-  phone as you go.
-- **Add expense** (date, paid-with = card or cash, category, amount, note) —
-  entries overlay the base numbers live (cash-outs lower liquid cash, card
-  charges raise cards owed / the prepay, both lower free cash).
-- **View** a live summary (liquid cash, free/unallocated, cards owed, 14th
-  prepay), the month's **Obligations** and **Sinking funds** cards, a 6-month
-  projection, and a money log that sanity-checks every entry.
-- Installs to the iPhone **Home Screen** and runs full-screen.
-- **Coach** (the floating bot, bottom right — opens a floating chat bubble; the tabs stay visible) — ask
-  in plain language: status, debt/one-off/sinking details, cash in any month,
-  add/list/remove plans, charge checks, and urgent-expense advice. Rule-based
-  and fully local (no made-up numbers); see `chat.js`.
-  - **First-time setup + availability (v47)** — with no numbers yet, the coach
-    walks you through them step by step (cash → cards → salary → debts → budgets
-    → goals → one-offs), drafting each as the same confirm/undo cards; you can
-    also start it from the Home empty-state. A small **availability LED** in the
-    chat header shows when the online coach is reachable (green) or not (amber).
-  - **Offline brain (opt-in, v39)** — open questions the rules can't answer can
-    be coached by a small local LLM (SmolLM2, ~250 MB one-time download,
-    Settings → "Offline brain"), and sentence embeddings (all-MiniLM-L6-v2)
-    give name matching a semantic second chance ("the gym one" → your *Gym
-    membership* budget). Rules always win, and the models only *read* your
-    data — they never write anything; with the brain off (the default) the
-    coach behaves exactly as before, fully offline. On iPhone/iPad the brain runs
-     the standard (non-jsep) WASM kernel instead of the faster jsep one —
-     WebKit 26.2+'s new JIT crashes on jsep ("A problem repeatedly occurred
-     on ...", onnxruntime#26827); see `model-worker.js`.
-   - **Remote coach (opt-in, online, v45; memory + drafts in v46; bring-your-own
-     key in v47)** — when you're online, open questions can also go to a free
-     hosted LLM behind your own Cloudflare Worker (Settings → "Remote coach
-     (online)"), **or straight to a provider with your own API key** (Groq by
-     default, or any OpenAI-compatible endpoint). The last few chat turns travel
-     with the question so the coach remembers the conversation, and when you ask
-     it to add or change a number it proposes a validated draft you confirm (same
-     draft card + one-tap undo as story mode). Works even without the ~250 MB
-     local brain downloaded. On the Worker path the key lives on the Worker; on
-     the bring-your-own path it stays in your phone's local storage and goes only
-     to the provider you chose. Offline, or if the remote is down, the local
-     brain answers instead. Rules still write everything — the LLM only drafts.
-     See `worker/`.
-- **Backup**: export/import a JSON file with your numbers + entries + plans
-  + owed notes.
+There is **no on-device model**. The coach is a deterministic **rule engine**
+that runs fully offline, plus an **optional online LLM** for open questions.
+Either way the coach only *drafts*: every money change is a card you confirm,
+with one-tap undo — the rule engine stays the only writer.
 
-## Owed tab — who owes whom
+## Tabs
+- **Home** — time-of-day greeting + date, free/unallocated cash with a 6-month
+  projection sparkline (dated x-axis, liquidity-floor line), the coach's
+  attention card, and insights (category donut, budget pace).
+- **Money** — live summary (liquid cash, free, cards owed, prepay), the month's
+  Obligations and Sinking funds, the 6-month projection, and upcoming plans.
+- **Ledger** — add expense (Amount, Category, then Card / cash beside Date, plus
+  a note; quick sums like "40+35.5" work) and the full transaction list.
+  Entries overlay the base numbers live; deletes confirm first, and the last
+  add/delete is undoable from the toast.
+- **Owed** — people and entries with a live = total.
 
-The **Owed** tab is a private book for money with people — **completely
-separate from your numbers**: it never changes free cash, the tiles, the
-projection or the coach.
+## Coach (floating bot)
+Plain language: status, debts, one-offs, sinking funds, cash in any month,
+add/list/remove plans, urgent-expense advice.
 
-- Add a person (top form), then tap **+ entry** on their card.
-- Each entry: date, amount, what happened — *I paid for them*, *I paid them
-  back*, *They paid for me* or *They paid me back* — and an optional note.
-- The pill under their name does the math: green **owes you** ₱X, amber
-  **you owe** ₱X, or **settled up** at zero. The card at the top totals it
-  all (owed to you / you owe / net).
-- Removing a person or an entry keeps an **Undo** button in the snackbar for
-  a few seconds.
+- **Rule engine (always, offline)** — deterministic, no made-up numbers.
+  **Story mode** parses casual updates ("my salary in october is 25k, water
+  went up to 1800") locally into a draft of validated changes: drop a line,
+  confirm or discard, undo in one tap. Name matching gets a semantic second
+  chance scored locally against your stored names ("the gym one" → *Gym
+  membership*); when a detail is missing the coach asks, so a bare follow-up
+  ("24k") completes the draft.
+- **Online (optional)** — see below. When it's off, you're offline, or the
+  remote is down, the rule engine answers automatically.
+- **First-time setup** — with no numbers yet, the coach walks you through them
+  step by step (cash → cards → salary → debts → budgets → goals → one-offs)
+  using the same confirm/undo cards; also startable from the Home empty-state
+  ("Set up with the coach"). A green/amber **availability LED** in the chat
+  header shows when the online coach is reachable.
 
-**Quick-sum amounts** — the amount box accepts operators, so you can write
-the math the way you think it: `300-125+10` shows `= PHP 185.00` as you type
-and saves `185`. Works with `+ - * /` (or `× ÷`), parentheses and plain
-numbers; the original sum stays shown on the entry so you can check it later.
-The **Add** sheet's amount accepts the same quick sums — the Home coach card's
-**Log prepay** action opens it prefilled, ready to adjust.
+## Online coach (optional)
+Connect in **Settings → Coach (online)**, either way:
 
-## 1) Host this folder (GitHub Pages)
-1. Go to **github.com → New repository**, name it e.g. `finance-app`, set it **Public**, Create.
-2. In the empty repo: **Add file → Upload files** → drag in the **contents of this folder**
-   (so `index.html` is at the top) → **Commit changes**.
-3. **Settings → Pages → Build and deployment → Source: "Deploy from a branch"** →
-   branch `main`, folder `/ (root)` → **Save**.
-4. After ~1 minute your app is live at `https://<your-username>.github.io/finance-app/`.
+- **Cloudflare Worker URL** — deploy `worker/` with Wrangler (steps in
+  `worker/README.md`); the provider key is a Worker *secret*, so the app only
+  knows the Worker URL.
+- **Bring-your-own key (direct)** — the phone calls the provider with your own
+  key (**Groq** default, or any OpenAI-compatible base URL + model); the key
+  stays in this device's localStorage and is sent only to that provider.
 
-> A **public** repo is fine (and needed for free GitHub Pages on a free account).
-> It contains **no personal data** — your numbers live only on your phone.
-
-## 2) Enter your numbers once
-1. Open the app → the **Your numbers** sheet (from the Home empty-state, or
-   Settings → "Open").
-2. Add your accounts (cash, cards with limits, debts, loans), salary, budgets,
-   debts, one-offs and sinking goals. The whole app (tiles, coach, projection,
-   6-month matrix, bridge advisor) recomputes from this data **on the phone**.
-
-> The app can also import a JSON backup (Settings → Backup → Import JSON) —
-> e.g. one exported from an older build that synced to a Google Sheet.
-> Older builds synced to a Google Sheet instead; that path was removed in the
-> local-first release, and the app no longer talks to any Sheet.
-
-## What each input means (the Your numbers sheet)
-
-Everything on this sheet **saves to the phone automatically** — there is no
-Save button. The form commits about half a second after you stop typing and the
-status line under the title shows `local · as of <date> · saved <time>` once it
-is stored (it says `no numbers yet` until the first save). All amounts are
-**plain numbers in your own currency**: no symbols, no thousand separators
-(`15000` or `15000.50` — never `₱15,000`).
-
-| Field | What to put | How the app uses it |
-| --- | --- | --- |
-| `name` | Your first name | Personalizes the coach notes and insights. |
-| `as of` | The date the balances you enter are correct (usually today) | Anchors the **6-month projection** (it starts at this month) and the countdown to the prepay day. Bump it whenever you refresh your balances. |
-| `salary / month` | Your normal take-home pay in a normal month | Income for every projected month **unless** that month has a salary override. |
-| `liquidity floor` | Cash you don't want to drop below (e.g. `5000`) | The Liquid-cash tile turns bad under it, and the bridge card shows how much a month's outflows would have to be borrowed to keep you above it. |
-| `emergency cap` | Extra cost of a bad month (e.g. `5000`) | Only used for the **worst-case** column of the 6-month projection (the base case ignores it). |
-| `prepay day` / `cutoff` | Day of the month you pay the cards / when the charge window closes (e.g. `14` / `15`) | Drives the in-app prepay card ("due in N days", per-day savings, one-tap **Log prepay**). |
-| `card target util` | A **fraction, not a percent** — `0.099` means 9.9 % | Per card: `prepay = amount owed − limit × target`. `0.099` keeps just under 10 % of each limit as headroom. Empty → defaults to `0.099`. |
-
-**Salary overrides** — one row per month where you don't get the normal
-salary: month (`YYYY-MM`, from the month picker) + the amount you actually get
-that month. `0` = no salary that month; a double payout = the full doubled
-amount. Any month without a row uses `salary / month`.
-
-**Accounts (cash, cards, debts, loans)** — name · kind · value · limit (the
-limit box only exists for cards):
-
-| Kind | `value` is | Effect |
-| --- | --- | --- |
-| `cash` | what you have in that account **right now** | Added to **Liquid cash** (one row per bank / e-wallet / cash stash). |
-| `card` | the **amount you owe** — not the limit! | Added to **Cards owed** and to the **prepay** = `value − limit × target util` (per card, never below 0). The **limit** is the card's credit limit; without it the card's prepay is `0`. |
-| `debt` | the **remaining balance** still owed | Shown in the Obligations liabilities list. The *payments* that reduce your monthly free cash are set in **Debts** below — this row is just the balance. |
-| `loan` | money bridged from someone (partner, family) | Listed as a loan, **not** part of liquid cash. Set it to `0` once repaid. |
-
-**Monthly budgets** — one row per recurring monthly expense (Rent, Wi-Fi,
-food…). These are the assumed amounts for **every** month unless a budget
-override says otherwise for one month.
-
-**Budget overrides (one month)** — change one budget line for one month. The
-value you type **replaces** the normal amount for that month (it is not added
-to it): use `0` to drop the line for that month (e.g. rent paid later, or all
-discretionary lines set to `0` in a no-salary "mandatory only" month). Pick the
-month and the budget from the dropdown, then enter the amount. Remove the row
-once the month has passed.
-
-**One-offs** — a one-time amount in a specific month (back rent, a December
-power bill, a gift): month + short name + positive amount. It counts as an
-outflow in that month only.
-
-**Debts** — the payment schedule for each debt. Two ways to fill it:
-- `monthly` + `active months` — a fixed payment repeated in the listed months,
-  e.g. `2020` monthly in `2026-09, 2026-10, … 2027-03` (comma-separated
-  `YYYY-MM`).
-- **+ payment by month** — specific amounts in specific months; a per-month
-  payment **wins over** `monthly` for its month (e.g. `10000` in Oct/Nov/Dec
-  and `14000` in Jan instead of a flat monthly).
-
-A debt with neither a monthly nor any per-month payments costs nothing in the
-projection — every debt you are actually paying needs a schedule here.
-
-**Sinking funds** — save-up targets with a deadline (e.g. Christmas):
-- `goal` — total needed by the deadline; `funded` — how much you've already
-  set aside (keep that money **out** of your cash accounts — it is tracked
-  here separately); `by` — the deadline date.
-- **+ payment by month** — what you plan to add each month. These count as
-  outflows in the projection, and if the plan is too slow to reach the goal in
-  time the app raises a "Sinking behind" alert with the amount you'd actually
-  need per month.
-
-**Sanity check after saving** — the Home tiles should satisfy:
-- **Liquid cash** = sum of all `cash` values.
-- **Prepay** = Σ over cards of `value − limit × target util` (each card ≥ 0).
-- **Free / unallocated** (as-of month) = Liquid cash − that month's committed
-  outflows (budgets after overrides + debt payments + sinking payments +
-  one-offs + the first month's card prepay).
-
-If a tile looks wrong it is almost always one of: a card **limit** missing
-(that card's prepay shows `0`), a debt with **no payment schedule**, or a month
-typed outside the `YYYY-MM` format (such rows are silently ignored — use the
-month picker).
-
-## 3) Install on your iPhone 11
-1. On the iPhone, open your Pages URL in **Safari**.
-2. **Share** button → **Add to Home Screen** → **Add**.
-3. Open the app → the **Your numbers** sheet → enter your numbers once.
-4. Add your first expense — everything works with **no signal at all**.
-
-## How the local data works
-- A **service worker** caches the app shell, so the app opens with no connection.
-- **IndexedDB** (on the phone) holds your base numbers, entries, plans and chat.
-- The summary tiles show a **live view**: your base numbers plus anything you
-  have recorded in the app (cash-outs lower Liquid cash, card charges raise Cards
-  owed / the prepay, and both lower Free / unallocated). When you edit a balance
-  in **Your numbers**, the app re-bases automatically (or tap **reset to my
-  numbers** under the tiles).
-- The 14th-prepay "email alert" from the sheet era is now the **in-app coach
-  card**: it shows the prepay amount, the days left, the per-day savings and a
-  one-tap **Log prepay** action, and it stays on the Home tab until handled.
-- **Insights** (below the tiles) give daily / weekly / monthly advice, opened by a
-  short **coach note** ("Hey Jan — keep today around ₱X" / "this week is over
-  budget by ₱Y") with one concrete number to act on today or this week. The name
-  comes from the **name** field in the **Your numbers** sheet. The treat amount is in
-  the Insights header.
-- **Plans** (bottom of the app) are things coming up — eat out, bills, gifts.
-  They're stored only on the phone (not written to the Sheet) and drive the
-  advice above.
-- **Offline brain models** (only when enabled) are cached by the
-  transformers.js runtime in its own IndexedDB caches, and the service worker
-  preserves them on every app update — the ~250 MB download happens once, and
-  afterwards everything works with no connection.
-
-## Remote coach (optional, online)
-The local brain is great offline but small and slow. When you're **online**,
-open questions can instead go to a free, hosted LLM (default: Groq) through
-**your own Cloudflare Worker** in `worker/` — a smarter, faster coach with short
-answers, without paying or giving the app any key.
-
-- **Your key never leaves Cloudflare (Worker path).** The provider API key is a
-  Worker *secret*. The app only knows the Worker URL and sends the question; the
-  Worker adds CORS, restricts the origin to your app, caps tokens (at most 96)
-  and prompt size, and returns one short answer.
-- **Bring-your-own key (v47, direct path).** In Settings you can instead put your
-  own provider key in the app — **Groq** by default, or any OpenAI-compatible
-  endpoint (base URL + model). The key stays in your phone's local storage and is
-  sent only to that provider. The app still tries the **Worker first** and a
-  direct BYO call second, so the Worker remains the recommended path (no browser
-  CORS needed, and it hides the key). Direct browser calls need a provider that
-  allows them (Groq does).
-- **Availability LED + graceful fallback (v47).** The **LED** in the chat header
-  shows the state live: green when online + configured + healthy, amber
-  otherwise. Online + configured + healthy → the online coach. Offline,
-  unconfigured, or if the call fails/times out → the local brain. If both are
-  unavailable → the rule engine. A 30-second circuit-breaker means a dead remote
-  doesn't hang every question.
-- **Change requests (v46).** "Add 5,000 to GCash" doesn't just get chatted
-  about: the remote model answers with a strict-JSON draft, the app validates it
-  against the same shapes the rule engine uses, and you confirm it like a story
-  draft (per-line ✕, Confirm, one-tap undo). The model itself still writes
-  nothing — the confirm button does.
-- **Privacy.** The question, your stored numbers summary and the last few chat
-  turns leave the device — only to the Worker (or your chosen provider on the
-  bring-your-own path), only when online and enabled. Transaction parsing and
-  every money action stay 100% deterministic and on-device. Turn it off in
-  Settings and the app is fully local again.
-
-**To enable (Worker):** deploy `worker/` with Wrangler (full steps in
-`worker/README.md`), store the provider key as a Worker secret, point
-`ALLOWED_ORIGIN` at your app, then paste the Worker URL into **Settings → Remote
-coach (online)** and press **Test**. **To enable (bring-your-own key):** in the
-same panel set the provider to **Groq**, paste your key (plus base URL and model
-for anything else), and press **Test** — no Worker needed.
+Worker first, direct second, with a 30-second circuit breaker so a dead remote
+never hangs the chat. Change requests ("add 5,000 to GCash") come back as a
+strict-JSON draft, validated against the same shapes the rule engine uses and
+confirmed like a story draft. Parsing and every money action stay deterministic
+and on-device — the LLM only drafts.
 
 ## Notes
-- **Free / unallocated** = liquid cash − this month's committed outflows
-  (the math was ported 1:1 from the original Apps Script into `app.js`).
-- The 6-month projection window is derived from your **as of** date (the first
-  month is the as-of month), not hardcoded.
-- Backups: **Export JSON** includes your numbers + entries + plans + owed
-  notes; **Import JSON** restores them (replaces what's on the phone).
-
-## After redeploying
-- Push to Pages (`git push origin main`); the service worker cache is bumped per release (v48),
-  so the phone picks up the new app shell on its next load — the "New version
-  ready" toast offers a one-tap reload. If the app ever looks stale: open the
-  Pages URL once in Safari, then relaunch the home-screen icon.
+- **Free / unallocated** = liquid cash − this month's committed outflows.
+- The 6-month window derives from your **as of** date (first month = as-of
+  month), not hardcoded; prepay day (default 14th) and budgets are editable in
+  Settings.
+- The **worst case** figure is the lowest the month-end could dip if an
+  uncertain one-off lands.
+- **Backup** (Settings → Backup): Export JSON (everything) / Export CSV (ledger
+  only) / Import JSON to restore.
+- Both footers show the shell version + when this build went live. Releases
+  bump the SW cache (`finances-pwa-v51`) and the `SHELL_RELEASE` stamp in
+  `app.js` together — the "New version ready" toast offers a one-tap reload.
+  If the app ever looks stale: open the Pages URL once in Safari, then
+  relaunch the home-screen icon.

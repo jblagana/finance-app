@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>FinSmart</title>
+<title>Fin.AI</title>
 <meta name="theme-color" content="#0f1420">
 <meta name="description" content="Fully local personal finance tracker — your numbers live on this phone.">
 <link rel="manifest" href="./manifest.webmanifest">
@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="FinSmart">
+<meta name="apple-mobile-web-app-title" content="Fin.AI">
 <style>
 :root{--bg:#0f1420;--card:#1a2233;--card2:#212c42;--ink:#e8edf7;--mut:#93a1bd;--line:#2c3a56;
 --ok:#37d39b;--bad:#ff6b6b;--warn:#ffc45c;--acc:#37d39b}
@@ -119,11 +119,6 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 #chatHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);flex:0 0 auto}
 #chatTitle{font-size:17px;font-weight:700}
 #chatFresh{font-size:11px;color:var(--mut);margin-top:2px}
-.ai-chip{font-size:10px;font-weight:700;letter-spacing:.3px;padding:2px 7px;border-radius:8px;
- border:1px solid var(--line);color:var(--mut);text-transform:uppercase;white-space:nowrap}
-.ai-chip.on{color:var(--ok);border-color:rgba(55,211,155,.4)}
-.ai-chip.loading{color:var(--warn);border-color:rgba(255,196,92,.4)}
-.ai-chip.off{color:var(--bad);border-color:rgba(255,107,107,.4)}
 /* v47: online-coach availability LED in the main chat header (green = ready,
    amber = not ready: remote off / not configured / offline / cooling down) */
 .coach-led{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--warn);
@@ -265,6 +260,10 @@ padding:7px 14px;font-size:12.5px}
 .hero-v.bad{color:var(--bad)}
 .hero-sub{color:var(--mut);font-size:12.5px;margin-top:6px;line-height:1.5}
 .hero-sub b{color:var(--ink)}
+/* ---- v51: home welcome (greeting + date) ---- */
+.greet{padding:12px 18px 0}
+.greet-h{margin:0;font-size:18px;font-weight:800;letter-spacing:.2px}
+.greet-d{margin:3px 0 0;color:var(--mut);font-size:12.5px}
 .spark{margin-top:12px}
 .spark svg{width:100%;height:auto;display:block}
 /* ---- Phase 5: attention rows inside the unified coach card ---- */
@@ -364,7 +363,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
 <body>
 <div id="topbar">
   <header>
-    <h1>Fin<span>Smart</span></h1>
+    <h1>Fin<span>.AI</span></h1>
     <div class="hwrap">
       <button class="gear" id="setBtn" type="button" aria-label="Settings">⚙&#xFE0E;</button>
     </div>
@@ -372,6 +371,11 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
 </div>
 <main>
   <div id="tab-home">
+    <div id="homeGreet" class="greet">
+      <h2 class="greet-h" id="greetHello">Hello</h2>
+      <p class="greet-d" id="greetDate"></p>
+    </div>
+
     <div id="homeEmpty" class="card" style="display:none">
       <p class="note" style="margin:2px 0">You haven’t added your numbers yet. Set them up with the coach, or add your accounts, salary, debts and budgets yourself — the insights appear here once they exist.</p>
       <div style="display:flex;gap:8px;margin-top:12px">
@@ -467,7 +471,6 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
     <section class="card" id="txnCard">
       <h2 style="margin-top:0">Your expenses</h2>
       <div id="moneyLog">
-        <p class="note" id="mlNote" style="margin:0 0 4px">How each entry moved your free cash, newest first. The change should always equal the entry — that is the sanity check.</p>
         <div id="mlBody"></div>
       </div>
     </section>
@@ -527,7 +530,6 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         <div id="chatFresh"></div>
       </div>
     </div>
-    <span id="chatAI" class="ai-chip" style="display:none"></span>
     <button id="chatClose" type="button" aria-label="Close chat">✕</button>
 
   </div>
@@ -542,7 +544,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
 <button id="coachFab" type="button" aria-label="Open coach"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#botFace"/></svg></button>
 <div id="addSheet" class="sheet" role="dialog" aria-label="Add expense">
   <div class="sheet-h">
-    <div class="t">Add</div>
+    <div class="t">Add expense</div>
     <button id="addClose" class="sheet-x" type="button" aria-label="Close">✕</button>
   </div>
   <div class="sheet-b">
@@ -551,9 +553,12 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
       <input id="f_amount" type="text" inputmode="decimal" placeholder="0.00, or a quick sum like 300-125+10">
       <p id="amtEq" class="amtEq" style="display:none"></p>
       <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
+      <label for="f_category">Category</label>
+      <select id="f_category"><option value="" disabled selected>Pick a category…</option></select>
+      <input id="f_categoryCustom" type="text" placeholder="Type a new category" style="display:none;margin-top:8px" autocomplete="off">
       <div class="row">
         <div>
-          <label for="f_account">Paid with</label>
+          <label for="f_account">Card / cash</label>
           <select id="f_account"><option value="" disabled selected>Pick…</option></select>
         </div>
         <div>
@@ -564,9 +569,6 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
           </div>
         </div>
       </div>
-      <label for="f_category">Category</label>
-      <select id="f_category"><option value="" disabled selected>Pick a category…</option></select>
-      <input id="f_categoryCustom" type="text" placeholder="Type a new category" style="display:none;margin-top:8px" autocomplete="off">
       <label for="f_note">Note (optional)</label>
       <input id="f_note" placeholder="optional">
       <div style="margin-top:14px">
@@ -606,36 +608,14 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
       <p class="note" style="margin:10px 0 0">Everything is stored on this phone. Open the <b>Your numbers</b> sheet to edit it — the whole app (tiles, coach, projection) recomputes instantly as you type.</p>
     </section>
     <section class="card" style="margin-top:16px">
-      <h2 style="margin-top:0">Offline brain</h2>
-      <p class="note" style="margin-top:2px">A small AI that lives on this phone: it reads your stored names better and answers open questions in its own words. Turning it on downloads about <b>250 MB</b> once (23 MB name brain + 180 MB coach), then everything works without signal. The model never writes anything — the rule engine and your confirm buttons stay the only writers — and your numbers never leave this phone.</p>
-      <label style="display:flex;align-items:center;gap:10px;margin:12px 0 4px;cursor:pointer">
-        <input type="checkbox" id="aiToggle" style="width:auto">
-        <span style="font-size:14px;font-weight:600">Use local AI</span>
-      </label>
-      <p id="aiNote" class="note" style="margin:0"></p>
-      <div id="aiModelRow" style="display:flex;gap:8px;margin-top:12px;align-items:center">
-        <span style="font-size:12.5px;color:var(--mut)">Coach model</span>
-        <button class="ai-model" id="aiModel135" type="button">135M · fast</button>
-        <button class="ai-model" id="aiModel360" type="button">360M · smarter</button>
-      </div>
-      <div style="margin-top:14px">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <span style="font-size:13px;font-weight:600">What I’ve learned</span>
-          <button class="act ghost" id="aiLexClear" type="button" style="display:none;width:auto;padding:6px 10px;font-size:12px">Forget everything</button>
-        </div>
-        <p id="aiLexEmpty" class="note" style="margin:6px 0 0">The coach remembers how you say things (e.g. “whats my log” → spending). Nothing learned yet.</p>
-        <div id="aiLexList" style="margin-top:4px"></div>
-      </div>
-    </section>
-    <section class="card" style="margin-top:16px">
-      <h2 style="margin-top:0">Remote coach (online)</h2>
-      <p class="note" style="margin-top:2px">A smarter, faster coach for when you're online, from a free LLM behind your own Cloudflare Worker. The Worker holds the API key — only your question leaves this phone, never your numbers. When you're offline, or the remote is down, the local coach above takes over automatically. Free, no card.</p>
+      <h2 style="margin-top:0">Coach (online)</h2>
+      <p class="note" style="margin-top:2px">A smarter, faster coach for when you're online, from a free LLM behind your own Cloudflare Worker. The Worker holds the API key — only your question leaves this phone, never your numbers. When you're offline, or the remote is down, the rule engine answers automatically. Free, no card.</p>
       <label style="display:flex;align-items:center;gap:10px;margin:12px 0 4px;cursor:pointer">
         <input type="checkbox" id="aiRemoteToggle" style="width:auto">
         <span style="font-size:14px;font-weight:600">Use remote coach when online (free)</span>
       </label>
       <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
-        <input type="url" id="aiRemoteUrl" inputmode="url" placeholder="https://finsmart-coach.your-subdomain.workers.dev"
+        <input type="url" id="aiRemoteUrl" inputmode="url" placeholder="https://your-worker.your-subdomain.workers.dev"
           style="flex:1;min-width:0;font-size:12.5px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
         <button class="act ghost" id="aiRemoteTest" type="button" style="width:auto;padding:7px 10px;font-size:12px">Test</button>
       </div>
@@ -678,7 +658,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </section>
-    <p class="note" style="margin:14px 0 0">FinSmart · local-first · shell v48</p>
+    <p class="note" style="margin:14px 0 0" id="setFoot"></p>
   </div>
 </div>
 <div id="snack" role="status" aria-live="polite"></div>

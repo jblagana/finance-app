@@ -1,4 +1,4 @@
-/* Finance PWA coach chat — the Coach tab.
+/* Fin.AI PWA coach chat — the Coach tab.
  *
  * Rule-based and fully local: it answers from the same data the app's tiles
  * use — the local base snapshot (accounts, salary, debts, budgets, one-offs,
@@ -23,14 +23,11 @@
  * anything else closes the question and routes normally. Nothing is ever
  * written without a confirmed draft.
  *
- * v39 offline brain: an optional local model runs in model-worker.js (a
- * dedicated worker — the UI thread never does model math). Its sentence
- * embeddings (all-MiniLM-L6-v2) back the semantic name matching only when the
- * word-overlap rules find nothing (embNameIn, a second chance, never an
- * override), and SmolLM2-Instruct answers the open-ended questions the rules
- * don't own — streamed, text only, no actions, no writes. The ~250 MB first
- * download starts only from the chat offer card or the Settings toggle; after
- * that everything, model math included, works without signal.
+ * The rule engine owns every command; an open question the rules can't
+ * answer goes to the ONLINE coach (a hosted LLM the user connects in
+ * Settings) via sendLlm, or to the fallback card when it's off / offline /
+ * not configured. The deterministic story/semantic scorer (v37) stays —
+ * it's part of the rule engine.
  */
 (function () {
   'use strict';
@@ -43,39 +40,10 @@
   // next bare answer can complete it. kind: 'amt' (a number) or 'month'.
   // Cleared on a non-answer, on any action, and on page reload.
   var pendingAsk = null; // { t: <normalized question text>, kind: 'amt' | 'month' }
-  // v39: embedding of the message currently being handled. send() embeds the
-  // message before handle() and passes the vector in here, so the semantic
-  // layer can read it synchronously; it is null for the test/dev path (and
-  // without the brain), which keeps the rule engine byte-identical.
-  var currentAiVec = null;
   // v46: short coach memory — the last few turns (user text + tag-stripped bot
   // text), rebuilt on every send and folded into the coach prompt so the coach
   // follows the conversation instead of answering each message in isolation.
   var recentHist = [];
-  // v43: personal lexicon — "learns your words." Your phrasings map to known
-  // concepts (canonical questions the rules already answer). A confident match
-  // routes deterministically in under a millisecond; a mid-band or seeded match
-  // asks once, then remembers. Rules always win; this only routes to existing
-  // read intents and never writes money.
-  var lex = [];           // [{norm, phrase, mapsTo, label, vec, count, lastAt}]
-  var lexByNorm = {};     // norm -> record (exact-match fast path)
-  var clarify = null;     // { t, choices: [{id, label}] } a pending clarification
-  var LEX_ACT = 0.80;     // confident similarity -> route straight to the concept
-  var LEX_ASK = 0.62;     // mid band -> ask which concept (then remember the pick)
-  var LEX_MAX = 200;      // cap on stored phrases (drop the least-recently-used)
-  var CONCEPTS = {
-    'spend:month': { label: 'How much I spent this month', q: 'what did i spend this month', kw: 'spend' },
-    'spend:week': { label: 'How much I spent this week', q: 'what did i spend this week', kw: 'week' },
-    'plans': { label: 'My plans / coming up', q: 'show my plans', kw: 'plan' },
-    'status': { label: 'Where I stand (status)', q: 'status', kw: 'status' }
-  };
-  // Known-ambiguous phrasings. When one matches, the rules have not answered, and
-  // there is no confident learned mapping yet, we offer a one-tap choice of the
-  // most likely concepts — then we remember whichever you pick.
-  var AMBIG = [
-    { rx: /\b(?:log|logs|logging|ledger|entries?|receipts?)\b/, concepts: ['spend:month', 'spend:week', 'plans', 'status'] }
-  ];
-  var aiCardMsg = null; // the live "downloading the offline brain" card, if open
   var RX_ANS_AMT = /^(?:it'?s|its|is|about|around|roughly|like|maybe|just|now|total|new)?\s*(?:php|\u20b1|pesos?)?\s*\d[\d,]*(?:\.\d{1,2})?\s*(?:k\b|thousand)?\s*(?:php|\u20b1|pesos?)?[?.!]*$/;
   var RX_ANS_NAMED = /^[a-z][a-z'&\- ]{0,39}?\s+(?:is|was|at|of|to|equals|running|sits)(?:\s+(?:at|around|about|roughly))?\s+(?:php|\u20b1|pesos?)?\s*\d[\d,]*(?:\.\d{1,2})?\s*(?:k\b|thousand)?\s*(?:php|\u20b1|pesos?)?[?.!]*$/;
   var RX_ANS_MONTH = /^(?:in|for|of|say|its|it'?s|that'?s|the)?\s*(?:next month|last month|this month|january|february|march|april|may|june|july|august|september|october|november|december|sept|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\b\s*[?.!]*$/;
@@ -451,7 +419,7 @@
       line('• <b>Urgent expense</b> — tell me something unplanned and I’ll map the options') +
       line('• <b>Spending</b> — what you’ve logged in this app this week / month') +
       line('• <b>Story mode</b> — tell me changes in plain words: “my salary in october is 25k, water went up to 1,800” — I draft them and you confirm before anything is written') +
-      line('• <b>Open questions</b> — with the offline brain on (Settings), I can reason about your numbers in my own words; it’s local and works without signal'),
+      line('• <b>Open questions</b> — when I’m connected to the online coach (Settings), I can reason about your numbers in my own words; it needs signal'),
       'Try: “urgent: car repair 8,000 this week”', 'good');
     return { html: h };
   }
@@ -921,23 +889,6 @@
     }
     return bestScore >= 1 ? best : null;
   }
-  // v39: offline-brain name boost. Only reached when the word-overlap rules
-  // found nothing: the stored name with the closest embedding wins, but only
-  // above a confident cosine threshold. Rules always win — this is a second
-  // chance, never an override. currentAiVec is null unless the brain is loaded
-  // and send() embedded this message first, so without it this is a no-op.
-  var SEM_EMB_MIN = 0.75;
-  function embNameIn(pool) {
-    if (!currentAiVec || typeof window === 'undefined' || !window.FinAI) return null;
-    var best = null, bestC = SEM_EMB_MIN;
-    for (var i = 0; i < pool.length; i++) {
-      var nv = window.FinAI.nameVec(pool[i]);
-      if (!nv) continue;
-      var c = window.FinAI.cosine(currentAiVec, nv);
-      if (c > bestC) { bestC = c; best = pool[i]; }
-    }
-    return best;
-  }
 
   // ---------- v37: semantic story layer (local scorer, no cloud) ----------
   // Hand-tuned affinity vocabulary: a "topic" (word bucket or known entity) plus
@@ -1001,21 +952,11 @@
     var chg = semHas(cl, SEM.change);
     var weak = semHas(cl, SEM.weak);
 
-    var entBudget = fuzzyNameIn(names.budgets, cl) || embNameIn(names.budgets);
-    var entDebt = fuzzyNameIn(names.debts, cl) || embNameIn(names.debts);
+    var entBudget = fuzzyNameIn(names.budgets, cl);
+    var entDebt = fuzzyNameIn(names.debts, cl);
     var entAccount = null;
     for (var iA = 0; iA < names.accounts.length; iA++) {
       if (nameScore(names.accounts[iA].name, toks) >= 1) { entAccount = names.accounts[iA]; break; }
-    }
-    if (!entAccount) { // v39: embedding second chance for account names
-      var acctNames = [];
-      for (var iAn = 0; iAn < names.accounts.length; iAn++) acctNames.push(names.accounts[iAn].name);
-      var eaN = embNameIn(acctNames);
-      if (eaN) {
-        for (var iA2 = 0; iA2 < names.accounts.length; iA2++) {
-          if (names.accounts[iA2].name === eaN) { entAccount = names.accounts[iA2]; break; }
-        }
-      }
     }
 
     var ai = semAmtIn(r, rs, allAmt, t);
@@ -1073,7 +1014,7 @@
     }
     // 5. recurring — recurring word + amount + name (known or extracted)
     if (recw) {
-      var nmR2 = fuzzyNameIn(names.debts.concat(names.budgets), cl) || embNameIn(names.debts.concat(names.budgets));
+      var nmR2 = fuzzyNameIn(names.debts.concat(names.budgets), cl);
       var known = !!nmR2;
       if (!nmR2) {
         var fR2 = cl.match(SEM_RE_RECURRING_NAME);
@@ -1091,7 +1032,7 @@
     }
     // 6. one-off — oneoff word + amount + name (known or extracted)
     if (oow) {
-      var nmO2 = fuzzyNameIn(names.oneoffs, cl) || embNameIn(names.oneoffs);
+      var nmO2 = fuzzyNameIn(names.oneoffs, cl);
       if (!nmO2) {
         var fO2 = cl.match(SEM_RE_ONEOFF_NAME);
         if (fO2 && fO2[1].trim().length >= 3 && !isMonthWord(fO2[1].trim())) nmO2 = fO2[1].trim();
@@ -1320,46 +1261,20 @@
     return { html: h + freshness(ctx), actions: actions, storyLines: changes, storyRaw: t, storyAsk: asks.join(' · ') };
   }
 
-  // ---------- v39: offline brain (local LLM coach + embedding signals) ----------
-  // The rule engine above owns every command; only what slips past it reaches
-  // the coach. The coach is text-only: no actions, no writes, no pendingAsk.
-  function aiNamesFor(ctx) {
-    var sn = storyNames(ctx);
-    return sn.budgets.concat(sn.debts, sn.oneoffs, sn.sinks,
-      sn.accounts.map(function (a) { return a.name; }));
-  }
+  // ---------- the online coach ----------
+  // The rule engine above owns every command; only an open question that slips
+  // past it reaches the coach. The coach is the ONLINE LLM (Worker or bring-
+  // your-own key) — text only, no actions of its own, no writes. When it's off,
+  // offline or not configured, the fallback card stands in its place.
   function aiCoach(t, ctx) {
     var FAI = typeof window !== 'undefined' ? window.FinAI : null;
     if (!FAI || !ctx.eff) return null;
-    var st = FAI.state();
-    // v46: with a Worker configured, the remote coach works even without the
-    // local brain downloaded (the ~250 MB download only matters when the
-    // remote path can't be used).
-    var remoteOn = FAI.remoteEnabled() && FAI.remoteConfigured() && (typeof navigator === 'undefined' || navigator.onLine !== false);
-    if (st.llmReady || remoteOn) {
-      var pr = aiPrompt(t, ctx, remoteOn, recentHist);
-      // the Worker caps prompt JSON at 4000 chars — if the numbers + memory
-      // push it over, send the same prompt without the conversation memory
-      if (JSON.stringify(pr).length > 3800) pr = aiPrompt(t, ctx, remoteOn, []);
-      return { llm: true, prompt: pr };
-    }
-    // loading / partial / error / already-offered: the plain fallback stands;
-    // the status chip shows what the brain is doing.
-    if (st.state !== 'idle' || FAI.offered()) return null;
-    // The card IS the consent — it states the size and what the model can and
-    // can't do, and it is shown at most once per phone.
-    FAI.markOffered();
-    return {
-      aiOffer: true,
-      html: block('Offline brain',
-        line('For open questions like that I can call on a small local coach — a model that lives on this phone and works without signal.') +
-        line('One-time download of <b>~250 MB</b> (about 23 MB is the name-matching brain, the rest is the 135M coach). After that it stays on this phone.'),
-        'Your numbers never leave this phone, and the model can’t write anything — the rules and your confirm buttons stay the only writers.', 'good'),
-      actions: [
-        { label: 'Download (~250 MB)', act: 'ai_download' },
-        { label: 'Not now', act: 'ai_dismiss' }
-      ]
-    };
+    if (!FAI.remoteAvailable()) return null;
+    var pr = aiPrompt(t, ctx, true, recentHist);
+    // the Worker caps prompt JSON at 4000 chars — if the numbers + memory push
+    // it over, send the same prompt without the conversation memory
+    if (JSON.stringify(pr).length > 3800) pr = aiPrompt(t, ctx, true, []);
+    return { llm: true, prompt: pr };
   }
   function aiContextText(t, ctx, hist) {
     var e = ctx.eff;
@@ -1401,15 +1316,14 @@
     L.push('Question: ' + t);
     return L.join('\n');
   }
-  var AI_LOCAL_SYSTEM = 'You are FinSmart, a personal money coach, offline on the user\'s phone. Answer only from the numbers given, in 1-2 short plain sentences (under 40 words), no lists, no markdown, no emojis. Never invent numbers. If outside the given numbers, say so in one line. You only explain - never write, log or change anything.';
   // v46: the remote coach can also DRAFT a number change as strict JSON when the
   // user asks to add/change something. The app validates the JSON against the
   // story-mode shapes and the existing confirm/undo flow — the model itself
   // still writes nothing.
-  var AI_REMOTE_SYSTEM = 'You are FinSmart, a personal money coach. Answer only from the numbers given, in 1-2 short plain sentences (under 45 words), no lists, no markdown, no emojis. Never invent numbers. If the user asks to add or change a number, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. Use only names from the numbers list or a new name the user stated. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
+  var AI_REMOTE_SYSTEM = 'You are Fin.AI, a personal money coach. Answer only from the numbers given, in 1-2 short plain sentences (under 45 words), no lists, no markdown, no emojis. Never invent numbers. If the user asks to add or change a number, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. Use only names from the numbers list or a new name the user stated. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
   function aiPrompt(t, ctx, remote, hist) {
     return [
-      { role: 'system', content: remote ? AI_REMOTE_SYSTEM : AI_LOCAL_SYSTEM },
+      { role: 'system', content: AI_REMOTE_SYSTEM },
       { role: 'user', content: aiContextText(t, ctx, hist) }
     ];
   }
@@ -1417,9 +1331,9 @@
   // v47: guided first-time setup. With an empty base the normal number intents
   // can't answer, so (when the online coach is available) we route to a setup
   // prompt: the coach walks the user through a generic checklist and drafts the
-  // numbers as strict JSON — the same confirm/undo flow as a story. The local
-  // brain is text-only, so setup needs a remote path (Worker or bring-your-own).
-  var AI_SETUP_SYSTEM = 'You are FinSmart, a personal money coach helping a user set up their numbers for the first time. Their phone has NO numbers stored yet. Be warm and brief (under 35 words), no markdown, no emojis. Ask for 1-2 things at a time, in this order: (1) cash accounts, (2) cards (name, balance and limit), (3) monthly salary, (4) debts / monthly payments, (5) monthly budgets, (6) goals / sinking funds, (7) one-offs this month. Use ONLY the exact names and amounts the user gives — never invent or assume a number. When the user has given you specific numbers, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card","value":123,"limit":123} (limit only for cards) | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. If the user has not given a specific number yet, reply plain text asking for the next thing — never JSON.';
+  // numbers as strict JSON — the same confirm/undo flow as a story. Setup
+  // needs a remote path (Worker or bring-your-own).
+  var AI_SETUP_SYSTEM = 'You are Finance, a personal money coach helping a user set up their numbers for the first time. Their phone has NO numbers stored yet. Be warm and brief (under 35 words), no markdown, no emojis. Ask for 1-2 things at a time, in this order: (1) cash accounts, (2) cards (name, balance and limit), (3) monthly salary, (4) debts / monthly payments, (5) monthly budgets, (6) goals / sinking funds, (7) one-offs this month. Use ONLY the exact names and amounts the user gives — never invent or assume a number. When the user has given you specific numbers, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card","value":123,"limit":123} (limit only for cards) | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. If the user has not given a specific number yet, reply plain text asking for the next thing — never JSON.';
   function setupPrompt(t, ctx, hist) {
     var L = [];
     L.push('Setup mode: the user is building their numbers from scratch on this phone. Nothing is stored yet.');
@@ -1544,217 +1458,6 @@
     return '<div class="c-block"><div class="ins-line">' + inner + '</div></div>';
   }
 
-  function aiProgressHtml(st) {
-    var p = st.progress || null;
-    var body;
-    if (p && p.stage === 'llm-fallback') {
-      body = 'The 135M coach didn’t fit — trying the 360M instead…';
-    } else if (p && p.pct != null) {
-      var what = p.stage === 'llm' ? 'the coach model' : 'the name-matching brain';
-      body = 'Downloading ' + what + ' — <b>' + p.pct + '%</b>' +
-        (p.totalMB ? ' · ' + (p.loadedMB || 0).toFixed(0) + '/' + Math.round(p.totalMB) + ' MB' : '');
-    } else {
-      body = 'Starting the offline brain…';
-    }
-    return '<div class="c-block"><div class="c-t">Offline brain</div>' +
-      '<div class="ins-line">' + body + '</div>' +
-      '<div class="note">one-time download · works without signal once done · nothing leaves this phone</div></div>';
-  }
-  function aiCardRefresh() {
-    if (!aiCardMsg) return;
-    var el = msgsEl && msgsEl.querySelector('[data-cid="' + aiCardMsg.id + '"]');
-    if (el) el.innerHTML = aiCardMsg.html;
-  }
-  function aiProgressDone(st) {
-    if (!aiCardMsg) return;
-    var m = aiCardMsg;
-    aiCardMsg = null;
-    var txt, cls = 'warn';
-    if (st.state === 'ready') {
-      cls = 'good';
-      txt = 'Offline brain ready — ' + (st.device === 'webgpu' ? 'WebGPU' : 'WASM') + (st.llm ? ' · ' + st.llm.split('/')[1] : '') +
-        '. I now read your names better and answer open questions in my own words. Ask me anything.';
-    } else if (st.state === 'partial') {
-      txt = 'The name-matching brain is ready, but the coach model didn’t fit on this phone — I’ll keep answering from the rules.';
-    } else {
-      txt = 'The download didn’t finish (' + (st.err || 'unknown error') + '). The rules keep working; try again later from Settings → Offline brain.';
-    }
-    m.html = block('Offline brain', line(txt), null, cls);
-    m.actions = [];
-    saveMsg(m).then(function () { aiCardRefresh(); if (msgsEl) scrollBottom(); });
-  }
-  function updateAiStatus(st) {
-    var FAI = window.FinAI;
-    var el = byId('chatAI');
-    if (el) {
-      if (!FAI || !FAI.enabled()) { el.style.display = 'none'; el.textContent = ''; }
-      else if (st.state === 'loading') {
-        el.style.display = 'inline-block';
-        el.textContent = 'AI ' + (st.progress && st.progress.pct != null ? st.progress.pct + '%' : '…');
-        el.className = 'ai-chip loading';
-      } else if (st.state === 'ready') { el.style.display = 'inline-block'; el.textContent = 'AI on'; el.className = 'ai-chip on'; }
-      else if (st.state === 'partial') { el.style.display = 'inline-block'; el.textContent = 'AI names'; el.className = 'ai-chip on'; }
-      else if (st.state === 'error') { el.style.display = 'inline-block'; el.textContent = 'AI off'; el.className = 'ai-chip off'; }
-      else { el.style.display = 'inline-block'; el.textContent = 'AI standby'; el.className = 'ai-chip'; }
-    }
-    if (aiCardMsg) {
-      if (st.state === 'loading') {
-        aiCardMsg.html = aiProgressHtml(st);
-        saveMsg(aiCardMsg);
-        aiCardRefresh();
-      } else {
-        aiProgressDone(st);
-      }
-    }
-  }
-  function startAiDownload() {
-    var FAI = window.FinAI;
-    if (!FAI) return;
-    FAI.setEnabled(true);
-    FAI.markOffered();
-    var m = { id: chatId(), who: 'bot', html: aiProgressHtml(FAI.state()), actions: [], at: new Date().toISOString(), aiCard: true };
-    saveMsg(m).then(function () { appendMsg(m); });
-    aiCardMsg = m;
-    FAI.ensureLoaded().then(function (st) { aiProgressDone(st); });
-  }
-
-  // ---------- v43: personal lexicon + clarification loop ----------
-  // Pull stored phrases from the app's lex store into the in-memory maps.
-  // Re-read on every message, so "Forget everything" in Settings takes effect on
-  // the next send with no cross-module sync.
-  function loadLex(rows) {
-    lex = (rows || []).slice(0, LEX_MAX);
-    lexByNorm = {};
-    for (var i = 0; i < lex.length; i++) { if (lex[i] && lex[i].norm) lexByNorm[lex[i].norm] = lex[i]; }
-  }
-  function lcos(a, b) {
-    if (!a || !b || a.length !== b.length) return 0;
-    var dot = 0, na = 0, nb = 0;
-    for (var i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
-    if (!na || !nb) return 0;
-    return dot / (Math.sqrt(na) * Math.sqrt(nb));
-  }
-  // lexMatch: exact (learned) first, then a fuzzy cosine match against stored
-  // phrase vectors. -> {type:'act',id,rec} | {type:'ask',choices} | {type:'none'}.
-  function lexMatch(t) {
-    if (!lex.length) return { type: 'none' };
-    var exact = lexByNorm[t];
-    if (exact) return { type: 'act', id: exact.mapsTo, rec: exact };
-    if (!currentAiVec) return { type: 'none' };
-    var scored = [];
-    for (var i = 0; i < lex.length; i++) {
-      var r = lex[i];
-      if (!r.vec) continue;
-      var c = lcos(currentAiVec, r.vec);
-      if (c >= LEX_ASK) scored.push({ id: r.mapsTo, c: c, rec: r });
-    }
-    if (!scored.length) return { type: 'none' };
-    scored.sort(function (a, b) { return b.c - a.c; });
-    var top = scored[0];
-    if (top.c >= LEX_ACT && (scored.length === 1 || top.c - scored[1].c >= 0.05)) return { type: 'act', id: top.id, rec: top.rec };
-    var seen = {}, choices = [];
-    for (var j = 0; j < scored.length && choices.length < 3; j++) {
-      if (seen[scored[j].id]) continue;
-      seen[scored[j].id] = 1;
-      choices.push({ id: scored[j].id, label: (CONCEPTS[scored[j].id] || {}).label || scored[j].id });
-    }
-    if (choices.length < 2) return { type: 'act', id: top.id, rec: top.rec };
-    return { type: 'ask', choices: choices };
-  }
-  // runRules: run ONLY the deterministic rule engine over a phrase (no story,
-  // lexicon, or LLM) — exactly the intents a normal question would hit.
-  function runRules(t, ctx) {
-    var dm = findDateSpan(t);
-    var amtText = dm ? t.replace(dm.raw, ' ') : t;
-    var am = findAmount(amtText);
-    var fa = findAccounts(t, ctx);
-    var p = {
-      date: dm ? dm.iso : null, amt: am ? am.amt : null, cat: guessCategory(t),
-      what: extractWhat(amtText, am), exactAcct: fa.exact,
-      cardAcct: fa.exact && fa.exact.kind === 'card' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'card'; })[0] || null),
-      cashAcct: fa.exact && fa.exact.kind === 'cash' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'cash'; })[0] || null)
-    };
-    var order = [intentHelp, intentGreet, intentPlanRemove, intentPlanAdd, intentPlanList,
-      intentUrgent, intentLog, intentDeficit, intentSpend, intentStory,
-      intentDebt, intentOneOff, intentSinking, intentFuture, intentStatus];
-    for (var i = 0; i < order.length; i++) { var rr = order[i](t, ctx, p); if (rr) return rr; }
-    return null;
-  }
-
-  function runConcept(cid, ctx) {
-    var c = CONCEPTS[cid];
-    if (!c || !c.q) return null;
-    return runRules(norm(c.q), ctx);
-  }
-  // learn: remember "phrasing -> concept." Embeds the phrase for fuzzy re-match
-  // (best effort — exact matching works without the brain), then persists to the
-  // app's lex store. Never writes money.
-  function learn(phrase, cid, rawText) {
-    var c = CONCEPTS[cid];
-    if (!c) return Promise.resolve(false);
-    var t = norm(phrase);
-    var rec = lexByNorm[t] || { norm: t, count: 0 };
-    rec.phrase = (rawText || phrase || t).replace(/\s+/g, ' ').trim();
-    rec.mapsTo = cid;
-    rec.label = c.label;
-    rec.count = (rec.count || 0) + 1;
-    rec.lastAt = new Date().toISOString();
-    var FAI = window.FinAI;
-    var pre = (FAI && FAI.enabled())
-      ? FAI.prepare(phrase).then(function (v) { if (v) rec.vec = v; return true; })['catch'](function () { return true; })
-      : Promise.resolve(true);
-    return pre.then(function () {
-      var all = [], have = false;
-      for (var k = 0; k < lex.length; k++) {
-        if (lex[k].norm === t) { all.push(rec); have = true; } else { all.push(lex[k]); }
-      }
-      if (!have) all.push(rec);
-      if (all.length > LEX_MAX) {
-        all.sort(function (a, b) { return (a.lastAt || '') < (b.lastAt || '') ? -1 : 1; });
-        all = all.slice(all.length - LEX_MAX);
-      }
-      loadLex(all);
-      return F.lexPut(rec).then(function () { return true; })['catch'](function () { return false; });
-    });
-  }
-  // clarifyPickFor: does the typed message match one of the pending choices?
-  function clarifyPickFor(t) {
-    if (!clarify || !clarify.choices) return null;
-    for (var i = 0; i < clarify.choices.length; i++) {
-      var cc = CONCEPTS[clarify.choices[i].id];
-      if (cc && cc.kw && t.indexOf(cc.kw) >= 0) return clarify.choices[i].id;
-    }
-    return null;
-  }
-  // ambiguousFor: a seeded known-ambiguous phrasing -> its candidate concepts.
-  function ambiguousFor(t) {
-    for (var i = 0; i < AMBIG.length; i++) {
-      if (AMBIG[i].rx.test(t)) {
-        var choices = [];
-        for (var j = 0; j < AMBIG[i].concepts.length; j++) {
-          var cid = AMBIG[i].concepts[j];
-          choices.push({ id: cid, label: (CONCEPTS[cid] || {}).label || cid });
-        }
-        return choices;
-      }
-    }
-    return null;
-  }
-  // clarifyCard: the one-tap "which did you mean?" — each choice is a clarify_pick.
-  function clarifyCard(t, choices, hint) {
-    var acts = [];
-    for (var i = 0; i < choices.length; i++) {
-      acts.push({ label: choices[i].label, act: 'clarify_pick', payload: { pick: choices[i].id } });
-    }
-    acts.push({ label: 'Not one of these', act: 'clarify_ignore' });
-    return {
-      html: block('Just to be sure',
-        line('“' + esc(t) + '” could mean a few things. Tap the one you meant and I’ll remember it.'),
-        hint || null, 'good'),
-      actions: acts
-    };
-  }
-
   // ---------- dispatch ----------
   function handle(raw, ctx) {
     var t = norm(raw);
@@ -1820,20 +1523,6 @@
       }
       pendingAsk = null;
     }
-    // v43: a pending clarification is completed by the very next message that
-    // matches one of its choices; anything else closes it and routes normally.
-    if (clarify) {
-      var cPick = clarifyPickFor(t);
-      if (cPick) {
-        var cPhrase = clarify.t;
-        clarify = null;
-        learn(cPhrase, cPick, cPhrase)['catch'](function () {});
-        var cRes = runConcept(cPick, ctx);
-        if (cRes) return cRes;
-      } else {
-        clarify = null;
-      }
-    }
     var order = [intentHelp, intentGreet, intentPlanRemove, intentPlanAdd, intentPlanList,
       intentUrgent, intentLog, intentDeficit, intentSpend, intentStory,
       intentDebt, intentOneOff, intentSinking, intentFuture, intentStatus];
@@ -1841,29 +1530,8 @@
       var r = order[i](t, ctx, p);
       if (r) return r;
     }
-    // v39: nothing the rules own matched — this is an open question. With the
-    // brain loaded, the local coach answers it (text only, no actions, no
-    // writes); otherwise the old fallback card.
-    // v43: the rules didn't own it. Before the LLM, give the personal lexicon a
-    // shot — a confident learned match answers deterministically (sub-millisecond),
-    // an ambiguous known phrasing asks once and then remembers the pick. Neither
-    // ever writes; both route only to read intents the rules already answer.
-    var lx = lexMatch(t);
-    if (lx.type === 'act') {
-      var ra = runConcept(lx.id, ctx);
-      if (ra) {
-        if (lx.rec) { lx.rec.count = (lx.rec.count || 0) + 1; lx.rec.lastAt = new Date().toISOString(); F.lexPut(lx.rec)['catch'](function () {}); }
-        return ra;
-      }
-    } else if (lx.type === 'ask') {
-      clarify = { t: t, choices: lx.choices };
-      return clarifyCard(t, lx.choices);
-    }
-    var amb = ambiguousFor(t);
-    if (amb) {
-      clarify = { t: t, choices: amb };
-      return clarifyCard(t, amb, 'Tap the one you meant — I’ll remember it next time.');
-    }
+    // v49: nothing the rules own matched — this is an open question. It goes to
+    // the online coach (when available); otherwise the plain fallback card.
     var aiRes = aiCoach(t, ctx);
     if (aiRes) return aiRes;
     return intentFallback(t);
@@ -1929,7 +1597,6 @@
 
   function runAction(m, a) {
     pendingAsk = null; // v38: any explicit action closes a pending question
-    var pendingClarify = clarify; clarify = null; // v43: any action closes a pending clarification
     if (!a || a.act === 'noop') { markDone(m); return; }
     var pl = a.payload || {};
     if (a.act === 'open_tab') {
@@ -1945,38 +1612,6 @@
     if (a.act === 'start_setup') {
       markDone(m);
       send('Let’s set up my numbers');
-      return;
-    }
-    if (a.act === 'ai_download') {
-      markDone(m);
-      startAiDownload();
-      return;
-    }
-    if (a.act === 'ai_dismiss') {
-      markDone(m);
-      return;
-    }
-    if (a.act === 'clarify_pick') {
-      var cid = pl.pick;
-      var cSel = CONCEPTS[cid];
-      var cPhrase = pendingClarify ? pendingClarify.t : '';
-      markDone(m);
-      if (!cSel || !cPhrase) { pushBot('Pick one of the options above and I’ll remember it next time.'); return; }
-      loadCtx().then(function (ctx) {
-        var rc = runConcept(cid, ctx);
-        var gotIt = block('Got it — I remember that now',
-          line('“' + esc(cPhrase) + '” → <b>' + esc(cSel.label) + '</b>. Next time you ask, I’ll jump straight to it.'),
-          null, 'good');
-        learn(cPhrase, cid, cPhrase).then(function () {
-          var um2 = { id: chatId(), who: 'bot', html: gotIt + (rc ? rc.html : ''), actions: [], at: new Date().toISOString() };
-          saveMsg(um2).then(function () { appendMsg(um2); });
-        });
-      });
-      return;
-    }
-    if (a.act === 'clarify_ignore') {
-      markDone(m);
-      pushBot('No problem — ask it another way and I’ll take my best guess.');
       return;
     }
     if (a.act === 'add_plan') {
@@ -2075,10 +1710,10 @@
       return;
     }
   }
-  // v39: stream the local coach's answer. The rules already rejected this
+  // v49: stream the online coach's answer. The rules already rejected this
   // message first, so this is strictly open-ended chat: plain text, no
   // actions, nothing written. The bubble appears immediately and fills in as
-  // tokens arrive from the worker; the final text is what gets persisted.
+  // text arrives; the final text is what gets persisted.
   function sendLlm(res, ctx, typing) {
     var FAI = window.FinAI;
     var sm = {
@@ -2140,27 +1775,14 @@
     msgsEl.appendChild(typing);
     scrollBottom();
     loadCtx().then(function (ctx) {
-      // v39: refresh the stored-name vectors and embed this message BEFORE the
-      // rules run, so the semantic layer can use the vector synchronously.
-      // Without the brain (or when it's off) both calls resolve instantly.
-      var FAI = window.FinAI;
-      var pre = (FAI && FAI.enabled())
-        ? FAI.ensureNameVecs(aiNamesFor(ctx)).then(function () { return FAI.prepare(v); })
-        : Promise.resolve(null);
-      // v43: load the personal lexicon before the rules, so a learned phrasing can
-      // route deterministically (the exact match works even with the brain off).
-      if (typeof F.lexAll === 'function') {
-        pre = pre.then(function (vec) { return F.lexAll().then(loadLex)['catch'](function () {}).then(function () { return vec; }); });
-      }
+      var pre = Promise.resolve(null);
       // v46: rebuild the coach's short memory (the last few turns, excluding the
       // message just sent) so the LLM prompt can carry the conversation.
       pre = pre.then(function (vec) {
         return loadChat().then(function (rows) { recentHist = coachHist(rows, um.id); return vec; })['catch'](function () { return vec; });
       });
       return pre.then(function (vec) {
-        currentAiVec = vec || null;
         var res = handle(v, ctx);
-        currentAiVec = null; // consumed; the dev/test path always runs with null
         if (res.llm) return sendLlm(res, ctx, typing);
         var bm = { id: chatId(), who: 'bot', html: res.html, actions: res.actions || [], at: new Date().toISOString() };
         if (res.storyLines) bm.storyLines = res.storyLines; // v35: the draft lives on the message (persisted in the chat store)
@@ -2230,8 +1852,6 @@
     msgsEl = byId('chatMsgs');
     if (!inputEl || !msgsEl) return;
     renderChips();
-    var FAI = window.FinAI;
-    if (FAI) FAI.onStatus(updateAiStatus); // v39: chip + live download card
     var c = byId('chatClose');
     if (c) c.onclick = closeChat;
     var s = byId('chatSend');
@@ -2256,10 +1876,7 @@
     close: closeChat,
     // v47: kick off the guided "set up my numbers" conversation (used by the
     // empty-state buttons in the app shell)
-    startSetup: function () { send('Let’s set up my numbers'); },
-    // v39: inject a message embedding for local tests of the semantic layer
-    setAiVec: function (v) { currentAiVec = v; },
-    getAiVec: function () { return currentAiVec; }
+    startSetup: function () { send('Let’s set up my numbers'); }
   };
 
   if (typeof document !== 'undefined') {

@@ -1,14 +1,13 @@
-/* Finance PWA client — fully local-first: base data + all math live on this phone. */
+/* Fin.AI PWA client — fully local-first: base data + all math live on this phone. */
 (function () {
   'use strict';
 
   var DB_NAME = 'finances-pwa';
-  var DB_VERSION = 4;
+  var DB_VERSION = 5;
   var STORE_TX = 'txns';
   var STORE_PLANS = 'plans';
   var STORE_META = 'meta';
   var STORE_CHAT = 'chat';
-  var STORE_LEX = 'lex';
   var LS_MEAL = 'fin.mealBudget';
   var LS_NAME = 'fin.name';
   var LS_TAB = 'fin.tab';
@@ -77,7 +76,8 @@
         if (!db.objectStoreNames.contains(STORE_PLANS)) db.createObjectStore(STORE_PLANS, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META, { keyPath: 'key' });
         if (!db.objectStoreNames.contains(STORE_CHAT)) db.createObjectStore(STORE_CHAT, { keyPath: 'id' });
-        if (!db.objectStoreNames.contains(STORE_LEX)) db.createObjectStore(STORE_LEX, { keyPath: 'norm' });
+        // v5: drop the on-device lexicon store left by older builds (local brain removed)
+        if (db.objectStoreNames.contains('lex')) db.deleteObjectStore('lex');
       };
       req.onsuccess = function () { resolve(req.result); };
       req.onerror = function () { reject(req.error); };
@@ -114,26 +114,6 @@
     });
   }
 
-  // ---------- personal lexicon (v43) — the coach learns YOUR phrasings ----------
-  // Stored on this phone in the 'lex' store. A record maps a normalized
-  // phrasing to a known concept (a canonical question the rule engine already
-  // answers) plus an optional embedding for fuzzy re-matches. The coach only
-  // ever routes to these deterministic intents — it never writes money.
-  function lexAll() { return idbAll(STORE_LEX).then(function (rows) { return rows || []; }); }
-  function lexPut(rec) { if (!rec || !rec.norm) return Promise.resolve(); return idbPut(STORE_LEX, rec).then(function () {}); }
-  function lexDel(norm) { return idbDel(STORE_LEX, norm); }
-  function lexClear() {
-    return openDB().then(function (db) {
-      return new Promise(function (resolve, reject) {
-        var tx = db.transaction(STORE_LEX, 'readwrite');
-        tx.objectStore(STORE_LEX).clear();
-        tx.oncomplete = function () { resolve(); };
-        tx.onerror = function () { reject(tx.error); };
-      });
-    });
-  }
-
-  // ---------- helpers ----------
   function byId(id) { return document.getElementById(id); }
   function money(v) {
     var n = Number(v) || 0;
@@ -252,9 +232,18 @@
   function monthShort(m) {
     var p = String(m || '').split('-');
     if (p.length === 2 && /^\d{4}$/.test(p[0]) && /^\d{2}$/.test(p[1])) {
-      return ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'][Number(p[1]) - 1] + " '" + p[0].slice(2);
+      return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(p[1]) - 1] + " '" + p[0].slice(2);
     }
     return m || '';
+  }
+  // v51: compact "10 Sep" label for a full ISO date (sparkline start point)
+  function dayMonth(iso) {
+    var p = String(iso || '').split('-');
+    if (p.length === 3 && /^\d{4}$/.test(p[0]) && /^\d{2}$/.test(p[1])) {
+      var mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(p[1]) - 1];
+      return mo ? Number(p[2]) + ' ' + mo : 'now';
+    }
+    return 'now';
   }
   function countUp(el, from, to, fmt) {
     if (!el) return;
@@ -1020,11 +1009,10 @@
     if (!bb) return;
     var b = state.base || defaultBase();
     var h = '';
-    h += brow('<span class="bnote">name</span><input class="grow" id="b_name" type="text" placeholder="Jan" value="' + esc(b.name || '') + '" autocomplete="off">');
+    h += brow('<span class="bnote">name</span><input class="grow" id="b_name" type="text" placeholder="e.g. Jan" value="' + esc(b.name || '') + '" autocomplete="off">');
     h += brow('<span class="bnote">as of</span><input class="grow" id="b_asof" type="date" value="' + esc(b.as_of || '') + '">');
     h += brow('<span class="bnote">salary / month</span><input class="grow" id="b_salary" type="number" inputmode="decimal" step="0.01" value="' + (b.salary || '') + '">');
     h += brow('<span class="bnote">liquidity floor</span><input class="grow" id="b_floor" type="number" inputmode="decimal" step="0.01" value="' + (b.liquidity_floor || '') + '">');
-    h += brow('<span class="bnote">emergency cap</span><input class="grow" id="b_ecap" type="number" inputmode="decimal" step="0.01" value="' + (b.emergency_cap || '') + '">');
     h += brow('<span class="bnote">prepay day</span><input class="grow" id="b_pday" type="number" inputmode="numeric" min="1" max="31" value="' + (b.prepay_day || 14) + '">' +
       '<span class="bnote">cutoff</span><input class="grow" id="b_cday" type="number" inputmode="numeric" min="1" max="31" value="' + (b.cutoff_day || 15) + '">');
     h += brow('<span class="bnote">card target util</span><input class="grow" id="b_util" type="number" inputmode="decimal" step="0.001" value="' + (b.card_util_target || '') + '" title="0.099 = just under 10%">');
@@ -1093,7 +1081,6 @@
     b.as_of = gv('b_asof').trim() || todayISO();
     b.salary = numVal(byId('b_salary'));
     b.liquidity_floor = numVal(byId('b_floor'));
-    b.emergency_cap = numVal(byId('b_ecap'));
     var pd = parseInt(gv('b_pday'), 10);
     var cd = parseInt(gv('b_cday'), 10);
     b.prepay_day = pd > 0 ? pd : 14;
@@ -1649,7 +1636,7 @@
   function sparkData() {
     var s = state.snapshot;
     if (!s || !s.matrix || !s.matrix.base || !s.matrix.base.length) return null;
-    var pts = [{ label: 'now', v: Number(s.matrix.start_cash) || 0 }];
+    var pts = [{ label: dayMonth((state.base && state.base.as_of) || todayISO()), v: Number(s.matrix.start_cash) || 0 }];
     s.matrix.base.forEach(function (row) {
       pts.push({ label: monthShort(row.month), v: Number(row.running) || 0 });
     });
@@ -2302,7 +2289,7 @@
     fr.onload = function () {
       try {
         var data = JSON.parse(String(fr.result || ''));
-        if (!data || data.app !== 'finances-pwa') throw new Error('not a Finance PWA backup');
+        if (!data || data.app !== 'finances-pwa') throw new Error('not a Fin.AI PWA backup');
         var nb = defaultBase();
         if (data.base && (data.base.accounts || data.base.salary)) {
           Object.keys(nb).forEach(function (k) { if (data.base[k] !== undefined) nb[k] = data.base[k]; });
@@ -2351,17 +2338,42 @@
     fr.onerror = function () { snack('Import failed: could not read the file.'); };
     fr.readAsText(file);
   }
+  // v51: single footer stamp — brand, shell version, and the moment this
+  // build went live. Rendered into both footers (page + Settings sheet) from
+  // this one source so they can never drift. Bump SHELL_RELEASE together with
+  // the sw.js cache on each release.
+  var SHELL_RELEASE = { v: 51, live: new Date(2026, 8, 10, 10, 57) };
+  function shellStamp() {
+    var d = SHELL_RELEASE.live;
+    var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var h = d.getHours(), ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return 'Fin.AI · shell v' + SHELL_RELEASE.v + ' (' + MO[d.getMonth()] + ' ' + d.getDate() +
+      ', ' + d.getFullYear() + ' | ' + h + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + ap + ')';
+  }
   function renderFooter() {
-    var el = byId('foot'); if (!el) return;
-    var b = state.base;
-    if (!b || baseIsEmpty(b)) { el.innerHTML = 'fully local · add your numbers in Settings (⚙)'; return; }
-    var parts = ['numbers as of ' + esc(fmtDate(b.as_of || ''))];
-    if (b.edited) parts.push('last edited ' + new Date(b.edited).toLocaleTimeString());
-    el.innerHTML = parts.join('<br>');
+    var stamp = shellStamp();
+    var el = byId('foot'); if (el) el.innerHTML = stamp;
+    var sf = byId('setFoot'); if (sf) sf.innerHTML = stamp;
   }
   var TABS = ['home', 'money', 'ledger', 'owed'];
   var TAB_MIGRATE = { overview: 'money', add: 'ledger', coach: 'home' };
   var shownTab = null;        // pane currently on screen
+  // v51: home welcome — time-of-day greeting + today's full date.
+  // Re-rendered every time the Home tab is shown, so a midnight crossing (or
+  // the next day's open) always lands on a fresh greeting.
+  function renderGreet() {
+    var el = byId('homeGreet'); if (!el) return;
+    var h = byId('greetHello'), d = byId('greetDate');
+    var now = new Date();
+    var hr = now.getHours();
+    if (h) h.textContent = hr < 5 ? 'Up late' : hr < 12 ? 'Good morning' :
+      hr < 17 ? 'Good afternoon' : hr < 21 ? 'Good evening' : 'Good night';
+    if (d) d.textContent =
+      ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()] + ', ' +
+      ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][now.getMonth()] + ' ' +
+      now.getDate() + ', ' + now.getFullYear();
+  }
   function setTab(name) {
     if (TAB_MIGRATE[name]) name = TAB_MIGRATE[name];
     if (TABS.indexOf(name) < 0) name = 'home';
@@ -2376,6 +2388,7 @@
     }
     try { localStorage.setItem(LS_TAB, name); } catch (e) {}
     window.scrollTo(0, 0);
+    if (name === 'home') renderGreet();
   }
   // v23: Coach is the floating bot; v24: floating bubble above the FAB;
   // v25: clicking the bot toggles the bubble (open, or close if already open);
@@ -2455,11 +2468,6 @@
     idbPut: idbPut,
     idbDel: idbDel,
     STORE_CHAT: STORE_CHAT,
-    STORE_LEX: STORE_LEX,
-    lexAll: lexAll,
-    lexPut: lexPut,
-    lexDel: lexDel,
-    lexClear: lexClear,
     STORE_PLANS: STORE_PLANS,
     STORE_TX: STORE_TX,
     STORE_META: STORE_META
@@ -2476,9 +2484,8 @@
       setTimeout(function () { location.reload(); }, 350);
     };
   }
-
-  // ---------- init ----------
   function init() {
+    renderGreet();
     var dateEl = byId('f_date');
     if (dateEl && !dateEl.value) dateEl.value = todayISO();
     if (dateEl) { dateEl.addEventListener('input', function () { syncDateLabel(dateEl); }); syncDateLabel(dateEl); }
