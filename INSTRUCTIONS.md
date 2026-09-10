@@ -6,6 +6,35 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-10 ~19:35 — Live test: coach fumbles the limit flow ("poor response")
+
+Status: **in progress** (code shipped — log close-out next)
+Progress: 90% — ETA ~2 min (log commit + push)
+
+### Instruction (verbatim)
+> poor response
+
+(plus a screenshot of the live coach chat, 04:58 PM — the exchange, transcribed: see Interpretation)
+
+### Interpretation (agent — user may edit this section)
+- Screenshot exchange, verbatim:
+  1. Coach: "So you're telling me: the credit limit for MariBank CC is PHP 70,000."
+  2. User: "yes"
+  3. Coach: "I don't see a previous draft to confirm. Please tell me what change you'd like to make to your numbers."
+  4. User: "record it"
+  5. Coach: "So you're telling me: you want to record the logged expenses for this month (Parents' Utilities Support, Transport, Personal Treats / Gear, and Food / Gym Nutrition). Please confirm the month"
+- Parsing worked (card + amount extracted) — the failure is **protocol**: after its own confirm question + the user's "yes", the coach must issue the `<draft>` with a `Card limit · 70,000` detail on the MariBank CC row. Instead it (a) claimed there was no previous draft, then (b) on "record it" dropped the pending limit intent and switched to the unrelated record-expenses intent.
+- Fix plan (agent — edit me): worker prompt in `worker/worker.js` — make post-confirmation behaviour explicit (confirm question + "yes"/"record it" → immediately issue the draft; a pending intent is never silently replaced by a different one). Then gates → commit + push.
+- Deploy limit (agent): the live worker is hosted — the fix only reaches the user's phone after a `npx wrangler deploy`; Node was reported missing on this machine, so if it's still missing the deploy step goes to the user (or tell me where Node is).
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Read worker/worker.js — find confirm/draft protocol + limit sections — the coach system prompt is `AI_REMOTE_SYSTEM` in **chat.js** (~line 1365); `worker/worker.js` is a thin key-injecting proxy with no prompt text (corrects the earlier "one line in worker/worker.js" note). Node v24.19.0 **is** available on this machine (was reported missing) — `node --check` works and a wrangler deploy can be attempted.
+- [x] Fix the prompt (post-confirm draft; pending intent never silently switches) — `AI_REMOTE_SYSTEM` loop-closer: paraphrase ends with "Shall I record that?" when nothing is missing; "The moment the user confirms your own paraphrase, reply with the JSON draft of that very change — … never answer that you cannot see a previous draft"; while a confirmation is open, short replies refer to the pending change and never switch topics
+- [x] Gates (check_site.py + test_chat_parser.py) → commit + push — check_site "all checks passed" (now also asserts the loop-closer phrase, v58), parser tests "all parser checks passed", `node --check` clean on all five JS files (Node v24 available). Code pushed as **`4283d7c`** (v58: chat.js prompt + sw.js/app.js/README bump) → origin/main
+- [x] Deploy path — resolved without asking: `npx wrangler deploy` ran from `finance-app/worker/` — `finsmart-coach` → https://finsmart-coach.jblagana.workers.dev, version `d9a8fac8-0397-4be3-93eb-cdfed6451dd4`. This also clears the open question: the hosted worker now provably carries the v56 code (MAX_INPUT 8000 / MAX_TOKENS 512). Worker code was unchanged by v58 itself (the prompt lives in chat.js), so the phone only needs the v58 shell via the Pages cache bump
+- [ ] Log done with hash
+
 ## 2026-09-10 ~19:05 — Process: catch interpretation edits + per-subtask log updates
 
 Status: **done**
