@@ -16,7 +16,7 @@ with one-tap undo — the rule engine stays the only writer.
   attention card, and insights (category donut, budget pace).
 - **Money** — live summary (liquid cash, free, cards owed, prepay), the month's
   Obligations and Sinking funds, the 6-month projection, and upcoming plans.
-- **Ledger** — add expense (Amount, Category, then Card / cash beside Date, plus
+- **Ledger** — add expense (Amount, optional Category, then Card / cash beside Date, plus
   a note; quick sums like "40+35.5" work) and the full transaction list.
   Entries overlay the base numbers live; deletes confirm first, and the last
   add/delete is undoable from the toast.
@@ -62,12 +62,10 @@ and on-device — the LLM only drafts.
 - The 6-month window derives from your **as of** date (first month = as-of
   month), not hardcoded; prepay day (default 14th) and budgets are editable in
   Settings.
-- The **worst case** figure is the lowest the month-end could dip if an
-  uncertain one-off lands.
 - **Backup** (Settings → Backup): Export JSON (everything) / Export CSV (ledger
   only) / Import JSON to restore.
 - Both footers show the shell version + when this build went live. Releases
-  bump the SW cache (`finances-pwa-v51`) and the `SHELL_RELEASE` stamp in
+  bump the SW cache (`finances-pwa-v52`) and the `SHELL_RELEASE` stamp in
   `app.js` together — the "New version ready" toast offers a one-tap reload.
   If the app ever looks stale: open the Pages URL once in Safari, then
   relaunch the home-screen icon.

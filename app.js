@@ -345,7 +345,7 @@
       v: 1, name: '', as_of: todayISO(),
       salary: 0, salary_overrides: {},
       prepay_day: 14, cutoff_day: 15, card_util_target: 0.099,
-      liquidity_floor: 0, emergency_cap: 0,
+      liquidity_floor: 0,
       accounts: [], budgets: {}, budget_overrides: {},
       one_offs: {}, debts: {}, sinking: {},
       migrated_from_snapshot: null, edited: null
@@ -367,7 +367,6 @@
     b.prepay_day = Number(s.prepay_day) || 14;
     b.cutoff_day = Number(s.cutoff_day) || 15;
     b.liquidity_floor = Number(s.floor) || 0;
-    b.emergency_cap = Number(s.emergency_cap) || 0;
     b.migrated_from_snapshot = String(s.month || s.as_of || '');
     var target = 0;
     (s.cards || []).forEach(function (c) {
@@ -457,8 +456,7 @@
     }
     return out;
   }
-  function baseMonthComponents(month, months, b, emergency, applyOverrides) {
-    emergency = emergency || 0;
+  function baseMonthComponents(month, months, b, applyOverrides) {
     var salary = (b.salary_overrides[month] !== undefined) ? Number(b.salary_overrides[month]) : Number(b.salary) || 0;
     var budget = {};
     Object.keys(b.budgets || {}).forEach(function (k) { budget[k] = Number(b.budgets[k]) || 0; });
@@ -485,24 +483,20 @@
     Object.keys(oneOffs).forEach(function (k) { oneOffTotal += Number(oneOffs[k]) || 0; });
     oneOffTotal = r2(oneOffTotal);
     var cardPrepay = (month === months[0]) ? baseCardPrepays(b).total : 0;
-    var outflows = r2(budgetTotal + debtTotal + sinkTotal + oneOffTotal + cardPrepay + emergency);
+    var outflows = r2(budgetTotal + debtTotal + sinkTotal + oneOffTotal + cardPrepay);
     return { month: month, salary: salary, budget_total: budgetTotal, debt_total: debtTotal,
       sinking_total: sinkTotal, one_off_total: oneOffTotal, card_prepay: cardPrepay,
-      emergency: emergency, partner_repay: 0, outflows: outflows, net: r2(salary - outflows) };
+      partner_repay: 0, outflows: outflows, net: r2(salary - outflows) };
   }
   function baseMatrix(b, months) {
     var start = baseCashTotal(b);
-    var cap = Number(b.emergency_cap) || 0;
-    var base = [], worst = [], bc = start, wc = start;
+    var base = [], bc = start;
     months.forEach(function (m) {
-      var bi = baseMonthComponents(m, months, b, 0, true);
-      var w = baseMonthComponents(m, months, b, cap, true);
+      var bi = baseMonthComponents(m, months, b, true);
       bc = r2(bc + bi.net);
-      wc = r2(wc + w.net);
       base.push({ comp: bi, running: bc });
-      worst.push({ comp: w, running: wc });
     });
-    return { start_cash: start, base: base, worst: worst };
+    return { start_cash: start, base: base };
   }
   function baseBridge(b, months) {
     var cash = baseCashTotal(b);
@@ -513,8 +507,8 @@
         borrow_to_avoid_negative: toZero, borrow_to_keep_floor: Math.max(0, r2(outflows - cash + floor)),
         need_borrow: toZero > 0 };
     }
-    var mand = baseMonthComponents(months[0], months, b, 0, true);
-    var full = baseMonthComponents(months[0], months, b, 0, false);
+    var mand = baseMonthComponents(months[0], months, b, true);
+    var full = baseMonthComponents(months[0], months, b, false);
     return { cash: cash, floor: floor, mandatory_only: advice(mand.outflows), full_living: advice(full.outflows) };
   }
 
@@ -523,8 +517,7 @@
     if (!/^\d{4}-\d{2}$/.test(month)) month = todayISO().slice(0, 7);
     var months = localMonths(month, 6);
     var pp = baseCardPrepays(b);
-    var comp0 = baseMonthComponents(month, months, b, 0, true);
-    var compW = baseMonthComponents(month, months, b, Number(b.emergency_cap) || 0, true);
+    var comp0 = baseMonthComponents(month, months, b, true);
     var cards = [];
     Object.keys(pp.per).forEach(function (name) {
       var d = pp.per[name];
@@ -594,10 +587,9 @@
       total_prepay: pp.total,
       cash: { total: baseCashTotal(b), free: r2(baseCashTotal(b) - comp0.outflows), accounts: cashAccounts },
       cards: cards,
-      committed: { base: comp0.outflows, worst: compW.outflows },
+      committed: comp0.outflows,
       obligations: { month: month, budget: budgetLines, budget_total: budgetTotal, debts: debtLines, one_offs: oneOffLines, loans: loanLines },
       sinking: sinkLines,
-      emergency_cap: Number(b.emergency_cap) || 0,
       matrix: baseMatrix(b, months),
       bridge: baseBridge(b, months)
     };
@@ -819,7 +811,7 @@
   function mlParts(e) {
     var lab, note = '';
     if (e.c != null) {
-      lab = e.c;
+      lab = e.c || '—';
       note = e.nt || '';
     } else {
       // legacy entry (pre-v17): only the merged "Category · note" label was stored
@@ -987,7 +979,7 @@
     return '<div class="bblk" data-sec="debt">' +
       brow('<input class="grow" data-r="name" placeholder="debt name" value="' + esc(d.name || '') + '" autocomplete="off">' + delBtn('Remove debt', true)) +
       brow('<span class="bnote">monthly</span><input data-r="monthly" type="number" inputmode="decimal" step="0.01" value="' + (d.monthly != null ? d.monthly : '') + '">' +
-        '<span class="bnote">active</span><input class="grow" data-r="active" placeholder="2027-02, 2027-03" value="' + esc((d.active_months || []).join(', ')) + '" autocomplete="off">') +
+        '<span class="bnote">active</span><input class="grow" data-r="active" value="' + esc((d.active_months || []).join(', ')) + '" autocomplete="off">') +
       '<div data-r="pays">' + pays + '</div>' +
       '<button type="button" class="addrow" data-add="dpay">+ payment by month</button>' +
       '</div>';
@@ -1025,7 +1017,7 @@
       '<button type="button" class="addrow" data-add="acc">+ account</button>';
     var budRows = '';
     Object.keys(b.budgets || {}).forEach(function (k) {
-      budRows += brow('<input class="grow" data-r="name" placeholder="e.g. Rent" value="' + esc(k) + '" autocomplete="off">' +
+      budRows += brow('<input class="grow" data-r="name" value="' + esc(k) + '" autocomplete="off">' +
         '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (Number(b.budgets[k]) || '') + '">' + delBtn('Remove budget'));
     });
     h += bsec('Monthly budgets') + '<div id="rowsBud">' + budRows + '</div>' +
@@ -1158,7 +1150,7 @@
     else if (kind === 'acc') { host = byId('rowsAcc'); html = accRow({}); }
     else if (kind === 'bud') {
       host = byId('rowsBud');
-      html = brow('<input class="grow" data-r="name" placeholder="e.g. Rent" autocomplete="off">' +
+      html = brow('<input class="grow" data-r="name" autocomplete="off">' +
         '<input data-r="a" type="number" inputmode="decimal" step="0.01">' + delBtn('Remove budget'));
     } else if (kind === 'bov') {
       host = byId('rowsBov');
@@ -1514,7 +1506,7 @@
   function monthBlock(d) {
     var s = d.s;
     var mLines = [];
-    mLines.push('Committed on the sheet: <b>' + money(s.committed ? s.committed.base : 0) + '</b> (worst case ' + money(s.committed ? s.committed.worst : 0) + ').');
+    mLines.push('Committed on the sheet: <b>' + money(s.committed || 0) + '</b>.');
     var monthPlans = d.monthPlans, monthPlanCount = d.monthPlanCount;
     if (monthPlanCount) mLines.push('Planned here this month: <b>' + money(monthPlans) + '</b> (' + monthPlanCount + ' item' + (monthPlanCount === 1 ? '' : 's') + ').');
     if (s.salary) mLines.push('Salary this cycle: <b>' + money(s.salary) + '</b>.');
@@ -1640,7 +1632,7 @@
     s.matrix.base.forEach(function (row) {
       pts.push({ label: monthShort(row.month), v: Number(row.running) || 0 });
     });
-    var floorLine = Number(s.floor) > 0 ? Number(s.floor) : (Number(s.emergency_cap) || 0);
+    var floorLine = Number(s.floor) || 0;
     return { pts: pts, floor: floorLine };
   }
   function renderSpark() {
@@ -1710,25 +1702,16 @@
         alerts.push('prepay');
       }
     }
-    var floor = Number(s.floor) > 0 ? Number(s.floor) : (Number(s.emergency_cap) || 0);
+    var floor = Number(s.floor) || 0;
     if (floor > 0 && state.snapshot && state.snapshot.matrix && state.snapshot.matrix.base) {
-      var base = state.snapshot.matrix.base, worst = state.snapshot.matrix.worst || [];
-      var baseDip = null, worstDip = null;
-      base.forEach(function (row, i) {
+      var baseDip = null;
+      state.snapshot.matrix.base.forEach(function (row) {
         var rv = Number(row.running) || 0;
         if (!baseDip && rv < floor) baseDip = { v: rv, m: row.month };
-        var w = worst[i];
-        if (w) {
-          var wv = Number(w.running) || 0;
-          if (wv < floor && (!worstDip || wv < worstDip.v)) worstDip = { v: wv, m: w.month };
-        }
       });
       if (baseDip) { rows.push({ cls: 'bad', tag: 'Cash floor',
         text: 'Cash dips to ' + money(baseDip.v) + ' in ' + monthLabel(baseDip.m) + ' — floor is ' + money(floor) + '.',
         r: 'below floor' }); alerts.push('floor'); }
-      else if (worstDip) { rows.push({ cls: 'warn', tag: 'Worst case',
-        text: 'With the full emergency budgeted each month, cash dips to ' + money(worstDip.v) + ' in ' + monthLabel(worstDip.m) + '.',
-        r: 'floor ' + fmtNum(floor) }); alerts.push('floor'); }
     }
     var sink = state.snapshot && state.snapshot.sinking;
     var nowM = d.monthPrefix;
@@ -2018,7 +2001,7 @@
       '<div><label>Date</label><div class="dfield"><input type="date" class="oent-date">' +
       '<span class="dlabel empty" aria-hidden="true">Pick a date</span></div></div>' +
       '<div><label>Amount (\u20b1) — number or quick sum</label>' +
-      '<input type="text" inputmode="decimal" class="oent-amt" maxlength="40" placeholder="e.g. 300-125+10" autocomplete="off">' +
+      '<input type="text" inputmode="decimal" class="oent-amt" maxlength="40" autocomplete="off">' +
       '<p class="oent-eq" aria-live="polite"></p></div>' +
       '</div>' +
       '<label>What happened</label>' +
@@ -2029,7 +2012,7 @@
       '<label><input type="radio" name="owdir" value="tmb"><span>They paid me back</span></label>' +
       '</div>' +
       '<label>Note (optional)</label>' +
-      '<input type="text" class="oent-note" maxlength="60" placeholder="e.g. lunch, split bill" autocomplete="off">' +
+      '<input type="text" class="oent-note" maxlength="60" autocomplete="off">' +
       '<div style="margin-top:14px"><button class="act" type="submit">Add entry</button></div>' +
       '</form>' +
       '</section>';
@@ -2342,7 +2325,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 51, live: new Date(2026, 8, 10, 10, 57) };
+  var SHELL_RELEASE = { v: 52, live: new Date(2026, 8, 10, 11, 31) };
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2511,7 +2494,6 @@
       var catVal = byId('f_category').value;
       var category = (catVal === CAT_CUSTOM ? byId('f_categoryCustom').value : catVal) || '';
       category = category.trim();
-      if (!category) { alert('Pick a category — or choose Custom… and type one.'); return; }
       addTxn({
         date: byId('f_date').value || todayISO(),
         account: name,

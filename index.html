@@ -423,11 +423,11 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
     <h2>Plans · coming up</h2>
     <form id="planForm" class="card" autocomplete="off">
       <label for="p_name">What you're planning</label>
-      <input id="p_name" placeholder="e.g. Eat out, Shoes, Birthday gift">
+      <input id="p_name">
       <div class="row">
         <div>
           <label for="p_amount">Amount (₱)</label>
-          <input id="p_amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+          <input id="p_amount" type="number" inputmode="decimal" min="0" step="0.01">
         </div>
         <div>
           <label for="p_date">Date</label>
@@ -488,7 +488,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
       <label for="owedName">Add a person</label>
       <div class="row">
         <div>
-          <input id="owedName" placeholder="e.g. Vhal" maxlength="24" autocomplete="off">
+          <input id="owedName" maxlength="24" autocomplete="off">
         </div>
         <div>
           <button class="act" type="submit">Add</button>
@@ -570,7 +570,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         </div>
       </div>
       <label for="f_note">Note (optional)</label>
-      <input id="f_note" placeholder="optional">
+      <input id="f_note">
       <div style="margin-top:14px">
         <button class="act" type="submit">Add expense</button>
       </div>

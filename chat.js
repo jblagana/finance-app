@@ -562,19 +562,17 @@
       if (cm > 12) { cm = 1; cy += 1; }
       target = cy + '-' + pad2(cm);
     }
-    var rowB = null, rowW = null;
+    var rowB = null;
     if (target) {
       (m.base || []).forEach(function (r) { if (r.comp.month === target) rowB = r; });
-      (m.worst || []).forEach(function (r) { if (r.comp.month === target) rowW = r; });
     }
-    if (target && (rowB || rowW)) {
-      var comp = rowB ? rowB.comp : rowW.comp;
-      var below = rowB && rowB.running < (ctx.eff.floor || 0);
+    if (target && rowB) {
+      var comp = rowB.comp;
+      var below = rowB.running < (ctx.eff.floor || 0);
       var h2 = block(monthLabel(target),
         kv('Salary', money(comp.salary)) +
-        kv('Committed outflows', money(comp.outflows) + ' <span class="note" style="font-size:11px">worst-case ' + money(rowW ? rowW.comp.outflows : 0) + '</span>') +
-        kv('Cash at month end (base)', money(rowB ? rowB.running : 0)) +
-        kv('Cash at month end (worst)', money(rowW ? rowW.running : 0)),
+        kv('Committed outflows', money(comp.outflows)) +
+        kv('Cash at month end', money(rowB.running)),
         below
           ? 'Base case dips below your ' + money(ctx.eff.floor || 0) + ' floor in ' + monthLabel(target) + ' — that’s the month to protect.'
           : 'Stays above the ' + money(ctx.eff.floor || 0) + ' floor in ' + monthLabel(target) + '.',
@@ -583,14 +581,13 @@
     }
     if (worst || general) {
       var lines = kv('Starting liquid cash', money(m.start_cash));
-      (m.base || []).forEach(function (r, i) {
-        var w = (m.worst || [])[i];
-        lines += kv(monthLabel(r.comp.month), money(r.running) + ' <span class="note" style="font-size:11px">worst ' + money(w ? w.running : '—') + '</span>');
+      (m.base || []).forEach(function (r) {
+        lines += kv(monthLabel(r.comp.month), money(r.running));
       });
       var ms = (ctx.snap && ctx.snap.months) || [];
       var winTitle = ms.length >= 2 ? monthLabel(ms[0]) + ' → ' + monthLabel(ms[ms.length - 1]) : '6 months';
       var h3 = block(winTitle + ' · running cash', lines,
-        'Worst case also eats the ' + money(ctx.snap.emergency_cap || 0) + ' emergency every month.', 'good');
+        'Liquid cash at the end of each month.', 'good');
       return { html: h3 + freshness(ctx) };
     }
     return null;
@@ -1539,7 +1536,7 @@
 
   // ---------- chat store + message UI ----------
   var inputEl = null, msgsEl = null;
-  var CHIPS = ['How much is free?', 'My 14th prepay', 'Show my plans', 'What’s coming up?', 'Check a charge', 'Urgent expense'];
+  var CHIPS = ['How much is free?', 'My cc prepay', 'What’s coming up?', 'Urgent expense'];
 
   function chatId() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function loadChat() {
@@ -1802,7 +1799,7 @@
     var el = byId('chatFresh');
     if (!el || !ctx) return;
     var when = ctx.at ? new Date(ctx.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'today';
-    el.textContent = 'as of ' + when + ' · on this phone';
+    el.textContent = 'as of ' + when;
   }
   function welcomeHtml() {
     var n = coachName();
