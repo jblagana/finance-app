@@ -1347,7 +1347,19 @@
     L.push('');
     // the last few turns, so "and next month?" knows what we just talked about
     var hLines = (hist || []).map(function (h) { return (h.who === 'user' ? 'You: ' : 'Coach: ') + h.txt; });
-    if (hLines.length) { L.push('Recent conversation (short, for context):'); L.push(hLines.join('\n')); L.push(''); }
+    if (hLines.length) {
+      L.push('Recent conversation (short, for context):');
+      L.push(hLines.join('\n'));
+      // v59: the model must read the current message against the last turn — a bare
+      // "yes" is a reply to the last Coach line above, not a fresh question
+      L.push("The 'Question:' below is the user's immediate reply to the last 'Coach:' line above.");
+      var lastC = null;
+      for (var hc = hLines.length - 1; hc >= 0; hc--) if (hLines[hc].who !== 'user') { lastC = hLines[hc].txt; break; }
+      if (lastC && lastC.indexOf("So you're telling me:") === 0) {
+        L.push("STATE: your last message was that paraphrase, awaiting confirmation — a 'yes' or 'record it' now means: reply with the JSON draft of that change, no further questions.");
+      }
+      L.push('');
+    }
     // v55: an open (unconfirmed) draft — the user's next words are a reply to it
     if (openDraft && openDraft.lines && openDraft.lines.length) {
       L.push('An UNCONFIRMED draft of base-data changes is on screen:');
@@ -1363,7 +1375,7 @@
   // story-mode shapes and the existing confirm/undo flow — the model itself
   // still writes nothing.
   var AI_REMOTE_SYSTEM = 'You are Fin.AI, a personal money coach. Answer only from the numbers given, in 1-3 short plain sentences (under 60 words), no lists, no markdown, no emojis. Never invent numbers. ' +
-    'When the user tells you a change to their money (a new or updated number, or a story of several changes), FIRST make sure you understand it: reply with a one-line paraphrase ("So you\'re telling me: ...") and ask only for the details you truly need (amount, month, which account); if nothing is missing, end with a short ask like "Shall I record that?". Do NOT output any JSON until the user confirms (yes / exactly / right / go ahead / record it) or supplies the last missing detail. The moment the user confirms your own paraphrase, reply with the JSON draft of that very change — the JSON you emit after their confirmation IS the draft; never answer that you cannot see a previous draft. While a confirmation or a missing detail is still open, the next short message from the user (yes, no, record it, a corrected number) refers to that same pending change — never drop it or start a different topic unless the user explicitly names a different one. ' +
+    'When the user tells you a change to their money (a new or updated number, or a story of several changes), FIRST make sure you understand it: reply with a one-line paraphrase ("So you\'re telling me: ...") and ask only for the details you truly need (amount, month, which account); if nothing is missing, end with a short ask like "Shall I record that?". Do NOT output any JSON until the user confirms (yes / exactly / right / go ahead / record it) or supplies the last missing detail. Your recent conversation above shows your own last reply: when the current message confirms that paraphrase (yes / record it), reply with the JSON draft of that very change — it is the FIRST draft; there is nothing to look for, so never answer that you cannot see a draft or a pending change. While a confirmation or a missing detail is still open, the next short message from the user (yes, no, record it, a corrected number) refers to that same pending change — never drop it or start a different topic unless the user explicitly names a different one. ' +
     'If an UNCONFIRMED draft of changes is provided as context, the user\'s message is a reply to that draft: if they correct it, reply with the corrected JSON draft; if they confirm it, reply with the same JSON draft; if they switch topics, answer the new topic. ' +
     'Once confirmed, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123} | {"type":"field","entity":"cash|card|debt|loan|budget","name":"N","key":"short_snake_key","value":123}. Use only names from the numbers list or a new name the user stated. Numbers in [brackets] on a row are custom details the user recorded (credit limit, due day, anything). When the user wants to record any other fact about an account or budget — a credit limit, APR, due day, penalty, anything — record it as a field change with a short snake_case key; value null removes a recorded detail; ask for the value if the user did not state it. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
   function aiPrompt(t, ctx, remote, hist) {
@@ -1385,7 +1397,12 @@
     L.push('Suggested order: cash accounts → cards (balance + limit) → monthly salary → debts / monthly payments → budgets → goals → one-offs this month.');
     L.push('Ask 1-2 things at a time. Use only the user\'s own names and amounts; never invent a number.');
     var hLines = (hist || []).map(function (h) { return (h.who === 'user' ? 'You: ' : 'Coach: ') + h.txt; });
-    if (hLines.length) { L.push('Recent conversation (short, for context):'); L.push(hLines.join('\n')); L.push(''); }
+    if (hLines.length) {
+      L.push('Recent conversation (short, for context):');
+      L.push(hLines.join('\n'));
+      L.push("The 'Question:' below is the user's immediate reply to the last 'Coach:' line above.");
+      L.push('');
+    }
     L.push('Question: ' + t);
     return [{ role: 'system', content: AI_SETUP_SYSTEM }, { role: 'user', content: L.join('\n') }];
   }
