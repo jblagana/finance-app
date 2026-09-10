@@ -6,6 +6,36 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-10 ~18:53 — v59 live re-test: "yes" now emits JSON, but the draft is a full-snapshot dump rendered as raw text
+
+Status: **done** — code `c8af0e2` on origin/main
+Progress: 100% — done (v60 code pushed; log commit follows)
+
+### Instruction (verbatim)
+> [TASK RESUMPTION] Please continue where you left off.
+
+(plus a screenshot of a new live coach test — the exchange, transcribed in the Interpretation)
+
+### Interpretation (agent — user may edit this section)
+- Screenshot exchange, verbatim:
+  1. Coach: "So you're telling me: you want to update the credit limit for MariBank CC to PHP 70,000. Shall I record that?"
+  2. User: "yes"
+  3. Coach: a raw JSON blob in a plain chat bubble (no draft card): `{"say":"Recorded your updated numbers.","changes":[{"type":"account","name":"MariBank CC","kind":"card","value":17279.64},{"type":"account","name":"Maya CC",…},{"type":"account","name":"MariBank","kind":"cash","value":3004.81},{"type":"account","name":"LandBank","kind":"cash","value":1000.0},{"type":"account","name":"Maya…` (continues past the visible cut)
+- **Progress**: the v59 STATE fix worked — the bare "yes" now triggers JSON emission; the confirm loop is closed.
+- **New failure**: the model dumped the whole snapshot as the "draft" — it restated every account at its current balance (17279.64 / 3004.81 / 1000.0 are existing numbers from the numbers list) instead of the single confirmed change (a credit-limit update on MariBank CC). The "say" is also past tense ("Recorded your updated numbers.") although nothing is recorded until the user taps confirm.
+- And the app showed raw JSON text instead of a draft card — so the response either failed JSON parse (truncation?) or failed validation of the changes. Reading the validation path will say which; either way the fix is the same.
+- Fix plan (agent — edit me): v60, prompt-only in `AI_REMOTE_SYSTEM`: (a) after confirmation "changes holds ONLY that one change — never restate current balances, limits, or other accounts from the numbers list (they are already on the phone)"; (b) "a credit-limit update is a single field change with key credit_limit on that card, not an account change"; (c) the say line presents the draft in present tense, never "recorded"; (d) the STATE annotation gets "that one change (only that change)". Shell bump v60; check_site guard + version bumps; worker untouched (prompt is app-side) → no redeploy.
+- Validation path read (agent): `parseCoachDraft` is strict — first char `{`, full `JSON.parse`, up to 4 changes through `coachSanitizeChange`; `sendLlm` renders the draft card only when `changes.length > 0`, else raw text. The app caps coach generation at `maxNew: 256` tokens, so the full-snapshot dump ran past the cap → truncated JSON → the raw-text fallback seen in the screenshot. A correct single field change (~60 tokens) parses and sanitizes fine: entity `card` exists in base, key `credit_limit` is not reserved, value numeric → label "Detail · MariBank CC — credit_limit".
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Read the draft parse/validation path (why raw text; which key the field change expects)
+- [x] chat.js v60 prompt edits
+- [x] check_site.py v60 guard + version bumps (sw/app/README/check_site)
+- [x] Gates (check_site + parser + node --check) — check_site "all checks passed" (v60 guard: draft holds ONLY that change), parser "all parser checks passed", node --check clean on all five JS files
+- [x] Push code + log — code pushed as `c8af0e2` (chat.js prompt, sw.js cache, app.js stamp, README)
+- [ ] Log done with hash
+
 ## 2026-09-10 ~20:25 — v58 live re-test: "Shall I record that?" lands, "yes" still dropped
 
 Status: **done** — code `8b4e90e` on origin/main, log `d767d6a`; re-test on the phone after the v59 shell loads
