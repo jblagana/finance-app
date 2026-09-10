@@ -6,6 +6,49 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-11 (night, after v67) — ok: sync local, bump gate, add coordination rules
+Status: in progress
+Progress: 10% — ETA ~8 min
+
+### Instruction (verbatim)
+> ok
+
+### Interpretation (agent — user may edit this section)
+- Approves the recommendation from the end of the check report: (1) sync the local clone — commit my check entry, `pull --rebase`, resolve the INSTRUCTIONS.md conflict keeping both entries (mine on top as newest), push; (2) bump the local `check_site.py` v66 → v67 (docstring + sw-cache + stamp assertions — local file, outside the repo); (3) append coordination rules to the repo-root `AGENTS.md` — single pusher to `main`, the version counter as a critical section, branch-only work for the non-on-duty agent; docs-only commit, no version bump (`AGENTS.md` is not in the SW shell).
+- Moving the structural gate into the repo (`tools/`) stays a next-release item for the HPC side (their v68 branch) per the report — **not** part of this "ok".
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [ ] Commit my log entries → `pull --rebase` → keep both entries → push
+- [ ] Bump local `check_site.py` to v67 (docstring, sw-cache line, stamp line) + run it (must pass)
+- [ ] Append coordination rules to repo-root `AGENTS.md` → docs-only commit + push
+- [ ] Mark this entry done (after pushes) + final log commit + push
+
+## 2026-09-11 (night, after v66) — check: did the HPC agent change anything?
+Status: done
+Progress: 100% — read-only task; findings reported to Jan; entry shipped with the sync push
+
+### Instruction (verbatim)
+> check now if they changed something
+
+### Interpretation (agent — user may edit this section)
+- Context: Jan runs a second Cline agent on an HPC against the same repo. Check what changed on the remote since v66 (local HEAD `760fd29`): `git fetch`, compare HEAD vs origin/main, list new commits + file diffs, look for a repo-root AGENTS.md / coordination scaffolding or any repo change at all.
+- **Read-only**: fetch + inspect only — no pull/rebase/merge in this task; I report, Jan decides.
+
+### Findings (agent)
+- **Yes — v67 landed on origin/main**: `5e7bd66` (committed 01:20:51 +0800) "v67: enlarge the bot in all icons by +14% (~80% of the tile); SW cache v67". Files: 4 icons (regenerated ×1.14, PIL), sw.js cache v67, app.js `SHELL_RELEASE` v67 @ 01:17, README release line v66→v67, INSTRUCTIONS.md (+33, proper log entry), and a **new repo-root `AGENTS.md`** (instruction-log discipline only — no push-ownership rules yet).
+- Their task: iPhone home-screen icon transparency (answer: iOS composites over white, can't be transparent) + enlarge the bot; scale "+14%" picked by the user. Their entry notes `check_site.py`/`verify_live.ps1` don't exist in the HPC workspace — their gates were node --check + geometry re-measure + visual read-back.
+- **Parallelism handled well**: they noticed v65/v66 shipped while their work was in flight, renumbered to v67, and their next planned release ("Option B rules-first routing") is explicitly **v68 on its own branch**.
+- **Live verified**: sw cache v67: True, app.js v: 67: True.
+- **No code clash** with my side: my only local change is my uncommitted log entry. Two sync items when Jan says go: (a) my log entry + their entry both sit at the top of INSTRUCTIONS.md → expect a text conflict on `pull --rebase` (resolve: keep both, mine on top as newest); (b) my local `check_site.py` still asserts v66 → bump to v67 (local file, outside the repo — the HPC side has no structural gate at all).
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] git fetch origin; compare local HEAD vs origin/main (+ remote branches)
+- [x] Inspect new commits (diff stat + key files) if any
+- [x] Report findings to Jan
+- [x] Sync + gate bump + AGENTS.md rules approved ("ok") — tracked under the entry above
+
 ## 2026-09-11 (night, after v66) — iPhone home-screen icon: can it render transparent? + enlarge the bot
 Status: done
 Progress: 100% — shipped as v67 (this commit) → origin/main
