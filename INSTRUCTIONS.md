@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-10 ~13:05 — Quick-sum revert (operators on keyboard) + Home positioning fix
-Status: **in progress**
-Progress: 90% — ETA ~10 min (gate passed; commit + push left)
+Status: **done**
+Progress: 100% — v54 pushed as `083a734` → origin/main (2026-09-10 ~13:35)
 
 ### Instruction (verbatim)
 > -revert back the quicksum, i never wanted it gone. my problem was that when i type in the phone, i cant do quicksum because the keyboard that appears is numeric so there are no operators. now make the keyboard add operators.
@@ -43,7 +43,7 @@ Progress: 90% — ETA ~10 min (gate passed; commit + push left)
 - [x] Home positioning fix (.greet 14px bottom padding)
 - [x] v54 bump: sw.js, SHELL_RELEASE, check_site.py (quick-sum checks back + keyboard check), READMEs
 - [x] Gate: all checks passed (check_site.py + check_owed.py)
-- [ ] Commit + push
+- [x] Commit + push — `083a734` → origin/main
 
 ## 2026-09-10 ~12:45 — Instruction log: verbatim + interpretation + status/percent/ETA
 Status: **done** (pushed in this commit; hash = top of `git log`)
