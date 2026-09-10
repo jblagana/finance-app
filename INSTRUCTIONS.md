@@ -6,6 +6,31 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-10 (night) — add-expense categories must come from "Your numbers"
+Status: in progress
+Progress: 85% — ETA ~23:55
+
+### Instruction (verbatim)
+> -in add expense, the category options must be empty if 'Your numbers' is not yet setup, otherwise it must come from there, automotacillay. example, if i setup in 'your numbers' a monthly expense for food only, then the category options in 'add expense' only shows food (and 'unsorted' by default)
+
+### Interpretation (agent — user may edit this section)
+- The category options offered when adding an expense must be **derived automatically from the base's monthly budgets** ("Your numbers" sheet): no fixed/hard-coded category list may remain as the source.
+- If the base has no budgets ("Your numbers" not yet set up), the category options are **empty** — "unsorted" is the only/default choice.
+- Example given: base has only a "Food" budget → add-expense category options = [unsorted (default), Food].
+- Applies to every add-expense surface that offers categories (chat coach prompt/parse + any in-app add-expense UI with a category field); must stay in sync automatically as the base changes.
+- Plan: TBD after reading chat.js (coach prompt + parser), app.js (add-expense actions/UI, base budgets), test_chat_parser.py.
+- Plan (agent, after reading): the "add expense" surface is the Add sheet (f_category select) + the coach rule engine's log path (the online LLM can only draft base changes — it never logs expenses). Changes: (1) app.js — drop CATEGORY_DEFAULTS + CAT_CUSTOM; seedCategories lists ONLY base budget names with "Unsorted" (value '') selected by default; re-seed on `emit('snap')` (base edits) so it stays in sync automatically; remove the Custom… input. (2) index.html — static default option becomes Unsorted; remove f_categoryCustom input. (3) chat.js — replace the hard-coded CAT_HINTS/guessCategory (which also defaulted to 'Other') with mentionedBudget(): match the message against stored budget names via the existing mentionOf matcher; nothing matched → '' (Unsorted). intentLog / intentDeficit / log_expense handler lose the 'Other' fallback (default Unsorted). (4) test_chat_parser.py needs no changes (it doesn't test categories); verify_live.ps1 is -Tag parameterized.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Read coach prompt/parser (chat.js), add-expense path + base budgets (app.js), parser tests
+- [x] Implement: categories derived from base budgets (empty if none; unsorted default) across all surfaces
+- [x] v63 bump: sw.js cache, app.js SHELL_RELEASE (+live date), check_site.py assertions, README
+- [x] Gates: check_site.py "all checks passed" (incl. new v63 section) + parser "all parser checks passed" + node --check clean (5 JS files)
+- [x] Push code commit — `22be768` → origin/main
+- [ ] Push log commit
+- [ ] Verify live serves v63
+
 ## 2026-09-10 (evening) — base screen: account/budget name fields all render empty ("why no detail names")
 
 Status: done
