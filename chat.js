@@ -1251,8 +1251,7 @@
       return { html: hq + freshness(ctx), actions: [], storyLines: [], storyRaw: t, storyAsk: asks.join(' · ') };
     }
     var rows = changes.map(function (l, i) {
-      var v = l.change.amount != null ? l.change.amount : l.change.value;
-      return '<div class="ins-line"><b>' + (i + 1) + '.</b> ' + esc(l.label) + ' — ' + esc(money(v)) + '</div>';
+      return '<div class="ins-line"><b>' + (i + 1) + '.</b> ' + esc(l.label) + ' — ' + esc(storyRowVal(l)) + '</div>';
     }).join('');
     var actions = changes.map(function (l, i) {
       return { label: '✕ ' + l.label, act: 'story_drop_line', payload: { i: i } };
@@ -1296,9 +1295,23 @@
     // exact stored names, so a remote draft can name an existing
     // account/budget instead of inventing one.
     var sn = storyNames(ctx);
-    var accs = sn.accounts.map(function (a) { return a.name + ' (' + a.kind + ')'; });
-    if (accs.length) L.push('- accounts: ' + accs.slice(0, 8).join(', '));
-    if (sn.budgets.length) L.push('- budgets: ' + sn.budgets.slice(0, 6).join(', '));
+    // v56: balances + custom details on the rows, so the coach can compute
+    // things like card utilization from stored data ("17,279 of a 70,000 limit").
+    var detAll = (ctx.base && ctx.base.details) || {};
+    function detTxt(k) {
+      var d = detAll[k];
+      if (!d) return '';
+      var ks = Object.keys(d);
+      if (!ks.length) return '';
+      return ' [' + ks.map(function (x) { return x + ' ' + (typeof d[x] === 'number' ? money(d[x]) : String(d[x])); }).join(', ') + ']';
+    }
+    var accs = ((ctx.base && ctx.base.accounts) || []).map(function (a) {
+      return a.name + ' (' + a.kind + ') ' + money(a.value || 0) + detTxt(a.kind + ':' + a.name);
+    });
+    if (accs.length) L.push('- accounts: ' + accs.slice(0, 8).join('; '));
+    if (sn.budgets.length) L.push('- budgets: ' + sn.budgets.slice(0, 6).map(function (n) {
+      return n + ' ' + money(((ctx.base && ctx.base.budgets) || {})[n] || 0) + detTxt('budget:' + n);
+    }).join('; '));
     var debts = (e.obligations && e.obligations.debts) || [];
     for (var i = 0; i < Math.min(4, debts.length); i++) {
       var d = debts[i];
@@ -1326,7 +1339,11 @@
   function aiContextText(t, ctx, hist) {
     var L = [];
     // v55: the shared snapshot above, not a second hand-built numbers list
-    L.push(coachSnapshot(ctx).text || 'My numbers on this phone: nothing stored yet.');
+    // v56: cap the snapshot — system + numbers + history must stay under the
+    // Worker's prompt cap even with details on every row
+    var snapTxt = coachSnapshot(ctx).text || 'My numbers on this phone: nothing stored yet.';
+    if (snapTxt.length > 1300) snapTxt = snapTxt.slice(0, 1297) + '…';
+    L.push(snapTxt);
     L.push('');
     // the last few turns, so "and next month?" knows what we just talked about
     var hLines = (hist || []).map(function (h) { return (h.who === 'user' ? 'You: ' : 'Coach: ') + h.txt; });
@@ -1348,7 +1365,7 @@
   var AI_REMOTE_SYSTEM = 'You are Fin.AI, a personal money coach. Answer only from the numbers given, in 1-3 short plain sentences (under 60 words), no lists, no markdown, no emojis. Never invent numbers. ' +
     'When the user tells you a change to their money (a new or updated number, or a story of several changes), FIRST make sure you understand it: reply with a one-line paraphrase ("So you\'re telling me: ...") and ask only for the details you truly need (amount, month, which account). Do NOT output any JSON until the user confirms (yes / exactly / right / go ahead) or supplies the last missing detail. ' +
     'If an UNCONFIRMED draft of changes is provided as context, the user\'s message is a reply to that draft: if they correct it, reply with the corrected JSON draft; if they confirm it, reply with the same JSON draft; if they switch topics, answer the new topic. ' +
-    'Once confirmed, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123}. Use only names from the numbers list or a new name the user stated. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
+    'Once confirmed, reply with ONLY a JSON object and nothing else: {"say":"one short line","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"cash|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123} | {"type":"field","entity":"cash|card|debt|loan|budget","name":"N","key":"short_snake_key","value":123}. Use only names from the numbers list or a new name the user stated. Numbers in [brackets] on a row are custom details the user recorded (credit limit, due day, anything). When the user wants to record any other fact about an account or budget — a credit limit, APR, due day, penalty, anything — record it as a field change with a short snake_case key; value null removes a recorded detail; ask for the value if the user did not state it. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
   function aiPrompt(t, ctx, remote, hist) {
     return [
       { role: 'system', content: AI_REMOTE_SYSTEM },
@@ -1399,8 +1416,19 @@
   // Returns null for plain-text answers (or broken JSON), so a bad model reply
   // degrades to a normal text answer instead of a broken card.
   var COACH_KINDS = { cash: 1, card: 1, debt: 1, loan: 1 };
+  // v56: what a draft row shows — money by default; raw text for a custom
+  // detail, "(remove)" for a detail deletion, and the limit alongside the
+  // balance when a card change carries both.
+  function storyRowVal(l) {
+    var c = l.change;
+    var v = c.amount != null ? c.amount : c.value;
+    if (c.type === 'field') return c.value == null ? '(remove)' : String(c.value);
+    if (c.type === 'account' && c.limit != null && c.limit !== c.value) return money(v) + ' · limit ' + money(c.limit);
+    return money(v);
+  }
   function coachChangeLabel(ch) {
     if (ch.type === 'account') return 'Account · ' + ch.name + (ch.kind && ch.kind !== 'cash' ? ' (' + ch.kind + ')' : '');
+    if (ch.type === 'field') return 'Detail · ' + ch.name + ' — ' + ch.key;
     if (ch.type === 'salary_base') return 'Base salary';
     if (ch.type === 'salary') return 'Salary · ' + (ch.month || '');
     if (ch.type === 'budget' || ch.type === 'budget_override') return 'Budget · ' + ch.name + (ch.month ? ' · ' + ch.month : '');
@@ -1411,7 +1439,7 @@
   }
   // Sanitize one model-emitted change into the exact shape applyBaseChange
   // validates (mirrors the story-mode rules: same types, same required fields).
-  function coachSanitizeChange(c) {
+  function coachSanitizeChange(c, ctx) {
     if (!c || typeof c !== 'object' || typeof c.type !== 'string') return null;
     function num(x) { var n = Number(x); return isFinite(n) && Math.abs(n) <= 1e9 ? n : null; }
     function mon(x) { return /^\d{4}-\d{2}$/.test(String(x || '')) ? String(x) : null; }
@@ -1456,11 +1484,39 @@
         for (var k = 0; k < 6; k++) months.push(addMonthsKey(k));
         return { type: 'recurring', name: n6, amount: a6, months: months };
       }
+      case 'field': {
+        // v56: grow the data table — a custom detail on an existing row.
+        // The coach picks the key; the app keeps it to a safe shape.
+        var fEnt = { cash: 1, card: 1, debt: 1, loan: 1, budget: 1 }[c.entity];
+        var fName = nm(c.name);
+        if (!fEnt || !fName) return null;
+        var fKey = String(c.key || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24);
+        if (!fKey) return null;
+        var fResv = ['name', 'kind', 'value', 'limit', 'note', 'amount', 'monthly', 'balance', 'goal', 'funded', 'deadline', 'month', 'id'];
+        if (fResv.indexOf(fKey) >= 0) return null;
+        var fBase = (ctx && ctx.base) || {};
+        var fFound = fEnt === 'budget'
+          ? Object.prototype.hasOwnProperty.call(fBase.budgets || {}, fName)
+          : (fBase.accounts || []).some(function (a) { return a.name === fName && a.kind === fEnt; });
+        if (!fFound) return null;
+        var fBag = ((fBase.details || {})[fEnt + ':' + fName]) || {};
+        if (c.value === null) {
+          return Object.prototype.hasOwnProperty.call(fBag, fKey)
+            ? { type: 'field', entity: fEnt, name: fName, key: fKey, value: null }
+            : null;
+        }
+        var fvS = String(c.value).trim();
+        if (!fvS) return null;
+        var fvN = /^-?[\d,]+(\.\d+)?$/.test(fvS) ? num(fvS.replace(/,/g, '')) : null;
+        var fVal = fvN != null ? fvN : fvS.slice(0, 80);
+        if (!Object.prototype.hasOwnProperty.call(fBag, fKey) && Object.keys(fBag).length >= 10) return null;
+        return { type: 'field', entity: fEnt, name: fName, key: fKey, value: fVal };
+      }
       default:
         return null;
     }
   }
-  function parseCoachDraft(txt) {
+  function parseCoachDraft(txt, ctx) {
     var s = String(txt || '').replace(/^\s+|\s+$/g, '');
     if (!s || s.charCodeAt(0) !== 123) return null; // 123 = opening brace
     var d = null;
@@ -1470,7 +1526,7 @@
     var raw = Array.isArray(d.changes) ? d.changes : [];
     var changes = [];
     for (var i = 0; i < raw.length && changes.length < 4; i++) {
-      var ch = coachSanitizeChange(raw[i]);
+      var ch = coachSanitizeChange(raw[i], ctx);
       if (ch) changes.push(ch);
     }
     if (!say && !changes.length) return null;
@@ -1537,6 +1593,30 @@
       cardAcct: fa.exact && fa.exact.kind === 'card' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'card'; })[0] || null),
       cashAcct: fa.exact && fa.exact.kind === 'cash' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'cash'; })[0] || null)
     };
+    // v56: "<card> limit is N" offline — set the card's limit column (the
+    // online coach usually takes this first; the rule engine stays the
+    // offline fallback and the only writer either way).
+    if (/\blimit\b/i.test(t) && p.amt != null && p.cardAcct && !/\bbudget\b/i.test(t)) {
+      pendingAsk = null;
+      var limAcc = p.cardAcct, limBal = 0;
+      ((ctx.base && ctx.base.accounts) || []).forEach(function (a) {
+        if (a.name === limAcc.name && a.kind === 'card') limBal = Number(a.value) || 0;
+      });
+      var limLine = { label: 'Card limit · ' + limAcc.name, change: { type: 'account', name: limAcc.name, kind: 'card', value: limBal, limit: p.amt } };
+      var limH = block('Draft: base-data changes',
+        '<div class="ins-line"><b>1.</b> ' + esc(limLine.label) + ' — ' + esc(storyRowVal(limLine)) + '</div>' +
+        line('<span class="note">nothing is written yet — tap ✕ to drop a line, or confirm to apply</span>'),
+        null);
+      return {
+        html: limH + freshness(ctx),
+        actions: [
+          { label: '✕ ' + limLine.label, act: 'story_drop_line', payload: { i: 0 } },
+          { label: 'Confirm 1 change', act: 'confirm_story', payload: { lines: [limLine] } },
+          { label: 'Discard', act: 'discard_story' }
+        ],
+        storyLines: [limLine], storyRaw: t, storyAsk: ''
+      };
+    }
     // v38: a pending "One number short" ask is completed by the very next bare
     // number, named amount, or bare month — re-parsed as question + answer
     // through the same validated story flow. Anything else closes the
@@ -1774,12 +1854,11 @@
         sm.streaming = false;
         // v46: the remote coach may answer a change request with a validated JSON
         // draft — render it through the same story-mode card (confirm/undo).
-        var draft = FAI.lastSource() === 'remote' ? parseCoachDraft(txt) : null;
+        var draft = FAI.lastSource() === 'remote' ? parseCoachDraft(txt, ctx) : null;
         if (draft && draft.changes.length) {
           var lines = draft.changes.map(function (ch) { return { label: coachChangeLabel(ch), change: ch }; });
           var rowsHtml = lines.map(function (l, i) {
-            var v = l.change.amount != null ? l.change.amount : l.change.value;
-            return '<div class="ins-line"><b>' + (i + 1) + '.</b> ' + esc(l.label) + ' — ' + esc(money(v)) + '</div>';
+            return '<div class="ins-line"><b>' + (i + 1) + '.</b> ' + esc(l.label) + ' — ' + esc(storyRowVal(l)) + '</div>';
           }).join('');
           sm.storyLines = lines;
           openDraft = { say: draft.say || '', lines: lines.map(function (l) { return l.label; }) }; // v55: open draft for correction

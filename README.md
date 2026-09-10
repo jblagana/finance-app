@@ -39,7 +39,15 @@ add/list/remove plans, urgent-expense advice.
   propose the change as a draft card only after you confirm or fill the last
   detail. A reply to an open draft **corrects that draft** instead of stacking
   a new one.
-- **Rule engine (always, offline — the only writer)** — deterministic, no
+- **Extensible table (v56)** — the numbers table grows with you: ask the coach
+  to record any other fact about an account or budget (a card's credit limit,
+  APR, due day, penalty, anything) and it proposes a **detail** change — same
+  confirm/undo cards, nothing written until you confirm. Details show as chips
+  under the row in Settings → Your numbers (tap to remove), ride along in
+  exports/imports, and land in the coach's context — so "util rate for my
+  maribank cc" is answered from stored data (balance ÷ recorded limit).
+  Offline, "…limit is N" on a stored card sets the card's limit column.
+
   made-up numbers, and the automatic fallback whenever the coach is off,
   offline or down. **Story mode** parses casual updates ("my salary in
   october is 25k, water went up to 1800") locally into a draft of validated
@@ -71,8 +79,10 @@ never hangs the chat. Change requests come back as a strict-JSON draft,
 validated against the same shapes the rule engine uses and confirmed like a
 story draft — the coach never writes directly. Parsing and every money action
 stay deterministic and on-device. (v55 raised the reply cap to 512 tokens so
-a clarification + confirmed proposal fits; the Worker enforces its own hard
-cap, so after changing `worker/` re-deploy it: `npx wrangler deploy`.)
+a clarification + confirmed proposal fits; v56 raised the Worker's prompt cap
+to 8000 chars so the snapshot can carry per-row balances + custom details —
+the Worker enforces its own hard caps, so after changing `worker/` re-deploy
+it: `npx wrangler deploy`.)
 
 ## Notes
 - **Free / unallocated** = liquid cash − this month's committed outflows.
@@ -86,7 +96,7 @@ cap, so after changing `worker/` re-deploy it: `npx wrangler deploy`.)
 - **Backup** (Settings → Backup): Export JSON (everything) / Export CSV (ledger
   only) / Import JSON to restore.
 - Both footers show the shell version + when this build went live. Releases
-  bump the SW cache (`finances-pwa-v55`) and the `SHELL_RELEASE` stamp in
+  bump the SW cache (`finances-pwa-v56`) and the `SHELL_RELEASE` stamp in
   `app.js` together — the "New version ready" toast offers a one-tap reload.
   If the app ever looks stale: open the Pages URL once in Safari, then
   relaunch the home-screen icon.

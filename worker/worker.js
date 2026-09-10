@@ -18,7 +18,7 @@
 
 var MAX_TOKENS = 512;     // hard cap regardless of what the client requests (v55: raised for the confirm-first coach protocol)
 var MIN_TOKENS = 16;      // floor: a 1-token reply can be empty/whitespace (the in-app Test pings with max_tokens:1)
-var MAX_INPUT = 4000;     // characters of prompt JSON we will forward
+var MAX_INPUT = 8000;     // characters of prompt JSON we will forward (v56: the shared snapshot now carries per-row balances + custom details)
 var DEFAULT_ORIGIN = 'https://jblagana.github.io/finance-app';
 
 function providerBase(env) {

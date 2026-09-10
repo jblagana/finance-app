@@ -348,6 +348,7 @@
       liquidity_floor: 0,
       accounts: [], budgets: {}, budget_overrides: {},
       one_offs: {}, debts: {}, sinking: {},
+      details: {},
       migrated_from_snapshot: null, edited: null
     };
   }
@@ -662,6 +663,22 @@
         if (kind === 'card' && ch.limit != null) hit.limit = Number(ch.limit) || 0;
       } else {
         b.accounts.push({ name: name, kind: kind, value: Number(ch.value) || 0, limit: kind === 'card' ? (Number(ch.limit) || 0) : 0, note: '' });
+      }
+    } else if (ch.type === 'field') {
+      // v56: a custom detail on an existing row — base.details side-map keyed
+      // "kind:name", so no per-entity schema change (budgets stay a flat map).
+      var fEnt = { cash: 1, card: 1, debt: 1, loan: 1, budget: 1 }[ch.entity];
+      if (!fEnt || !name || !ch.key) throw new Error('field change needs entity, name and key');
+      b.details = b.details || {};
+      var dk = ch.entity + ':' + name;
+      if (ch.value === null) {
+        if (b.details[dk]) {
+          delete b.details[dk][ch.key];
+          if (!Object.keys(b.details[dk]).length) delete b.details[dk];
+        }
+      } else {
+        b.details[dk] = b.details[dk] || {};
+        b.details[dk][ch.key] = ch.value;
       }
     } else {
       throw new Error('unknown story change: ' + ch.type);
@@ -997,6 +1014,18 @@
       '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (a != null ? a : '') + '">' +
       delBtn('Remove payment'));
   }
+  // v56: custom details recorded by the coach — shown as chips under the row.
+  // Tap a chip to remove it; the coach adds and updates details in chat.
+  function detChips(dk) {
+    var d = (state.base && state.base.details || {})[dk];
+    if (!d) return '';
+    var ks = Object.keys(d);
+    if (!ks.length) return '';
+    return '<div class="bchips">' + ks.map(function (k) {
+      var v = (typeof d[k] === 'number') ? money(d[k]) : esc(String(d[k]));
+      return '<button type="button" class="bchip" data-dk="' + esc(dk) + '" data-dk-key="' + esc(k) + '">' + esc(k) + ' ' + v + ' ✕</button>';
+    }).join('') + '</div>';
+  }
   function accRow(a) {
     a = a || {};
     var kinds = ['cash', 'card', 'debt', 'loan'];
@@ -1006,7 +1035,7 @@
       }).join('') + '</select>' +
       '<input data-r="value" type="number" inputmode="decimal" step="0.01" value="' + (a.value != null ? a.value : '') + '">' +
       '<input data-r="limit" type="number" inputmode="decimal" step="0.01" value="' + (a.limit ? a.limit : '') + '"' + (a.kind === 'card' ? '' : ' disabled') + '>' +
-      delBtn('Remove account'));
+      delBtn('Remove account')) + detChips(a.kind + ':' + a.name);
   }
   function debtBlock(d) {
     d = d || {};
@@ -1053,7 +1082,7 @@
     var budRows = '';
     Object.keys(b.budgets || {}).forEach(function (k) {
       budRows += brow('<input class="grow" data-r="name" value="' + esc(k) + '" autocomplete="off">' +
-        '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (Number(b.budgets[k]) || '') + '">' + delBtn('Remove budget'));
+        '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (Number(b.budgets[k]) || '') + '">' + delBtn('Remove budget')) + detChips('budget:' + k);
     });
     h += bsec('Monthly budgets') + '<div id="rowsBud">' + budRows + '</div>' +
       '<button type="button" class="addrow" data-add="bud">+ budget</button>';
@@ -1102,6 +1131,7 @@
     if (!bb) return null;
     var b = defaultBase();
     if (state.base) b.migrated_from_snapshot = state.base.migrated_from_snapshot || null;
+    if (state.base && state.base.details) b.details = state.base.details; // v56: coach-recorded details survive a form commit
     var gv = function (id) { var el = byId(id); return el ? String(el.value || '') : ''; };
     var isMonth = function (s) { return /^\d{4}-\d{2}$/.test(String(s || '')); };
     b.name = gv('b_name').trim();
@@ -2363,6 +2393,28 @@
     setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 600);
     snack('Exported ' + name);
   }
+  // v56: imported custom details — keep only the safe shape (the same rules
+  // the coach's field changes are validated to), so a bad backup can't inject junk.
+  var DET_RESV = ['name', 'kind', 'value', 'limit', 'note', 'amount', 'monthly', 'balance', 'goal', 'funded', 'deadline', 'month', 'id'];
+  function sanitizeDetails(raw) {
+    var out = {};
+    Object.keys(raw || {}).slice(0, 40).forEach(function (dk) {
+      var m = dk.match(/^(cash|card|debt|loan|budget):(.+)$/);
+      if (!m) return;
+      var src = (raw || {})[dk];
+      if (!src || typeof src !== 'object') return;
+      var bag = {};
+      Object.keys(src).slice(0, 10).forEach(function (k) {
+        var key = String(k).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24);
+        if (!key || DET_RESV.indexOf(key) >= 0) return;
+        var v = src[k];
+        if (typeof v === 'number' && isFinite(v) && Math.abs(v) <= 1e9) bag[key] = v;
+        else if (typeof v === 'string') { var s = v.trim().slice(0, 80); if (s) bag[key] = s; }
+      });
+      if (Object.keys(bag).length) out[dk] = bag;
+    });
+    return out;
+  }
   function importData(file) {
     var fr = new FileReader();
     fr.onload = function () {
@@ -2372,6 +2424,7 @@
         var nb = defaultBase();
         if (data.base && (data.base.accounts || data.base.salary)) {
           Object.keys(nb).forEach(function (k) { if (data.base[k] !== undefined) nb[k] = data.base[k]; });
+          nb.details = sanitizeDetails(nb.details); // v56
           state.base = nb;
         }
         var saves = [];
@@ -2421,7 +2474,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 55, live: new Date(2026, 8, 10, 15, 40) };
+  var SHELL_RELEASE = { v: 56, live: new Date(2026, 8, 10, 18, 0) };
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2710,6 +2763,18 @@
         if (!t || !t.getAttribute) return;
         var add = t.getAttribute('data-add');
         if (add) { addBaseRow(add); return; }
+        var dk = t.getAttribute('data-dk'); // v56: remove a coach-recorded detail
+        if (dk) {
+          if (window.confirm('Remove this detail?')) {
+            var db = state.base && state.base.details;
+            if (db && db[dk]) {
+              delete db[dk][t.getAttribute('data-dk-key') || ''];
+              if (!Object.keys(db[dk]).length) delete db[dk];
+              saveBase(state.base).then(function () { emit('snap'); renderBaseEditor(); renderBaseStatus(); });
+            }
+          }
+          return;
+        }
         var rm = t.getAttribute('data-rm');
         if (rm) {
           var holder = rm === 'blk' ? t.closest('.bblk') : t.closest('.brow');
