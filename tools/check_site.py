@@ -466,6 +466,11 @@ def main():
           "left:0;right:0;margin:0 auto" in snack_rule and "width:fit-content" in snack_rule
           and "snack('Added ' + money(t.amount) + ' \u00b7 ' + esc(t.category || t.account));" in js
           and "undoAddTxn" not in js)
+    check("ledger entries are editable (v71.4): tap a row -> the Add sheet opens pre-filled (title/button flip to Edit/Save); Save re-logs via saveTxnEdit (same id; Undo restores the ORIGINAL entry)",
+          "function openTxnEdit" in js and "function saveTxnEdit" in js
+          and "function removeTxnRow" in js and "function restoreTxnRow" in js
+          and "data-ml-edit" in js and "ev.stopPropagation()" in js
+          and 'id="addSheetTitle"' in html and 'id="addSubmit"' in html)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):

@@ -530,6 +530,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         <h2 style="margin:0;flex:1">Your expenses</h2>
         <select id="mlFilter" aria-label="Filter by category"></select>
       </div>
+      <p class="note" style="margin:0 0 8px">Tap an entry to edit it — <b>✕</b> deletes.</p>
       <div id="moneyLog">
         <div id="mlBody"></div>
       </div>
@@ -606,7 +607,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
 <button id="coachFab" type="button" aria-label="Open coach"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#botFace"/></svg></button>
 <div id="addSheet" class="sheet" role="dialog" aria-label="Add expense">
   <div class="sheet-h">
-    <div class="t">Add expense</div>
+    <div class="t" id="addSheetTitle">Add expense</div>
     <button id="addClose" class="sheet-x" type="button" aria-label="Close">✕</button>
   </div>
   <div class="sheet-b">
@@ -633,7 +634,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
       <label for="f_note">Note (optional)</label>
       <input id="f_note">
       <div style="margin-top:14px">
-        <button class="act" type="submit">Add expense</button>
+        <button class="act" id="addSubmit" type="submit">Add expense</button>
       </div>
     </form>
   </div>

@@ -769,11 +769,13 @@
     confirmAsk('Delete <b>' + what + '</b> from the ledger? Free cash goes back up and you can undo right after.',
       'Delete', function () { deleteTxnFromLog(tid); });
   }
-  function deleteTxnFromLog(tid) {
+  // v71: the delete + edit paths share one remove/restore pair, so an edit is
+  // "delete the row, re-log it with the new values, keep the same id".
+  function removeTxnRow(tid) {
     var t = null;
     for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) t = state.txns[i];
     var removed = (state.moneyLog || []).filter(function (e) { return e && e.tid === tid; });
-    if (!t && !removed.length) return;
+    if (!t && !removed.length) return null;
     if (t) {
       state.txns = state.txns.filter(function (x) { return x.id !== tid; });
       addAdj(txnAdj(t), -1);
@@ -781,23 +783,114 @@
     state.moneyLog = (state.moneyLog || []).filter(function (e) { return !(e && e.tid === tid); });
     idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
     var done = t ? Promise.all([idbDel(STORE_TX, tid), saveAdj()]) : Promise.resolve();
-    done.then(function () {
+    return { t: t, removed: removed, persist: done };
+  }
+  function restoreTxnRow(r) {
+    if (r.t) {
+      // an edited version (same id) may be there now — it goes, the original comes back
+      state.txns = state.txns.filter(function (x) { return x.id !== r.t.id; });
+      state.txns.push(r.t);
+      addAdj(txnAdj(r.t), 1);
+      idbPut(STORE_TX, r.t).catch(function () {});
+    }
+    if (r.removed.length) {
+      state.moneyLog = (state.moneyLog || []).filter(function (e) { return !(e && r.t && e.tid === r.t.id); });
+      r.removed.forEach(function (e) { state.moneyLog.push(e); });
+      if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
+      idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
+    }
+    if (r.t) saveAdj();
+    emit('txn');
+  }
+  function deleteTxnFromLog(tid) {
+    var r = removeTxnRow(tid);
+    if (!r) return;
+    r.persist.then(function () {
       emit('txn');
-      snack('Deleted ' + (t ? money(t.amount) + ' · ' + esc(t.category || t.account) : 'entry'), function () {
-        if (t) {
-          state.txns.push(t);
-          addAdj(txnAdj(t), 1);
-          idbPut(STORE_TX, t).catch(function () {});
-        }
-        if (removed.length) {
-          removed.forEach(function (e) { state.moneyLog.push(e); });
-          if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
-          idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
-        }
-        if (t) saveAdj();
-        emit('txn');
+      snack('Deleted ' + (r.t ? money(r.t.amount) + ' · ' + esc(r.t.category || r.t.account) : 'entry'), function () {
+        restoreTxnRow(r);
       });
     });
+  }
+  // v71: editable ledger entries — re-logs the txn (same id, same created
+  // stamp) with the edited values. The old money-log row is replaced by the
+  // new one, so the ledger shows one corrected entry; Undo restores the
+  // ORIGINAL entry (values AND log rows), not the edited one.
+  function saveTxnEdit(tid, data) {
+    var r = removeTxnRow(tid);
+    if (!r) return Promise.resolve();
+    var t = {
+      id: tid, date: data.date, account: data.account, kind: data.kind,
+      category: data.category, amount: data.amount, note: data.note,
+      created: (r.t && r.t.created) || new Date().toISOString()
+    };
+    state.txns.push(t);
+    addAdj(txnAdj(t), 1);
+    logMoney('add', t);
+    return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () {
+      emit('txn');
+      snack('Updated ' + money(t.amount) + ' · ' + esc(t.category || 'Unsorted'), function () {
+        restoreTxnRow(r);
+      });
+      return tid;
+    });
+  }
+  // v71: opening the Add sheet in EDIT mode — the entry's values prefill the
+  // same fields (amount / category / paid-with / date / note), the sheet title
+  // and button switch to "Edit entry" / "Save changes". Values that are no
+  // longer in the seeded options (old custom names) get a one-off option.
+  var editingTxn = null;
+  function openTxnEdit(tid) {
+    var t = null;
+    for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) t = state.txns[i];
+    if (!t) return;
+    editingTxn = t;
+    seedCategories();
+    var cs = byId('f_category');
+    if (cs) {
+      var hasC = false;
+      for (var ci = 0; ci < cs.options.length; ci++) if (cs.options[ci].value === (t.category || '')) hasC = true;
+      if (!hasC && t.category) {
+        var oc = document.createElement('option');
+        oc.value = t.category; oc.textContent = t.category;
+        cs.appendChild(oc);
+      }
+      cs.value = t.category || '';
+    }
+    seedAccounts();
+    var as = byId('f_account');
+    if (as) {
+      var av = (t.kind === 'card_charge' ? 'CARD' : 'CASH') + '::' + (t.account || 'Cash');
+      var hasA = false;
+      for (var ai = 0; ai < as.options.length; ai++) if (as.options[ai].value === av) hasA = true;
+      if (!hasA) {
+        var oa = document.createElement('option');
+        oa.value = av; oa.textContent = t.account || 'Cash';
+        as.appendChild(oa);
+      }
+      as.value = av;
+    }
+    var amtEl = byId('f_amount');
+    if (amtEl) amtEl.value = String(t.amount);
+    var ntEl = byId('f_note');
+    if (ntEl) ntEl.value = t.note || '';
+    var dtEl = byId('f_date');
+    if (dtEl) { dtEl.value = t.date || todayISO(); syncDateLabel(dtEl); }
+    addAmtEq(amtEl); // refresh the quick-sum hint for the prefilled value
+    updateChargeHint();
+    var ttl = byId('addSheetTitle');
+    if (ttl) ttl.textContent = 'Edit entry';
+    var sub = byId('addSubmit');
+    if (sub) sub.textContent = 'Save changes';
+    openSheet('addSheet');
+  }
+  function exitTxnEdit() {
+    if (!editingTxn) return;
+    editingTxn = null;
+    var ttl = byId('addSheetTitle');
+    if (ttl) ttl.textContent = 'Add expense';
+    var sub = byId('addSubmit');
+    if (sub) sub.textContent = 'Add expense';
   }
 
   // ---------- Phase 6: money log — per-change audit trail so the overview math can be sanity-checked ----------
@@ -900,9 +993,11 @@
         if (e.k === 'c') extra = '<span class="ml-x">card ' + money(r2(e.o + (add ? -e.n : e.n))) + ' → ' + money(e.o) + '</span>';
         if (e.s != null) extra += '<span class="ml-x">month spent ' + money(r2(e.s + (add ? -e.n : e.n))) + ' → ' + money(e.s) + '</span>';
         var p = mlParts(e);
+        // v71: add rows with a live txn are editable — tap the row (not the ✕)
+        var editAttr = (add && e.tid) ? ' data-ml-edit="' + esc(e.tid) + '" title="Tap to edit" style="cursor:pointer"' : '';
         var delBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-del="' + esc(e.tid) +
           '" aria-label="Delete this expense" title="Delete this expense">\u2715</button>' : '';
-        return '<div class="ml-row' + (add ? '' : ' del') + '">' +
+        return '<div class="ml-row' + (add ? '' : ' del') + '"' + editAttr + '>' +
           '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
           (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
           '<div class="ml-meta">' + mlDate(e.at) + (p.m ? ' · ' + esc(p.m) : '') + '</div></div>' +
@@ -910,7 +1005,12 @@
           '<span class="ml-f">free ' + money(before) + ' → ' + money(e.f) + '</span>' + extra + delBtn + '</div></div>';
       }).join('');
     var dl = body.querySelectorAll('[data-ml-del]');
-    for (var di = 0; di < dl.length; di++) dl[di].onclick = function () { askDeleteTxn(this.getAttribute('data-ml-del')); };
+    for (var di = 0; di < dl.length; di++) dl[di].onclick = function (ev) {
+      ev.stopPropagation(); // v71: ✕ deletes — it must not also open the editor
+      askDeleteTxn(this.getAttribute('data-ml-del'));
+    };
+    var ed = body.querySelectorAll('[data-ml-edit]');
+    for (var ei = 0; ei < ed.length; ei++) ed[ei].onclick = function () { openTxnEdit(this.getAttribute('data-ml-edit')); };
   }
 
   // ---------- bottom sheets (Add, Settings) ----------
@@ -920,6 +1020,8 @@
     var sc = byId('scrim');
     var wasOpen = !!openSheetEl;
     if (sc) sc.classList.remove('show');
+    // v71: closing the Add sheet leaves edit mode (title/button back to add).
+    if (openSheetEl && openSheetEl.id === 'addSheet') exitTxnEdit();
     if (openSheetEl) { openSheetEl.classList.remove('show'); openSheetEl = null; }
     if (wasOpen && lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
     lastFocus = null;
@@ -2808,7 +2910,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 71.3, live: new Date(2026, 8, 11, 17, 4) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 71.4, live: new Date(2026, 8, 11, 17, 51) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3027,6 +3129,7 @@
     deletePlan: deletePlan,
     addTxn: addTxn,
     deleteTxn: deleteTxn,
+    saveTxnEdit: saveTxnEdit, // v71: editable ledger entries
     applyBaseChanges: applyBaseChanges,
     undoBaseStory: undoBaseStory,
     merchantCatFor: merchantCatFor, // v68 item 1: learned merchant→category lookup for the coach
@@ -3087,16 +3190,22 @@
       var amtRaw = String(byId('f_amount').value || '').trim();
       var amount = evalExpr(amtRaw);
       if (amount === null || !(amount > 0)) { alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.'); return; }
-      var category = byId('f_category').value || '';
-      category = category.trim();
-      addTxn({
+      var category = (byId('f_category').value || '').trim();
+      var payload = {
         date: byId('f_date').value || todayISO(),
         account: name,
         kind: type === 'CARD' ? 'card_charge' : 'cash_out',
         category: category,
         amount: amount,
         note: (byId('f_note').value || '').trim()
-      }).then(function () {
+      };
+      // v71: the same sheet doubles as the ledger editor — when an entry is
+      // being edited, its values re-log through saveTxnEdit (same id, Undo
+      // restores the ORIGINAL entry); otherwise a plain add.
+      var editId = editingTxn ? editingTxn.id : null;
+      var done = editId ? saveTxnEdit(editId, payload) : addTxn(payload);
+      done.then(function () {
+        if (editId) exitTxnEdit();
         byId('f_amount').value = '';
         byId('f_category').value = '';
         byId('f_note').value = '';
