@@ -6,9 +6,34 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-12 02:16 — User edit: v72.3 emoji note amplified ("prioritize this … here")
+Status: in progress — logged first; v72.8 push completes in flight, emoji fix ships next as v72.12
+Progress: 0% — ETA ~02:35 (v72.12 dot after the v72.8 push)
+### Instruction (verbatim)
+> User edit in the master entry's Interpretation, v72.3 bullet (diff of the line the agent last wrote):
+> - old: `words, no emoji (yes to emoji, prioritize this -jan); one light self-aware line in the chat welcome`
+> - new: `words, no emoji (yes to emoji, prioritize this -jan here yoohoo0o); one light self-aware line in the chat welcome`
+### Interpretation (agent — user may edit this section)
+- A user edit is the new instruction (rule 2). Jan is re-emphasizing the note
+  he already left in the v72.3 bullet: emoji ARE wanted ("yes to emoji"),
+  and it should be prioritized — now ("here").
+- Action: the v72.3 voice prompts currently say "no emoji" — flip that
+  constraint: emoji allowed in the LLM paths (chat system prompt + note
+  prompt + welcome line), kept light (at most one, only where it fits;
+  numbers + draft protocol still win).
+- Ordering: v72.8 is already stamped + gate-green — it ships first (dot
+  discipline: one push per subtask); the emoji fix is the NEXT dot, ahead
+  of the remaining batch items: **v72.12** (new number; v72.9–v72.11 stay
+  reserved for items 5/2/11 in the master entry).
+### Subtasks
+- [x] Log the edit verbatim (first action)
+- [ ] v72.12 — emoji allowed in the LLM voice prompts (chat + note + welcome)
+- [ ] Push v72.12 on green; record hash; mark done
+
+
 ## 2026-09-12 00:29 — v72: 11-item batch + push/order/streamline discipline
 Status: in progress
-Progress: 38% — ETA ~05:45
+Progress: 41% — ETA ~05:45
 ### Instruction (verbatim)
 > The original 11-item batch instruction arrived in the previous session; its
 > exact wording is not in this session's context — logged here as a marked
@@ -97,7 +122,7 @@ Progress: 38% — ETA ~05:45
   - **v72.3 personality (item 7)** — voice only in the LLM paths:
     AI_REMOTE_SYSTEM (chat.js) + note() prompt (ai.js): light/funny, dry
     wink, ≤1 short joke line, numbers + draft protocol always win, ≤60
-    words, no emoji (yes to emoji, prioritize this -jan); one light self-aware line in the chat welcome
+    words, no emoji (yes to emoji, prioritize this -jan here yoohoo0o); one light self-aware line in the chat welcome
     Rule-engine functional replies stay plain.
   - **v72.4 account kinds (item 8)** — the account-row picker offers
     exactly Debit / Credit ("Credit" = internal kind `card`, "Debit" =
@@ -149,7 +174,8 @@ Progress: 38% — ETA ~05:45
 - [x] v72.5 — 5-minute chat memory (session window + adaptive trim) — pushed 828b5fa (live 01:21); gates green + 3 new smoke checks
 - [x] v72.6 — quicksum stores the computed total — pushed dce5cac (live 01:32); gates green (one stale v71.1 assertion updated for the new call shape)
 - [x] v72.7 — owed people drag + sort (default recent) — pushed 6382c6f (live 01:42); gates green
-- [ ] v72.8 — export/import data-loss fix (moneyLog + chat)
+- [x] v72.8 — export/import data-loss fix (full backup: chat + moneyLog + adj/sig + owedSort; sanitized restore; adj recompute for pre-72.8 files) — committed b2b1d3a (live 02:14); gates green + 8 new smoke checks (export content + wipe→import round-trip); smoke's fake IDB now resolves keyPath keys (id vs key)
+- [ ] v72.12 — emoji allowed in the LLM voice prompts (user edit 02:16; NEXT dot after v72.8, ahead of the remaining batch)
 - [ ] v72.9 — ledger edit keeps position + original date/time
 - [ ] v72.10 — owed → ledger "Owed" entries (sign by flow) + editable subentries
 - [ ] v72.11 — draggable floating bot, 4 corner snaps
