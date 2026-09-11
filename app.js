@@ -2102,10 +2102,13 @@
     el.style.display = '';
     var body = byId('coachNoteBody');
     if (body) body.textContent = txt;
+    // v72.1: the sub line is offline-ONLY — a fresh note shows no sub line at
+    // all; when the coach can't be reached, exactly this line:
     var sub = byId('coachNoteSub');
-    if (sub) sub.textContent = stale
-      ? 'the online coach is not reachable right now — this is the last note'
-      : 'the online coach reads your numbers — it changes nothing';
+    if (sub) {
+      sub.textContent = stale ? 'Coach Fin is unavailable right now.' : '';
+      sub.style.display = sub.textContent ? '' : 'none';
+    }
   }
   function renderCoachNote() {
     var el = byId('coachNote');
@@ -2947,7 +2950,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 71.8, live: new Date(2026, 8, 11, 22, 47) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.1, live: new Date(2026, 8, 12, 0, 56) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

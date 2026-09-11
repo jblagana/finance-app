@@ -158,16 +158,16 @@ def main():
           html.index("app.js") < html.index("chat.js") < html.index("ai.js"))
 
     print("\n== PWA shell (offline app, online coach) ==")
-    check("sw.js cache is v71 (dot releases v71.x per subtask)",
-          "finances-pwa-v71" in sw and "finances-pwa-v70" not in sw)
+    check("sw.js cache is v72 (dot releases v72.x per subtask)",
+          "finances-pwa-v72" in sw and "finances-pwa-v71" not in sw)
     check("sw.js handles SKIP_WAITING", "'SKIP_WAITING'" in sw)
     check("shell cache holds the app scripts + manifest + icons (no model files)",
           "'./app.js'" in sw and "'./chat.js'" in sw and "'./ai.js'" in sw
           and "'./manifest.webmanifest'" in sw and "'./favicon.png'" in sw)
     check("sw.js: non-GET and cross-origin (coach) calls stay network-only",
           "url.origin !== self.location.origin" in sw and "req.method !== 'GET'" in sw)
-    check("footer stamp: brand + shell v71 + live date/time, one source for both footers",
-          "var SHELL_RELEASE = { v: 71" in js and "function shellStamp" in js
+    check("footer stamp: brand + shell v72 + live date/time, one source for both footers",
+          "var SHELL_RELEASE = { v: 72" in js and "function shellStamp" in js
           and "'Fin.AI · shell v'" in js and 'id="setFoot"' in html
           and "byId('setFoot')" in js)
     check("service worker registration wired (page or app.js)",
@@ -482,6 +482,13 @@ def main():
     check("the coach note header carries the bot's face (svg #botFace) left of the label; the avatar is untouched (v71.8)",
           'class="coachnote-av"' in html and ".coachnote-av{" in html
           and '<use href="#botFace"/>' in html)
+
+    print("\n== v72: coach note offline-only sub line (dot releases v72.x) ==")
+    check("the coach note sub line is offline-only (v72.1): stale shows 'Coach Fin is unavailable right now.'; a fresh note shows no sub line (both old variants gone)",
+          "'Coach Fin is unavailable right now.'" in js
+          and "sub.style.display = sub.textContent ? '' : 'none'" in js
+          and "'the online coach reads your numbers" not in js
+          and "'the online coach is not reachable right now" not in js)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):

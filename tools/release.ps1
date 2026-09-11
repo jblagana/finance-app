@@ -116,15 +116,15 @@ if (-not $GatesOnly) {
     '"finances-pwa-v\d+" in sw and "finances-pwa-v\d+" not in sw',
     ('"finances-pwa-v' + $maj + '" in sw and "finances-pwa-v' + $prev + '" not in sw'))
   $t = [regex]::Replace($t,
-    'check\("footer stamp: brand \+ shell v\d+ \+ live date/time, one source for both footers\)",',
-    ('check("footer stamp: brand + shell v' + $maj + ' + live date/time, one source for both footers"),'))
+    'check\("footer stamp: brand \+ shell v\d+ \+ live date/time, one source for both footers",',
+    ('check("footer stamp: brand + shell v' + $maj + ' + live date/time, one source for both footers",'))
   $t = [regex]::Replace($t,
     '"var SHELL_RELEASE = \{ v: \d+" in js',
     ('"var SHELL_RELEASE = { v: ' + $maj + '" in js'))
-  if (($t -notlike "*cache is v$maj*") -or
-      ($t -notlike "*in sw and `"finances-pwa-v$prev`" not in sw*") -or
-      ($t -notlike "*shell v$maj + live date/time*") -or
-      ($t -notlike "*SHELL_RELEASE = { v: $maj`" in js*")) {
+  if (-not ($t -like "*cache is v$maj (dot releases v$maj.x per subtask)*") -or
+      (-not ($t -like "*`"finances-pwa-v$maj`" in sw and `"finances-pwa-v$prev`" not in sw*")) -or
+      (-not ($t -like "*shell v$maj + live date/time*")) -or
+      (-not ($t -like "*SHELL_RELEASE = { v: $maj`" in js*"))) {
     Bad "could not stamp version assertions in tools\check_site.py"
   }
   Write-Text $p $t
