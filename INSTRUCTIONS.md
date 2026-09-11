@@ -21,6 +21,23 @@ Progress: 100%
   3. **New line** — release process for THIS batch: push live per subtask, each push bumps a dot version (v71.1 … v71.8). All eight items were already implemented in one tree, so the pushes are a cumulative sequence: push k ships items 1..k as a complete, gate-green state (sw cache `finances-pwa-v71.k`, `SHELL_RELEASE v: 71.k` — the existing prefix-based version assertions still pass, so only the per-item structural checks are staged in check_site.py; the live stamp is set seconds before each push). The final state after v71.8 equals the implemented feature tree (verified by diff).
 - This dot-release preference is noted for future sessions: when work arrives incrementally, push + dot-bump per completed app-affecting subtask.
 
+## 2026-09-11 — go (proceed with the next dot release: v71.5)
+Status: in progress
+Progress: 90% — ETA ~18:05 (live stamp + commit + push left)
+### Instruction (verbatim)
+> go
+### Interpretation (agent — user may edit this section)
+- Continue the v71 dot-release sequence: implement + ship v71.5 = item 5 — the "Your numbers" Save button (dirty-marking instead of silent auto-save, Save bar appears when dirty, closing the sheet auto-commits, pre-commits before re-rendering paths). Source = item-5 hunks in _v71_final_backup (same byte-splice discipline as v71.4); staged v71.5 gate check; stamps sw.js `finances-pwa-v71.5` / `SHELL_RELEASE v: 71.5`; live stamp seconds before push.
+- Open question to resolve during the splice: the backup adds `dragH()` to budget/override rows in `addRow` — decide whether that belongs to item 2 (already shipped v71.2) or item 5, and apply it in whichever release makes the final tree match the backup.
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Fresh _mkdiff run; identify item-5 hunks (app.js + index.html) — also found a v71.2 gap: "+"-added budget/override/one-off rows lacked drag handles (initial rows had them); fixed in this release along with item 5
+- [x] Splice item-5 code byte-exactly into app.js / index.html (_splice_v715.py, 21 ops; node --check green)
+- [x] Staged v71.5 structural check in tools/check_site.py (+ local mirror re-synced — this time the root mirror's SITE line was restored correctly)
+- [x] Version stamps: sw.js v71.5, SHELL_RELEASE v: 71.5, README line, INSTRUCTIONS.md
+- [x] Gates: check_site (repo + root mirror) + parser + node --check — all green
+- [ ] Set live stamp → commit → push → log hash + status done
+
 ## 2026-09-11 — v71: Your-numbers (keyboard, drag-reorder, save button), ledger (editable, AM/PM time, Unsorted title), toast, coach avatar
 Status: in progress — per the user's dot-release edit, shipping as v71.1 … v71.8 (one live push per subtask, cumulative); v71.1–v71.4 shipped, v71.5 (save button) next
 Progress: 50% — ETA ~18:30 (v71.5…v71.8 dot pushes + final gates left)

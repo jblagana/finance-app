@@ -216,16 +216,17 @@ button.gear:active{border-color:var(--acc);color:var(--acc)}
 .mmrow .mmname{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mmrow .mmc{flex:0 0 auto;font-size:13px}
 .mmrow.mm-b,.mmrow.mm-d{opacity:.55}
-/* v71: "Your numbers" drag handles (v71.2) */
+/* v71: "Your numbers" — drag handles, quick-sum hint, Save bar */
 .bdrag{flex:0 0 auto;color:var(--mut);font-size:14px;line-height:1;cursor:grab;padding:6px 2px;
 touch-action:none;user-select:none;-webkit-user-select:none}
 .bdrag:active{color:var(--acc);cursor:grabbing}
 .brow.dragging,.bblk.dragging{position:relative;z-index:20;background:rgba(55,211,155,.07);
 border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.4);transition:none}
-/* v71: "Your numbers" quick-sum hint (v71.1) */
 .qsbar{margin-top:10px;padding:8px 10px;border:1px dashed var(--acc);border-radius:9px;
 font-size:12.5px;font-weight:700;color:var(--acc)}
 .qsbar.bad{border-color:var(--warn);color:var(--warn)}
+.basesave{flex:0 0 auto;padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+border-top:1px solid var(--line);background:var(--card)}
 /* v68 item 4: per-category pace anomalies under the monthly pace */
 .pace-anom{margin-top:5px;font-size:12px;line-height:1.5}
 .bblk{padding:8px 0;border-top:1px solid var(--line)}
@@ -646,13 +647,16 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
   </div>
   <div class="sheet-b">
     <p id="baseStatus" class="note" style="margin:10px 0 14px" aria-live="polite"></p>
-    <p class="note" style="margin-top:2px">Everything is stored on this phone — edit it here and the whole app (tiles, coach, projection) recomputes instantly. Changes save as you type.</p>
+    <p class="note" style="margin-top:2px">Everything is stored on this phone — edit it here and the whole app (tiles, coach, projection) recomputes when you save. Amounts take quick sums like 300-125+10. Drag <b>⠿</b> to reorder; tap <b>Save</b> (or close the sheet) to keep changes.</p>
     <div id="baseBody"></div>
     <div id="qsBar" class="qsbar" style="display:none" aria-live="polite"></div>
     <p id="baseMigrated" class="note" style="display:none;margin-top:10px"></p>
     <div style="margin-top:16px">
       <button class="act ghost" id="numCoachBtn" type="button">Set up with the coach</button>
     </div>
+  </div>
+  <div id="baseSaveBar" class="basesave" style="display:none">
+    <button id="baseSave" class="act" type="button">Save</button>
   </div>
 </div>
 <div id="setSheet" class="sheet" role="dialog" aria-label="Settings">
@@ -668,7 +672,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         <button class="act" id="setNumOpen" type="button">Open</button>
         <button class="act ghost" id="setNumCoach" type="button">Set up with the coach</button>
       </div>
-      <p class="note" style="margin:10px 0 0">Everything is stored on this phone. Open the <b>Your numbers</b> sheet to edit it — the whole app (tiles, coach, projection) recomputes instantly as you type.</p>
+      <p class="note" style="margin:10px 0 0">Everything is stored on this phone. Open the <b>Your numbers</b> sheet to edit it — the whole app (tiles, coach, projection) recomputes when you save.</p>
     </section>
     <section class="card" style="margin-top:16px">
       <h2 style="margin-top:0">Coach (online)</h2>

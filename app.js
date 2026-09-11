@@ -1020,6 +1020,9 @@
     var sc = byId('scrim');
     var wasOpen = !!openSheetEl;
     if (sc) sc.classList.remove('show');
+    // v71: closing "Your numbers" with unsaved changes commits them — the
+    // Save button is the fast path, but nothing typed is ever dropped.
+    if (openSheetEl && openSheetEl.id === 'numSheet' && baseDirty) commitBaseForm();
     // v71: closing the Add sheet leaves edit mode (title/button back to add).
     if (openSheetEl && openSheetEl.id === 'addSheet') exitTxnEdit();
     if (openSheetEl) { openSheetEl.classList.remove('show'); openSheetEl = null; }
@@ -1210,7 +1213,10 @@
   function renderBaseEditor() {
     var bb = byId('baseBody');
     if (!bb) return;
-    var qs0 = byId('qsBar'); if (qs0) qs0.style.display = 'none'; // v71: no stale hint on re-open
+    // v71: a fresh render reads straight from state — nothing is dirty anymore.
+    baseDirty = false;
+    var qs0 = byId('qsBar'); if (qs0) qs0.style.display = 'none';
+    var sb0 = byId('baseSaveBar'); if (sb0) sb0.style.display = 'none';
     var b = state.base || defaultBase();
     var h = '';
     h += brow('<span class="bnote">your name</span><input class="grow" id="b_name" type="text" placeholder="e.g. Jan" value="' + esc(b.name || '') + '" autocomplete="off">');
@@ -1389,18 +1395,18 @@
     else if (kind === 'acc') { host = byId('rowsAcc'); html = accRow({}); }
     else if (kind === 'bud') {
       host = byId('rowsBud');
-      html = brow('<input class="grow" data-r="name" autocomplete="off">' +
+      html = brow(dragH() + '<input class="grow" data-r="name" autocomplete="off">' +
         '<input data-r="a" type="text">' + delBtn('Remove budget'));
     } else if (kind === 'bov') {
       host = byId('rowsBov');
       var opts = Object.keys((state.base && state.base.budgets) || {}).map(function (k) {
         return '<option value="' + esc(k) + '">' + esc(k) + '</option>';
       }).join('') || '<option value="">—</option>';
-      html = brow('<input data-r="m" type="month"><select data-r="cat">' + opts + '</select>' +
+      html = brow(dragH() + '<input data-r="m" type="month"><select data-r="cat">' + opts + '</select>' +
         '<input data-r="a" type="text">' + delBtn('Remove override'));
     } else if (kind === 'one') {
       host = byId('rowsOne');
-      html = brow('<input data-r="m" type="month"><input class="grow" data-r="name" autocomplete="off">' +
+      html = brow(dragH() + '<input data-r="m" type="month"><input class="grow" data-r="name" autocomplete="off">' +
         '<input data-r="a" type="text">' + delBtn('Remove one-off'));
     } else if (kind === 'debt') { host = byId('rowsDebt'); html = debtBlock({}); }
     else if (kind === 'sink') { host = byId('rowsSink'); html = sinkBlock({}); }
@@ -1415,6 +1421,7 @@
     }
     if (!host) return;
     host.insertAdjacentHTML('beforeend', html);
+    markBaseDirty(); // v71: a new row is a change until saved
     var last = host.lastElementChild;
     if (last && last.querySelector) {
       var f = last.querySelector('input');
@@ -1428,12 +1435,33 @@
       emit('snap');
       renderFooter();
       renderBaseStatus();
+      setBaseClean(); // v71: saved -> the Save button goes away again
       var bb = byId('baseBody');
       if (bb) bb.querySelectorAll('#rowsAcc .brow').forEach(function (row) {
         var ki = row.querySelector('[data-r="kind"]'); var li = row.querySelector('[data-r="limit"]');
         if (ki && li) li.disabled = ki.value !== 'card';
       });
     });
+  }
+  // v71: explicit "Save" for "Your numbers" — no more silent auto-save on every
+  // keystroke: edits mark the sheet dirty, a Save button appears, and closing
+  // the sheet commits whatever is dirty (no silent loss). Dragging a row
+  // (⠿ handle) is a change too, so it lights the same button.
+  var baseDirty = false;
+  function markBaseDirty() {
+    baseDirty = true;
+    var bar = byId('baseSaveBar');
+    if (bar) bar.style.display = '';
+  }
+  function setBaseClean() {
+    baseDirty = false;
+    var bar = byId('baseSaveBar');
+    if (bar) bar.style.display = 'none';
+    var q = byId('qsBar');
+    if (q) q.style.display = 'none';
+  }
+  function commitIfDirtyBase() {
+    if (baseDirty) commitBaseForm();
   }
   // v71: the live quick-sum hint for "Your numbers" (the Add sheet's amtEq,
   // generalized): shows while an amount field holds an expression.
@@ -1455,10 +1483,10 @@
   }
   // v71: drag-to-reorder in "Your numbers". Pointer-based (touch + mouse) and
   // handle-driven (⠿) so the inputs keep working. The row follows the finger,
-  // siblings reflow live, and the drop commits the new order (readBaseForm
-  // reads DOM order, so what you see is what gets saved). Identity and values
-  // are untouched: only the node order changes — and the Add sheet's category
-  // list follows, since it is seeded from the saved budgets order.
+  // siblings reflow live, and the drop just marks the sheet dirty — the new
+  // order is stored through the normal Save path (readBaseForm reads DOM
+  // order, so what you see is what gets saved). Identity and values are
+  // untouched: only the node order changes.
   var dragSt = null;
   function layoutTop(el) {
     var t = el.style.transform;
@@ -1508,7 +1536,7 @@
     row.style.transform = '';
     try { if (ev.target && ev.target.releasePointerCapture) ev.target.releasePointerCapture(ev.pointerId); } catch (e) {}
     dragSt = null;
-    if (moved) commitBaseForm();
+    if (moved) markBaseDirty();
   }
   function renderBaseStatus() {
     var el = byId('baseStatus');
@@ -2857,6 +2885,9 @@
       try {
         var data = JSON.parse(String(fr.result || ''));
         if (!data || data.app !== 'finances-pwa') throw new Error('not a Fin.AI PWA backup');
+        // v71: fold any unsaved "Your numbers" edits into state before the
+        // import replaces it (readBaseForm is synchronous; no save race).
+        if (baseDirty) { var _nb = readBaseForm(); if (_nb) state.base = migrateBaseKinds(_nb); baseDirty = false; }
         var nb = defaultBase();
         if (data.base && (data.base.accounts || data.base.salary)) {
           Object.keys(nb).forEach(function (k) { if (data.base[k] !== undefined) nb[k] = data.base[k]; });
@@ -2910,7 +2941,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 71.4, live: new Date(2026, 8, 11, 17, 51) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 71.5, live: new Date(2026, 8, 11, 18, 26) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3064,6 +3095,7 @@
     return e ? e.cat : null;
   }
   function toggleMerchantFlag(nm, flag) {
+    commitIfDirtyBase(); // v71: renderBaseEditor below wipes the form — commit first
     var ov = merchantOv();
     if (ov[flag][nm]) delete ov[flag][nm]; else ov[flag][nm] = 1;
     state.merchantMap = ov;
@@ -3303,9 +3335,11 @@
     };
     var bb = byId('baseBody');
     if (bb) {
-      var deb = null;
-      bb.addEventListener('input', function (ev) { clearTimeout(deb); deb = setTimeout(commitBaseForm, 450); qsHint(ev.target); });
-      bb.addEventListener('change', function () { clearTimeout(deb); commitBaseForm(); });
+      // v71: no more silent auto-save — edits (and drags, and row adds/removes)
+      // mark the sheet dirty; the Save button commits. Closing the sheet
+      // commits too (closeSheets), so nothing typed is ever lost.
+      bb.addEventListener('input', function (ev) { markBaseDirty(); qsHint(ev.target); });
+      bb.addEventListener('change', function () { markBaseDirty(); });
       bb.addEventListener('pointerdown', baseDragStart);
       bb.addEventListener('pointermove', baseDragMove);
       bb.addEventListener('pointerup', baseDragEnd);
@@ -3319,6 +3353,7 @@
         if (mmact) { toggleMerchantFlag(t.getAttribute('data-mm'), mmact === 'block' ? 'blocked' : 'deleted'); return; }
         var dk = t.getAttribute('data-dk'); // v56: remove a coach-recorded detail
         if (dk) {
+          commitIfDirtyBase(); // v71: the re-render below wipes the form — commit first
           if (window.confirm('Remove this detail?')) {
             var db = state.base && state.base.details;
             if (db && db[dk]) {
@@ -3333,10 +3368,12 @@
         if (rm) {
           var holder = rm === 'blk' ? t.closest('.bblk') : t.closest('.brow');
           if (holder) holder.parentNode.removeChild(holder);
-          commitBaseForm();
+          markBaseDirty(); // v71: removal is a change — Save button appears
         }
       });
     }
+    var bsv = byId('baseSave'); // v71: the explicit "Your numbers" save button
+    if (bsv) bsv.onclick = function () { commitBaseForm(); };
     var hob = byId('homeOpenSet');
     if (hob) hob.onclick = function () { openSheet('numSheet'); };
     var hcb = byId('homeCoach');

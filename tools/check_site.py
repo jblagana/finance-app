@@ -471,6 +471,10 @@ def main():
           and "function removeTxnRow" in js and "function restoreTxnRow" in js
           and "data-ml-edit" in js and "ev.stopPropagation()" in js
           and 'id="addSheetTitle"' in html and 'id="addSubmit"' in html)
+    check("'Your numbers' Save button appears only when dirty (v71.5); closing the sheet auto-commits (nothing typed is lost)",
+          'id="baseSave"' in html and "function markBaseDirty" in js
+          and "function setBaseClean" in js and "function commitIfDirtyBase" in js
+          and "openSheetEl.id === 'numSheet'" in js)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):
