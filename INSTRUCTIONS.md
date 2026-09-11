@@ -33,7 +33,7 @@ Progress: 100%
 
 ## 2026-09-12 00:29 — v72: 11-item batch + push/order/streamline discipline
 Status: in progress
-Progress: 67% — ETA ~05:00
+Progress: 80% — ETA ~05:00
 ### Instruction (verbatim)
 > The original 11-item batch instruction arrived in the previous session; its
 > exact wording is not in this session's context — logged here as a marked
@@ -98,6 +98,15 @@ Progress: 67% — ETA ~05:00
     the Add-sheet category options (budgets ∪ categories in use). Numbers
     recompute through the normal addTxn adj path; a directly-deleted ledger
     row leaves the owed entry intact (dangling txnId, no crash).
+    (Decision, Jan 03:1x — asked because the ledger knew spend only: FULL
+    infLOW SUPPORT. cash_in / card_payment are the exact inverse of their
+    spend twins: cash_in {-a,-a,0,0} frees cash back; card_payment
+    {0,-a,-a,-a} releases the committed card debt. Log rows gain flavors
+    i/p; month spend nets inflows down, ignores card payments; the v72.9
+    rebase generalizes via freeEffect/cardEffect/monthEffect; the Add sheet
+    keeps an inflow's flow direction when editing (no kind control).
+    Dangling-link edit re-creates the link; entry undo re-runs the in-place
+    edit with the original values = the exact inverse rebase.)
   - **v72.7 owed (item 4)** — sort control A–Z / recent / custom, DEFAULT =
     **recent** (p.updated, fallback newest entry created); drag = ⠿ handle
     on the person card (v71.2 pattern), drop reorders state.owed.people,
@@ -185,7 +194,7 @@ Progress: 67% — ETA ~05:00
 - [x] v72.8 — export/import data-loss fix (full backup: chat + moneyLog + adj/sig + owedSort; sanitized restore; adj recompute for pre-72.8 files) — pushed b2b1d3a (live 02:14); gates green + 8 new smoke checks (export content + wipe→import round-trip); smoke's fake IDB now resolves keyPath keys (id vs key)
 - [x] v72.12 — emoji allowed in the LLM voice prompts (user edit 02:16; shipped ahead of the remaining batch) — pushed e2f710f (live 02:26); gates green
 - [x] v72.9 — ledger edit keeps position + original date/time — pushed 0118152 (live 02:51); gates green + 10 new smoke checks (position/timestamp preservation, delta rebase of the row's own f/o + the tail incl. month lines, real Undo driven through the snack stub, full un-rebase on undo)
-- [ ] v72.10 — owed → ledger "Owed" entries (sign by flow) + editable subentries
+- [x] v72.10 — owed → ledger "Owed" entries (sign by flow) + editable subentries — pushed 89b745d (live 03:41); gates green + 14 new smoke checks (cash/card out+in kinds, net math, tpf note-only, txn link, in-place edit w/ canonical note, delete+undo of entry AND txn)
 - [ ] v72.11 — draggable floating bot, 4 corner snaps
 - [ ] Final: full gates, clean tree, master entry done
 
