@@ -2605,7 +2605,7 @@
         '</div>';
     });
     return '<section class="card ow-p" data-ow-pid="' + esc(p.id) + '">' +
-      '<div class="ow-h"><b>' + esc(p.name) + '</b>' + owedBalHTML(b) +
+      '<div class="ow-h"><span class="bdrag" data-ow-drag="1" aria-label="Drag to reorder" title="Drag to reorder">\u287F</span><b>' + esc(p.name) + '</b>' + owedBalHTML(b) +
       '<button type="button" class="sheet-x" data-ow-del="' + esc(p.id) + '" aria-label="Remove person">\u2715</button></div>' +
       (rows || '<p class="note" style="margin:8px 0 0">No entries yet — add the first one below.</p>') +
       '<button type="button" class="addrow" data-ow-toggle="' + esc(p.id) + '">+ entry</button>' +
@@ -2630,12 +2630,34 @@
       '</form>' +
       '</section>';
   }
+  // v72.7: person order — A–Z / recent / custom (drag). Default = recent:
+  // the last time anything on the card changed (p.updated; a person's newest
+  // entry as fallback).
+  function owedRecent(p) {
+    var t = p && p.updated ? Date.parse(p.updated) || 0 : 0;
+    (p && p.entries || []).forEach(function (e) {
+      if (e && e.created) { var c = Date.parse(e.created) || 0; if (c > t) t = c; }
+    });
+    return t;
+  }
+  function owedSortedPeople() {
+    var people = (state.owed.people || []).slice();
+    var sort = state.owed.sort || 'recent';
+    if (sort === 'az') {
+      people.sort(function (a, b) {
+        return String(a.name).toLowerCase() < String(b.name).toLowerCase() ? -1 : 1;
+      });
+    } else if (sort === 'recent') {
+      people.sort(function (a, b) { return owedRecent(b) - owedRecent(a); });
+    }
+    return people; // 'custom' = the stored (dragged) order
+  }
   function renderOwed() {
     var body = byId('owedBody'); if (!body) return;
     var sum = byId('owedSum');
-    var people = (state.owed.people || []).slice().sort(function (a, b) {
-      return String(a.name).toLowerCase() < String(b.name).toLowerCase() ? -1 : 1;
-    });
+    var people = owedSortedPeople();
+    var ssel = byId('owedSort'); // v72.7: keep the control in sync (drag -> custom)
+    if (ssel && ssel.value !== (state.owed.sort || 'recent')) ssel.value = state.owed.sort || 'recent';
     if (sum) {
       if (!people.length) {
         sum.style.display = 'none';
@@ -2669,7 +2691,7 @@
       return p.name.toLowerCase() === name.toLowerCase();
     });
     if (dupe) { snack('Already in the book: ' + esc(name)); return; }
-    state.owed.people.push({ id: owedUid('ow'), name: name, entries: [] });
+    state.owed.people.push({ id: owedUid('ow'), name: name, entries: [], updated: new Date().toISOString() }); // v72.7: updated = recent-sort key
     saveOwed().then(emitOwed);
   }
   function delOwedPerson(id) {
@@ -2697,6 +2719,7 @@
     };
     if (data.expr) e.expr = data.expr;
     p.entries.push(e);
+    p.updated = new Date().toISOString(); // v72.7: recent-sort key
     saveOwed().then(function () {
       emitOwed();
       snack(OWED_DIRS[e.dir].label + ' ' + money(e.amt) + ' · ' + esc(p.name), function () {
@@ -2713,6 +2736,7 @@
     (p.entries || []).forEach(function (e, i) { if (e.id === eid) idx = i; });
     if (idx < 0) return;
     var gone = p.entries.splice(idx, 1)[0];
+    p.updated = new Date().toISOString(); // v72.7: recent-sort key
     saveOwed().then(function () {
       emitOwed();
       snack('Removed ' + money(gone.amt) + ' entry', function () {
@@ -2744,6 +2768,59 @@
     if (!input.value) { lab.textContent = 'Pick a date'; lab.className = 'dlabel empty'; }
     else { lab.textContent = fmtDate(input.value); lab.className = 'dlabel'; }
   }
+  // v72.7: drag-to-reorder the person cards (⠿ handle, the same pointer
+  // pattern as "Your numbers"). The drop rewrites state.owed.people in DOM
+  // order and pins the sort to custom (stored order), persisted via saveOwed.
+  var owedDragSt = null;
+  function owedDragStart(ev) {
+    var h = ev.target && ev.target.closest ? ev.target.closest('[data-ow-drag]') : null;
+    if (!h) return;
+    var card = h.closest('.ow-p');
+    if (!card) return;
+    ev.preventDefault();
+    owedDragSt = { card: card };
+    card.classList.add('dragging');
+    document.addEventListener('pointermove', owedDragMove);
+    document.addEventListener('pointerup', owedDragEnd);
+    document.addEventListener('pointercancel', owedDragEnd);
+  }
+  function owedDragMove(ev) {
+    if (!owedDragSt) return;
+    var body = byId('owedBody');
+    if (!body) return;
+    var y = ev.clientY;
+    var sibs = Array.prototype.slice.call(body.querySelectorAll('.ow-p:not(.dragging)'));
+    for (var i = 0; i < sibs.length; i++) {
+      var r = sibs[i].getBoundingClientRect();
+      if (y < r.top + r.height / 2) { body.insertBefore(owedDragSt.card, sibs[i]); break; }
+      if (i === sibs.length - 1) body.appendChild(owedDragSt.card);
+    }
+  }
+  function owedDragEnd() {
+    document.removeEventListener('pointermove', owedDragMove);
+    document.removeEventListener('pointerup', owedDragEnd);
+    document.removeEventListener('pointercancel', owedDragEnd);
+    if (!owedDragSt) return;
+    var st = owedDragSt;
+    owedDragSt = null;
+    st.card.classList.remove('dragging');
+    var body = byId('owedBody');
+    if (!body) return;
+    var order = [];
+    Array.prototype.forEach.call(body.querySelectorAll('.ow-p'), function (c) {
+      order.push(c.getAttribute('data-ow-pid'));
+    });
+    var map = {};
+    (state.owed.people || []).forEach(function (p) { map[p.id] = p; });
+    var np = order.map(function (id) { return map[id]; }).filter(function (p) { return p; });
+    (state.owed.people || []).forEach(function (p) {
+      if (order.indexOf(p.id) < 0) np.push(p);
+    });
+    if (np.length !== (state.owed.people || []).length) return;
+    state.owed.people = np;
+    state.owed.sort = 'custom';
+    saveOwed().then(emitOwed);
+  }
   function owedBindEvents() {
     var form = byId('owedForm');
     if (form) form.onsubmit = function (ev) {
@@ -2756,6 +2833,12 @@
     };
     var body = byId('owedBody');
     if (!body) return;
+    var ssel = byId('owedSort'); // v72.7: sort control (az / recent / custom)
+    if (ssel) ssel.onchange = function () {
+      state.owed.sort = ssel.value;
+      saveOwed().then(emitOwed);
+    };
+    body.addEventListener('pointerdown', owedDragStart); // v72.7: drag-to-reorder
     body.addEventListener('submit', function (ev) {
       var f = ev.target;
       if (!f || typeof f.className !== 'string' || f.className.indexOf('oent') < 0) return;
@@ -2965,7 +3048,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.6, live: new Date(2026, 8, 12, 1, 32) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.7, live: new Date(2026, 8, 12, 1, 42) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

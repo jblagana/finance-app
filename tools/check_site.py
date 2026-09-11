@@ -508,6 +508,10 @@ def main():
           "function numVal(el, normalize)" in js and "if (normalize) el.value = v" in js
           and "numVal(byId('b_salary'), true)" in js and "numVal(vi, true)" in js
           and "numVal(ai, true)" in js)
+    check("owed people: drag + sort, default recent (v72.7): az/recent/custom control persisted on state.owed; the ⠿ handle on each person card reorders and pins the sort to custom",
+          "function owedSortedPeople" in js and "state.owed.sort || 'recent'" in js
+          and 'id="owedSort"' in html and "data-ow-drag" in js
+          and "state.owed.sort = 'custom'" in js and "p.updated = new Date().toISOString()" in js)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):

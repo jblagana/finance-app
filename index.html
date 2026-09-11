@@ -222,7 +222,7 @@ button.gear:active{border-color:var(--acc);color:var(--acc)}
 .bdrag{flex:0 0 auto;color:var(--mut);font-size:14px;line-height:1;cursor:grab;padding:6px 2px;
 touch-action:none;user-select:none;-webkit-user-select:none}
 .bdrag:active{color:var(--acc);cursor:grabbing}
-.brow.dragging,.bblk.dragging{position:relative;z-index:20;background:rgba(55,211,155,.07);
+.brow.dragging,.bblk.dragging,.ow-p.dragging{position:relative;z-index:20;background:rgba(55,211,155,.07);
 border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.4);transition:none}
 .qsbar{margin-top:10px;padding:8px 10px;border:1px dashed var(--acc);border-radius:9px;
 font-size:12.5px;font-weight:700;color:var(--acc)}
@@ -561,6 +561,16 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
       </div>
       <p class="note" style="margin:10px 0 0">A private book of who owes whom — it never touches your Money numbers.</p>
     </form>
+
+    <div style="display:flex;align-items:center;gap:8px;margin:10px 2px">
+      <label for="owedSort" class="note" style="margin:0">Sort</label>
+      <select id="owedSort">
+        <option value="recent" selected>Recent</option>
+        <option value="az">A–Z</option>
+        <option value="custom">Custom (drag)</option>
+      </select>
+      <span class="note" style="margin:0 0 0 auto">⠿ drag a card to rearrange</span>
+    </div>
 
     <div id="owedBody"></div>
   </div>
