@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-12 02:16 — User edit: v72.3 emoji note amplified ("prioritize this … here")
-Status: in progress — logged first; v72.8 push completes in flight, emoji fix ships next as v72.12
-Progress: 0% — ETA ~02:35 (v72.12 dot after the v72.8 push)
+Status: done — shipped as v72.12
+Progress: 100%
 ### Instruction (verbatim)
 > User edit in the master entry's Interpretation, v72.3 bullet (diff of the line the agent last wrote):
 > - old: `words, no emoji (yes to emoji, prioritize this -jan); one light self-aware line in the chat welcome`
@@ -27,13 +27,13 @@ Progress: 0% — ETA ~02:35 (v72.12 dot after the v72.8 push)
   reserved for items 5/2/11 in the master entry).
 ### Subtasks
 - [x] Log the edit verbatim (first action)
-- [ ] v72.12 — emoji allowed in the LLM voice prompts (chat + note + welcome)
-- [ ] Push v72.12 on green; record hash; mark done
+- [x] v72.12 — emoji allowed in the LLM voice prompts (chat + note + welcome) — pushed e2f710f (live 02:26); gates green (new v72.12 check: both voice prompts say "at most one emoji and only where it genuinely fits", setup prompt stays plain, welcome carries the 🍜)
+- [x] Push v72.12 on green; record hash; mark done
 
 
 ## 2026-09-12 00:29 — v72: 11-item batch + push/order/streamline discipline
 Status: in progress
-Progress: 41% — ETA ~05:45
+Progress: 44% — ETA ~05:45
 ### Instruction (verbatim)
 > The original 11-item batch instruction arrived in the previous session; its
 > exact wording is not in this session's context — logged here as a marked
@@ -174,8 +174,8 @@ Progress: 41% — ETA ~05:45
 - [x] v72.5 — 5-minute chat memory (session window + adaptive trim) — pushed 828b5fa (live 01:21); gates green + 3 new smoke checks
 - [x] v72.6 — quicksum stores the computed total — pushed dce5cac (live 01:32); gates green (one stale v71.1 assertion updated for the new call shape)
 - [x] v72.7 — owed people drag + sort (default recent) — pushed 6382c6f (live 01:42); gates green
-- [x] v72.8 — export/import data-loss fix (full backup: chat + moneyLog + adj/sig + owedSort; sanitized restore; adj recompute for pre-72.8 files) — committed b2b1d3a (live 02:14); gates green + 8 new smoke checks (export content + wipe→import round-trip); smoke's fake IDB now resolves keyPath keys (id vs key)
-- [ ] v72.12 — emoji allowed in the LLM voice prompts (user edit 02:16; NEXT dot after v72.8, ahead of the remaining batch)
+- [x] v72.8 — export/import data-loss fix (full backup: chat + moneyLog + adj/sig + owedSort; sanitized restore; adj recompute for pre-72.8 files) — pushed b2b1d3a (live 02:14); gates green + 8 new smoke checks (export content + wipe→import round-trip); smoke's fake IDB now resolves keyPath keys (id vs key)
+- [x] v72.12 — emoji allowed in the LLM voice prompts (user edit 02:16; shipped ahead of the remaining batch) — pushed e2f710f (live 02:26); gates green
 - [ ] v72.9 — ledger edit keeps position + original date/time
 - [ ] v72.10 — owed → ledger "Owed" entries (sign by flow) + editable subentries
 - [ ] v72.11 — draggable floating bot, 4 corner snaps
