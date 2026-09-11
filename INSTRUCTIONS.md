@@ -22,8 +22,8 @@ Progress: 100%
 - This dot-release preference is noted for future sessions: when work arrives incrementally, push + dot-bump per completed app-affecting subtask.
 
 ## 2026-09-11 — go (proceed with the next dot release: v71.5)
-Status: in progress
-Progress: 90% — ETA ~18:05 (live stamp + commit + push left)
+Status: done — v71.5 pushed as de97593 (live stamp 18:26); next dot release is v71.6 (item 6: ledger row title = category, "Unsorted" for no-category)
+Progress: 100%
 ### Instruction (verbatim)
 > go
 ### Interpretation (agent — user may edit this section)
@@ -36,11 +36,11 @@ Progress: 90% — ETA ~18:05 (live stamp + commit + push left)
 - [x] Staged v71.5 structural check in tools/check_site.py (+ local mirror re-synced — this time the root mirror's SITE line was restored correctly)
 - [x] Version stamps: sw.js v71.5, SHELL_RELEASE v: 71.5, README line, INSTRUCTIONS.md
 - [x] Gates: check_site (repo + root mirror) + parser + node --check — all green
-- [ ] Set live stamp → commit → push → log hash + status done
+- [x] Set live stamp (18:26) → commit → push (de97593) → log hash + status done
 
 ## 2026-09-11 — v71: Your-numbers (keyboard, drag-reorder, save button), ledger (editable, AM/PM time, Unsorted title), toast, coach avatar
-Status: in progress — per the user's dot-release edit, shipping as v71.1 … v71.8 (one live push per subtask, cumulative); v71.1–v71.4 shipped, v71.5 (save button) next
-Progress: 50% — ETA ~18:30 (v71.5…v71.8 dot pushes + final gates left)
+Status: in progress — per the user's dot-release edit, shipping as v71.1 … v71.8 (one live push per subtask, cumulative); v71.1–v71.5 shipped, v71.6 (ledger Unsorted title) next
+Progress: 62% — ETA ~19:00 (v71.6…v71.8 dot pushes + final gates left)
 ### Instruction (verbatim)
 > -allow quicksum keyboard on 'your numbers'
 > -allow the entries in the 'your numbers' to be rearranged by dragging
