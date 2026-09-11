@@ -8,7 +8,7 @@ commit is not done.
 
 ## 2026-09-12 00:29 — v72: 11-item batch + push/order/streamline discipline
 Status: in progress
-Progress: 32% — ETA ~05:30
+Progress: 38% — ETA ~05:45
 ### Instruction (verbatim)
 > The original 11-item batch instruction arrived in the previous session; its
 > exact wording is not in this session's context — logged here as a marked
@@ -97,7 +97,7 @@ Progress: 32% — ETA ~05:30
   - **v72.3 personality (item 7)** — voice only in the LLM paths:
     AI_REMOTE_SYSTEM (chat.js) + note() prompt (ai.js): light/funny, dry
     wink, ≤1 short joke line, numbers + draft protocol always win, ≤60
-    words, no emoji (yes to emoji, prioritize this); one light self-aware line in the chat welcome.
+    words, no emoji (yes to emoji, prioritize this -jan); one light self-aware line in the chat welcome
     Rule-engine functional replies stay plain.
   - **v72.4 account kinds (item 8)** — the account-row picker offers
     exactly Debit / Credit ("Credit" = internal kind `card`, "Debit" =
@@ -147,8 +147,8 @@ Progress: 32% — ETA ~05:30
 - [x] v72.3 — funny personality (LLM voice: chat + note prompts, welcome line) — pushed 59c61eb (live 01:06); gates green
 - [x] v72.4 — account kind = credit or debit only — pushed 680f3b9 (live 01:13); gates green
 - [x] v72.5 — 5-minute chat memory (session window + adaptive trim) — pushed 828b5fa (live 01:21); gates green + 3 new smoke checks
-- [ ] v72.6 — quicksum stores the computed total
-- [ ] v72.7 — owed people drag + sort (default recent)
+- [x] v72.6 — quicksum stores the computed total — pushed dce5cac (live 01:32); gates green (one stale v71.1 assertion updated for the new call shape)
+- [x] v72.7 — owed people drag + sort (default recent) — pushed 6382c6f (live 01:42); gates green
 - [ ] v72.8 — export/import data-loss fix (moneyLog + chat)
 - [ ] v72.9 — ledger edit keeps position + original date/time
 - [ ] v72.10 — owed → ledger "Owed" entries (sign by flow) + editable subentries
