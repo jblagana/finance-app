@@ -454,6 +454,11 @@ def main():
           and "Math.round(numVal(byId('b_pday')))" in js)
     check("'Your numbers' live quick-sum hint (v71.1): qsBar on the sheet",
           'id="qsBar"' in html and "function qsHint" in js and ".qsbar{" in html)
+    check("'Your numbers' rows are drag-reorderable (v71.2): handle + pointer drag; order saved on drop (Add-sheet categories follow the saved order)",
+          "function dragH" in js and "data-drag" in js
+          and "function baseDragStart" in js and "function baseDragMove" in js
+          and "function baseDragEnd" in js and "insertBefore(dragSt.row" in js
+          and "touch-action:none" in html and ".bdrag{" in html)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):

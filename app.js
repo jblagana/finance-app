@@ -1026,11 +1026,15 @@
   }
   function brow(inner) { return '<div class="brow">' + inner + '</div>'; }
   function delBtn(label, blk) { return '<button type="button" class="mini" data-rm="' + (blk ? 'blk' : '1') + '" aria-label="' + esc(label || 'Remove') + '">✕</button>'; }
-  function payRow(m, a) {
+  // v71: drag handle — rows/blocks carrying it are reorderable in "Your numbers".
+  function dragH() {
+    return '<span class="bdrag" data-drag="1" aria-label="Drag to reorder" title="Drag to reorder">\u287F</span>';
+  }
+  function payRow(m, a, dr) {
     // v71: the amount is a text input with the FULL keyboard (no inputmode) —
     // a numeric keypad has no operators, which is exactly why quick sums died
     // in v52. Same treatment as the Add sheet's f_amount.
-    return brow('<input data-r="m" type="month" value="' + esc(m || '') + '">' +
+    return brow((dr ? dragH() : '') + '<input data-r="m" type="month" value="' + esc(m || '') + '">' +
       '<input data-r="a" type="text" value="' + (a != null ? a : '') + '">' +
       delBtn('Remove payment'));
   }
@@ -1049,7 +1053,7 @@
   function accRow(a) {
     a = a || {};
     var kinds = ['debit', 'card', 'debt', 'loan']; // v65: 'cash' renamed to 'debit'
-    return brow('<input class="grow" data-r="name" value="' + esc(a.name || '') + '" autocomplete="off">' +
+    return brow(dragH() + '<input class="grow" data-r="name" value="' + esc(a.name || '') + '" autocomplete="off">' +
       '<select data-r="kind">' + kinds.map(function (k) {
         return '<option value="' + k + '"' + (a.kind === k ? ' selected' : '') + '>' + k + '</option>';
       }).join('') + '</select>' +
@@ -1061,7 +1065,7 @@
     d = d || {};
     var pays = d.payments ? Object.keys(d.payments).map(function (m) { return payRow(m, d.payments[m]); }).join('') : '';
     return '<div class="bblk" data-sec="debt">' +
-      brow('<input class="grow" data-r="name" value="' + esc(d.name || '') + '" autocomplete="off">' + delBtn('Remove debt', true)) +
+      brow(dragH() + '<input class="grow" data-r="name" value="' + esc(d.name || '') + '" autocomplete="off">' + delBtn('Remove debt', true)) +
       brow('<span class="bnote">monthly</span><input data-r="monthly" type="text" value="' + (d.monthly != null ? d.monthly : '') + '">' +
         '<span class="bnote">active</span><input class="grow" data-r="active" value="' + esc((d.active_months || []).join(', ')) + '" autocomplete="off">') +
       '<div data-r="pays">' + pays + '</div>' +
@@ -1099,7 +1103,7 @@
     s = s || {};
     var pays = s.payments ? Object.keys(s.payments).map(function (m) { return payRow(m, s.payments[m]); }).join('') : '';
     return '<div class="bblk" data-sec="sink">' +
-      brow('<input class="grow" data-r="name" value="' + esc(s.name || '') + '" autocomplete="off">' + delBtn('Remove goal', true)) +
+      brow(dragH() + '<input class="grow" data-r="name" value="' + esc(s.name || '') + '" autocomplete="off">' + delBtn('Remove goal', true)) +
       brow('<span class="bnote">goal</span><input data-r="goal" type="text" value="' + (s.goal != null ? s.goal : '') + '">' +
         '<span class="bnote">funded</span><input data-r="funded" type="text" value="' + (s.funded != null ? s.funded : '') + '>') +
       brow('<span class="bnote">by</span><input data-r="deadline" type="date" value="' + esc(s.deadline || '') + '">') +
@@ -1124,7 +1128,7 @@
       '<span class="bnote">cutoff</span><input class="grow" id="b_cday" type="text" value="' + (b.cutoff_day || 15) + '">');
     h += brow('<span class="bnote">card target util</span><input class="grow" id="b_util" type="text" value="' + (b.card_util_target || '') + '" title="0.099 = just under 10%">');
     var salRows = '';
-    Object.keys(b.salary_overrides || {}).forEach(function (m) { salRows += payRow(m, b.salary_overrides[m]); });
+    Object.keys(b.salary_overrides || {}).forEach(function (m) { salRows += payRow(m, b.salary_overrides[m], true); });
     h += bsec('Salary overrides') + '<div id="rowsSal">' + salRows + '</div>' +
       '<button type="button" class="addrow" data-add="sal">+ override month</button>';
     var accRows = (b.accounts || []).map(accRow).join('');
@@ -1132,7 +1136,7 @@
       '<button type="button" class="addrow" data-add="acc">+ account</button>';
     var budRows = '';
     Object.keys(b.budgets || {}).forEach(function (k) {
-      budRows += brow('<input class="grow" data-r="name" value="' + esc(k) + '" autocomplete="off">' +
+      budRows += brow(dragH() + '<input class="grow" data-r="name" value="' + esc(k) + '" autocomplete="off">' +
         '<input data-r="a" type="text" value="' + (Number(b.budgets[k]) || '') + '">' + delBtn('Remove budget')) + detChips('budget:' + k);
     });
     h += bsec('Monthly budgets') + '<div id="rowsBud">' + budRows + '</div>' +
@@ -1143,7 +1147,7 @@
         var opts = Object.keys(b.budgets || {}).map(function (bk) {
           return '<option value="' + esc(bk) + '"' + (bk === k ? ' selected' : '') + '>' + esc(bk) + '</option>';
         }).join('') || '<option value="">—</option>';
-        bovRows += brow('<input data-r="m" type="month" value="' + esc(m) + '">' +
+        bovRows += brow(dragH() + '<input data-r="m" type="month" value="' + esc(m) + '">' +
           '<select data-r="cat">' + opts + '</select>' +
           '<input data-r="a" type="text" value="' + (Number(b.budget_overrides[m][k]) || '') + '">' + delBtn('Remove override'));
       });
@@ -1160,7 +1164,7 @@
     var oneRows = '';
     Object.keys(b.one_offs || {}).forEach(function (m) {
       Object.keys(b.one_offs[m] || {}).forEach(function (k) {
-        oneRows += brow('<input data-r="m" type="month" value="' + esc(m) + '">' +
+        oneRows += brow(dragH() + '<input data-r="m" type="month" value="' + esc(m) + '">' +
           '<input class="grow" data-r="name" value="' + esc(k) + '" autocomplete="off">' +
           '<input data-r="a" type="text" value="' + (Number(b.one_offs[m][k]) || '') + '">' + delBtn('Remove one-off'));
       });
@@ -1353,6 +1357,63 @@
     }
     bar.style.display = show ? '' : 'none';
     if (show) { bar.textContent = txt; bar.className = 'qsbar' + (bad ? ' bad' : ''); }
+  }
+  // v71: drag-to-reorder in "Your numbers". Pointer-based (touch + mouse) and
+  // handle-driven (⠿) so the inputs keep working. The row follows the finger,
+  // siblings reflow live, and the drop commits the new order (readBaseForm
+  // reads DOM order, so what you see is what gets saved). Identity and values
+  // are untouched: only the node order changes — and the Add sheet's category
+  // list follows, since it is seeded from the saved budgets order.
+  var dragSt = null;
+  function layoutTop(el) {
+    var t = el.style.transform;
+    el.style.transform = 'none';
+    var top = el.getBoundingClientRect().top;
+    el.style.transform = t;
+    return top;
+  }
+  function baseDragStart(ev) {
+    var t = ev.target;
+    if (!t || !t.getAttribute || t.getAttribute('data-drag') !== '1') return;
+    var row = t.closest ? (t.closest('.bblk') || t.parentElement) : null;
+    var container = row && row.parentElement;
+    if (!row || !container) return;
+    if (ev.cancelable) ev.preventDefault();
+    var rect = row.getBoundingClientRect();
+    dragSt = { row: row, container: container, offY: ev.clientY - rect.top, h: rect.height, y0: ev.clientY, moved: false };
+    row.classList.add('dragging');
+    try { t.setPointerCapture(ev.pointerId); } catch (e) {}
+  }
+  function baseDragMove(ev) {
+    if (!dragSt) return;
+    ev.preventDefault();
+    if (Math.abs(ev.clientY - dragSt.y0) > 3) dragSt.moved = true;
+    var top = ev.clientY - dragSt.offY;
+    dragSt.row.style.transform = 'translateY(' + (top - layoutTop(dragSt.row)) + 'px)';
+    var center = top + dragSt.h / 2;
+    var before = null, kids = dragSt.container.children;
+    for (var i = 0; i < kids.length; i++) {
+      var c = kids[i];
+      if (c === dragSt.row) continue;
+      var cr = c.getBoundingClientRect();
+      if (cr.top + cr.height / 2 < center) before = c;
+    }
+    var next = before ? before.nextSibling : dragSt.container.firstElementChild;
+    if (next !== dragSt.row) {
+      var oldTop = dragSt.row.getBoundingClientRect().top;
+      dragSt.container.insertBefore(dragSt.row, next);
+      dragSt.row.style.transform = 'translateY(' + (oldTop - layoutTop(dragSt.row)) + 'px)';
+      dragSt.offY = ev.clientY - oldTop;
+    }
+  }
+  function baseDragEnd(ev) {
+    if (!dragSt) return;
+    var row = dragSt.row, moved = dragSt.moved;
+    row.classList.remove('dragging');
+    row.style.transform = '';
+    try { if (ev.target && ev.target.releasePointerCapture) ev.target.releasePointerCapture(ev.pointerId); } catch (e) {}
+    dragSt = null;
+    if (moved) commitBaseForm();
   }
   function renderBaseStatus() {
     var el = byId('baseStatus');
@@ -2754,7 +2815,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 71.1, live: new Date(2026, 8, 11, 16, 47) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 71.2, live: new Date(2026, 8, 11, 16, 59) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3143,6 +3204,10 @@
       var deb = null;
       bb.addEventListener('input', function (ev) { clearTimeout(deb); deb = setTimeout(commitBaseForm, 450); qsHint(ev.target); });
       bb.addEventListener('change', function () { clearTimeout(deb); commitBaseForm(); });
+      bb.addEventListener('pointerdown', baseDragStart);
+      bb.addEventListener('pointermove', baseDragMove);
+      bb.addEventListener('pointerup', baseDragEnd);
+      bb.addEventListener('pointercancel', baseDragEnd);
       bb.addEventListener('click', function (ev) {
         var t = ev.target;
         if (!t || !t.getAttribute) return;
