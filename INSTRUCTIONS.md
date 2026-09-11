@@ -8,7 +8,7 @@ commit is not done.
 
 ## 2026-09-12 00:29 — v72: 11-item batch + push/order/streamline discipline
 Status: in progress
-Progress: 2% — ETA ~05:00
+Progress: 5% — ETA ~05:00
 ### Instruction (verbatim)
 > The original 11-item batch instruction arrived in the previous session; its
 > exact wording is not in this session's context — logged here as a marked
@@ -140,7 +140,7 @@ Progress: 2% — ETA ~05:00
 
 ### Subtasks
 - [x] Log the instruction verbatim (first action)
-- [ ] AGENTS.md discipline block + docs commit + push
+- [x] AGENTS.md discipline block + docs commit + push (fba5252)
 - [ ] tools/release.ps1 built + dogfooded on the first dot
 - [ ] v72.1 — coach card offline-only sub line ("Coach Fin is unavailable right now.")
 - [ ] v72.2 — settings gear glyph 16px → 20px
