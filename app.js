@@ -1118,10 +1118,17 @@
   // v71: quick sums in "Your numbers" — the amount fields are text inputs
   // (operators typeable, like the Add sheet) and numVal evaluates an
   // expression first (300-125+10 -> 185), falling back to parseFloat.
-  function numVal(el) {
+  // v72.6: with normalize=true the computed total is written back into the
+  // field on commit (spreadsheet-style: the stored value is the total, so a
+  // re-opened field shows the plain number). One-way: the original expression
+  // is not kept.
+  function numVal(el, normalize) {
     if (!el) return 0;
     var v = evalExpr(el.value);
-    if (v != null) return v;
+    if (v != null) {
+      if (normalize) el.value = v;
+      return v;
+    }
     v = parseFloat(el.value);
     return isFinite(v) ? r2(v) : 0;
   }
@@ -1330,31 +1337,31 @@
     var isMonth = function (s) { return /^\d{4}-\d{2}$/.test(String(s || '')); };
     b.name = gv('b_name').trim();
     b.as_of = gv('b_asof').trim() || todayISO();
-    b.salary = numVal(byId('b_salary'));
-    b.liquidity_floor = numVal(byId('b_floor'));
-    var pd = Math.round(numVal(byId('b_pday'))); // v71: quick sums here too (10+4 -> 14)
-    var cd = Math.round(numVal(byId('b_cday')));
+    b.salary = numVal(byId('b_salary'), true);
+    b.liquidity_floor = numVal(byId('b_floor'), true);
+    var pd = Math.round(numVal(byId('b_pday'), true)); // v71: quick sums here too (10+4 -> 14)
+    var cd = Math.round(numVal(byId('b_cday'), true));
     b.prepay_day = pd > 0 ? pd : 14;
     b.cutoff_day = cd > 0 ? cd : 15;
-    var ut = numVal(byId('b_util'));
+    var ut = numVal(byId('b_util'), true);
     b.card_util_target = ut > 0 ? ut : 0.099;
     bb.querySelectorAll('#rowsSal .brow').forEach(function (row) {
       var m = row.querySelector('[data-r="m"]'); var a = row.querySelector('[data-r="a"]');
-      if (m && a && isMonth(m.value)) b.salary_overrides[m.value] = numVal(a);
+      if (m && a && isMonth(m.value)) b.salary_overrides[m.value] = numVal(a, true);
     });
     bb.querySelectorAll('#rowsAcc .brow').forEach(function (row) {
       var ni = row.querySelector('[data-r="name"]'); var ki = row.querySelector('[data-r="kind"]');
       var vi = row.querySelector('[data-r="value"]'); var li = row.querySelector('[data-r="limit"]');
       var name = ni ? ni.value.trim() : '';
       var kind = ki ? ki.value : 'debit'; // v65
-      var value = numVal(vi);
+      var value = numVal(vi, true);
       if (!name && !value) return;
-      b.accounts.push({ name: name || '(unnamed)', kind: kind, value: value, limit: kind === 'card' ? numVal(li) : 0, note: '' });
+      b.accounts.push({ name: name || '(unnamed)', kind: kind, value: value, limit: kind === 'card' ? numVal(li, true) : 0, note: '' });
     });
     bb.querySelectorAll('#rowsBud .brow').forEach(function (row) {
       var ni = row.querySelector('[data-r="name"]'); var ai = row.querySelector('[data-r="a"]');
       var name = ni ? ni.value.trim() : '';
-      var amt = numVal(ai);
+      var amt = numVal(ai, true);
       if (!name && !amt) return;
       b.budgets[name || '(unnamed)'] = amt;
     });
@@ -1362,27 +1369,27 @@
       var m = row.querySelector('[data-r="m"]'); var c = row.querySelector('[data-r="cat"]'); var a = row.querySelector('[data-r="a"]');
       if (m && c && a && isMonth(m.value) && c.value) {
         b.budget_overrides[m.value] = b.budget_overrides[m.value] || {};
-        b.budget_overrides[m.value][c.value] = numVal(a);
+        b.budget_overrides[m.value][c.value] = numVal(a, true);
       }
     });
     bb.querySelectorAll('#rowsOne .brow').forEach(function (row) {
       var m = row.querySelector('[data-r="m"]'); var ni = row.querySelector('[data-r="name"]'); var a = row.querySelector('[data-r="a"]');
       var name = ni ? ni.value.trim() : '';
-      if (m && isMonth(m.value) && (name || numVal(a) > 0)) {
+      if (m && isMonth(m.value) && (name || numVal(a, true) > 0)) {
         b.one_offs[m.value] = b.one_offs[m.value] || {};
-        b.one_offs[m.value][name || '(unnamed)'] = numVal(a);
+        b.one_offs[m.value][name || '(unnamed)'] = numVal(a, true);
       }
     });
     bb.querySelectorAll('.bblk[data-sec="debt"]').forEach(function (blk) {
       var ni = blk.querySelector('[data-r="name"]');
       var name = ni ? ni.value.trim() : '';
       if (!name) return;
-      var d = { monthly: numVal(blk.querySelector('[data-r="monthly"]')), active_months: [], payments: {} };
+      var d = { monthly: numVal(blk.querySelector('[data-r="monthly"]'), true), active_months: [], payments: {} };
       var act = blk.querySelector('[data-r="active"]');
       if (act) act.value.split(',').forEach(function (s) { s = s.trim(); if (isMonth(s)) d.active_months.push(s); });
       blk.querySelectorAll('[data-r="pays"] .brow').forEach(function (row) {
         var m = row.querySelector('[data-r="m"]'); var a = row.querySelector('[data-r="a"]');
-        if (m && a && isMonth(m.value) && numVal(a) > 0) d.payments[m.value] = numVal(a);
+        if (m && a && isMonth(m.value) && numVal(a, true) > 0) d.payments[m.value] = numVal(a, true);
       });
       b.debts[name] = d;
     });
@@ -1391,11 +1398,11 @@
       var name = ni ? ni.value.trim() : '';
       if (!name) return;
       var dl = blk.querySelector('[data-r="deadline"]');
-      var s = { goal: numVal(blk.querySelector('[data-r="goal"]')), deadline: dl ? dl.value : '',
-        funded: numVal(blk.querySelector('[data-r="funded"]')), payments: {} };
+      var s = { goal: numVal(blk.querySelector('[data-r="goal"]'), true), deadline: dl ? dl.value : '',
+        funded: numVal(blk.querySelector('[data-r="funded"]'), true), payments: {} };
       blk.querySelectorAll('[data-r="pays"] .brow').forEach(function (row) {
         var m = row.querySelector('[data-r="m"]'); var a = row.querySelector('[data-r="a"]');
-        if (m && a && isMonth(m.value) && numVal(a) > 0) s.payments[m.value] = numVal(a);
+        if (m && a && isMonth(m.value) && numVal(a, true) > 0) s.payments[m.value] = numVal(a, true);
       });
       b.sinking[name] = s;
     });
@@ -2958,7 +2965,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.5, live: new Date(2026, 8, 12, 1, 21) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.6, live: new Date(2026, 8, 12, 1, 32) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

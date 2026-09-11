@@ -450,9 +450,9 @@ def main():
           and "ch.kind !== 'debit'" in chatjs)
 
     print("\n== v71: your-numbers quicksum + drag-reorder + save button; ledger edit + AM/PM + unsorted title; snack; coach avatar (dot releases v71.1..v71.8) ==")
-    check("'Your numbers' fields take quick sums (v71.1): text inputs (full keyboard, operators typeable) and numVal evaluates the expression first",
+    check("'Your numbers' fields take quick sums (v71.1): text inputs (full keyboard, operators typeable) and numVal evaluates the expression first; commit stores the total (v72.6)",
           'type="number"' not in js and "evalExpr(el.value)" in js
-          and "Math.round(numVal(byId('b_pday')))" in js)
+          and "Math.round(numVal(byId('b_pday'), true))" in js)
     check("'Your numbers' live quick-sum hint (v71.1): qsBar on the sheet",
           'id="qsBar"' in html and "function qsHint" in js and ".qsbar{" in html)
     check("'Your numbers' rows are drag-reorderable (v71.2): handle + pointer drag; order saved on drop (Add-sheet categories follow the saved order)",
@@ -504,6 +504,10 @@ def main():
     check("Coach Fin has a 5-minute conversation memory (v72.5): session = rows since the last 5+ min gap, capped at 24 msgs x 160 chars; past the 3800-char guard the OLDEST lines are trimmed, not the whole memory",
           "COACH_MEM_GAP_MS = 5 * 60 * 1000" in chatjs and "COACH_MEM_MAX = 24" in chatjs
           and "mem = mem.slice(1)" in chatjs and "out.length < 6" not in chatjs)
+    check("quicksum stores the computed total (v72.6): commit normalizes every Your-numbers amount field to the evaluated total (one-way; a plain number shows next open)",
+          "function numVal(el, normalize)" in js and "if (normalize) el.value = v" in js
+          and "numVal(byId('b_salary'), true)" in js and "numVal(vi, true)" in js
+          and "numVal(ai, true)" in js)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):
