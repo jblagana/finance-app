@@ -158,15 +158,15 @@ def main():
           html.index("app.js") < html.index("chat.js") < html.index("ai.js"))
 
     print("\n== PWA shell (offline app, online coach) ==")
-    check("sw.js cache is v69", "finances-pwa-v69" in sw and "finances-pwa-v68" not in sw)
+    check("sw.js cache is v70", "finances-pwa-v70" in sw and "finances-pwa-v69" not in sw)
     check("sw.js handles SKIP_WAITING", "'SKIP_WAITING'" in sw)
     check("shell cache holds the app scripts + manifest + icons (no model files)",
           "'./app.js'" in sw and "'./chat.js'" in sw and "'./ai.js'" in sw
           and "'./manifest.webmanifest'" in sw and "'./favicon.png'" in sw)
     check("sw.js: non-GET and cross-origin (coach) calls stay network-only",
           "url.origin !== self.location.origin" in sw and "req.method !== 'GET'" in sw)
-    check("footer stamp: brand + shell v69 + live date/time, one source for both footers",
-          "var SHELL_RELEASE = { v: 69" in js and "function shellStamp" in js
+    check("footer stamp: brand + shell v70 + live date/time, one source for both footers",
+          "var SHELL_RELEASE = { v: 70" in js and "function shellStamp" in js
           and "'Fin.AI · shell v'" in js and 'id="setFoot"' in html
           and "byId('setFoot')" in js)
     check("service worker registration wired (page or app.js)",
@@ -338,6 +338,8 @@ def main():
     check("chips derive from the stored numbers (v69): the standing four use the real prepay day + the biggest budget, so they change with the state even when no coach alert is active",
           "function standingChips" in chatjs and "function dynamicChips" in chatjs
           and "prepayDay: d.prepayDay" in js and "topCat: topCat" in js)
+    check("'hm' = 'how much' (v70): a bare 'hm' (any trailing punctuation) — or a bare 'how much' — routes to the full status summary",
+          "^(?:hm|how much)" in chatjs and "want.all = true" in chatjs)
     check("shadow mode (v68 item 11): every chat message logs its answering path (rule intent / llm / fallback) + what was drafted, capped at 200 in a meta key, included in the JSON export",
           "SHADOW_KEY = 'shadowLog'" in js and "SHADOW_CAP = 200" in js
           and "shadowLog: state.shadowLog || []" in js

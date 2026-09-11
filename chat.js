@@ -463,7 +463,7 @@
     // phrase you can actually type.
     var h = block('What I can do',
       line('I’m <b>Fin</b> — your money coach. I work from the numbers stored on this phone, and everything below works offline.') +
-      line('• <b>Status</b> — free cash, liquid cash, cards owed, the 14th prepay: “how much is free?”') +
+      line('• <b>Status</b> — free cash, liquid cash, cards owed, the 14th prepay: “how much is free?” (or just “hm")') +
       line('• <b>Details</b> — debt schedules, one-offs, sinking funds, “what’s my cash in Feb?”') +
       line('• <b>Plans</b> — add / list / remove plans, exactly like the form on the Money tab: “plan: shoes 1,500 on the 20th”') +
       line('• <b>Charge check</b> — “can I charge 2,500 on Maya?”') +
@@ -551,6 +551,10 @@
       util: /\butiliz/.test(t),
       all: /\b(status|summary|overview|big picture|how am i doing|where do i stand|recap)\b/.test(t)
     };
+    // v70: "hm" is the shorthand for "how much". A bare "hm" (any trailing
+    // punctuation) — or a bare "how much" — is the status question: answer
+    // with the full "where you stand" picture.
+    if (/^(?:hm|how much)[\s?!.,:;-]*$/.test(t)) want.all = true;
     if (!want.free && !want.cash && !want.card && !want.prepay && !want.util && !want.all) return null;
     var floor = e.floor || 0;
     if (want.all) {

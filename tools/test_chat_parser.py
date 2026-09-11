@@ -1063,6 +1063,9 @@ def route(text):
             or re.search(r"\b" + MONAME + r"\b", t) or re.search(r"\bnext month\b", t)
             or re.search(r"\b(project|projection|forecast|runway|trajectory|next (?:few )?months|how (?:far|long) (?:will|does)|will i (?:make it|be ok|be fine)|break even|through february|the plan)\b", t)):
         return "future"
+    # v70: bare "hm" / "how much" is the status question (mirror of chat.js)
+    if re.match(r"^(?:hm|how much)[\s?!.,:;-]*$", t):
+        return "status"
     if (re.search(r"\bfree\b|\bunallocated\b|\bheadroom\b|\bhow much (?:can i |do i )?spend\b|\bcan i spend\b", t)
             or re.search(r"\b(?:liquid )?cash\b|\bbalances?\b|\bhow much (?:money|cash)(?: do i | i )?have\b", t)
             or (re.search(r"\bcards?\b", t) and re.search(r"\b(owe|owed|balance|total|due)\b", t))
@@ -1185,6 +1188,9 @@ def main():
         ("my 14th prepay", "status"),
         ("where do i stand", "status"),
         ("how much can i spend", "status"),
+        ("hm", "status"),        # v70: "hm" = "how much"
+        ("hm?", "status"),       # v70: trailing punctuation is fine
+        ("how much", "status"),  # v70: the bare question too
         ("how is my christmas fund doing", "sinking"),
         ("what's the back rent one-off", "oneoff"),
         ("how is the weather", "fallback"),
