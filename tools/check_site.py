@@ -117,9 +117,10 @@ def main():
     for _n, _s in (("index.html", html), ("app.js", js), ("chat.js", chatjs),
                    ("ai.js", aijs), ("sw.js", sw), ("manifest", mf)):
         check("no FinSmart in %s" % _n, "FinSmart" not in _s)
-    check("brand is Fin.AI (title, topbar, footer stamp, coach prompt)",
+    check("brand is Fin.AI (title, topbar, footer stamp) + the bot is Coach Fin (v69, in the coach prompts)",
           "<title>Fin.AI</title>" in html and "Fin<span>.AI</span>" in html
-          and "'Fin.AI · shell v'" in js and "You are Fin.AI" in chatjs)
+          and "'Fin.AI · shell v'" in js and "You are Coach Fin" in chatjs
+          and "You are Coach Fin" in aijs)
     check("manifest is named Fin.AI",
           '"name": "Fin.AI"' in mf and '"short_name": "Fin.AI"' in mf)
     check("README is Fin.AI + local-first, no old brain copy",
@@ -137,7 +138,7 @@ def main():
               "f_category", "f_account", "f_date", "f_note", "chargeHint",
               "chatHead", "chatTitle", "chatFresh", "chatInfo",
               "chatMsgs", "chatChips", "chatInRow", "chatInput", "chatSend",
-              "chatTip", "chatTipText", "chatInfoView", "chatInfoBody", "chatInfoBack",
+              "chatTip", "chatTipText", "chatInfoView", "chatInfoBody",
               "addSheet", "setSheet", "scrim", "addBtn", "setBtn", "addClose", "setClose",
               "baseStatus", "baseBody", "baseMigrated", "homeOpenSet", "homeCoach",
               "impBtn", "impFile", "snack", "swToast", "swReload",
@@ -157,15 +158,15 @@ def main():
           html.index("app.js") < html.index("chat.js") < html.index("ai.js"))
 
     print("\n== PWA shell (offline app, online coach) ==")
-    check("sw.js cache is v68", "finances-pwa-v68" in sw and "finances-pwa-v67" not in sw)
+    check("sw.js cache is v69", "finances-pwa-v69" in sw and "finances-pwa-v68" not in sw)
     check("sw.js handles SKIP_WAITING", "'SKIP_WAITING'" in sw)
     check("shell cache holds the app scripts + manifest + icons (no model files)",
           "'./app.js'" in sw and "'./chat.js'" in sw and "'./ai.js'" in sw
           and "'./manifest.webmanifest'" in sw and "'./favicon.png'" in sw)
     check("sw.js: non-GET and cross-origin (coach) calls stay network-only",
           "url.origin !== self.location.origin" in sw and "req.method !== 'GET'" in sw)
-    check("footer stamp: brand + shell v68 + live date/time, one source for both footers",
-          "var SHELL_RELEASE = { v: 68" in js and "function shellStamp" in js
+    check("footer stamp: brand + shell v69 + live date/time, one source for both footers",
+          "var SHELL_RELEASE = { v: 69" in js and "function shellStamp" in js
           and "'Fin.AI · shell v'" in js and 'id="setFoot"' in html
           and "byId('setFoot')" in js)
     check("service worker registration wired (page or app.js)",
@@ -315,14 +316,28 @@ def main():
     check("availability LED wired (chat header + settings note)",
           'id="coachLed"' in html and ".coach-led" in html
           and "function refreshRemoteNote" in aijs)
-    check("chat header (v68 Jan add-on): the ✕ is replaced by an 'i' info button (close = scrim / Esc only) that opens the full 'what I can do' details with a way back; a rotating tap-to-send tip strip is pinned below the header",
+    check("chat header (v68 Jan add-on → v69): the 'i' info button TOGGLES the full 'what I can do' details (tap 'i' again to close — the back button is gone; scrim / Esc also close); the rotating example strip is pinned below the header, DISPLAY-ONLY (tap does nothing), rendered as a quoted example in italics",
           'id="chatInfo"' in html and 'id="chatClose"' not in html
           and 'id="chatTip"' in html and 'id="chatTipText"' in html
-          and 'id="chatInfoView"' in html and 'id="chatInfoBack"' in html
+          and 'id="chatInfoView"' in html and 'id="chatInfoBack"' not in html
           and "function openInfoView" in chatjs and "function closeInfoView" in chatjs
+          and "function toggleInfoView" in chatjs
           and "intentHelp('help')" in chatjs
           and "TIPS[tipIdx]" in chatjs and "setInterval" in chatjs
-          and "closeInfo" in chatjs and "closeInfo" in js)
+          and "closeInfo" in chatjs and "closeInfo" in js
+          and "tip.onclick" not in chatjs and "font-style:italic" in html
+          and "<b>Try</b>" in html and "<b>Tip</b>" not in html)
+    check("the bot is Coach Fin (v69): the header title + self-introductions + both LLM system prompts; the name is separate from the user's display name in Settings (the greeting still uses coachName())",
+          'id="chatTitle">Coach Fin' in html and "You are Coach Fin" in chatjs
+          and "I’m <b>Fin</b> — your money coach" in chatjs
+          and "function coachName" in chatjs)
+    check("account balance cue (v69): NEW accounts + the spoken kind word + debit default — 'i have landbank debit 600' drafts a debit account, 'landbank debit' = 'landbank' (kind word stripped from the name); casual logging gains 'ate' and a dropped subject ('ate at jollibee 250')",
+          "function newAcctName" in chatjs and "function knownEntityIn" in chatjs
+          and "kindHintA || 'debit'" in chatjs
+          and "(?:paid|bought|spent|ate|charged|gave|sent|swiped|used)" in chatjs)
+    check("chips derive from the stored numbers (v69): the standing four use the real prepay day + the biggest budget, so they change with the state even when no coach alert is active",
+          "function standingChips" in chatjs and "function dynamicChips" in chatjs
+          and "prepayDay: d.prepayDay" in js and "topCat: topCat" in js)
     check("shadow mode (v68 item 11): every chat message logs its answering path (rule intent / llm / fallback) + what was drafted, capped at 200 in a meta key, included in the JSON export",
           "SHADOW_KEY = 'shadowLog'" in js and "SHADOW_CAP = 200" in js
           and "shadowLog: state.shadowLog || []" in js

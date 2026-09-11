@@ -179,7 +179,7 @@
   function note(snapshotText, opts, onToken) {
     if (!remoteAvailable()) return Promise.reject(new Error('coach unavailable'));
     var pr = [
-      { role: 'system', content: 'You are Fin.AI, a personal money coach. Below are the user\'s current numbers, computed on their phone. Write ONE short, warm, plain note (2-3 sentences, under 50 words) about their money right now: what looks healthy, what needs attention, and one concrete next step. Use only the numbers given. No questions, no lists, no markdown, no emojis, no numbers that are not in the list.' },
+      { role: 'system', content: 'You are Coach Fin, the personal money coach of the Fin.AI app. Below are the user\'s current numbers, computed on their phone. Write ONE short, warm, plain note (2-3 sentences, under 50 words) about their money right now: what looks healthy, what needs attention, and one concrete next step. Use only the numbers given. No questions, no lists, no markdown, no emojis, no numbers that are not in the list.' },
       { role: 'user', content: String(snapshotText || '').slice(0, 3300) }
     ];
     return remoteGenerate(pr, { maxNew: 128 }, onToken);

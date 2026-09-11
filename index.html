@@ -130,17 +130,16 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 .coach-led{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--mut);
   box-shadow:0 0 0 1px rgba(147,161,189,.45) inset;vertical-align:middle;margin-left:2px}
 .coach-led.on{background:var(--ok);box-shadow:0 0 8px 1px rgba(55,211,155,.8), 0 0 0 1px rgba(55,211,155,.5) inset}
-/* v68 (Jan add-on): the header's ✕ is now the 'i' info button — it opens the
-   full "what I can do" details (with a way back); close is scrim / Esc only */
+/* v68 (Jan add-on) → v69: the header's ✕ is the 'i' info button — it TOGGLES
+   the full "what I can do" details (tap 'i' again, or scrim / Esc, to close) */
 #chatInfo{background:var(--card2);border:1px solid var(--line);color:var(--mut);width:36px;height:36px;border-radius:10px;
  font-size:17px;font-style:italic;font-family:Georgia,'Times New Roman',serif;cursor:pointer;flex:0 0 auto}
 #chatInfo:active{border-color:var(--acc);color:var(--acc)}
-/* v68 (Jan add-on): a rotating example pinned below the main header — tap to send */
+/* v68 (Jan add-on) → v69: rotating example below the main header — display-only (tap does nothing), quoted + italic */
 #chatTip{display:flex;align-items:baseline;gap:7px;padding:6px 14px;border-bottom:1px solid var(--line);
- background:var(--card);font-size:12px;color:var(--mut);cursor:pointer;flex:0 0 auto;overflow:hidden;white-space:nowrap}
-#chatTip:active{color:var(--ink)}
+ background:var(--card);font-size:12px;color:var(--mut);cursor:default;flex:0 0 auto;overflow:hidden;white-space:nowrap}
 #chatTip b{color:var(--acc);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;flex:0 0 auto}
-#chatTipText{overflow:hidden;text-overflow:ellipsis}
+#chatTipText{overflow:hidden;text-overflow:ellipsis;font-style:italic}
 /* v68 (Jan add-on): the info panel takes over the chat's own area (the header stays) */
 #chatInfoView{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;background:var(--bg)}
 #chatInfoView[hidden]{display:none}
@@ -148,10 +147,6 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 /* the help card's .ins-line/.note/.verdict styles are global; only the title
    (.c-t) is .msg-scoped, so give the info panel's title its own look */
 #chatInfoBody .c-t{font-weight:700;font-size:15px;margin:0 0 8px}
-.chat-info-foot{flex:0 0 auto;padding:10px 14px;border-top:1px solid var(--line);background:var(--card);text-align:center}
-#chatInfoBack{background:var(--card2);border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:8px 20px;
- font-size:13px;font-weight:700;cursor:pointer}
-#chatInfoBack:active{border-color:var(--acc);color:var(--acc)}
 #coachOv.info-open #chatMsgs,#coachOv.info-open #chatChips,#coachOv.info-open #chatInRow,#coachOv.info-open #chatTip{display:none}
 #chatMsgs{flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px 14px 6px;-webkit-overflow-scrolling:touch}
 .msg{max-width:84%;margin:0 0 10px;padding:9px 11px;border-radius:13px;font-size:13.5px;line-height:1.42;overflow-wrap:break-word}
@@ -578,13 +573,13 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
     <div class="chat-id">
       <span class="chat-avatar"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#botFace"/></svg></span>
       <div>
-        <div id="chatTitle">Coach <span id="coachLed" class="coach-led" aria-hidden="true" title="Online coach: not available"></span></div>
+        <div id="chatTitle">Coach Fin <span id="coachLed" class="coach-led" aria-hidden="true" title="Online coach: not available"></span></div>
         <div id="chatFresh"></div>
       </div>
     </div>
     <button id="chatInfo" type="button" aria-label="What I can do" title="What I can do">i</button>
   </div>
-  <div id="chatTip" title="Tap to send this example"><b>Tip</b><span id="chatTipText"></span></div>
+  <div id="chatTip" title="Examples — try typing one of these"><b>Try</b><span id="chatTipText"></span></div>
   <div id="chatMsgs"></div>
   <div id="chatChips"></div>
   <div id="chatInRow">
@@ -593,7 +588,6 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
   </div>
   <div id="chatInfoView" hidden>
     <div id="chatInfoBody"></div>
-    <div class="chat-info-foot"><button id="chatInfoBack" type="button">Back to chat</button></div>
   </div>
 </div>
 <button id="coachFab" type="button" aria-label="Open coach"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#botFace"/></svg></button>

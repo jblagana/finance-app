@@ -459,38 +459,48 @@
   // ---------- intents ----------
   function intentHelp(t) {
     if (!/^(help|\?+|what can you do|what do you do|what can i ask|how do you work|commands|abilities)\b/.test(t)) return null;
+    // v69: elaborated — Fin introduces himself first; every ability shows a
+    // phrase you can actually type.
     var h = block('What I can do',
-      line('• <b>Status</b> — free cash, liquid cash, cards owed, the 14th prepay') +
+      line('I’m <b>Fin</b> — your money coach. I work from the numbers stored on this phone, and everything below works offline.') +
+      line('• <b>Status</b> — free cash, liquid cash, cards owed, the 14th prepay: “how much is free?”') +
       line('• <b>Details</b> — debt schedules, one-offs, sinking funds, “what’s my cash in Feb?”') +
-      line('• <b>Plans</b> — add / list / remove plans, exactly like the form on the Money tab') +
+      line('• <b>Plans</b> — add / list / remove plans, exactly like the form on the Money tab: “plan: shoes 1,500 on the 20th”') +
       line('• <b>Charge check</b> — “can I charge 2,500 on Maya?”') +
-      line('• <b>Urgent expense</b> — tell me something unplanned and I’ll map the options') +
+      line('• <b>Log expenses</b> — a command or a sentence: “log expense 500 food on maya”, or just tell me what happened — “ate at jollibee 250”') +
+      line('• <b>Urgent expense</b> — tell me something unplanned and I’ll map the options: “urgent: car repair 8,000 this week”') +
       line('• <b>Spending</b> — what you’ve logged in this app this week / month') +
-      line('• <b>Story mode</b> — tell me changes in plain words: “my salary in october is 25k, food budget up 10%, water in december same as last month +500” — I draft them and you confirm before anything is written') +
-      line('• <b>Open questions</b> — when I’m connected to the online coach (Settings), I can reason about your numbers in my own words; it needs signal'),
+      line('• <b>Account balances</b> — “i have landbank 600” updates (or adds) a bank account; debit is the default kind, so “landbank debit 600” and “landbank 600” land in the same place') +
+      line('• <b>Story mode</b> — tell me changes in plain words: “my salary in october is 25k, food budget up 10%, water in december same as last month +500”. I draft every change and you confirm before anything is written — and each story has a one-tap undo.') +
+      line('• <b>Open questions</b> — when I’m connected to the online coach (Settings), I can also reason about your numbers in my own words; that part needs signal'),
       'Try: “urgent: car repair 8,000 this week”', 'good');
     return { html: h };
   }
 
-  // v68 (Jan add-on): the rotating examples under the chat header — each is a
-  // phrase the rule engine answers locally (status / prepay, plans, log, charge
-  // check, urgent, story mode incl. the v68 percent / delta / payday grammar).
-  // Deterministic + offline; tapping the strip sends it.
+  // v68 (Jan add-on) → v69: the rotating examples under the chat header — each
+  // is a phrase the rule engine answers locally (status / prepay, plans, log
+  // incl. casual "ate at jollibee 250", charge check, urgent, story mode incl.
+  // the percent / delta / payday grammar and the v69 "i have landbank 600"
+  // account update). Deterministic + offline. DISPLAY-ONLY since v69 — tapping
+  // the strip does nothing; it shows a quoted example to type, in italics.
   var TIPS = [
     'how much is free?',
     'my 14th prepay',
     'what’s coming up?',
+    'ate at jollibee 250',
     'log expense 500 food on maya',
     'can i charge 2,500 on Maya?',
     'urgent: car repair 8,000 this week',
+    'i have landbank 600',
     'my salary in october is 25k',
     'water in october same as last month +500',
-    'one-off: power bill 1,500 after payday'
+    'one-off: power bill 1,500 after payday',
+    'plan: shoes 1,500 on the 20th'
   ];
   var tipIdx = 0;
   function renderTip(text) {
     var el = byId('chatTipText');
-    if (el) el.textContent = text;
+    if (el) el.textContent = '“' + text + '”'; // v69: a quoted example (italic via CSS)
   }
   // The info panel shows the exact "What I can do" card (intentHelp's own
   // output, so it can never drift from typing help) with a way back.
@@ -511,6 +521,13 @@
     view.hidden = true;
     ov.classList.remove('info-open');
   }
+  // v69: the 'i' in the header TOGGLES the panel — tap it again to go back
+  // (the "Back to chat" button is gone; scrim / Esc still close it too).
+  function toggleInfoView() {
+    var view = byId('chatInfoView');
+    if (view && !view.hidden) closeInfoView();
+    else openInfoView();
+  }
 
   function intentGreet(t, ctx) {
     if (!/^(hi|hiya|hey|hello|yo|um|sup)([!.? ,]*)$/.test(t)
@@ -518,7 +535,7 @@
       && !/^(what'?s up|how'?s it going|how are you(?: doing)?|hey there)\b/.test(t)) return null;
     var n = coachName();
     var h = block(n ? 'Hey ' + esc(n) : 'Hey',
-      line('I’m your money coach. Ask for <b>status</b>, <b>plans</b>, <b>debt</b> details, a <b>charge check</b>, or tell me about an <b>urgent expense</b> — it works offline.') +
+      line('I’m <b>Fin</b> — your money coach. Ask for <b>status</b>, <b>plans</b>, <b>debt</b> details, a <b>charge check</b>, or tell me about an <b>urgent expense</b> — it works offline.') +
       line('Type <b>help</b> for the full list.'),
       'I answer from your numbers on this phone.', 'good');
     return { html: h + freshness(ctx) };
@@ -869,8 +886,9 @@
 
   function intentLog(t, ctx, p) {
     // v35: casual past tense ("i paid for spaylater today 1828 pesos") logs like a command does
+    // v69: the subject can be dropped ("ate at jollibee 250") and "ate" counts
     var cmd = /^(log|record|add|note)\b/.test(t);
-    var casual = /^(?:i|we)\s+(?:just\s+|already\s+|did\s+)?(?:paid|bought|spent|charged|gave|sent|swiped|used)\b/.test(t);
+    var casual = /^(?:(?:i|we)\s+(?:(?:just|already|did)\s+)?)?(?:paid|bought|spent|ate|charged|gave|sent|swiped|used)\b/.test(t);
     if ((!cmd && !casual) || (!casual && !/\b(expense|spend|spent|charge|paid|payment|bought)\b/.test(t))) return null;
     var A = p.amt;
     if (!A || A <= 0) {
@@ -982,6 +1000,41 @@
       }
     }
     return bestScore >= 1 ? best : null;
+  }
+  // v69: does the clause name a known entity by an EXACT word? (Fuzzy matching
+  // would false-positive: "ave" is within one edit of "have", so "i have
+  // landbank 600" would look like it is about the debt "Ave".)
+  function knownEntityIn(pool, toks) {
+    var ct = (toks || []).map(function (x) { return String(x).toLowerCase().replace(/[^a-z0-9]/g, ''); });
+    for (var i = 0; i < (pool || []).length; i++) {
+      var wds = String(pool[i]).toLowerCase().split(/[\s/]+/);
+      for (var w = 0; w < wds.length; w++) {
+        if (wds[w].length >= 3 && ct.indexOf(wds[w]) >= 0) return pool[i];
+      }
+    }
+    return null;
+  }
+  // v69: pull a NEW account name out of a balance clause — "i have landbank
+  // debit 600" -> "Landbank". The cue words, the KIND words (the "debit" in
+  // "landbank debit" is how he says it, not part of the name), the amount and
+  // month words are stripped; what remains is title-cased. '' = nothing usable.
+  var ACCT_STOP = { i: 1, we: 1, my: 1, your: 1, the: 1, a: 1, an: 1, in: 1, of: 1, on: 1, at: 1, is: 1, are: 1, was: 1, am: 1, now: 1, current: 1, account: 1, accounts: 1, balance: 1, balances: 1, holding: 1, holds: 1, have: 1, has: 1, got: 1, showing: 1, available: 1, left: 1, remaining: 1, up: 1, down: 1, to: 1, from: 1, with: 1, php: 1, peso: 1, pesos: 1, e: 1 };
+  var ACCT_KIND_WDS = { debit: 1, credit: 1, card: 1, cc: 1, cash: 1, wallet: 1, 'e-wallet': 1 };
+  function newAcctName(cl, amt) {
+    var wds = String(cl).split(/\s+/);
+    var raws = (amt && amt.raw) ? String(amt.raw).split(/\s+/) : [];
+    var out = [];
+    for (var i = 0; i < wds.length; i++) {
+      var w = wds[i].replace(/[^a-z0-9\-]/g, '');
+      if (!w || w.length < 2) continue;
+      if (ACCT_STOP[w] || ACCT_KIND_WDS[w]) continue;
+      if (/^\d/.test(w)) continue;
+      if (raws.indexOf(w) >= 0) continue;
+      if (isMonthWord(w)) continue;
+      if (out.length < 3 && out.indexOf(w) < 0) out.push(w);
+    }
+    if (!out.length) return '';
+    return out.map(function (x) { return x.charAt(0).toUpperCase() + x.slice(1); }).join(' ');
   }
 
   // ---------- v37: semantic story layer (local scorer, no cloud) ----------
@@ -1398,6 +1451,12 @@
       }
 
       // 7. account balance update — "gcash balance is 50k"
+      //    v69: also works for NEW accounts — "i have landbank debit 600" drafts
+      //    a debit account "Landbank" even if it isn't stored yet. An explicit
+      //    kind word beats the stored kind ("landbank debit" = "landbank", under
+      //    debit), and debit is the DEFAULT kind: "i have landbank 600" saves as
+      //    debit too. Known budgets / debts / one-offs / sinks never become
+      //    new accounts.
       var nmA = null;
       var kindHintA = kindHintIn(cl); // v68 item 3: "maya card" resolves a name tie
       for (var iA = 0; iA < names.accounts.length; iA++) {
@@ -1408,12 +1467,21 @@
           if (nameScore(names.accounts[iD].name, clToks) >= 1) { nmA = names.accounts[iD]; break; }
         }
       }
-      if (nmA && /\b(?:balance|left|has|have|got|showing|available)\b/.test(cl)) {
+      if (!isQuestion(cl) && /\b(?:balance|left|has|have|got|showing|available)\b/.test(cl)) {
         var aiA = amtIn(r, null, consumed);
         if (aiA != null) {
           consumed.push(aiA);
           var aA = allAmt[aiA];
-          lines.push({ label: 'Account · ' + nmA.name, change: { type: 'account', name: nmA.name, kind: nmA.kind, value: aA.amt } });
+          if (nmA) {
+            var kindA = kindHintA || nmA.kind; // v69: the spoken kind word wins over the stored kind
+            lines.push({ label: 'Account · ' + nmA.name, change: { type: 'account', name: nmA.name, kind: kindA, value: aA.amt } });
+          } else if (!knownEntityIn(names.budgets, clToks) && !knownEntityIn(names.debts, clToks) && !knownEntityIn(names.oneoffs, clToks) && !knownEntityIn(names.sinks, clToks)) {
+            var nmN = newAcctName(cl, aA); // v69: new account, title-cased
+            if (nmN) {
+              var kindN = kindHintA || 'debit'; // v69: debit is the default kind
+              lines.push({ label: 'Account · ' + nmN + (kindN !== 'debit' ? ' (' + kindN + ')' : ''), change: { type: 'account', name: nmN, kind: kindN, value: aA.amt } });
+            }
+          }
         }
       }
 
@@ -1582,7 +1650,7 @@
   // drafted immediately; the user confirms by tapping the Confirm button on
   // the draft card. A missing detail is asked for in text; the next short
   // message completes that same request.
-  var AI_REMOTE_SYSTEM = 'You are Fin.AI, a personal money coach. Answer only from the numbers given, in 1-3 short plain sentences (under 60 words), no lists, no markdown, no emojis. Never invent numbers. ' +
+  var AI_REMOTE_SYSTEM = 'You are Coach Fin, the personal money coach of the Fin.AI app. Answer only from the numbers given, in 1-3 short plain sentences (under 60 words), no lists, no markdown, no emojis. Never invent numbers. ' +
     'When the user tells you a change to their money (a new or updated number, or a story of several changes): if every detail you need is present (amount, month, which account), reply with ONLY the JSON draft of that change - it becomes a draft card with a Confirm button that the user presses, so do not ask "shall I record that?" and never wait for a yes. changes holds ONLY that change (a story means its lines, a single update means one line): never pad it with current balances, limits, or details of other accounts from the numbers list, they are already on the phone, and a card credit-limit update is a single field change (entity card, key credit_limit) on that card, not an account change. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes; the user\'s next short message (an amount, an account name, a corrected number) completes that same request - never drop it or start a different topic unless the user explicitly names one. ' +
     'If an UNCONFIRMED draft of changes is provided as context, the user\'s message is a reply to that draft: if they correct it, reply with the corrected JSON draft; if they confirm it (yes / record it), reply with the same JSON draft; if they switch topics, answer the new topic. ' +
     'A draft is a JSON object and nothing else: {"say":"one short line presenting the draft (never past tense - the user still has to confirm)","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"debit|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123} | {"type":"field","entity":"debit|card|debt|loan|budget","name":"N","key":"short_snake_key","value":123}. Use only names from the numbers list or a new name the user stated. Numbers in [brackets] on a row are custom details the user recorded (credit limit, due day, anything). When the user wants to record any other fact about an account or budget — a credit limit, APR, due day, penalty, anything — record it as a field change with a short snake_case key; value null removes a recorded detail; ask for the value if the user did not state it. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
@@ -1919,16 +1987,26 @@
   var inputEl = null, msgsEl = null;
   var CHIPS = ['How much is free?', 'My cc prepay', 'What’s coming up?', 'Urgent expense'];
   function capFirst(s) { var x = String(s || ''); return x ? x.charAt(0).toUpperCase() + x.slice(1) : x; }
+  // v69: the standing four, DERIVED from the stored numbers — the real prepay
+  // day and the biggest budget, so the chips change with the state even when
+  // no coach alert is active. CHIPS stays as the no-data last resort.
+  function standingChips(ca) {
+    var day = (ca && ca.prepayDay) || 14;
+    var cat = String((ca && ca.topCat) || 'food').split('/')[0].trim().toLowerCase();
+    return ['How much is free?', 'My ' + ordinal(day) + ' prepay', 'What’s coming up?', 'log expense 500 ' + cat];
+  }
   // v68 item 9: alert-driven chips — the active coach alerts pick the first
-  // slots; with nothing active, the standing four stand in.
+  // slots; with nothing active, the state-derived standing four stand in.
   function dynamicChips() {
     var ca = (typeof window !== 'undefined' && window.FinApp && window.FinApp.coachAlerts) ? window.FinApp.coachAlerts() : null;
-    if (!ca || !(ca.alerts || []).length) return CHIPS;
+    if (!ca) return CHIPS;
+    var stand = standingChips(ca);
+    if (!(ca.alerts || []).length) return stand;
     var out = [];
     if (ca.recurring) out.push('Add plan: ' + capFirst(ca.recurring.merchant) + ' ' + fmtNum(ca.recurring.amount) + ' monthly');
-    if (ca.alerts.indexOf('prepay') >= 0) out.push('My cc prepay');
+    if (ca.alerts.indexOf('prepay') >= 0) out.push(stand[1]);
     if (ca.alerts.indexOf('floor') >= 0 || ca.alerts.indexOf('dip') >= 0) out.push('When does cash dip?');
-    CHIPS.forEach(function (c) { if (out.indexOf(c) < 0 && out.length < 4) out.push(c); });
+    stand.forEach(function (c) { if (out.indexOf(c) < 0 && out.length < 4) out.push(c); });
     return out.slice(0, 4);
   }
 
@@ -2206,7 +2284,7 @@
   function welcomeHtml() {
     var n = coachName();
     return '<div class="c-block"><div class="c-t">' + (n ? 'Hey ' + esc(n) : 'Hey') + '</div>' +
-      '<div class="ins-line">I’m your money coach — ask me anything about your plan, or tell me when something unexpected comes up. Everything is stored on this phone.</div>' +
+      '<div class="ins-line">I’m <b>Fin</b> — your money coach. Ask me anything about your plan, or tell me when something unexpected comes up. Everything is stored on this phone.</div>' +
       '<div class="ins-line">Try: <b>“how much is free?”</b> · <b>“plan: shoes 1,500 on the 20th”</b> · <b>“urgent: car repair 8,000 this week”</b> · <b>“my salary in october is 25k, water went up to 1,800”</b></div></div>';
   }
   function openChat() {
@@ -2263,15 +2341,15 @@
     msgsEl = byId('chatMsgs');
     if (!inputEl || !msgsEl) return;
     renderChips();
-    // v68 (Jan add-on): the header's ✕ is the 'i' info button — close is scrim / Esc only
+    // v68 (Jan add-on) → v69: the 'i' in the header TOGGLES the info panel —
+    // tap it again to close (no "Back to chat" button; scrim / Esc still work)
     var inf = byId('chatInfo');
-    if (inf) inf.onclick = openInfoView;
-    var ib = byId('chatInfoBack');
-    if (ib) ib.onclick = closeInfoView;
+    if (inf) inf.onclick = toggleInfoView;
     var tip = byId('chatTip');
     if (tip) {
       renderTip(TIPS[tipIdx]);
-      tip.onclick = function () { send(TIPS[tipIdx]); };
+      // v69: display-only — tapping the strip does nothing on purpose; the
+      // quoted example is there to be typed.
       // ~8s rotation — deterministic: a fixed list, a plain counter
       setInterval(function () { tipIdx = (tipIdx + 1) % TIPS.length; renderTip(TIPS[tipIdx]); }, 8000);
     }

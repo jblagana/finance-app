@@ -425,6 +425,50 @@ def fuzzy_name_in(pool, cl):
     return best if best_score >= 1 else None
 
 
+# v69: does the clause name a known entity by an EXACT word? (Fuzzy matching
+# would false-positive: "ave" is within one edit of "have".)
+def known_entity_in(pool, toks):
+    ct = [re.sub(r"[^a-z0-9]", "", str(x).lower()) for x in (toks or [])]
+    for nm in (pool or []):
+        for w in re.split(r"[\s/]+", str(nm).lower()):
+            if len(w) >= 3 and w in ct:
+                return nm
+    return None
+
+
+# v69: NEW-account name extraction (mirror of chat.js newAcctName) — the cue
+# words, the kind words, the amount and month words are stripped; the rest is
+# title-cased. "i have landbank debit 600" -> "Landbank".
+ACCT_STOP = {"i", "we", "my", "your", "the", "a", "an", "in", "of", "on", "at",
+             "is", "are", "was", "am", "now", "current", "account", "accounts",
+             "balance", "balances", "holding", "holds", "have", "has", "got",
+             "showing", "available", "left", "remaining", "up", "down", "to",
+             "from", "with", "php", "peso", "pesos", "e"}
+ACCT_KIND_WDS = {"debit", "credit", "card", "cc", "cash", "wallet", "e-wallet"}
+
+
+def new_acct_name(cl, amt):
+    raws = (amt.get("raw") or "").split() if isinstance(amt, dict) else []
+    out = []
+    for w in str(cl).split():
+        w = re.sub(r"[^a-z0-9\-]", "", w)
+        if len(w) < 2:
+            continue
+        if w in ACCT_STOP or w in ACCT_KIND_WDS:
+            continue
+        if w[0].isdigit():
+            continue
+        if w in raws:
+            continue
+        if is_month_word(w):
+            continue
+        if len(out) < 3 and w not in out:
+            out.append(w)
+    if not out:
+        return ""
+    return " ".join(x[0].upper() + x[1:] for x in out)
+
+
 BARE_NUM = re.compile(r"^[\d][\d,\.]*\s*(k|php|pesos?)?\.?$")
 
 # ---------- v37 semantic story layer (mirrors of chat.js SEM + semClause) ----------
@@ -850,6 +894,10 @@ def extract_story(t, base, with_asks=False):
                     continue
 
         # 7) account balance update — "gcash balance is 50k"
+        # v69: also NEW accounts ("i have landbank debit 600" drafts a debit
+        # account "Landbank"); the spoken kind word beats the stored kind;
+        # debit is the DEFAULT kind; known budgets/debts/one-offs/sinks never
+        # become new accounts.
         nm_a = None
         kind_hint_a = kind_hint_in(cl)  # v68 item 3: "maya card" resolves a name tie
         for acc in names["accounts"]:
@@ -861,12 +909,20 @@ def extract_story(t, base, with_asks=False):
                 if name_score(acc["name"], cl_toks) >= 1:
                     nm_a = acc
                     break
-        if nm_a and re.search(r"\b(?:balance|left|has|have|got|showing|available)\b", cl):
+        if not is_question(cl) and re.search(r"\b(?:balance|left|has|have|got|showing|available)\b", cl):
             ai_a = amt_in(r, None, consumed)
             if ai_a is not None:
                 consumed.append(ai_a)
                 a_a = all_amt[ai_a]
-                lines.append({"label": "Account", "change": {"type": "account", "name": nm_a["name"], "kind": nm_a["kind"], "value": a_a["amt"]}})
+                if nm_a:
+                    kind_a = kind_hint_a or nm_a["kind"]  # v69: the spoken kind word wins
+                    lines.append({"label": "Account", "change": {"type": "account", "name": nm_a["name"], "kind": kind_a, "value": a_a["amt"]}})
+                elif not (known_entity_in(names["budgets"], cl_toks) or known_entity_in(names["debts"], cl_toks)
+                          or known_entity_in(names["oneoffs"], cl_toks) or known_entity_in(names["sinks"], cl_toks)):
+                    nm_n = new_acct_name(cl, a_a)  # v69: new account, title-cased
+                    if nm_n:
+                        kind_n = kind_hint_a or "debit"  # v69: debit is the default kind
+                        lines.append({"label": "Account", "change": {"type": "account", "name": nm_n, "kind": kind_n, "value": a_a["amt"]}})
 
         # v37: semantic fallback for clauses the v35 cues left alone
         if len(lines) == n_before:
@@ -985,7 +1041,8 @@ def route(text):
     if URGENT.search(t):
         return "urgent"
     cmd = re.match(r"^(log|record|add|note)\b", t)
-    casual = re.match(r"^(?:i|we)\s+(?:just\s+|already\s+|did\s+)?(?:paid|bought|spent|charged|gave|sent|swiped|used)\b", t)
+    # v69: the subject can be dropped ("ate at jollibee 250") and "ate" counts
+    casual = re.match(r"^(?:(?:i|we)\s+(?:(?:just|already|did)\s+)?)?(?:paid|bought|spent|ate|charged|gave|sent|swiped|used)\b", t)
     if (cmd or casual) and (casual or re.search(r"\b(expense|spend|spent|charge|paid|payment|bought)\b", t)):
         return "log"
     if re.search(r"charge|swipe|cash[- ]back", t) or re.search(r"\bcan\b.*\bbuy\b", t):
@@ -1197,6 +1254,9 @@ def main():
         ("gcash balance is 50k", [("account", None, 50000, "gcash")]),
         ("how much is in gcash", []),  # question: no amount, no write
         ("the sky is blue", []),
+        # v69: new-account grammar (debit default; kind word stripped from the name)
+        ("i have landbank debit 600", [("account", None, 600, "landbank")]),
+        ("i have landbank 600", [("account", None, 600, "landbank")]),
     ]
     for text, want in story_cases:
         got = sig(extract_story(norm(text), SAMPLE_BASE))
@@ -1375,20 +1435,61 @@ def main():
           sig(kind_roundtrip(norm("maya balance is 3k wallet"))["lines"]),
           [("account", None, 3000, "maya e-wallet")])
 
+    print("\n== v69: account balance for NEW accounts + debit default ==")
+    # "i have landbank debit 600" must draft a debit account "Landbank" even
+    # though LandBank is not stored; the kind word is how he says the name,
+    # not part of it; debit is the default kind.
+    p1 = story_parse(norm("i have landbank debit 600"), SAMPLE_BASE)
+    check("new acct: 'i have landbank debit 600' drafts an account", sig(p1["lines"]),
+          [("account", None, 600, "landbank")])
+    check("new acct: kind is debit", p1["lines"][0]["change"].get("kind") if p1["lines"] else None, "debit")
+    p2 = story_parse(norm("i have landbank 600"), SAMPLE_BASE)
+    check("new acct: bare 'i have landbank 600' drafts an account", sig(p2["lines"]),
+          [("account", None, 600, "landbank")])
+    check("new acct: debit is the default kind", p2["lines"][0]["change"].get("kind") if p2["lines"] else None, "debit")
+    p3 = story_parse(norm("i have bpi savings balance is 12,000"), SAMPLE_BASE)
+    check("new acct: multi-word name", sig(p3["lines"]), [("account", None, 12000, "bpi savings")])
+    check("new acct: title-cased", p3["lines"][0]["change"].get("name") if p3["lines"] else None, "Bpi Savings")
+    p4 = story_parse(norm("my bdo card balance is 8k"), SAMPLE_BASE)
+    check("new acct: 'card' hint -> kind card", p4["lines"][0]["change"].get("kind") if p4["lines"] else None, "card")
+    check("new acct: 'my bdo card balance is 8k' name (kind word stripped)", sig(p4["lines"]),
+          [("account", None, 8000, "bdo")])
+    p5 = story_parse(norm("i have 600"), SAMPLE_BASE)
+    check("new acct: no name -> nothing", (sig(p5["lines"]), p5["asks"]), ([], []))
+    p6 = story_parse(norm("i have water 500"), SAMPLE_BASE)
+    check("new acct: a known budget stays a budget", sig(p6["lines"]), [("budget", None, 500, "water")])
+    # a KNOWN account: the spoken kind word wins over the stored kind
+    # ("landbank debit" = "landbank", saved under debit)
+    lb_base = {"budgets": {}, "debts": {}, "one_offs": {}, "sinking": {},
+               "accounts": [{"name": "LandBank", "kind": "card", "value": 12000}]}
+    p7 = story_parse(norm("i have landbank debit 600"), lb_base)
+    check("known acct: 'landbank debit' -> debit kind",
+          (sig(p7["lines"]), p7["lines"][0]["change"].get("kind")) if p7["lines"] else (None, None),
+          ([("account", None, 600, "landbank")], "debit"))
+    p8 = story_parse(norm("i have landbank 600"), lb_base)
+    check("known acct: no kind word -> stored kind (card)",
+          (sig(p8["lines"]), p8["lines"][0]["change"].get("kind")) if p8["lines"] else (None, None),
+          ([("account", None, 600, "landbank")], "card"))
+
     print("\n== v68 Jan add-on: the rotating tips are rule-owned ==")
     # The tip strip under the chat header cycles these example phrases — each
     # must route to a RULE (never the open-question fallback), so a tap always
     # gets a local answer. Mirrors chat.js TIPS.
+    # v69: the strip is display-only (tap does nothing) — it cycles these
+    # example phrases for TYPING; each must still route to a rule.
     tips = [
         "how much is free?",
         "my 14th prepay",
         "what's coming up?",
+        "ate at jollibee 250",
         "log expense 500 food on maya",
         "can i charge 2,500 on Maya?",
         "urgent: car repair 8,000 this week",
+        "i have landbank 600",
         "my salary in october is 25k",
         "water in october same as last month +500",
         "one-off: power bill 1,500 after payday",
+        "plan: shoes 1,500 on the 20th",
     ]
     for tip in tips:
         r = route(tip)

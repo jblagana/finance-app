@@ -6,6 +6,47 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-11 — User edit of the interpretation (chat-polish entry below)
+Status: in progress — folded into that entry's plan
+Progress: 90% (logged; both edits now drive the plan)
+### Instruction (verbatim)
+> User edits made directly in the Interpretation section of the entry "2026-09-11 (after v68 push) — Chat polish…":
+> 1. item 1, appended: `(instead of 'tip', change it to 'try')`
+> 2. item 3, appended: `(the bots name is separate from the account name. Fin introduces himself in the chat or anywhere appropriate.)(on second thought, make it 'Coach Fin')`
+### Interpretation (agent — user may edit this section)
+- A user edit is the new instruction (rule 2). Plan changes:
+  1. The strip label is **"Try"**, not "Tip" (index.html `<b>Tip</b>` → `<b>Try</b>`).
+  2. The bot's name is **"Coach Fin"** (not just "Fin"): header title, welcome + greet self-introductions, the LLM system prompts ("You are Coach Fin…"). The name is separate from the account (display) name in Settings — `coachName()` still resolves the USER's name for "Hey Jan"; Coach Fin is the bot. Fin introduces himself in the chat (welcome message, greet) and in the info panel.
+
+## 2026-09-11 (after v68 push) — Chat polish: tips, info panel, bot name "Fin", dynamic chips, LandBank debit default
+Status: in progress — all code + gates green; release unit (sw v69 / SHELL_RELEASE v69 / README) done; commit + push pending
+Progress: 90% — ETA ~15m
+### Subtasks
+- [x] Log the instruction verbatim (first action) + log the user's interpretation edits (rule 2) as their own entry
+- [x] Scope: story cue 7 (known accounts only) + findAccounts/newAcctName gap, dynamicChips/alerts, TIPS/info/greet/welcome/prompts, gate assertions
+- [x] Ask 5 (LandBank): cue 7 extended — new accounts via `newAcctName()` (cue/kind/amount/month words stripped, title-cased), `knownEntityIn()` EXACT guard (fuzzy would false-positive: "ave"≈"have"), spoken kind word beats stored kind, debit default; confirmed path = existing `applyBaseChanges` 'account' type (smoke-verified end-to-end)
+- [x] Ask 1 (tips → "Try"): TIPS 12 phrases (incl. "ate at jollibee 250" + "i have landbank 600"), renderTip wraps in curly quotes, CSS italic + cursor:default, tap does NOTHING (onclick removed), label Tip → Try; intentLog casual verbs += "ate" + dropped subject
+- [x] Ask 2 (info toggle): `toggleInfoView()` wired to the "i" button; "Back to chat" button + foot + CSS removed (Esc/scrim still close)
+- [x] Ask 3 (Coach Fin): header title "Coach Fin", Fin self-introduces (welcome + greet + help card), AI_REMOTE_SYSTEM + ai.js note prompt → "You are Coach Fin, the personal money coach of the Fin.AI app"; coachName() (user's name) untouched
+- [x] Ask 4 (chips): EXPLAINED — alert-driven chips (v68 item 9) only show when an alert is active; Jan's data triggers none (no card → no prepay alert, no logged spend → no pace, floor not breached) → static fallback stood in. FIX — the standing four now derive from stored numbers: real prepay day + biggest budget (`coachAlerts` += prepayDay/topCat, `standingChips()`)
+- [x] Gates: repo tools/ check_site.py v69 (brand → "You are Coach Fin", chatInfoBack gone, toggleInfoView, display-only tip, Coach Fin title, account-cue + chips checks) + test_chat_parser.py mirror (new_acct_name/known_entity_in, cue 7, "ate" verb, TIPS, v69 test section incl. the fuzzy-guard regression); local mirrors re-synced (local check_site path line → finances/finance-app); full suite green ×2 (repo + local) + node --check ×4 + both smokes (smoke_app_v68 += v69 account-change + coachAlerts checks)
+- [x] Release unit: sw.js `finances-pwa-v69`, SHELL_RELEASE v: 69 (live stamp at push), README line, .gitignore (__pycache__)
+- [ ] Commit + push to origin/main; log done + commit hash
+### Instruction (verbatim)
+> -in chatbot, italicized the tip with quote e.g. "Ate at jollibee 250", add more practical tips and elaborate the info section, dont send it when clicked, just do nothing
+> -close 'i' when clicked again, remove the 'back to chat'
+> -make the bots name 'Fin' to make it personal
+> - why are the chips not dynamic/changing? i thought it was part of the 12rule engine improvements
+> -in bot, i told "i have landbank debit 600", it should change the numbers after confirmation of draft, save to accounts LandBank under debit kind. also, 'landbank debit'='landbank', make it understand that debit is the default so telling "i have landbank 600" saves as debit too
+### Interpretation (agent — user may edit this section)
+- 5 asks, one v69 release unit (version files @ push):
+  1. **Tip strip**: italic, rendered as a quoted example (e.g. "Ate at jollibee 250"); expand the list with more practical examples (realistic Filipino phrasings of what the rules own: log, status, plans, urgent, story); **tap does NOTHING** (the "just do nothing" kills tap-to-send — the strip becomes display-only; no send on click) (instead of 'tip', change it to 'try')
+  2. **Info panel**: tapping "i" again CLOSES it (toggle); the "Back to chat" button is removed
+  3. **Bot name "Fin"**: coachName() default / header title / greeting / welcome copy — the bot is "Fin" (personal). If Jan sets a name in Settings, that presumably still wins for the greeting ("Good morning, Jan") — but the BOT's name is Fin (the bots name is separate from the account name. Fin introduces himself in the chat or anywhere appropriate.)(on second thought, make it 'Coach Fin')
+  4. **Dynamic chips: diagnose + fix** — chips ARE alert-driven (v68 item 9: recurring/prepay/floor/dip with static fallback) but on Jan's phone they show the static fallback (no alerts active in his data); explain that + make them visibly dynamic (the alert-driven ones appear when an alert exists — check why his state produces none and whether the fallback should show something state-derived instead)
+  5. **Account balance grammar with debit default**: "i have landbank debit 600" → account-change draft (kind debit, name LandBank, value 600) that, after Confirm, actually writes the account balance into state (verify the draft's change type reaches applyBaseChanges 'account' and renders); "landbank debit" and "landbank" must both match the account (the "debit" kind word is part of the name — parser strips it); and debit is the DEFAULT kind, so the bare "i have landbank 600" drafts a debit account too
+- Shipping: v69 — feature commit (no version files), then push-time: sw.js v69 + SHELL_RELEASE v69 (stamp at push) + README line + gate v69 bump + repo tools/ copies synced; gates green (repo tools/ + local mirror + node --check); commit + push; log done + hashes
+
 ## 2026-09-11 — Chat header: info button replaces ✕ + rotating tip (Jan add-on)
 Status: done — shipped in the v68 release: feature commit `b32595c` + release commit `b1c8261` (SHELL_RELEASE v68, live 2026-09-11 09:41), both pushed to origin/main
 Progress: 100%

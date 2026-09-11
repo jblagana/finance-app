@@ -2724,7 +2724,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 68, live: new Date(2026, 8, 11, 9, 41) };
+  var SHELL_RELEASE = { v: 69, live: new Date(2026, 8, 11, 11, 47) };
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2908,11 +2908,20 @@
     }
   }
   // v68 item 9: the active coach alerts, for the chat's dynamic chips
+  // v69: + prepayDay / topCat so the standing chips derive from the stored
+  // numbers (real prepay day, biggest budget) instead of a fixed string
   function coachAlerts() {
     var d = insightsData();
     if (!d) return null;
     var info = coachRows(d);
-    return { alerts: info.alerts, recurring: (d.recurringGuess || [])[0] || null, prepayIn: d.prepayIn, prepayAmt: d.prepayAmt };
+    var tb = (state.base && state.base.budgets) || {};
+    var topCat = null, tbv = 0;
+    Object.keys(tb).forEach(function (k) { if (Number(tb[k]) > tbv) { tbv = Number(tb[k]); topCat = k; } });
+    return {
+      alerts: info.alerts, recurring: (d.recurringGuess || [])[0] || null,
+      prepayIn: d.prepayIn, prepayAmt: d.prepayAmt,
+      prepayDay: d.prepayDay, topCat: topCat
+    };
   }
   // v68 item 12: the top deterministic findings, for the Coach's-note prompt —
   // the LLM phrases findings instead of re-deriving them from raw numbers;
