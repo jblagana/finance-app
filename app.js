@@ -3131,7 +3131,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.8, live: new Date(2026, 8, 12, 2, 14) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.12, live: new Date(2026, 8, 12, 2, 24) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

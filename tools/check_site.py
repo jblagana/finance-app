@@ -520,6 +520,13 @@ def main():
           and "sanitizeChatRows(data.chat)" in js
           and "sanitizeMoneyLogRows(data.moneyLog)" in js
           and "if (!data.adj) computeAdjFromTxns()" in js)
+    check("emoji allowed, kept light, in the voice paths only (v72.12): the v72.3 'no emojis' flips to at most one where it fits (chat + note prompts); the setup prompt stays plain; the welcome carries one on its ramen line",
+          "at most one emoji and only where it genuinely fits" in chatjs
+          and "at most one emoji and only where it genuinely fits" in aijs
+          and "no lists, no markdown, no emojis" not in chatjs
+          and "no markdown, no emojis, no numbers" not in aijs
+          and "no emojis. Ask for 1-2 things" in chatjs
+          and "do not judge the ramen 🍜" in chatjs)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):
