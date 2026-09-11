@@ -33,7 +33,7 @@ Progress: 100%
 
 ## 2026-09-12 00:29 — v72: 11-item batch + push/order/streamline discipline
 Status: in progress
-Progress: 44% — ETA ~05:45
+Progress: 67% — ETA ~05:00
 ### Instruction (verbatim)
 > The original 11-item batch instruction arrived in the previous session; its
 > exact wording is not in this session's context — logged here as a marked
@@ -148,6 +148,14 @@ Progress: 44% — ETA ~05:45
     position); constant-delta propagation (Δfree/Δcard/Δmonth-spend, incl.
     month-changed edges) keeps every "before → after" chain honest; Undo
     restores the original row at the original index.
+    (shipped implementation: the rebase covers the edited row's OWN f/o plus
+    the tail; month lines keyed by each row's own txn date-month via
+    monthOfTxn — the row's `at` is log time, not the month key; a month-
+    crossing edit drops the edited row's old month line, totals unaffected
+    since monthSpendSum reads txns; Undo = exact inverse via
+    removeTxnRow(tid, keepInStore=true) so the persistent store is replaced
+    in place by id, never delete+re-add-filing-at-end; the delete path is
+    unchanged.)
 - **Push order (rule 2 applied; the single non-independent pair is item 5 ↔
   item 2 — owed subentry edits call saveTxnEdit, so the in-place edit is
   foundational and goes first):**
@@ -176,7 +184,7 @@ Progress: 44% — ETA ~05:45
 - [x] v72.7 — owed people drag + sort (default recent) — pushed 6382c6f (live 01:42); gates green
 - [x] v72.8 — export/import data-loss fix (full backup: chat + moneyLog + adj/sig + owedSort; sanitized restore; adj recompute for pre-72.8 files) — pushed b2b1d3a (live 02:14); gates green + 8 new smoke checks (export content + wipe→import round-trip); smoke's fake IDB now resolves keyPath keys (id vs key)
 - [x] v72.12 — emoji allowed in the LLM voice prompts (user edit 02:16; shipped ahead of the remaining batch) — pushed e2f710f (live 02:26); gates green
-- [ ] v72.9 — ledger edit keeps position + original date/time
+- [x] v72.9 — ledger edit keeps position + original date/time — pushed 0118152 (live 02:51); gates green + 10 new smoke checks (position/timestamp preservation, delta rebase of the row's own f/o + the tail incl. month lines, real Undo driven through the snack stub, full un-rebase on undo)
 - [ ] v72.10 — owed → ledger "Owed" entries (sign by flow) + editable subentries
 - [ ] v72.11 — draggable floating bot, 4 corner snaps
 - [ ] Final: full gates, clean tree, master entry done
