@@ -182,7 +182,9 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
    v27: sits above the scrim (22) so it stays bright and tappable while open */
 #coachFab{position:fixed;right:16px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:24;
   width:58px;height:58px;border-radius:50%;border:1px solid var(--acc);background:var(--card);
-  box-shadow:0 6px 18px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+  box-shadow:0 6px 18px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;
+  touch-action:none} /* v72.11: draggable — pointer events own the gesture */
+#coachFab.dragging{cursor:grabbing;z-index:26;box-shadow:0 10px 26px rgba(0,0,0,.6);transition:none}
 #coachFab:active{filter:brightness(1.15)}
 #coachFab svg{display:block;width:38px;height:38px}
 button.gear{cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--mut);width:34px;height:34px;

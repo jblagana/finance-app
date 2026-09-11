@@ -540,6 +540,15 @@ def main():
           and "if (editId) updateOwedEntry(pid, editId, payload);" in js
           and "function updateOwedEntry(pid, eid, data)" in js
           and "if (names.indexOf('Owed') < 0) names.push('Owed');" in js)
+    check("the floating bot is draggable with four corner snaps (v72.11): pointer drag (>8px = drag, tap still opens the coach), settle to the nearest of tl/tr/bl/br around the bubble's OPEN geometry (closed transform ignored, centered on the corner's x, 10px gap, viewport-clamped), the spot persists in fin.fabPos.v1 (default br) and re-snaps on resize/orientation",
+          "var FAB_POS_KEY = 'fin.fabPos.v1'" in js
+          and "function fabSnapPoints(bub)" in js
+          and "function fabNearestSnap(cx, cy, pts)" in js
+          and "ov.style.transform = 'none';" in js
+          and "fab.addEventListener('pointermove'" in js
+          and "fabLastDragAt = Date.now(); // a click right after a drag must NOT open the coach" in js
+          and "window.addEventListener('orientationchange', fabSettleAny);" in js
+          and "touch-action:none" in html)
     check("emoji allowed, kept light, in the voice paths only (v72.12): the v72.3 'no emojis' flips to at most one where it fits (chat + note prompts); the setup prompt stays plain; the welcome carries one on its ramen line",
           "at most one emoji and only where it genuinely fits" in chatjs
           and "at most one emoji and only where it genuinely fits" in aijs

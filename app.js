@@ -3506,7 +3506,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.10, live: new Date(2026, 8, 12, 3, 41) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.11, live: new Date(2026, 8, 12, 4, 2) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3573,6 +3573,122 @@
     var sc = byId('scrim');
     if (sc && !openSheetEl) sc.classList.remove('show');
   }
+  // ---------- v72.11: the floating bot is draggable ----------
+  // Pointer drag (>8px = drag, a plain tap still opens the coach). On release
+  // the bot settles to the nearest of FOUR snaps measured from the coach
+  // bubble's OPEN geometry (computed style, the closed transform ignored):
+  // above the top-left / top-right corners, below the bottom-left /
+  // bottom-right corners — centered on the corner's x, 10px gap, clamped to
+  // the viewport. The settled spot persists (fin.fabPos.v1; default br =
+  // today's spot) and is re-snapped on resize / orientation change.
+  var FAB_POS_KEY = 'fin.fabPos.v1';
+  var FAB_SIZE = 58, FAB_GAP = 10, FAB_MARGIN = 4, FAB_DRAG_THRESH = 8;
+  function fabSnapPoints(bub) {
+    if (!bub || !window.innerWidth || !window.innerHeight) return [];
+    var maxL = window.innerWidth - FAB_SIZE - FAB_MARGIN;
+    var maxT = window.innerHeight - FAB_SIZE - FAB_MARGIN;
+    function cl(x) { return Math.max(FAB_MARGIN, Math.min(x, maxL)); }
+    function ct(y) { return Math.max(FAB_MARGIN, Math.min(y, maxT)); }
+    return [
+      { key: 'tl', x: cl(bub.left - FAB_SIZE / 2), y: ct(bub.top - FAB_GAP - FAB_SIZE) },
+      { key: 'tr', x: cl(bub.right - FAB_SIZE / 2), y: ct(bub.top - FAB_GAP - FAB_SIZE) },
+      { key: 'bl', x: cl(bub.left - FAB_SIZE / 2), y: ct(bub.bottom + FAB_GAP) },
+      { key: 'br', x: cl(bub.right - FAB_SIZE / 2), y: ct(bub.bottom + FAB_GAP) }
+    ];
+  }
+  function fabNearestSnap(cx, cy, pts) {
+    var best = null, bd = Infinity;
+    (pts || []).forEach(function (p) {
+      var dx = p.x + FAB_SIZE / 2 - cx, dy = p.y + FAB_SIZE / 2 - cy;
+      var d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = p; }
+    });
+    return best;
+  }
+  // the bubble's OPEN rect — the closed state carries translateY(12px)
+  // scale(.97); drop the transform for one synchronous read (no paint between)
+  function fabBubbleRect() {
+    var ov = byId('coachOv');
+    if (!ov) return null;
+    var t = ov.style.transform;
+    ov.style.transform = 'none';
+    var r = ov.getBoundingClientRect();
+    ov.style.transform = t;
+    return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+  }
+  function fabPosSave(x, y) {
+    try { localStorage.setItem(FAB_POS_KEY, JSON.stringify({ x: Math.round(x), y: Math.round(y) })); } catch (e) {}
+  }
+  function fabPosLoad() {
+    try {
+      var v = JSON.parse(localStorage.getItem(FAB_POS_KEY) || 'null');
+      if (v && isFinite(v.x) && isFinite(v.y)) return v;
+    } catch (e) {}
+    return null;
+  }
+  // place the bot on the snap nearest the stored spot (fall back to the
+  // default key, then br) and persist the result
+  function fabSettle(defaultKey) {
+    var fab = byId('coachFab');
+    var pts = fabSnapPoints(fabBubbleRect());
+    if (!fab || !pts.length) return null;
+    var want = fabPosLoad();
+    var p = null;
+    if (want) p = fabNearestSnap(want.x + FAB_SIZE / 2, want.y + FAB_SIZE / 2, pts);
+    if (!p) for (var i = 0; i < pts.length; i++) if (pts[i].key === (defaultKey || 'br')) p = pts[i];
+    if (!p) p = pts[3];
+    fab.style.left = p.x + 'px';
+    fab.style.top = p.y + 'px';
+    fabPosSave(p.x, p.y);
+    return p;
+  }
+  function fabSettleAny() { fabSettle('br'); }
+  function fabInitDrag() {
+    var fab = byId('coachFab');
+    if (!fab || fabInitDrag.wired) return;
+    fabInitDrag.wired = true;
+    fabSettle('br'); // first run: default br = today's spot
+    window.addEventListener('resize', fabSettleAny);
+    window.addEventListener('orientationchange', fabSettleAny);
+    var st = null;
+    fab.addEventListener('pointerdown', function (ev) {
+      if (ev.button !== undefined && ev.button !== 0) return;
+      var r = fab.getBoundingClientRect();
+      st = { x: ev.clientX, y: ev.clientY, left: r.left, top: r.top, drag: false };
+      if (fab.setPointerCapture) { try { fab.setPointerCapture(ev.pointerId); } catch (e) {} }
+    });
+    fab.addEventListener('pointermove', function (ev) {
+      if (!st) return;
+      var dx = ev.clientX - st.x, dy = ev.clientY - st.y;
+      if (!st.drag && Math.sqrt(dx * dx + dy * dy) > FAB_DRAG_THRESH) st.drag = true;
+      if (!st.drag) return; // under the threshold this is still a tap
+      ev.preventDefault();
+      fab.classList.add('dragging');
+      var maxL = window.innerWidth - FAB_SIZE - FAB_MARGIN, maxT = window.innerHeight - FAB_SIZE - FAB_MARGIN;
+      fab.style.left = Math.max(FAB_MARGIN, Math.min(st.left + dx, maxL)) + 'px';
+      fab.style.top = Math.max(FAB_MARGIN, Math.min(st.top + dy, maxT)) + 'px';
+    });
+    function release(ev) {
+      if (!st) return;
+      var wasDrag = st.drag;
+      st = null;
+      fab.classList.remove('dragging');
+      if (wasDrag) {
+        fabLastDragAt = Date.now(); // a click right after a drag must NOT open the coach
+        var r = fab.getBoundingClientRect();
+        var pts = fabSnapPoints(fabBubbleRect());
+        var p = pts.length ? fabNearestSnap(r.left + FAB_SIZE / 2, r.top + FAB_SIZE / 2, pts) : null;
+        if (p) {
+          fab.style.left = p.x + 'px';
+          fab.style.top = p.y + 'px';
+          fabPosSave(p.x, p.y);
+        }
+      }
+    }
+    fab.addEventListener('pointerup', release);
+    fab.addEventListener('pointercancel', release);
+  }
+  var fabLastDragAt = 0;
   // v47: open the coach and kick off the guided "set up my numbers" conversation.
   // Used by the empty-state "Set up with the coach" buttons (Home, Your numbers,
   // Settings). The chat itself owns the prompt; here we just bring the coach up.
@@ -3737,6 +3853,12 @@
     delOwedEntry: delOwedEntry,
     delOwedPerson: delOwedPerson,
     effectiveSnap: effectiveSnap,
+    // v72.11: the FAB drag/snap geometry (smoke drives the pure math)
+    fabSnapPoints: fabSnapPoints,
+    fabNearestSnap: fabNearestSnap,
+    fabPosSave: fabPosSave,
+    fabPosLoad: fabPosLoad,
+    fabSettle: fabSettle,
     mlDate: mlDate,           // v71: ledger row date+time (AM/PM)
     applyBaseChanges: applyBaseChanges,
     undoBaseStory: undoBaseStory,
@@ -3873,10 +3995,15 @@
     var ab = byId('addBtn');
     if (ab) ab.onclick = function () { openSheet('addSheet'); };
     var cfab = byId('coachFab');
-    if (cfab) cfab.onclick = function () {
-      var ov = byId('coachOv');
-      if (ov && ov.classList.contains('show')) closeCoach(); else openCoach();
-    };
+    if (cfab) {
+      fabInitDrag(); // v72.11: draggable bot (settles to a corner snap on release)
+      cfab.onclick = function () {
+        // v72.11: a click that just finished a DRAG must not open the coach
+        if (Date.now() - fabLastDragAt < 400) return;
+        var ov = byId('coachOv');
+        if (ov && ov.classList.contains('show')) closeCoach(); else openCoach();
+      };
+    }
     var sbtn2 = byId('setBtn');
     if (sbtn2) sbtn2.onclick = function () { openSheet('setSheet'); };
     var ac = byId('addClose');
