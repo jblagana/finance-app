@@ -158,15 +158,16 @@ def main():
           html.index("app.js") < html.index("chat.js") < html.index("ai.js"))
 
     print("\n== PWA shell (offline app, online coach) ==")
-    check("sw.js cache is v70", "finances-pwa-v70" in sw and "finances-pwa-v69" not in sw)
+    check("sw.js cache is v71 (dot releases v71.x per subtask)",
+          "finances-pwa-v71" in sw and "finances-pwa-v70" not in sw)
     check("sw.js handles SKIP_WAITING", "'SKIP_WAITING'" in sw)
     check("shell cache holds the app scripts + manifest + icons (no model files)",
           "'./app.js'" in sw and "'./chat.js'" in sw and "'./ai.js'" in sw
           and "'./manifest.webmanifest'" in sw and "'./favicon.png'" in sw)
     check("sw.js: non-GET and cross-origin (coach) calls stay network-only",
           "url.origin !== self.location.origin" in sw and "req.method !== 'GET'" in sw)
-    check("footer stamp: brand + shell v70 + live date/time, one source for both footers",
-          "var SHELL_RELEASE = { v: 70" in js and "function shellStamp" in js
+    check("footer stamp: brand + shell v71 + live date/time, one source for both footers",
+          "var SHELL_RELEASE = { v: 71" in js and "function shellStamp" in js
           and "'Fin.AI · shell v'" in js and 'id="setFoot"' in html
           and "byId('setFoot')" in js)
     check("service worker registration wired (page or app.js)",
@@ -446,6 +447,13 @@ def main():
           and "if (kind === 'cash') kind = 'debit'" in chatjs
           and "w.kind === 'debit'" in chatjs
           and "ch.kind !== 'debit'" in chatjs)
+
+    print("\n== v71: your-numbers quicksum + drag-reorder + save button; ledger edit + AM/PM + unsorted title; snack; coach avatar (dot releases v71.1..v71.8) ==")
+    check("'Your numbers' fields take quick sums (v71.1): text inputs (full keyboard, operators typeable) and numVal evaluates the expression first",
+          'type="number"' not in js and "evalExpr(el.value)" in js
+          and "Math.round(numVal(byId('b_pday')))" in js)
+    check("'Your numbers' live quick-sum hint (v71.1): qsBar on the sheet",
+          'id="qsBar"' in html and "function qsHint" in js and ".qsbar{" in html)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):

@@ -1011,8 +1011,14 @@
   }
 
   // ---------- "Your numbers" editor (Settings sheet) ----------
+  // v71: quick sums in "Your numbers" — the amount fields are text inputs
+  // (operators typeable, like the Add sheet) and numVal evaluates an
+  // expression first (300-125+10 -> 185), falling back to parseFloat.
   function numVal(el) {
-    var v = el ? parseFloat(el.value) : NaN;
+    if (!el) return 0;
+    var v = evalExpr(el.value);
+    if (v != null) return v;
+    v = parseFloat(el.value);
     return isFinite(v) ? r2(v) : 0;
   }
   function bsec(title) {
@@ -1021,8 +1027,11 @@
   function brow(inner) { return '<div class="brow">' + inner + '</div>'; }
   function delBtn(label, blk) { return '<button type="button" class="mini" data-rm="' + (blk ? 'blk' : '1') + '" aria-label="' + esc(label || 'Remove') + '">✕</button>'; }
   function payRow(m, a) {
+    // v71: the amount is a text input with the FULL keyboard (no inputmode) —
+    // a numeric keypad has no operators, which is exactly why quick sums died
+    // in v52. Same treatment as the Add sheet's f_amount.
     return brow('<input data-r="m" type="month" value="' + esc(m || '') + '">' +
-      '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (a != null ? a : '') + '">' +
+      '<input data-r="a" type="text" value="' + (a != null ? a : '') + '">' +
       delBtn('Remove payment'));
   }
   // v56: custom details recorded by the coach — shown as chips under the row.
@@ -1044,8 +1053,8 @@
       '<select data-r="kind">' + kinds.map(function (k) {
         return '<option value="' + k + '"' + (a.kind === k ? ' selected' : '') + '>' + k + '</option>';
       }).join('') + '</select>' +
-      '<input data-r="value" type="number" inputmode="decimal" step="0.01" value="' + (a.value != null ? a.value : '') + '">' +
-      '<input data-r="limit" type="number" inputmode="decimal" step="0.01" value="' + (a.limit ? a.limit : '') + '"' + (a.kind === 'card' ? '' : ' disabled') + '>' +
+      '<input data-r="value" type="text" value="' + (a.value != null ? a.value : '') + '">' +
+      '<input data-r="limit" type="text" value="' + (a.limit ? a.limit : '') + '"' + (a.kind === 'card' ? '' : ' disabled') + '>' +
       delBtn('Remove account')) + detChips(a.kind + ':' + a.name);
   }
   function debtBlock(d) {
@@ -1053,7 +1062,7 @@
     var pays = d.payments ? Object.keys(d.payments).map(function (m) { return payRow(m, d.payments[m]); }).join('') : '';
     return '<div class="bblk" data-sec="debt">' +
       brow('<input class="grow" data-r="name" value="' + esc(d.name || '') + '" autocomplete="off">' + delBtn('Remove debt', true)) +
-      brow('<span class="bnote">monthly</span><input data-r="monthly" type="number" inputmode="decimal" step="0.01" value="' + (d.monthly != null ? d.monthly : '') + '">' +
+      brow('<span class="bnote">monthly</span><input data-r="monthly" type="text" value="' + (d.monthly != null ? d.monthly : '') + '">' +
         '<span class="bnote">active</span><input class="grow" data-r="active" value="' + esc((d.active_months || []).join(', ')) + '" autocomplete="off">') +
       '<div data-r="pays">' + pays + '</div>' +
       '<button type="button" class="addrow" data-add="dpay">+ payment by month</button>' +
@@ -1091,8 +1100,8 @@
     var pays = s.payments ? Object.keys(s.payments).map(function (m) { return payRow(m, s.payments[m]); }).join('') : '';
     return '<div class="bblk" data-sec="sink">' +
       brow('<input class="grow" data-r="name" value="' + esc(s.name || '') + '" autocomplete="off">' + delBtn('Remove goal', true)) +
-      brow('<span class="bnote">goal</span><input data-r="goal" type="number" inputmode="decimal" step="0.01" value="' + (s.goal != null ? s.goal : '') + '">' +
-        '<span class="bnote">funded</span><input data-r="funded" type="number" inputmode="decimal" step="0.01" value="' + (s.funded != null ? s.funded : '') + '>') +
+      brow('<span class="bnote">goal</span><input data-r="goal" type="text" value="' + (s.goal != null ? s.goal : '') + '">' +
+        '<span class="bnote">funded</span><input data-r="funded" type="text" value="' + (s.funded != null ? s.funded : '') + '>') +
       brow('<span class="bnote">by</span><input data-r="deadline" type="date" value="' + esc(s.deadline || '') + '">') +
       sinkNote(s) +
       '<div data-r="pays">' + pays + '</div>' +
@@ -1102,15 +1111,18 @@
   function renderBaseEditor() {
     var bb = byId('baseBody');
     if (!bb) return;
+    var qs0 = byId('qsBar'); if (qs0) qs0.style.display = 'none'; // v71: no stale hint on re-open
     var b = state.base || defaultBase();
     var h = '';
     h += brow('<span class="bnote">your name</span><input class="grow" id="b_name" type="text" placeholder="e.g. Jan" value="' + esc(b.name || '') + '" autocomplete="off">');
     h += brow('<span class="bnote">as of</span><input class="grow" id="b_asof" type="date" value="' + esc(b.as_of || '') + '">');
-    h += brow('<span class="bnote">salary / month</span><input class="grow" id="b_salary" type="number" inputmode="decimal" step="0.01" value="' + (b.salary || '') + '">');
-    h += brow('<span class="bnote">liquidity floor</span><input class="grow" id="b_floor" type="number" inputmode="decimal" step="0.01" value="' + (b.liquidity_floor || '') + '">');
-    h += brow('<span class="bnote">cc prepay day</span><input class="grow" id="b_pday" type="number" inputmode="numeric" min="1" max="31" value="' + (b.prepay_day || 14) + '">' +
-      '<span class="bnote">cutoff</span><input class="grow" id="b_cday" type="number" inputmode="numeric" min="1" max="31" value="' + (b.cutoff_day || 15) + '">');
-    h += brow('<span class="bnote">card target util</span><input class="grow" id="b_util" type="number" inputmode="decimal" step="0.001" value="' + (b.card_util_target || '') + '" title="0.099 = just under 10%">');
+    // v71: amount fields are text inputs (full keyboard, operators typeable)
+    // and numVal() evaluates quick sums like 300-125+10 on save.
+    h += brow('<span class="bnote">salary / month</span><input class="grow" id="b_salary" type="text" placeholder="0.00, or a quick sum like 300-125+10" value="' + (b.salary || '') + '">');
+    h += brow('<span class="bnote">liquidity floor</span><input class="grow" id="b_floor" type="text" value="' + (b.liquidity_floor || '') + '">');
+    h += brow('<span class="bnote">cc prepay day</span><input class="grow" id="b_pday" type="text" value="' + (b.prepay_day || 14) + '">' +
+      '<span class="bnote">cutoff</span><input class="grow" id="b_cday" type="text" value="' + (b.cutoff_day || 15) + '">');
+    h += brow('<span class="bnote">card target util</span><input class="grow" id="b_util" type="text" value="' + (b.card_util_target || '') + '" title="0.099 = just under 10%">');
     var salRows = '';
     Object.keys(b.salary_overrides || {}).forEach(function (m) { salRows += payRow(m, b.salary_overrides[m]); });
     h += bsec('Salary overrides') + '<div id="rowsSal">' + salRows + '</div>' +
@@ -1121,7 +1133,7 @@
     var budRows = '';
     Object.keys(b.budgets || {}).forEach(function (k) {
       budRows += brow('<input class="grow" data-r="name" value="' + esc(k) + '" autocomplete="off">' +
-        '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (Number(b.budgets[k]) || '') + '">' + delBtn('Remove budget')) + detChips('budget:' + k);
+        '<input data-r="a" type="text" value="' + (Number(b.budgets[k]) || '') + '">' + delBtn('Remove budget')) + detChips('budget:' + k);
     });
     h += bsec('Monthly budgets') + '<div id="rowsBud">' + budRows + '</div>' +
       '<button type="button" class="addrow" data-add="bud">+ budget</button>';
@@ -1133,7 +1145,7 @@
         }).join('') || '<option value="">—</option>';
         bovRows += brow('<input data-r="m" type="month" value="' + esc(m) + '">' +
           '<select data-r="cat">' + opts + '</select>' +
-          '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (Number(b.budget_overrides[m][k]) || '') + '">' + delBtn('Remove override'));
+          '<input data-r="a" type="text" value="' + (Number(b.budget_overrides[m][k]) || '') + '">' + delBtn('Remove override'));
       });
     });
     h += bsec('Budget overrides (one month)') + '<div id="rowsBov">' + bovRows + '</div>' +
@@ -1150,7 +1162,7 @@
       Object.keys(b.one_offs[m] || {}).forEach(function (k) {
         oneRows += brow('<input data-r="m" type="month" value="' + esc(m) + '">' +
           '<input class="grow" data-r="name" value="' + esc(k) + '" autocomplete="off">' +
-          '<input data-r="a" type="number" inputmode="decimal" step="0.01" value="' + (Number(b.one_offs[m][k]) || '') + '">' + delBtn('Remove one-off'));
+          '<input data-r="a" type="text" value="' + (Number(b.one_offs[m][k]) || '') + '">' + delBtn('Remove one-off'));
       });
     });
     h += bsec('One-offs') + '<div id="rowsOne">' + oneRows + '</div>' +
@@ -1201,8 +1213,8 @@
     b.as_of = gv('b_asof').trim() || todayISO();
     b.salary = numVal(byId('b_salary'));
     b.liquidity_floor = numVal(byId('b_floor'));
-    var pd = parseInt(gv('b_pday'), 10);
-    var cd = parseInt(gv('b_cday'), 10);
+    var pd = Math.round(numVal(byId('b_pday'))); // v71: quick sums here too (10+4 -> 14)
+    var cd = Math.round(numVal(byId('b_cday')));
     b.prepay_day = pd > 0 ? pd : 14;
     b.cutoff_day = cd > 0 ? cd : 15;
     var ut = numVal(byId('b_util'));
@@ -1279,18 +1291,18 @@
     else if (kind === 'bud') {
       host = byId('rowsBud');
       html = brow('<input class="grow" data-r="name" autocomplete="off">' +
-        '<input data-r="a" type="number" inputmode="decimal" step="0.01">' + delBtn('Remove budget'));
+        '<input data-r="a" type="text">' + delBtn('Remove budget'));
     } else if (kind === 'bov') {
       host = byId('rowsBov');
       var opts = Object.keys((state.base && state.base.budgets) || {}).map(function (k) {
         return '<option value="' + esc(k) + '">' + esc(k) + '</option>';
       }).join('') || '<option value="">—</option>';
       html = brow('<input data-r="m" type="month"><select data-r="cat">' + opts + '</select>' +
-        '<input data-r="a" type="number" inputmode="decimal" step="0.01">' + delBtn('Remove override'));
+        '<input data-r="a" type="text">' + delBtn('Remove override'));
     } else if (kind === 'one') {
       host = byId('rowsOne');
       html = brow('<input data-r="m" type="month"><input class="grow" data-r="name" autocomplete="off">' +
-        '<input data-r="a" type="number" inputmode="decimal" step="0.01">' + delBtn('Remove one-off'));
+        '<input data-r="a" type="text">' + delBtn('Remove one-off'));
     } else if (kind === 'debt') { host = byId('rowsDebt'); html = debtBlock({}); }
     else if (kind === 'sink') { host = byId('rowsSink'); html = sinkBlock({}); }
     else if (kind === 'dpay') {
@@ -1323,6 +1335,24 @@
         if (ki && li) li.disabled = ki.value !== 'card';
       });
     });
+  }
+  // v71: the live quick-sum hint for "Your numbers" (the Add sheet's amtEq,
+  // generalized): shows while an amount field holds an expression.
+  function qsHint(el) {
+    var bar = byId('qsBar');
+    if (!bar) return;
+    var show = false, txt = '', bad = false;
+    if (el && el.tagName === 'INPUT' && el.type === 'text' && el.closest && el.closest('#baseBody')) {
+      var raw = String(el.value || '').trim();
+      var hasOp = raw.replace(/^[+-]/, '').search(/[+\-*/()×÷]/) >= 0;
+      if (raw && hasOp) {
+        var v = evalExpr(raw);
+        if (v != null) { txt = '= ' + money(v) + '  ·  quick sum'; show = true; }
+        else { txt = 'not a valid sum — try 300-125+10'; bad = true; show = true; }
+      }
+    }
+    bar.style.display = show ? '' : 'none';
+    if (show) { bar.textContent = txt; bar.className = 'qsbar' + (bad ? ' bad' : ''); }
   }
   function renderBaseStatus() {
     var el = byId('baseStatus');
@@ -2724,7 +2754,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 70, live: new Date(2026, 8, 11, 12, 54) };
+  var SHELL_RELEASE = { v: 71.1, live: new Date(2026, 8, 11, 16, 47) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3111,7 +3141,7 @@
     var bb = byId('baseBody');
     if (bb) {
       var deb = null;
-      bb.addEventListener('input', function () { clearTimeout(deb); deb = setTimeout(commitBaseForm, 450); });
+      bb.addEventListener('input', function (ev) { clearTimeout(deb); deb = setTimeout(commitBaseForm, 450); qsHint(ev.target); });
       bb.addEventListener('change', function () { clearTimeout(deb); commitBaseForm(); });
       bb.addEventListener('click', function (ev) {
         var t = ev.target;
