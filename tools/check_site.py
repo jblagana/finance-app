@@ -479,6 +479,9 @@ def main():
           "c: t.category || ''" in js)
     check("ledger rows show the 12-hour AM/PM time next to the date; mlDate exported to the chat parser (v71.7)",
           "h12 = h % 12 || 12" in js and "mlDate: mlDate," in js)
+    check("the coach note header carries the bot's face (svg #botFace) left of the label; the avatar is untouched (v71.8)",
+          'class="coachnote-av"' in html and ".coachnote-av{" in html
+          and '<use href="#botFace"/>' in html)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):

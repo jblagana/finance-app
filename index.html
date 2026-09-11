@@ -75,8 +75,10 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--in
 /* v23: the home coach card no longer carries a colored vertical left bar */
 .coach-h{font-size:15px;font-weight:700;margin:0 0 4px}
 .coach-s{color:var(--mut);font-size:13px;margin:0}
-.coachnote-h{font-size:15px;font-weight:700;margin:0 0 6px}
-.coachnote-r{float:right;margin-top:-2px;border:0;background:none;color:var(--mut);font-size:15px;line-height:1;cursor:pointer;padding:2px 4px}
+/* v71: the bot's face sits left of the "Coach's note" label */
+.coachnote-h{display:flex;align-items:center;gap:7px;font-size:15px;font-weight:700;margin:0 0 6px}
+.coachnote-av{width:20px;height:20px;flex:0 0 auto}
+.coachnote-r{margin-left:auto;border:0;background:none;color:var(--mut);font-size:15px;line-height:1;cursor:pointer;padding:2px 4px}
 .coachnote-r:active{color:var(--ink)}
 .coachnote-t{font-size:14px;line-height:1.45;margin:0;color:var(--ink)}
 input:focus,select:focus{outline:none;border-color:var(--acc)}
@@ -442,7 +444,8 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
     </section>
 
     <section id="coachNote" class="card coachnote" style="display:none">
-      <div class="coachnote-h">Coach’s note
+      <div class="coachnote-h">
+        <svg class="coachnote-av" viewBox="0 0 64 64" aria-hidden="true"><use href="#botFace"/></svg>Coach’s note
         <button type="button" id="coachNoteRefresh" class="coachnote-r" title="Ask the coach again" aria-label="Refresh coach’s note">↻</button>
       </div>
       <p class="coachnote-t" id="coachNoteBody"></p>
