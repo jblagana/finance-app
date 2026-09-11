@@ -2934,6 +2934,54 @@
     s = String(s == null ? '' : s);
     return '"' + s.replace(/"/g, '""') + '"';
   }
+  // v72.8: the data-loss fix — import sanitizers. A backup is trusted data,
+  // but a hand-edited one must not inject junk: keep only the shapes the app
+  // itself writes, capped like the live stores.
+  var CHAT_CAP = 200;
+  function sanitizeChatRows(rows) {
+    var out = [];
+    (rows || []).forEach(function (r) {
+      if (!r || typeof r.id !== 'string' || !r.id) return;
+      if (r.who !== 'user' && r.who !== 'bot') return;
+      if (typeof r.at !== 'string') return;
+      var m = { id: r.id, who: r.who, at: r.at };
+      if (typeof r.text === 'string') m.text = r.text.slice(0, 2000);
+      if (typeof r.html === 'string') m.html = r.html.slice(0, 4000);
+      if (!m.text && !m.html) return;
+      if (Array.isArray(r.storyLines)) m.storyLines = r.storyLines.slice(0, 20);
+      if (r.done) m.done = true;
+      out.push(m);
+    });
+    return out.slice(-CHAT_CAP);
+  }
+  function sanitizeMoneyLogRows(rows) {
+    var out = [];
+    (rows || []).forEach(function (e) {
+      if (!e || typeof e.at !== 'number' || typeof e.a !== 'string') return;
+      var m = { at: e.at, a: e.a.slice(0, 40) };
+      if (typeof e.tid === 'string') m.tid = e.tid;
+      if (typeof e.l === 'string') m.l = e.l.slice(0, 120);
+      if (typeof e.c === 'string') m.c = e.c.slice(0, 60);
+      if (typeof e.nt === 'string') m.nt = e.nt.slice(0, 120);
+      if (typeof e.m === 'string') m.m = e.m.slice(0, 60);
+      if (typeof e.n === 'number' && isFinite(e.n)) m.n = e.n;
+      if (e.k === 'c' || e.k === 'x') m.k = e.k;
+      if (typeof e.f === 'number' && isFinite(e.f)) m.f = e.f;
+      if (typeof e.o === 'number' && isFinite(e.o)) m.o = e.o;
+      if (typeof e.s === 'number' && isFinite(e.s)) m.s = e.s;
+      out.push(m);
+    });
+    return out.slice(-ML_CAP);
+  }
+  function sanitizeAdj(a) {
+    return {
+      cash: Number(a && a.cash) || 0, free: Number(a && a.free) || 0,
+      card: Number(a && a.card) || 0, prepay: Number(a && a.prepay) || 0
+    };
+  }
+  function owedImportSort(v) {
+    return v === 'az' || v === 'custom' || v === 'recent' ? v : 'recent';
+  }
   function exportData(kind) {
     var txns = state.txns.slice().sort(function (a, b) {
       if (a.date !== b.date) return a.date < b.date ? -1 : 1;
@@ -2941,28 +2989,43 @@
     });
     var plans = state.plans.slice().sort(function (a, b) { return String(a.date) < String(b.date) ? -1 : 1; });
     var stamp = todayISO();
-    var blob, name;
+    function download(blob, name) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 600);
+      snack('Exported ' + name);
+    }
     if (kind === 'csv') {
       var lines = ['date,account,kind,category,amount,note'];
       txns.forEach(function (t) {
         lines.push([t.date, csvQ(t.account), csvQ(t.kind), csvQ(t.category), t.amount, csvQ(t.note || '')].join(','));
       });
-      blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-      name = 'finances-ledger-' + stamp + '.csv';
-    } else {
-      blob = new Blob([JSON.stringify({
+      download(new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }),
+        'finances-ledger-' + stamp + '.csv');
+      return;
+    }
+    // v72.8 (async): the JSON backup covers everything the app holds — base,
+    // txns, plans, owed (+ its sort), shadowLog, the Ledger tab's money log,
+    // the live overlay (adj + its sig), and the coach chat thread (an IDB
+    // store, read here) — so a reinstall + import loses nothing.
+    function jsonBlob(chat) {
+      return new Blob([JSON.stringify({
         app: 'finances-pwa', exportedAt: new Date().toISOString(),
         base: state.base, txns: txns, plans: plans, owed: state.owed.people,
-        shadowLog: state.shadowLog || [] // v68 item 11: the rule-coverage evidence
+        owedSort: state.owed.sort || 'recent',
+        shadowLog: state.shadowLog || [], // v68 item 11: the rule-coverage evidence
+        moneyLog: (state.moneyLog || []).slice(-ML_CAP), // v72.8: the Ledger tab's audit
+        adj: state.adj, adjSig: state.adjSig || '',      // v72.8: the live overlay (exact numbers)
+        chat: chat                                       // v72.8: the coach chat thread
       }, null, 2)], { type: 'application/json' });
-      name = 'finances-export-' + stamp + '.json';
     }
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url; a.download = name;
-    document.body.appendChild(a); a.click();
-    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 600);
-    snack('Exported ' + name);
+    idbAll(STORE_CHAT).then(function (chatRows) {
+      download(jsonBlob(sanitizeChatRows(chatRows)), 'finances-export-' + stamp + '.json');
+    })['catch'](function () {
+      download(jsonBlob([]), 'finances-export-' + stamp + '.json');
+    });
   }
   // v56: imported custom details — keep only the safe shape (the same rules
   // the coach's field changes are validated to), so a bad backup can't inject junk.
@@ -3001,13 +3064,22 @@
           nb.details = sanitizeDetails(nb.details); // v56
           state.base = migrateBaseKinds(nb); // v65
         }
+        // v72.8: the full restore. Import now covers everything the export
+        // holds — txns, plans, base, owed (+ its sort), the money log, the
+        // live overlay, the coach chat thread, and shadowLog (already
+        // restored on the first path below) — so a fresh install + import
+        // loses nothing, and a mid-lifespan import keeps every tab consistent.
         var saves = [];
         state.txns.forEach(function (t) { saves.push(idbDel(STORE_TX, t.id)); });
         state.plans.forEach(function (p) { saves.push(idbDel(STORE_PLANS, p.id)); });
-        Promise.all(saves).then(function () {
+        idbAll(STORE_CHAT).then(function (chatRows) {
+          (chatRows || []).forEach(function (r) { if (r && r.id) saves.push(idbDel(STORE_CHAT, r.id)); });
+          return Promise.all(saves);
+        }).then(function () {
           var puts = [];
           (data.txns || []).forEach(function (t) { if (t && t.id && t.date) puts.push(idbPut(STORE_TX, t)); });
           (data.plans || []).forEach(function (p) { if (p && p.id) puts.push(idbPut(STORE_PLANS, p)); });
+          sanitizeChatRows(data.chat).forEach(function (r) { puts.push(idbPut(STORE_CHAT, r)); });
           return Promise.all(puts);
         }).then(function () {
           state.txns = data.txns || [];
@@ -3018,12 +3090,16 @@
                 return e && e.id && OWED_DIRS[e.dir] && (Number(e.amt) || 0) > 0 && e.d;
               });
           }).map(function (p) {
-            return { id: p.id || owedUid('ow'), name: p.name.trim(), entries: p.entries || [] };
+            return { id: p.id || owedUid('ow'), name: p.name.trim(), entries: p.entries || [],
+              updated: typeof p.updated === 'string' ? p.updated : '' }; // v72.7: recent-sort key
           });
-          state.owed = { people: owedPeople };
-          saveOwed();
-          state.adj = { cash: 0, free: 0, card: 0, prepay: 0 };
+          state.owed = { people: owedPeople, sort: owedImportSort(data.owedSort) };
+          var mlRows = sanitizeMoneyLogRows(data.moneyLog);
+          state.moneyLog = mlRows;
+          state.adj = sanitizeAdj(data.adj);
+          state.adjSig = typeof data.adjSig === 'string' ? data.adjSig : snapSig(state.snapshot);
           state.adjLoaded = true;
+          if (!data.adj) computeAdjFromTxns(); // v72.8: a pre-72.8 backup has no adj — recompute from the imported txns
           // v47: persist the base too. The old code re-derived the snapshot from
           // the imported base in memory (and saved the snapshot) but never wrote
           // the base back to IndexedDB, so on the next launch the stale stored
@@ -3031,6 +3107,13 @@
           // saveBase() writes base + snapshot + adj through the same path the
           // Settings editor uses, so an import sticks.
           return saveBase(state.base).then(function () {
+            saveOwed();
+            return Promise.all([
+              idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }),
+              idbPut(STORE_META, { key: 'adj', value: state.adj }),
+              idbPut(STORE_META, { key: 'adjSig', value: state.adjSig })
+            ]);
+          }).then(function () {
             renderBaseEditor();
             renderBaseStatus();
             render();
@@ -3048,7 +3131,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.7, live: new Date(2026, 8, 12, 1, 42) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.8, live: new Date(2026, 8, 12, 2, 14) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3278,6 +3361,7 @@
     coachFindings: coachFindings, // v68 item 12: findings for the Coach's-note prompt
     shadowLog: shadowLog, // v68 item 11: shadow-mode answering-path log
     exportData: exportData, // v68 item 11: lets the smoke read what the JSON export contains
+    importData: importData, // v72.8: the full-restore path (smoke)
     snack: snack,
     render: render,
     setTab: setTab,

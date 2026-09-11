@@ -512,6 +512,14 @@ def main():
           "function owedSortedPeople" in js and "state.owed.sort || 'recent'" in js
           and 'id="owedSort"' in html and "data-ow-drag" in js
           and "state.owed.sort = 'custom'" in js and "p.updated = new Date().toISOString()" in js)
+    check("export/import cover the whole app (v72.8): the JSON backup is async (reads the chat store) and carries the chat thread, the Ledger money log, the overlay (adj+sig) and the owed sort; the import restores all of them, recomputing adj from txns when a pre-72.8 backup lacks it",
+          "idbAll(STORE_CHAT).then" in js and "chat: chat" in js
+          and "moneyLog: (state.moneyLog || []).slice(-ML_CAP)" in js
+          and "adj: state.adj, adjSig: state.adjSig || ''" in js
+          and "owedSort: state.owed.sort || 'recent'" in js
+          and "sanitizeChatRows(data.chat)" in js
+          and "sanitizeMoneyLogRows(data.moneyLog)" in js
+          and "if (!data.adj) computeAdjFromTxns()" in js)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):
