@@ -492,6 +492,11 @@ def main():
     check("the settings gear glyph is enlarged to 20px (v72.2); the 44px tap target stays (a11y block)",
           "font-size:20px;flex:0 0 auto;line-height:1}" in html
           and "button.gear{width:44px;height:44px}" in html)
+    check("Coach Fin gets a light, funny voice in the LLM paths only (v72.3): chat system prompt + note prompt + welcome line; accuracy and draft protocol still win",
+          "Personality (v72.3): light and funny - dry wit, at most one short quip" in chatjs
+          and "one dry, self-aware quip at most" in aijs
+          and "I read the numbers; I do not judge the ramen" in chatjs
+          and "the draft JSON below always win" in chatjs)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):
