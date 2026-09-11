@@ -22,8 +22,8 @@ Progress: 100%
 - This dot-release preference is noted for future sessions: when work arrives incrementally, push + dot-bump per completed app-affecting subtask.
 
 ## 2026-09-11 — v71: Your-numbers (keyboard, drag-reorder, save button), ledger (editable, AM/PM time, Unsorted title), toast, coach avatar
-Status: in progress — per the user's dot-release edit, shipping as v71.1 … v71.8 (one live push per subtask, cumulative); v71.1–v71.3 shipped, v71.4 (editable ledger entries) in progress
-Progress: 40% — ETA ~18:15 (v71.4 code applied, gates running; v71.5…v71.8 dot pushes + final gates left)
+Status: in progress — per the user's dot-release edit, shipping as v71.1 … v71.8 (one live push per subtask, cumulative); v71.1–v71.4 shipped, v71.5 (save button) next
+Progress: 50% — ETA ~18:30 (v71.5…v71.8 dot pushes + final gates left)
 ### Instruction (verbatim)
 > -allow quicksum keyboard on 'your numbers'
 > -allow the entries in the 'your numbers' to be rearranged by dragging
@@ -59,7 +59,8 @@ Progress: 40% — ETA ~18:15 (v71.4 code applied, gates running; v71.5…v71.8 d
 - [x] v71.1 pushed (item 1 — QuickSum keyboard): `df9724a`, live 16:47 — gates green (check_site + parser + node --check)
 - [x] v71.2 pushed (item 2 — drag-to-reorder rows): `7494e67`, live 16:53 — gates green (check_site + parser + node --check)
 - [x] v71.3 pushed (item 3 — centered add snack, no undo): `115bcbc`, live 17:04 — gates green (check_site + parser + node --check)
-- [ ] v71.4 in progress (item 4 — editable ledger entries) → then v71.5…v71.8 (items 5,6,7,8) — one live push per subtask, cumulative, gate-green
+- [x] v71.4 pushed (item 4 — editable ledger entries): `2a7f9fd`, live 17:51 — gates green (check_site + parser + node --check); item-4 code byte-spliced from _v71_final_backup (removeTxnRow/restoreTxnRow/deleteTxnFromLog refactor/saveTxnEdit/editingTxn/openTxnEdit/exitTxnEdit + add-sheet wiring + hint + staged gate check); remaining diff vs backup = items 5–8 + version stamps only
+- [ ] v71.5…v71.8 (items 5,6,7,8) — one live push per subtask, cumulative, gate-green; source hunks identified in the backup diff (item 5: baseSaveBar/baseDirty/commitIfDirtyBase + drag/import/merchant/detail pre-commits + HTML save bar; item 6: logMoney `c: t.category || ''`; item 7: mlDate AM/PM + export; item 8: coachnote avatar CSS/HTML)
 - [ ] Gates at v71.8: smoke_app_v68.js += v71 live checks (saveTxnEdit identity/unsorted/AM/PM); local mirrors re-synced (SITE line → finances/finance-app); full suite ×2 + node --check ×4; final tree == implemented feature tree (diff vs _v71_final_backup)
 - [ ] Log done with hashes; worktree clean, HEAD == origin/main
 
