@@ -272,11 +272,18 @@
   }
 
   // ---- live overlay: app entries adjust the sheet snapshot until the sheet catches up ----
+  // v72.10: the ledger learns INFLOWS — cash_in (money came to a cash pocket)
+  // and card_payment (a payment landed on a card). Both are the exact inverse
+  // of their spend twin, so an owed entry and its "paid me back" net to zero:
+  // card_charge {0, +a, +a, +a}  <-> card_payment {0, -a, -a, -a}
+  // cash_out    {+a, +a, 0,  0}  <-> cash_in      {-a, -a, 0,  0}
+  // (overlay: effective free = snap.free − adj.free, owed = snap + adj.card.)
   function txnAdj(t) {
     var amt = Number(t.amount) || 0;
-    return t.kind === 'card_charge'
-      ? { cash: 0, free: amt, card: amt, prepay: amt }
-      : { cash: amt, free: amt, card: 0, prepay: 0 };
+    if (t.kind === 'card_charge') return { cash: 0, free: amt, card: amt, prepay: amt };
+    if (t.kind === 'card_payment') return { cash: 0, free: -amt, card: -amt, prepay: -amt };
+    if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };
+    return { cash: amt, free: amt, card: 0, prepay: 0 }; // cash_out (default, legacy rows)
   }
   function addAdj(a, sign) {
     state.adj.cash = r2(state.adj.cash + a.cash * sign);
@@ -725,7 +732,9 @@
   }
 
   // ---------- actions ----------
-  function addTxn(data) {
+  // v72.10: opts.quiet — the caller shows its own snack (the owed flow wraps
+  // the add in an entry+txn undo, two toasts would collide).
+  function addTxn(data, opts) {
     var id = 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     var t = {
       id: id, date: data.date, account: data.account, kind: data.kind,
@@ -737,9 +746,11 @@
     logMoney('add', t);
     return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () {
       emit('txn');
-      // v71: no Undo on the add toast (user's call — the ledger's ✕ is the
-      // deletion path); the snack just confirms.
-      snack('Added ' + money(t.amount) + ' · ' + esc(t.category || t.account));
+      if (!(opts && opts.quiet)) {
+        // v71: no Undo on the add toast (user's call — the ledger's ✕ is the
+        // deletion path); the snack just confirms.
+        snack('Added ' + money(t.amount) + ' · ' + esc(t.category || t.account));
+      }
       return Promise.resolve();
     }).then(function () { return id; });
   }
@@ -848,7 +859,13 @@
   // alone — totals come from txns via monthSpendSum, so only the row's line
   // goes). Undo is the exact inverse: un-rebase the tail, then swap the
   // ORIGINAL row (values + timestamp) back where the edited row sits.
-  function saveTxnEdit(tid, data) {
+  // v72.10: per-kind effects — spend pulls free down, inflows push it back up;
+  // card owed moves only for the two card kinds; month spend counts spend,
+  // nets inflows, ignores card payments.
+  function freeEffect(kind, amt) { return (kind === 'cash_in' || kind === 'card_payment') ? amt : -amt; }
+  function cardEffect(kind, amt) { return kind === 'card_charge' ? amt : kind === 'card_payment' ? -amt : 0; }
+  function monthEffect(kind, amt) { return kind === 'card_payment' ? 0 : kind === 'cash_in' ? -amt : amt; }
+  function saveTxnEdit(tid, data, opts) {
     var o = null, oIdx = -1;
     for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) { o = state.txns[i]; oIdx = i; }
     if (!o) return Promise.resolve();
@@ -861,19 +878,19 @@
     addAdj(txnAdj(t), 1);
     addAdj(txnAdj(o), -1);
     var oldAmt = Number(o.amount) || 0, newAmt = Number(t.amount) || 0;
-    // effect delta (new − old): a cash entry pulls free cash down, a card
-    // charge pushes card owed up
-    var dFree = (t.kind === 'card_charge' ? 0 : -newAmt) - (o.kind === 'card_charge' ? 0 : -oldAmt);
-    var dCard = (t.kind === 'card_charge' ? newAmt : 0) - (o.kind === 'card_charge' ? oldAmt : 0);
+    // effect delta (new − old) across free / card / month-spent
+    var dFree = freeEffect(t.kind, newAmt) - freeEffect(o.kind, oldAmt);
+    var dCard = cardEffect(t.kind, newAmt) - cardEffect(o.kind, oldAmt);
+    var meOld = monthEffect(o.kind, oldAmt), meNew = monthEffect(t.kind, newAmt);
     var M_old = String(o.date || '').slice(0, 7), M_new = String(t.date || '').slice(0, 7);
     function rebase(e, dF, dC, sMode) {
       if (e.f != null) e.f = r2(e.f + dF);
       if (e.o != null) e.o = r2(e.o + dC);
       if (e.s != null && sMode) {
         var m = monthOfTxn(e.tid);
-        if (M_old === M_new) { if (m === M_old) e.s = r2(e.s + (newAmt - oldAmt) * sMode); }
-        else if (m === M_old) e.s = r2(e.s - oldAmt * sMode);
-        else if (m === M_new) e.s = r2(e.s + newAmt * sMode);
+        if (M_old === M_new) { if (m === M_old) e.s = r2(e.s + (meNew - meOld) * sMode); }
+        else if (m === M_old) e.s = r2(e.s - meOld * sMode);
+        else if (m === M_new) e.s = r2(e.s + meNew * sMode);
       }
     }
     var log = state.moneyLog || [];
@@ -883,19 +900,28 @@
     if (li >= 0) {
       var e0 = log[li];
       e0.n = newAmt;
-      e0.k = t.kind === 'card_charge' ? 'c' : 'x';
+      e0.k = t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x';
       e0.c = t.category || '';
       e0.nt = t.note || '';
       e0.m = t.account || '';
       e0.l = (t.category || t.account || 'entry') + (t.note ? ' · ' + t.note : '');
       // e.at is UNTOUCHED — the original date/time stays on the row
       rebase(e0, dFree, dCard, 1);
+      // v72.10: the edit flipped the row to a card flavor — backfill the card
+      // line from the (post-edit) snapshot so the row renders complete
+      if (e0.o == null && (t.kind === 'card_charge' || t.kind === 'card_payment')) {
+        var sNow = effectiveSnap();
+        if (sNow) e0.o = r2(sNow.card_owed || 0);
+      }
       if (M_old !== M_new) delete e0.s; // month line no longer fits (see the note above)
       for (var k = li + 1; k < log.length; k++) { if (log[k]) rebase(log[k], dFree, dCard, 1); }
       idbPut(STORE_META, { key: 'moneyLog', value: log }).catch(function () {});
     }
     return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () {
       emit('txn');
+      // v72.10: opts.quiet — the owed flow wraps the edit in its own
+      // entry+txn undo toast (two snacks would collide).
+      if (!(opts && opts.quiet))
       snack('Updated ' + money(t.amount) + ' · ' + esc(t.category || 'Unsorted'), function () {
         // undo: the exact inverse — un-rebase everything after the edited row
         // (a row logged AFTER the edit already reflects the NEW values; it is
@@ -946,7 +972,8 @@
     seedAccounts();
     var as = byId('f_account');
     if (as) {
-      var av = (t.kind === 'card_charge' ? 'CARD' : 'CASH') + '::' + (t.account || 'Cash');
+      // v72.10: a card payment belongs to a CARD account, like its charge twin
+      var av = (t.kind === 'card_charge' || t.kind === 'card_payment' ? 'CARD' : 'CASH') + '::' + (t.account || 'Cash');
       var hasA = false;
       for (var ai = 0; ai < as.options.length; ai++) if (as.options[ai].value === av) hasA = true;
       if (!hasA) {
@@ -993,13 +1020,22 @@
       // (Unsorted) add is titled "Unsorted", not the account (e.g. "Cash").
       // The account name lives in m (shown under the date) exactly as before.
       c: t.category || '', nt: t.note || '', m: t.account || '',
-      n: amt, k: t.kind === 'card_charge' ? 'c' : 'x'
+      n: amt,
+      // v72.10: k = the row's FLAVOR — c charge / p card payment / x cash
+      // spend / i cash in. Render derives every before→after from it.
+      k: t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x'
     };
     e.f = r2(s.cash ? s.cash.free : 0);
-    if (t.kind === 'card_charge') e.o = r2(s.card_owed || 0);
-    if (String(t.date).slice(0, 7) === mp) {
+    if (t.kind === 'card_charge' || t.kind === 'card_payment') e.o = r2(s.card_owed || 0);
+    if (String(t.date).slice(0, 7) === mp && t.kind !== 'card_payment') {
+      // v72.10: month spend nets inflows down; a card payment isn't spend
+      // (the charge that created the debt already counted).
       var sp = 0;
-      state.txns.forEach(function (x) { if (String(x.date).slice(0, 7) === mp) sp += Number(x.amount) || 0; });
+      state.txns.forEach(function (x) {
+        if (String(x.date).slice(0, 7) !== mp) return;
+        var a = Number(x.amount) || 0;
+        sp += x.kind === 'card_payment' ? 0 : x.kind === 'cash_in' ? -a : a;
+      });
       e.s = r2(sp);
     }
     state.moneyLog.push(e);
@@ -1080,20 +1116,30 @@
     if (noteEl) noteEl.style.display = '';
     body.innerHTML = shown.map(function (e) {
         var add = e.a === 'add';
-        var before = r2(e.f + (add ? e.n : -e.n));
+        // v72.10: inflow rows (i cash in / p card payment) move free the OTHER
+        // way — a row's before→after follows its flavor, not its add/del side.
+        var inflow = e.k === 'i' || e.k === 'p';
+        var before = r2(e.f + (add ? (inflow ? -e.n : e.n) : (inflow ? e.n : -e.n)));
         var extra = '';
-        if (e.k === 'c') extra = '<span class="ml-x">card ' + money(r2(e.o + (add ? -e.n : e.n))) + ' → ' + money(e.o) + '</span>';
-        if (e.s != null) extra += '<span class="ml-x">month spent ' + money(r2(e.s + (add ? -e.n : e.n))) + ' → ' + money(e.s) + '</span>';
+        if (e.k === 'c' || e.k === 'p') {
+          var oBefore = r2(e.o + (add ? (e.k === 'c' ? -e.n : e.n) : (e.k === 'c' ? e.n : -e.n)));
+          extra = '<span class="ml-x">card ' + money(oBefore) + ' → ' + money(e.o) + '</span>';
+        }
+        if (e.s != null) {
+          var sBefore = r2(e.s + (add ? (e.k === 'i' ? e.n : -e.n) : (e.k === 'i' ? -e.n : e.n)));
+          extra += '<span class="ml-x">month spent ' + money(sBefore) + ' → ' + money(e.s) + '</span>';
+        }
         var p = mlParts(e);
         // v71: add rows with a live txn are editable — tap the row (not the ✕)
         var editAttr = (add && e.tid) ? ' data-ml-edit="' + esc(e.tid) + '" title="Tap to edit" style="cursor:pointer"' : '';
         var delBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-del="' + esc(e.tid) +
           '" aria-label="Delete this expense" title="Delete this expense">\u2715</button>' : '';
+        var down = add ? !inflow : inflow; // spend down / come-back up vs inflow up / take-back down
         return '<div class="ml-row' + (add ? '' : ' del') + '"' + editAttr + '>' +
           '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
           (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
           '<div class="ml-meta">' + mlDate(e.at) + (p.m ? ' · ' + esc(p.m) : '') + '</div></div>' +
-          '<div class="ml-r"><b class="' + (add ? 'ml-down' : 'ml-up') + '">' + (add ? '−' : '+') + money(e.n) + '</b>' +
+          '<div class="ml-r"><b class="' + (down ? 'ml-down' : 'ml-up') + '">' + (down ? '−' : '+') + money(e.n) + '</b>' +
           '<span class="ml-f">free ' + money(before) + ' → ' + money(e.f) + '</span>' + extra + delBtn + '</div></div>';
       }).join('');
     var dl = body.querySelectorAll('[data-ml-del]');
@@ -2685,8 +2731,11 @@
       rows += '<div class="ow-e">' +
         '<div class="ow-el"><b>' + esc(dir.label) + '</b>' +
         (e.note ? ' <span class="ow-x">' + esc(e.note) + '</span>' : '') +
+        // v72.10: a ledger-filed entry wears a chip + its own edit button
+        (e.txnId ? ' <span class="ow-led" title="Filed in the ledger as Owed — the entry moves your numbers">· ledger</span>' : '') +
         '<div class="ow-k">' + esc(fmtDate(e.d)) + (e.expr ? ' · ' + esc(e.expr) : '') + '</div></div>' +
         '<b class="ow-amt ' + (dir.sign > 0 ? 'plus' : 'minus') + '">' + (dir.sign > 0 ? '+' : '\u2212') + money(amt) + '</b>' +
+        (e.txnId ? '<button type="button" class="ow-xbtn wide" data-ow-edit-e="' + esc(e.id) + '" aria-label="Edit entry">edit</button>' : '') +
         '<button type="button" class="ow-xbtn" data-ow-del-e="' + esc(e.id) + '" aria-label="Remove entry">\u2715</button>' +
         '</div>';
     });
@@ -2709,6 +2758,14 @@
       '<label><input type="radio" name="owdir" value="itb"><span>I paid them back</span></label>' +
       '<label><input type="radio" name="owdir" value="tpf"><span>They paid for me</span></label>' +
       '<label><input type="radio" name="owdir" value="tmb"><span>They paid me back</span></label>' +
+      '</div>' +
+      // v72.10: the account dropdown — WITH an account the entry is a real
+      // ledger txn (category Owed, flow from the direction); "no account"
+      // stays a balance-only note; "They paid for me" is always a note.
+      '<div class="oent-accrow">' +
+      '<label>Account — how the money moved</label>' +
+      '<select class="oent-acc">' + owedAccOptions('CASH::Cash') + '</select>' +
+      '<p class="note oent-acchint">Filed in the ledger as <b>Owed</b> — it moves your free cash.</p>' +
       '</div>' +
       '<label>Note (optional)</label>' +
       '<input type="text" class="oent-note" maxlength="60" autocomplete="off">' +
@@ -2770,6 +2827,78 @@
     people.forEach(function (p) { html += owedPersonHTML(p); });
     body.innerHTML = html;
   }
+  // ---------- v72.10: owed entries WITH an account are real ledger txns ----------
+  // The dropdown mirrors the add sheet's Paid-with list; '' = note only.
+  // Flow: ipf/itb move money OUT (cash_out / card_charge), tmb moves it IN
+  // (cash_in / card_payment), tpf never touches the ledger.
+  function owedAccName(acc) {
+    var s = String(acc || '').indexOf('::');
+    return s >= 0 ? String(acc).slice(s + 2) : String(acc || '');
+  }
+  function owedTxnKind(dir, acc) {
+    var isCard = String(acc).indexOf('CARD::') === 0;
+    if (dir === 'tmb') return isCard ? 'card_payment' : 'cash_in';
+    return isCard ? 'card_charge' : 'cash_out';
+  }
+  function owedAccOptions(sel) {
+    var accounts = ((state.base && state.base.accounts) || [])
+      .filter(function (a) { return a.kind === 'card' || a.kind === 'debit'; });
+    var html = '<option value="">\u2014 no account (note only) \u2014</option>';
+    html += '<option value="CASH::Cash"' + (sel === 'CASH::Cash' ? ' selected' : '') + '>Cash</option>';
+    accounts.forEach(function (a) {
+      if (a.kind === 'debit' && a.name === 'Cash') return; // the default option is already it
+      var v = (a.kind === 'card' ? 'CARD' : 'CASH') + '::' + a.name;
+      html += '<option value="' + esc(v) + '"' + (sel === v ? ' selected' : '') + '>' + esc(a.name) + '</option>';
+    });
+    return html;
+  }
+  // "They paid for me" is always a note — the account row hides for it.
+  function owedAccRowState(form, dir) {
+    var row = form && form.querySelector ? form.querySelector('.oent-accrow') : null;
+    if (row) row.style.display = dir === 'tpf' ? 'none' : '';
+  }
+  // v72.10: back to a fresh, hidden add form (after a submit or edit save).
+  function resetOentForm(f) {
+    if (!f) return;
+    f.removeAttribute('data-ow-edit');
+    var d = f.querySelector('.oent-date');
+    if (d) { d.value = ''; owedSyncDate(d); }
+    var a = f.querySelector('.oent-amt');
+    if (a) a.value = '';
+    var eq = f.querySelector('.oent-eq');
+    if (eq) { eq.textContent = ''; eq.className = 'oent-eq'; }
+    var n = f.querySelector('.oent-note');
+    if (n) n.value = '';
+    var s = f.querySelector('.oent-acc');
+    if (s) s.value = 'CASH::Cash';
+    var radios = f.querySelectorAll('input[name="owdir"]');
+    for (var i = 0; i < radios.length; i++) radios[i].checked = radios[i].value === 'ipf';
+    var seg = f.querySelector('.seg');
+    if (seg) {
+      var labs = seg.getElementsByTagName('label');
+      for (var j = 0; j < labs.length; j++) {
+        var inp = labs[j].getElementsByTagName('input')[0];
+        labs[j].className = inp && inp.checked ? 'sel' : '';
+      }
+    }
+    owedAccRowState(f, 'ipf');
+    var sb = f.querySelector('[type="submit"]');
+    if (sb) sb.textContent = 'Add entry';
+    f.style.display = 'none';
+  }
+  // no-snack txn removal / restore — the owed flow shows ONE toast that covers
+  // both the entry and its ledger row.
+  function removeTxnQuiet(tid) {
+    var r = removeTxnRow(tid);
+    if (!r) return Promise.resolve();
+    return r.persist.then(function () { emit('txn'); });
+  }
+  function restoreTxnQuiet(t) {
+    state.txns.push(t);
+    addAdj(txnAdj(t), 1);
+    logMoney('add', t);
+    return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () { emit('txn'); });
+  }
   function addOwedPerson(name) {
     name = String(name || '').trim();
     if (!name) return;
@@ -2785,11 +2914,21 @@
     (state.owed.people || []).forEach(function (p, i) { if (p.id === id) idx = i; });
     if (idx < 0) return;
     var gone = state.owed.people.splice(idx, 1)[0];
+    // v72.10: every ledger-filed entry goes with the person — undo brings them back
+    var goneTxns = [];
+    (gone.entries || []).forEach(function (e) {
+      if (e && e.txnId) {
+        for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === e.txnId) { goneTxns.push(Object.assign({}, state.txns[i])); break; }
+      }
+    });
     saveOwed().then(function () {
       emitOwed();
+      goneTxns.forEach(function (t) { removeTxnQuiet(t.id); });
       snack('Removed ' + esc(gone.name), function () {
         state.owed.people.push(gone);
-        saveOwed().then(emitOwed);
+        var u = Promise.resolve();
+        goneTxns.forEach(function (t) { u = u.then(function () { return restoreTxnQuiet(t); }); });
+        u.then(function () { saveOwed().then(emitOwed); });
       });
     });
   }
@@ -2804,13 +2943,29 @@
       note: String(data.note || '').trim(), created: new Date().toISOString()
     };
     if (data.expr) e.expr = data.expr;
+    // v72.10: WITH an account (and not tpf) the entry is a real ledger txn
+    var acc = data.acc || '';
+    if (acc && e.dir !== 'tpf') e.acc = acc;
+    var doTxn = !!e.acc;
     p.entries.push(e);
     p.updated = new Date().toISOString(); // v72.7: recent-sort key
-    saveOwed().then(function () {
+    var step = Promise.resolve();
+    if (doTxn) {
+      step = addTxn({
+        date: e.d, account: owedAccName(e.acc), kind: owedTxnKind(e.dir, e.acc),
+        category: 'Owed', amount: e.amt, note: 'Owed · ' + p.name
+      }, { quiet: true }).then(function (id) {
+        e.txnId = id; // the link persists with the entry (export/import carries it)
+        return saveOwed();
+      });
+    }
+    saveOwed().then(function () { return step; }).then(function () {
       emitOwed();
-      snack(OWED_DIRS[e.dir].label + ' ' + money(e.amt) + ' · ' + esc(p.name), function () {
+      snack(OWED_DIRS[e.dir].label + ' ' + money(e.amt) + ' · ' + esc(p.name) + (doTxn ? ' (in the ledger)' : ''), function () {
         p.entries = p.entries.filter(function (x) { return x.id !== e.id; });
-        saveOwed().then(emitOwed);
+        var u = e.txnId ? removeTxnQuiet(e.txnId) : Promise.resolve();
+        e.txnId = null;
+        u.then(function () { saveOwed().then(emitOwed); });
       });
     });
   }
@@ -2822,13 +2977,92 @@
     (p.entries || []).forEach(function (e, i) { if (e.id === eid) idx = i; });
     if (idx < 0) return;
     var gone = p.entries.splice(idx, 1)[0];
+    // v72.10: the linked ledger txn (if any) is snapshotted for the undo
+    var goneTxn = null;
+    if (gone.txnId) {
+      for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === gone.txnId) goneTxn = Object.assign({}, state.txns[i]);
+    }
     p.updated = new Date().toISOString(); // v72.7: recent-sort key
     saveOwed().then(function () {
       emitOwed();
+      if (goneTxn) removeTxnQuiet(goneTxn.id);
       snack('Removed ' + money(gone.amt) + ' entry', function () {
         p.entries.push(gone);
-        saveOwed().then(emitOwed);
+        var u = goneTxn ? restoreTxnQuiet(goneTxn) : Promise.resolve();
+        u.then(function () { saveOwed().then(emitOwed); });
       });
+    });
+  }
+  // v72.10: editable subentries. The linked ledger txn follows the entry:
+  // linked+linked → v72.9's in-place edit (position + original timestamp stay);
+  // linked→note → the txn is removed; note→linked (or a dangling link) → a
+  // fresh txn is filed. ONE toast covers entry + txn; Undo reverses both.
+  function updateOwedEntry(pid, eid, data) {
+    var p = null, e = null;
+    (state.owed.people || []).forEach(function (x) {
+      if (x.id === pid) {
+        p = x;
+        (x.entries || []).forEach(function (y) { if (y.id === eid) e = y; });
+      }
+    });
+    if (!p || !e) return Promise.resolve();
+    var prev = Object.assign({}, e); // undo payload — the entry side, BEFORE
+    var prevTxn = null;
+    if (e.txnId) {
+      for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === e.txnId) prevTxn = Object.assign({}, state.txns[i]);
+    }
+    var acc = data.acc || '';
+    var next = {
+      d: data.d || e.d, amt: r2(data.amt),
+      dir: OWED_DIRS[data.dir] ? data.dir : e.dir,
+      note: String(data.note || '').trim()
+    };
+    if (acc && next.dir !== 'tpf') next.acc = acc;
+    var step = Promise.resolve();
+    if (prevTxn && next.acc) {
+      step = saveTxnEdit(e.txnId, {
+        date: next.d, account: owedAccName(next.acc), kind: owedTxnKind(next.dir, next.acc),
+        category: 'Owed', amount: next.amt, note: 'Owed · ' + p.name
+      }, { quiet: true });
+    } else if (prevTxn && !next.acc) {
+      step = removeTxnQuiet(e.txnId);
+    } else if (!prevTxn && next.acc) {
+      step = addTxn({
+        date: next.d, account: owedAccName(next.acc), kind: owedTxnKind(next.dir, next.acc),
+        category: 'Owed', amount: next.amt, note: 'Owed · ' + p.name
+      }, { quiet: true }).then(function (id) {
+        e.txnId = id;
+        return saveOwed();
+      });
+    }
+    return step.then(function () {
+      e.d = next.d; e.amt = next.amt; e.dir = next.dir; e.note = next.note;
+      if (data.expr) e.expr = data.expr; else delete e.expr;
+      if (next.acc) e.acc = next.acc; else { delete e.acc; e.txnId = null; }
+      p.updated = new Date().toISOString(); // v72.7: recent-sort key
+      return saveOwed();
+    }).then(function () {
+      emitOwed();
+      var undoNewId = !prevTxn && next.acc ? e.txnId : null; // the just-created link
+      snack('Updated ' + money(e.amt) + ' · ' + esc(p.name), function () {
+        Object.keys(prev).forEach(function (k) { e[k] = prev[k]; });
+        if (prev.txnId) e.txnId = prev.txnId; else delete e.txnId;
+        var u = Promise.resolve();
+        if (prevTxn && next.acc) {
+          // re-run the in-place edit with the ORIGINAL values — the exact
+          // inverse rebase; position + timestamp stay put
+          u = saveTxnEdit(prevTxn.id, {
+            date: prevTxn.date, account: prevTxn.account, kind: prevTxn.kind,
+            category: prevTxn.category || 'Owed', amount: prevTxn.amount, note: prevTxn.note || ''
+          }, { quiet: true });
+        } else if (prevTxn && !next.acc) {
+          u = restoreTxnQuiet(prevTxn);
+        } else if (undoNewId) {
+          u = removeTxnQuiet(undoNewId);
+        }
+        u.then(function () { saveOwed().then(emitOwed); });
+      });
+      return Promise.resolve();
     });
   }
   function owedExprHint(input) {
@@ -2939,11 +3173,17 @@
       }
       var dirEl = f.querySelector('input[name="owdir"]:checked');
       var expr = (raw !== String(r2(amt))) ? raw : null;
-      addOwedEntry(pid, {
+      var payload = {
         d: f.querySelector('.oent-date').value || todayISO(),
         amt: amt, dir: dirEl ? dirEl.value : 'ipf', expr: expr,
-        note: (f.querySelector('.oent-note').value || '').trim()
-      });
+        note: (f.querySelector('.oent-note').value || '').trim(),
+        // v72.10: the account pick ('' = note only; hidden for tpf, ignored there)
+        acc: (f.querySelector('.oent-acc') || { value: '' }).value || ''
+      };
+      var editId = f.getAttribute('data-ow-edit'); // v72.10: edit mode
+      if (editId) updateOwedEntry(pid, editId, payload);
+      else addOwedEntry(pid, payload);
+      resetOentForm(f);
     });
     body.addEventListener('click', function (ev) {
       var t = ev.target;
@@ -2951,9 +3191,55 @@
         var tog = t.getAttribute && t.getAttribute('data-ow-toggle');
         var delP = t.getAttribute && t.getAttribute('data-ow-del');
         var delE = t.getAttribute && t.getAttribute('data-ow-del-e');
+        var edE = t.getAttribute && t.getAttribute('data-ow-edit-e');
+        if (edE) {
+          // v72.10: edit the subentry — prefill the form in EDIT mode
+          var card = t;
+          while (card && card !== body && !(card.getAttribute && card.getAttribute('data-ow-pid'))) card = card.parentNode;
+          if (card && card.getAttribute) {
+            var pid3 = card.getAttribute('data-ow-pid');
+            var f3 = body.querySelector('.oent[data-ow-for="' + pid3 + '"]');
+            if (f3) {
+              var ee = null;
+              (state.owed.people || []).forEach(function (x) {
+                if (x.id === pid3) (x.entries || []).forEach(function (y) { if (y.id === edE) ee = y; });
+              });
+              if (ee) {
+                f3.setAttribute('data-ow-edit', edE);
+                f3.style.display = '';
+                var d3 = f3.querySelector('.oent-date');
+                d3.value = ee.d || todayISO(); owedSyncDate(d3);
+                var a3 = f3.querySelector('.oent-amt');
+                a3.value = String(ee.amt); owedExprHint(a3);
+                var radios3 = f3.querySelectorAll('input[name="owdir"]');
+                for (var r3 = 0; r3 < radios3.length; r3++) radios3[r3].checked = radios3[r3].value === (ee.dir || 'ipf');
+                var seg3 = f3.querySelector('.seg');
+                if (seg3) {
+                  var labs3 = seg3.getElementsByTagName('label');
+                  for (var l3 = 0; l3 < labs3.length; l3++) {
+                    var i3 = labs3[l3].getElementsByTagName('input')[0];
+                    labs3[l3].className = i3 && i3.checked ? 'sel' : '';
+                  }
+                }
+                var s3 = f3.querySelector('.oent-acc');
+                if (s3) s3.value = ee.acc || '';
+                owedAccRowState(f3, ee.dir || 'ipf');
+                var n3 = f3.querySelector('.oent-note');
+                if (n3) n3.value = ee.note || '';
+                var sb3 = f3.querySelector('[type="submit"]');
+                if (sb3) sb3.textContent = 'Save changes';
+              }
+            }
+          }
+          return;
+        }
         if (tog) {
           var f = body.querySelector('.oent[data-ow-for="' + tog + '"]');
           if (f) {
+            // v72.10: "+ entry" is always a fresh add — clear any edit mode
+            f.removeAttribute('data-ow-edit');
+            var sb = f.querySelector('[type="submit"]');
+            if (sb) sb.textContent = 'Add entry';
             f.style.display = f.style.display === 'none' ? '' : 'none';
             var d = f.querySelector('.oent-date');
             if (d && !d.value) { d.value = todayISO(); owedSyncDate(d); }
@@ -3012,6 +3298,9 @@
             var inp = labs[i].getElementsByTagName('input')[0];
             labs[i].className = inp && inp.checked ? 'sel' : '';
           }
+          // v72.10: "They paid for me" is a note — hide the account row
+          var formEl = seg.closest ? seg.closest('.oent') : null;
+          owedAccRowState(formEl, t.value);
         }
       }
     });
@@ -3217,7 +3506,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.9, live: new Date(2026, 8, 12, 2, 51) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.10, live: new Date(2026, 8, 12, 3, 41) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3311,6 +3600,8 @@
     if (!sel) return;
     var names = Object.keys((state.base && state.base.budgets) || {})
       .filter(function (n) { return String(n).trim(); });
+    // v72.10: 'Owed' is a real filing category (the owed tab's ledger entries)
+    if (names.indexOf('Owed') < 0) names.push('Owed');
     var sig = names.join('|');
     if (sig === catSig) return;
     catSig = sig;
@@ -3438,6 +3729,14 @@
     addTxn: addTxn,
     deleteTxn: deleteTxn,
     saveTxnEdit: saveTxnEdit, // v71: editable ledger entries
+    // v72.10: the owed flow (smoke drives the real paths) + the effective
+    // numbers (the free-cash / card-owed math the owed entries recompute)
+    addOwedPerson: addOwedPerson,
+    addOwedEntry: addOwedEntry,
+    updateOwedEntry: updateOwedEntry,
+    delOwedEntry: delOwedEntry,
+    delOwedPerson: delOwedPerson,
+    effectiveSnap: effectiveSnap,
     mlDate: mlDate,           // v71: ledger row date+time (AM/PM)
     applyBaseChanges: applyBaseChanges,
     undoBaseStory: undoBaseStory,
@@ -3501,10 +3800,17 @@
       var amount = evalExpr(amtRaw);
       if (amount === null || !(amount > 0)) { alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.'); return; }
       var category = (byId('f_category').value || '').trim();
+      // v72.10: editing an INFLOW entry keeps its flow direction — the sheet
+      // has no kind control, so the instrument follows the picked account but
+      // cash_in stays cash_in (and card_payment stays card_payment); a fresh
+      // add is always a spend.
+      var kind = type === 'CARD'
+        ? (editingTxn && editingTxn.kind === 'card_payment' ? 'card_payment' : 'card_charge')
+        : (editingTxn && editingTxn.kind === 'cash_in' ? 'cash_in' : 'cash_out');
       var payload = {
         date: byId('f_date').value || todayISO(),
         account: name,
-        kind: type === 'CARD' ? 'card_charge' : 'cash_out',
+        kind: kind,
         category: category,
         amount: amount,
         note: (byId('f_note').value || '').trim()

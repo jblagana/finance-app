@@ -530,6 +530,16 @@ def main():
           and "return { t: t, removed: removed, txIdx: txIdx, logIdxs: logIdxs, persist: done };" in js
           and "state.txns.splice(ti, 0, r.t);" in js
           and "var r = removeTxnRow(tid, true); // keep the persistent row (see above)" in js)
+    check("owed entries with an account are real ledger txns (v72.10): inflow kinds cash_in / card_payment are the exact inverse of their spend twins (txnAdj), the log row flavor i/p renders before→after correctly and nets month spend, the owed form carries the account dropdown (default Cash, '' = note only, hidden for tpf), subentries edit the linked txn in place (v72.9) and delete/undo cover entry + txn together; 'Owed' joins the add-sheet categories",
+          "if (t.kind === 'card_payment') return { cash: 0, free: -amt, card: -amt, prepay: -amt };" in js
+          and "if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };" in js
+          and "k: t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x'" in js
+          and "function owedTxnKind(dir, acc)" in js
+          and '<select class="oent-acc">' in js and "owedAccOptions('CASH::Cash')" in js
+          and "category: 'Owed', amount: e.amt, note: 'Owed \u00b7 ' + p.name" in js
+          and "if (editId) updateOwedEntry(pid, editId, payload);" in js
+          and "function updateOwedEntry(pid, eid, data)" in js
+          and "if (names.indexOf('Owed') < 0) names.push('Owed');" in js)
     check("emoji allowed, kept light, in the voice paths only (v72.12): the v72.3 'no emojis' flips to at most one where it fits (chat + note prompts); the setup prompt stays plain; the welcome carries one on its ramen line",
           "at most one emoji and only where it genuinely fits" in chatjs
           and "at most one emoji and only where it genuinely fits" in aijs
