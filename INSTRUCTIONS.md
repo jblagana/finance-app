@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-11 — User edit of the interpretation (chat-polish entry below)
-Status: in progress — folded into that entry's plan
-Progress: 90% (logged; both edits now drive the plan)
+Status: done — both edits acted and shipped in v69 (`94c2add`): "Try" label + Coach Fin naming
+Progress: 100%
 ### Instruction (verbatim)
 > User edits made directly in the Interpretation section of the entry "2026-09-11 (after v68 push) — Chat polish…":
 > 1. item 1, appended: `(instead of 'tip', change it to 'try')`
@@ -19,8 +19,8 @@ Progress: 90% (logged; both edits now drive the plan)
   2. The bot's name is **"Coach Fin"** (not just "Fin"): header title, welcome + greet self-introductions, the LLM system prompts ("You are Coach Fin…"). The name is separate from the account (display) name in Settings — `coachName()` still resolves the USER's name for "Hey Jan"; Coach Fin is the bot. Fin introduces himself in the chat (welcome message, greet) and in the info panel.
 
 ## 2026-09-11 (after v68 push) — Chat polish: tips, info panel, bot name "Fin", dynamic chips, LandBank debit default
-Status: in progress — all code + gates green; release unit (sw v69 / SHELL_RELEASE v69 / README) done; commit + push pending
-Progress: 90% — ETA ~15m
+Status: done — v69 pushed to origin/main: `94c2add` (SHELL_RELEASE v69, live 2026-09-11 11:47; single release commit — feature + gates + version files)
+Progress: 100%
 ### Subtasks
 - [x] Log the instruction verbatim (first action) + log the user's interpretation edits (rule 2) as their own entry
 - [x] Scope: story cue 7 (known accounts only) + findAccounts/newAcctName gap, dynamicChips/alerts, TIPS/info/greet/welcome/prompts, gate assertions
@@ -30,8 +30,8 @@ Progress: 90% — ETA ~15m
 - [x] Ask 3 (Coach Fin): header title "Coach Fin", Fin self-introduces (welcome + greet + help card), AI_REMOTE_SYSTEM + ai.js note prompt → "You are Coach Fin, the personal money coach of the Fin.AI app"; coachName() (user's name) untouched
 - [x] Ask 4 (chips): EXPLAINED — alert-driven chips (v68 item 9) only show when an alert is active; Jan's data triggers none (no card → no prepay alert, no logged spend → no pace, floor not breached) → static fallback stood in. FIX — the standing four now derive from stored numbers: real prepay day + biggest budget (`coachAlerts` += prepayDay/topCat, `standingChips()`)
 - [x] Gates: repo tools/ check_site.py v69 (brand → "You are Coach Fin", chatInfoBack gone, toggleInfoView, display-only tip, Coach Fin title, account-cue + chips checks) + test_chat_parser.py mirror (new_acct_name/known_entity_in, cue 7, "ate" verb, TIPS, v69 test section incl. the fuzzy-guard regression); local mirrors re-synced (local check_site path line → finances/finance-app); full suite green ×2 (repo + local) + node --check ×4 + both smokes (smoke_app_v68 += v69 account-change + coachAlerts checks)
-- [x] Release unit: sw.js `finances-pwa-v69`, SHELL_RELEASE v: 69 (live stamp at push), README line, .gitignore (__pycache__)
-- [ ] Commit + push to origin/main; log done + commit hash
+- [x] Release unit: sw.js `finances-pwa-v69`, SHELL_RELEASE v: 69 (live stamp set at 11:47, right before push), README line, .gitignore (__pycache__)
+- [x] Commit + push to origin/main — `94c2add` (9371685..94c2add main -> main), worktree clean, HEAD == origin/main
 ### Instruction (verbatim)
 > -in chatbot, italicized the tip with quote e.g. "Ate at jollibee 250", add more practical tips and elaborate the info section, dont send it when clicked, just do nothing
 > -close 'i' when clicked again, remove the 'back to chat'
