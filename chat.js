@@ -1548,9 +1548,16 @@
     var FAI = typeof window !== 'undefined' ? window.FinAI : null;
     if (!FAI || !ctx.eff) return null;
     if (!FAI.remoteAvailable()) return null;
-    var pr = aiPrompt(t, ctx, true, recentHist);
-    // the Worker caps prompt JSON at 4000 chars — if the numbers + memory push
-    // it over, send the same prompt without the conversation memory
+    // v72.5: adaptive trim — if the numbers + memory push past the Worker's
+    // 3800-char guard, drop the OLDEST history lines one by one until it fits
+    // (the newest turn always stays); only if even that isn't enough, send
+    // without any conversation memory.
+    var mem = recentHist.slice();
+    var pr = aiPrompt(t, ctx, true, mem);
+    while (JSON.stringify(pr).length > 3800 && mem.length > 1) {
+      mem = mem.slice(1);
+      pr = aiPrompt(t, ctx, true, mem);
+    }
     if (JSON.stringify(pr).length > 3800) pr = aiPrompt(t, ctx, true, []);
     return { llm: true, prompt: pr };
   }
@@ -1691,17 +1698,33 @@
     var FAI = typeof window !== 'undefined' ? window.FinAI : null;
     if (!FAI) return null;
     if (!(FAI.remoteEnabled() && FAI.remoteConfigured() && (typeof navigator === 'undefined' || navigator.onLine !== false))) return null;
-    var pr = setupPrompt(t, ctx, recentHist);
+    var mem = recentHist.slice(); // v72.5: adaptive trim (same as aiCoach)
+    var pr = setupPrompt(t, ctx, mem);
+    while (JSON.stringify(pr).length > 3800 && mem.length > 1) {
+      mem = mem.slice(1);
+      pr = setupPrompt(t, ctx, mem);
+    }
     if (JSON.stringify(pr).length > 3800) pr = setupPrompt(t, ctx, []);
     return { llm: true, prompt: pr };
   }
-  // v46: the coach's short memory — the last few turns, tag-stripped and capped,
-  // so the prompt stays under the Worker's input cap even on a busy phone.
+  // v46: the coach's short memory, tag-stripped and capped, so the prompt stays
+  // under the Worker's input cap even on a busy phone.
+  // v72.5: 5-minute conversation memory — a session is the run of rows since
+  // the last gap of 5+ minutes of silence (rows carry `at`), capped at 24
+  // messages × 160 chars. Older sessions stay in the visible thread (IDB);
+  // they just don't go into the prompt.
+  var COACH_MEM_GAP_MS = 5 * 60 * 1000;
+  var COACH_MEM_MAX = 24;
   function coachHist(rows, skipId) {
     var out = [];
     var rs = (rows || []).slice().sort(function (a, b) { return a.at < b.at ? -1 : 1; });
-    for (var i = rs.length - 1; i >= 0 && out.length < 6; i--) {
-      var m = rs[i];
+    var cut = 0;
+    for (var i = rs.length - 1; i > 0; i--) {
+      if (new Date(rs[i].at) - new Date(rs[i - 1].at) >= COACH_MEM_GAP_MS) { cut = i; break; }
+      cut = 0;
+    }
+    for (var j = rs.length - 1; j >= cut && out.length < COACH_MEM_MAX; j--) {
+      var m = rs[j];
       if (!m || m.id === skipId) continue;
       var txt = m.who === 'user' ? String(m.text || '') : String(m.html || '').replace(/<[^>]+>/g, ' ');
       txt = txt.replace(/\s+/g, ' ').trim();
@@ -2374,6 +2397,7 @@
     norm: norm,
     URGENT_RX: URGENT_RX,
     extractStory: extractStory,
+    coachHist: coachHist, // v72.5: exported for the Node smoke
     storyMonth: storyMonth,
     fuzzyNameIn: fuzzyNameIn,
     open: openChat,

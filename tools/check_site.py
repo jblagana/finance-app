@@ -501,6 +501,9 @@ def main():
     check("account kind = credit or debit only (v72.4): the picker offers just the two; a legacy debt/loan row keeps its kind via a per-row '(legacy)' option",
           " (legacy)</option>" in js and "'Credit'" in js and "'Debit'" in js
           and "kinds.indexOf(a.kind) < 0" in js)
+    check("Coach Fin has a 5-minute conversation memory (v72.5): session = rows since the last 5+ min gap, capped at 24 msgs x 160 chars; past the 3800-char guard the OLDEST lines are trimmed, not the whole memory",
+          "COACH_MEM_GAP_MS = 5 * 60 * 1000" in chatjs and "COACH_MEM_MAX = 24" in chatjs
+          and "mem = mem.slice(1)" in chatjs and "out.length < 6" not in chatjs)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):
