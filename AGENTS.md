@@ -48,3 +48,29 @@ session). Rules to keep them from clobbering each other:
   above).
 - **Docs-only changes** (this file, `INSTRUCTIONS.md`, `README.md`) do not
   bump the version counter and need no shell gate.
+
+## Push & ordering discipline (this project, always)
+
+User mandate (2026-09-12): these apply to every batch in this repo.
+
+1. **One push per subtask.** Each instruction line of a batch = one dot
+   release (vN.M): implement → structural check → stamp → commit → push →
+   log line. *Done = pushed to the remote.*
+2. **Ordering:** fastest-estimated-first, *provided each subtask is
+   independent* — independent = doing it never makes another subtask redo
+   the previous subtask's work. If two subtasks are not independent, the
+   foundational one (the one the other builds on / would rework) goes
+   first, regardless of estimated time.
+3. **Always via `tools/release.ps1`** — no manual stamp edits, no ad-hoc
+   gate runs, ever:
+   - `tools\release.ps1 vN.M "HH:MM"` — sets `SHELL_RELEASE` (v + `live`)
+     in `app.js`, the `sw.js` cache, the `README.md` reference, and the
+     `check_site.py` version assertions; re-syncs the root mirror
+     (`../check_site.py`); runs the FULL gate suite in one pass
+     (check_site repo + mirror, `test_chat_parser.py`, `node --check` on
+     all JS, both smokes). Invoke it as the final step right before
+     commit, so `live` is set at the last possible moment.
+   - `tools\release.ps1 -GatesOnly` — re-run the gates without
+     re-stamping.
+   - Commit + push only on green; on red, fix and re-run — never push
+     past a failing gate.

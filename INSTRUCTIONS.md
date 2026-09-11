@@ -6,6 +6,158 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-12 00:29 — v72: 11-item batch + push/order/streamline discipline
+Status: in progress
+Progress: 2% — ETA ~05:00
+### Instruction (verbatim)
+> The original 11-item batch instruction arrived in the previous session; its
+> exact wording is not in this session's context — logged here as a marked
+> paraphrase from the session summary (Jan: paste the exact words to replace):
+> 1. Maintain per-subtask push discipline (this project only).
+> 2. Owed tab: add a payment-method/account dropdown for "I paid for them",
+>    "I paid them back", "they paid me back"; recompute with my numbers
+>    (it's touching my money numbers now).
+> 3. Fix export/import data loss: after export → app removal/reinstall →
+>    re-import, the ledger log, "this month, by category", "spend space", and
+>    chat conversations were lost.
+> 4. Owed tab: make people draggable and sortable, alphabetically or by last
+>    modified.
+> 5. Ledger: preserve an entry's position and original date/time when edited.
+> 6. Coach card: remove "the online coach reads your numbers...".
+> 7. Add a funny personality to the bot.
+> 8. Accounts: restrict account kind to only credit or debit.
+> 9. Quicksum: spreadsheet-formula-like — the total replaces the displayed
+>    quicksum after input, but the original quicksum/formula remains usable
+>    when edited.
+> 10. Enlarge the settings symbol slightly.
+> 11. Make the floating bot draggable but settle only to four positions:
+>     directly above or below the corners of the current chatbox.
+>
+> Refinement 1 (this session, verbatim):
+> -how can we streamline the per-subtask push discipline so it does waste precious time
+> -howd u recommend we order the tasks from quickest to longest work time
+> -v72.1, the owed tab logs in the ledger but category is 'Owed', it can have be negative or positive depending on the flow of money
+> -subentries in the owed tab are editable
+> -v72.3, default is recent
+> -v72.5, we address 'the online coach' as 'Coach Fin' and keep theoffline variant but make it 'Coach Fin is unavailable right now.'
+> -how can we make coach fin remember the chat context longer, like a 5min conversation?
+>
+> Refinement 2 (this session, verbatim):
+> -v72.1, remove the online variant, only keep the offline variant
+> -i want u to implemtn this discipline in this project: do the subtask in order of estimated time of completion, if it is independent of the other subtasks, independent means if u do this subtask, doing another subtask doesnt redo the previous subtask
+>
+> Refinement 3 (this session, verbatim):
+> make sure to also do that streamlining push discpline always in this project
+
+### Interpretation (agent — user may edit this section)
+- **Disciplines (implemented in the repo `AGENTS.md`, this project only):**
+  (1) one push per subtask (dot release per instruction line);
+  (2) subtask order = fastest-estimated-first *provided independent*;
+  independent = doing it never makes another subtask redo the previous
+  subtask's work; non-independent pair → foundational one first regardless
+  of time;
+  (3) release mechanics ALWAYS via `tools/release.ps1` (stamps + full gate
+  suite in one pass; `-GatesOnly` to re-run gates); push only on green;
+  live stamp set by invoking the script right before commit.
+- **Locked scope decisions:**
+  - **v72.1 coach card (item 6)** — the sub line is offline-ONLY: fresh/
+    online note → no sub line at all; stale note → exactly "Coach Fin is
+    unavailable right now." (The online variant text is removed from code.)
+  - **v72.10 owed (item 2)** — an owed entry WITH an account = a real
+    ledger txn: category exactly `Owed`, note `Owed · <person>`; sign by
+    flow via kind (ipf/itb → cash_out/card_charge = negative; tmb →
+    cash_in/card_payment = positive; tpf = pure note, no ledger entry).
+    Account dropdown default = Cash, explicit "— no account —" = pure note.
+    Subentries are EDITABLE (inline edit → saveTxnEdit on the linked txn;
+    delete removes the txn; snack Undo restores entry + txn). `Owed` joins
+    the Add-sheet category options (budgets ∪ categories in use). Numbers
+    recompute through the normal addTxn adj path; a directly-deleted ledger
+    row leaves the owed entry intact (dangling txnId, no crash).
+  - **v72.7 owed (item 4)** — sort control A–Z / recent / custom, DEFAULT =
+    **recent** (p.updated, fallback newest entry created); drag = ⠿ handle
+    on the person card (v71.2 pattern), drop reorders state.owed.people,
+    sets sort=custom, persists via saveOwed.
+  - **v72.5 memory (new item from Q7)** — coachHist: session window = all
+    rows since the last gap ≥ 5 min (rows carry `at`), max 24 messages ×
+    160 chars; adaptive trim: drop OLDEST history lines until the prompt is
+    back under the existing 3800-char guard (replaces the all-or-nothing
+    fallback). Full history stays in IDB (visible thread unchanged).
+  - **v72.8 data loss (item 3)** — root cause confirmed: the export JSON
+    never contained `moneyLog` (the Ledger tab's audit) nor `chat` (IDB
+    store) → after reinstall+import those two are gone; the rest (base,
+    txns, plans) does export, which is why stats/spend space came back.
+    THE LOST DATA FROM THIS INCIDENT IS NOT RECOVERABLE (it was never in
+    the file). Fix (forward): export adds `moneyLog` + `chat` (exportData
+    json becomes async to read the chat store); import restores both,
+    shape-sanitized + capped; import recomputes adj from txns (instead of
+    zeroing it in-session); snack reports restored counts; old files import
+    fine (absent fields skipped). Smoke gains an export→import round-trip
+    check.
+
+  - **v72.3 personality (item 7)** — voice only in the LLM paths:
+    AI_REMOTE_SYSTEM (chat.js) + note() prompt (ai.js): light/funny, dry
+    wink, ≤1 short joke line, numbers + draft protocol always win, ≤60
+    words, no emoji; one light self-aware line in the chat welcome.
+    Rule-engine functional replies stay plain.
+  - **v72.4 account kinds (item 8)** — the account-row picker offers
+    exactly Debit / Credit ("Credit" = internal kind `card`, "Debit" =
+    `debit`); internal kinds + v65 migration untouched; legacy debt/loan
+    rows keep their kind (still excluded from totals, as today), just not
+    offered. Debts/sinking sections unaffected.
+  - **v72.6 quicksum (item 9)** — normalize on commit: when evalExpr
+    succeeds, `numVal` writes the computed total back into the field
+    (one-way; the field re-opened later shows the plain number); applies to
+    all Your-numbers amount fields; the qsBar hint clears accordingly.
+  - **v72.2 gear (item 10)** — `button.gear` glyph font-size 16px → 20px;
+    the 44×44 tap target stays.
+  - **v72.11 FAB (item 11)** — draggable (pointer events, >8px = drag, tap
+    still opens the coach); settles to the nearest of 4 snaps measured from
+    the coach bubble's OPEN geometry (computed style; closed transform
+    ignored): above the top-left/top-right corners, below the
+    bottom-left/bottom-right corners (center on the corner's x, 10px gap,
+    clamped to viewport); persisted `localStorage fin.fabPos.v1` (default
+    br = today's spot); re-snaps on resize/orientation.
+  - **v72.9 in-place edit (item 5)** — saveTxnEdit rewrites as in-place:
+    txn replaced in state.txns at its index (same id/created); money-log
+    row updated at its index with `at` UNTOUCHED (original date/time +
+    position); constant-delta propagation (Δfree/Δcard/Δmonth-spend, incl.
+    month-changed edges) keeps every "before → after" chain honest; Undo
+    restores the original row at the original index.
+- **Push order (rule 2 applied; the single non-independent pair is item 5 ↔
+  item 2 — owed subentry edits call saveTxnEdit, so the in-place edit is
+  foundational and goes first):**
+  v72.1 coach offline line (~5m) → v72.2 gear (~5m) → v72.3 personality
+  (~15m) → v72.4 account kinds (~20m) → v72.5 memory (~20m) → v72.6
+  quicksum (~25m) → v72.7 owed drag+sort (~35m) → v72.8 data-loss fix
+  (~40m) → v72.9 in-place edit (~60m) → v72.10 owed ledger entries
+  (~45–60m) → v72.11 FAB drag (~60m)
+- **Step 1** — `tools/release.ps1` (the streamliner): stamps app.js
+  SHELL_RELEASE (v + live), sw.js cache, README reference, check_site.py
+  version asserts (the two prefix lines), Copy-Item the root mirror (path
+  line preserved), then one-pass gates: check_site repo + mirror,
+  test_chat_parser, node --check on all 4 JS, smoke_v68.js +
+  smoke_app_v68.js; PASS/FAIL + exit code.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [ ] AGENTS.md discipline block + docs commit + push
+- [ ] tools/release.ps1 built + dogfooded on the first dot
+- [ ] v72.1 — coach card offline-only sub line ("Coach Fin is unavailable right now.")
+- [ ] v72.2 — settings gear glyph 16px → 20px
+- [ ] v72.3 — funny personality (LLM voice: chat + note prompts, welcome line)
+- [ ] v72.4 — account kind = credit or debit only
+- [ ] v72.5 — 5-minute chat memory (session window + adaptive trim)
+- [ ] v72.6 — quicksum stores the computed total
+- [ ] v72.7 — owed people drag + sort (default recent)
+- [ ] v72.8 — export/import data-loss fix (moneyLog + chat)
+- [ ] v72.9 — ledger edit keeps position + original date/time
+- [ ] v72.10 — owed → ledger "Owed" entries (sign by flow) + editable subentries
+- [ ] v72.11 — draggable floating bot, 4 corner snaps
+- [ ] Final: full gates, clean tree, master entry done
+
+
+
+
 ## 2026-09-11 — User edit of the v71 interpretation (3 edits) — acted on
 Status: done — all three acted: add-toast Undo removed (v71.3), add-sheet category order follows reordering (already covered by v71.2), per-subtask dot releases (v71.1–v71.8 push sequence)
 Progress: 100%
