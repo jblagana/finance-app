@@ -6,6 +6,61 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-11 — User edit of the v71 interpretation (3 edits) — acted on
+Status: done — all three acted: add-toast Undo removed (v71.3), add-sheet category order follows reordering (already covered by v71.2), per-subtask dot releases (v71.1–v71.8 push sequence)
+Progress: 100%
+### Instruction (verbatim)
+> User edits made directly in the Interpretation section of the entry "2026-09-11 — v71: …":
+> 1. item 2, appended: `(reordering also reorders the categories in 'add expense' accordingly)`
+> 2. item 3, appended: `(remove the undo here only)`
+> 3. new line after item 8: `---in every subtask that affects the app, can u push it live immediately after the subtask, add an additional dot to the version e.g. v69.1 if subtask is done, v69.2 if another is done.`
+### Interpretation (agent — user may edit this section)
+- A user edit is the new instruction (rule 2). Changes to the plan:
+  1. **Item 2 addition** — the drag order must flow into the Add-sheet category list. Already true by construction: `seedCategories()` iterates `Object.keys(state.base.budgets)`, and the budgets map is rebuilt in form (DOM) order on Save — reorder + Save reorders the Add-sheet list too (verified in the smoke/gate run; noted on the item 2 subtask).
+  2. **Item 3 addition** — my logged decision "center it, keep Undo" is vetoed on the Undo part: the add-expense toast is centered AND loses its Undo button (the ledger × is the user's accepted deletion path). "here only" = just the "Added …" toast — the Deleted/plan/other snacks keep Undo. `undoAddTxn` becomes unused and is removed with it.
+  3. **New line** — release process for THIS batch: push live per subtask, each push bumps a dot version (v71.1 … v71.8). All eight items were already implemented in one tree, so the pushes are a cumulative sequence: push k ships items 1..k as a complete, gate-green state (sw cache `finances-pwa-v71.k`, `SHELL_RELEASE v: 71.k` — the existing prefix-based version assertions still pass, so only the per-item structural checks are staged in check_site.py; the live stamp is set seconds before each push). The final state after v71.8 equals the implemented feature tree (verified by diff).
+- This dot-release preference is noted for future sessions: when work arrives incrementally, push + dot-bump per completed app-affecting subtask.
+
+## 2026-09-11 — v71: Your-numbers (keyboard, drag-reorder, save button), ledger (editable, AM/PM time, Unsorted title), toast, coach avatar
+Status: in progress — per the user's dot-release edit, shipping as v71.1 … v71.8 (one live push per subtask, cumulative)
+Progress: 85% — ETA ~18:00 (8 dot pushes + log updates left)
+### Instruction (verbatim)
+> -allow quicksum keyboard on 'your numbers'
+> -allow the entries in the 'your numbers' to be rearranged by dragging
+> -see img, the note for undo after adding expense is floating on the left. center it give remove it at all since ledger has x buttons anyway
+> -in ledger, allow editable entries
+> -add a save button in 'your numbers' if there are changes
+> -in add expense, choosing the unsorted category, its corresponding entry in the ledger has title 'cash' instead of the name of the category, see img.
+> -in ledger, add time in AM/PM of entries
+> -in coach card in overview, add the bot's face beside (left side) the 'coach's note'
+### Interpretation (agent — user may edit this section)
+- One release (v71) with eight items. Shell changes → release unit at push: sw.js cache `finances-pwa-v71`, `SHELL_RELEASE v: 71` (live stamp set right before push), README line, check_site.py version assertions + structural checks for the new features; gates green before push.
+- **1. QuickSum keyboard on "Your numbers"** — the in-app QuickSum numpad (same one used on Money/inputs) must be available when the "Your numbers" view is open and its fields are edited, so values can be entered on the number pad instead of the system keyboard.
+- **2. Drag-reorder "Your numbers" entries** — rows in "Your numbers" become reorderable by dragging (pointer/touch events, no scroll hijacking). New order is persisted with the entries and re-rendered after drop. Reordering must not touch entry identity/values or any derived summaries. (reordering also reorders the categories in 'add expense' accordingly)
+- **3. "Added … Undo" toast** — after adding an expense the confirmation toast sits hard against the left edge (screenshot: "Added PHP 13.00 · Food Undo" cut at left). "center it give remove it at all since ledger has x buttons anyway" reads as *center it, or remove it entirely*. **Decision (edit to veto):** center it — keeps the Undo affordance (the ledger × is a permanent delete, Undo is mistake-proofing), fixes the left-floating look. If Jan wants it gone, say so in an edit and it's removed instead. (remove the undo here only)
+- **4. Editable ledger entries** — tapping a ledger row opens an edit sheet (amount / category / account / date) pre-filled from the entry; Save updates the stored log entry and re-renders ledger + derived views (free cash, pace, chips). Cancel/✕ discards. (Delete stays on the × button.)
+- **5. "Save" button in "Your numbers" when dirty** — "Your numbers" shows an explicit Save button only while there are unsaved changes (dirty entries); saving persists and clears the dirty state; leaving the view with dirty changes keeps them (or is confirmed — decide during implementation, default: keep + show button again when returning).
+- **6. Unsorted category title bug** — in Add Expense, choosing the **Unsorted** category files the entry, but its ledger row title shows the account (e.g. "Cash") instead of the category name "Unsorted" (screenshot: the −45 row titled "Cash"). Fix: ledger row title falls back to the *category* name (Unsorted) — not the account name; only when there is no category at all does the account name appear.
+- **7. Ledger AM/PM time** — each ledger row's date line gains the entry time in 12-hour AM/PM form (e.g. "Sep 11, 2026 · 2:43 PM"); entries without a stored time keep the date-only line.
+- **8. Coach avatar beside "Coach's note"** — the Overview coach card's "Coach's note" header gets the bot's face (same avatar used in the chat/header, left side of the label).
+---in every subtask that affects the app, can u push it live immediately after the subtask, add an additional dot to the version e.g. v69.1 if subtask is done, v69.2 if another is done.
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Inspect: Your-numbers view + storage/order, QuickSum keyboard wiring, ledger row render + ×, add-expense sheet (Unsorted path), toast, coach card, version files (sw.js/README/check_site.py)
+- [x] Item 1: QuickSum keyboard on "Your numbers" — all base-amount fields are now text inputs (full keyboard, operators typeable, same as the Add sheet; no `inputmode="decimal"` numeric pad), `numVal()` evaluates `evalExpr` first (300-125+10 → 185) with parseFloat fallback, prepay/cutoff days too; live "= … · quick sum" hint (qsBar) under the form while an expression is typed
+- [x] Item 2: drag-to-reorder — ⠿ handles on accounts / budgets / overrides / one-offs / salary-override rows + whole debt & goal blocks; pointer-capture drag (touch + mouse, `touch-action:none` on the handle), live sibling reflow, drop marks the sheet dirty → order persists through the Save path (`readBaseForm` reads DOM order; string-key maps keep insertion order)
+- [x] Item 3: center the add-expense toast (keeps Undo) — decision as logged; implemented with left:0;right:0 + margin:0 auto + fit-content (the old left:50%+translate(-50%) was already in the repo CSS but floated left in the screenshot — the new form is robust either way)
+- [x] Item 4: ledger entries editable — tap a row → the Add sheet in edit mode (prefilled amount/category/paid-with/date/note, one-off options for names no longer seeded, title "Edit entry" / button "Save changes"); save = `saveTxnEdit` (delete + relog, SAME id + created stamp, fresh money-log row, "Updated …" snack whose Undo restores the ORIGINAL entry + log rows); ✕ still deletes (stopPropagation); "Tap an entry to edit it — ✕ deletes" hint above the list
+- [x] Item 5: "Save" button in "Your numbers" when dirty — silent 450ms auto-save removed; input/change/add-row/remove-row/drag all mark dirty → Save bar appears (footer of the sheet); Save commits + hides; closing the sheet auto-commits (no loss); merchant-flag toggle / detail-chip remove / import pre-commit a dirty form first (their re-render would otherwise wipe it)
+- [x] Item 6: ledger row title → category name (Unsorted), not account — root cause found: `logMoney` stored `c: t.category || t.account || 'entry'`, so a no-category add stored the ACCOUNT as the "category" and the v53 `|| 'Unsorted'` fallback never fired; now `c: t.category || ''` (account stays in `m`, shown under the date as before); the v53 "blank category reads Unsorted" gate strings intact
+- [x] Item 7: ledger rows show AM/PM time — `mlDate` appends "· h:mm AM/PM" (12-hour, leading-zero minutes)
+- [x] Item 8: bot avatar left of "Coach's note" — `#botFace` symbol as a 20px `.coachnote-av` svg in the `.coachnote-h` (now flex; the ↻ button uses margin-left:auto instead of float)
+- [x] Release files done early (stamp last): sw.js `finances-pwa-v71`, SHELL_RELEASE v: 71 (live still = v70's, set at push), README line, check_site.py v71 assertions + 9 new structural checks — repo gate GREEN (all checks passed)
+- [x] v71.1 pushed (item 1 — QuickSum keyboard): `df9724a`, live 16:47 — gates green (check_site + parser + node --check)
+- [ ] v71.2 … v71.8 dot pushes (items 2,3,4,5,6,7,8) — one live push per subtask, cumulative, gate-green
+- [ ] Gates at v71.8: smoke_app_v68.js += v71 live checks (saveTxnEdit identity/unsorted/AM/PM); local mirrors re-synced (SITE line → finances/finance-app); full suite ×2 + node --check ×4; final tree == implemented feature tree (diff vs _v71_final_backup)
+- [ ] Log done with hashes; worktree clean, HEAD == origin/main
+
 ## 2026-09-11 — Chat: "hm" = "how much"
 Status: done — v70 pushed to origin/main: `6644266` (SHELL_RELEASE v70, live 2026-09-11 12:54)
 Progress: 100%
