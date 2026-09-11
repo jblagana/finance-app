@@ -1156,11 +1156,19 @@
   }
   function accRow(a) {
     a = a || {};
-    var kinds = ['debit', 'card', 'debt', 'loan']; // v65: 'cash' renamed to 'debit'
+    // v72.4: the picker offers exactly Debit / Credit ("Credit" = the internal
+    // 'card' kind). A legacy row with another stored kind (debt/loan from
+    // older versions) keeps it via a per-row option, so a save can never
+    // silently rewrite the kind; the user can still move it to Debit/Credit.
+    var kinds = ['debit', 'card'];
+    var legacy = a.kind && kinds.indexOf(a.kind) < 0;
+    var kindOpts = (legacy
+      ? '<option value="' + esc(a.kind) + '" selected>' + esc(a.kind) + ' (legacy)</option>'
+      : '') + kinds.map(function (k) {
+      return '<option value="' + k + '"' + (a.kind === k ? ' selected' : '') + '>' + (k === 'card' ? 'Credit' : 'Debit') + '</option>';
+    }).join('');
     return brow(dragH() + '<input class="grow" data-r="name" value="' + esc(a.name || '') + '" autocomplete="off">' +
-      '<select data-r="kind">' + kinds.map(function (k) {
-        return '<option value="' + k + '"' + (a.kind === k ? ' selected' : '') + '>' + k + '</option>';
-      }).join('') + '</select>' +
+      '<select data-r="kind">' + kindOpts + '</select>' +
       '<input data-r="value" type="text" value="' + (a.value != null ? a.value : '') + '">' +
       '<input data-r="limit" type="text" value="' + (a.limit ? a.limit : '') + '"' + (a.kind === 'card' ? '' : ' disabled') + '>' +
       delBtn('Remove account')) + detChips(a.kind + ':' + a.name);
@@ -1239,7 +1247,7 @@
     h += bsec('Salary overrides') + '<div id="rowsSal">' + salRows + '</div>' +
       '<button type="button" class="addrow" data-add="sal">+ override month</button>';
     var accRows = (b.accounts || []).map(accRow).join('');
-    h += bsec('Accounts (debit, cards, debts, loans)') + '<div id="rowsAcc">' + accRows + '</div>' +
+    h += bsec('Accounts (debit, credit)') + '<div id="rowsAcc">' + accRows + '</div>' +
       '<button type="button" class="addrow" data-add="acc">+ account</button>';
     var budRows = '';
     Object.keys(b.budgets || {}).forEach(function (k) {
@@ -2950,7 +2958,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.3, live: new Date(2026, 8, 12, 1, 6) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.4, live: new Date(2026, 8, 12, 1, 14) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

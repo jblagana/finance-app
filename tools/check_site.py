@@ -434,8 +434,9 @@ def main():
     check("paid-with option labels drop the (card)/(cash) kind suffix",
           "' (card)'" not in js and "' (cash)'" not in js
           and "+ esc(a.name) + '</option>'" in js)
-    check("base editor: the kind select offers debit (card/debt/loan as before)",
-          "var kinds = ['debit', 'card', 'debt', 'loan']" in js)
+    check("base editor: the kind select offers exactly Debit / Credit (v72.4; 'Credit' = internal 'card' kind)",
+          "var kinds = ['debit', 'card']" in js
+          and "var kinds = ['debit', 'card', 'debt', 'loan']" not in js)
     check("no stored-account path still writes the old 'cash' kind",
           "kind: 'cash'" not in js and "kind: 'debit'" in js)
     check("one-time migration rewrites old 'cash' kinds and detail keys",
@@ -497,6 +498,9 @@ def main():
           and "one dry, self-aware quip at most" in aijs
           and "I read the numbers; I do not judge the ramen" in chatjs
           and "the draft JSON below always win" in chatjs)
+    check("account kind = credit or debit only (v72.4): the picker offers just the two; a legacy debt/loan row keeps its kind via a per-row '(legacy)' option",
+          " (legacy)</option>" in js and "'Credit'" in js and "'Debit'" in js
+          and "kinds.indexOf(a.kind) < 0" in js)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):
