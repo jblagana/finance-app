@@ -23,14 +23,17 @@
  * anything else closes the question and routes normally. Nothing is ever
  * written without a confirmed draft.
  *
- * The rule engine owns every command and stays the only writer. v55: while
- * the ONLINE coach (a hosted LLM the user connects in Settings) is available
- * and "Coach answers everything" is on (default), it answers first — talking
- * and confirming understanding before proposing any change; a reply to an
- * open draft corrects it instead of stacking a new one. When the coach is
- * off / offline / not configured, the rule engine answers (with the fallback
- * card when even it can't). The deterministic story/semantic scorer (v37)
- * stays — it's part of the rule engine.
+ * The rule engine owns every command and stays the only writer. v68
+ * rules-first: the rule engine runs BEFORE the online coach ALWAYS — every
+ * command and story it owns is answered locally. Only an open question that
+ * slips past the rules reaches the ONLINE coach (a hosted LLM the user
+ * connects in Settings), and only while "let the coach answer questions the
+ * rules don't own" is on (Settings, default ON); a reply to an open draft
+ * that the rules can't re-parse goes to the coach, which corrects the draft
+ * instead of stacking a new one. When the toggle is off or the coach is
+ * off / offline / not configured, the fallback card stands in. The
+ * deterministic story/semantic scorer (v37) stays — it's part of the rule
+ * engine.
  */
 (function () {
   'use strict';
@@ -55,6 +58,8 @@
   var RX_ANS_AMT = /^(?:it'?s|its|is|about|around|roughly|like|maybe|just|now|total|new)?\s*(?:php|\u20b1|pesos?)?\s*\d[\d,]*(?:\.\d{1,2})?\s*(?:k\b|thousand)?\s*(?:php|\u20b1|pesos?)?[?.!]*$/;
   var RX_ANS_NAMED = /^[a-z][a-z'&\- ]{0,39}?\s+(?:is|was|at|of|to|equals|running|sits)(?:\s+(?:at|around|about|roughly))?\s+(?:php|\u20b1|pesos?)?\s*\d[\d,]*(?:\.\d{1,2})?\s*(?:k\b|thousand)?\s*(?:php|\u20b1|pesos?)?[?.!]*$/;
   var RX_ANS_MONTH = /^(?:in|for|of|say|its|it'?s|that'?s|the)?\s*(?:next month|last month|this month|january|february|march|april|may|june|july|august|september|october|november|december|sept|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\b\s*[?.!]*$/;
+  // v68 item 3: a bare kind word answers the "which one?" account question
+  var RX_KIND_ANS = /^(?:a|the|my|its|it'?s|on)?\s*(?:credit\s+)?(?:card|cc|debit|cash|e-?wallet|wallet|gcash)\b\s*[?.!]*$/i;
   // v38: what the remembered question is about (stored name or 'salary'). A
   // named answer like "gcash is 4k" only counts if the name fits this entity,
   // so an off-topic sentence never fills a draft for something else.
@@ -201,6 +206,7 @@
   function isMonthWord(s) {
     var tk = cleanTok(s);
     if (!tk) return false;
+    if (tk === 'payday' || tk === 'paydays') return true; // v68 item 2: payday is a timing word, never a name
     for (var k = 0; k < MON.length; k++) {
       var full = MONFULL[k];
       if (tk === full || tk === full.slice(0, 3)) return true;
@@ -309,31 +315,74 @@
   }
 
   // ---------- account / name / category matching ----------
+  // v68 item 3: a kind word in the text breaks a name tie — "maya card" vs
+  // "maya wallet" — so the match resolves without asking.
+  function kindHintIn(t) {
+    if (/\b(?:credit\s+)?card\b|\bcc\b/.test(t)) return 'card';
+    if (/\b(?:debit|cash|e-?wallet|wallet|gcash)\b/.test(t)) return 'debit';
+    return null;
+  }
   function findAccounts(text, ctx) {
     var e = ctx.eff;
     var list = [];
     (e.cards || []).forEach(function (c) { list.push({ name: c.name, kind: 'card', balance: c.balance, limit: c.limit }); });
     (e.cash.accounts || []).forEach(function (a) { list.push({ name: a.name, kind: 'debit', balance: a.value, limit: null }); }); // v65
-    var t = ' ' + String(text || '') + ' ';
-    var exact = null, words = [];
+    var t = ' ' + String(text || '').toLowerCase().trim() + ' ';
+    var exacts = [];
     for (var i = 0; i < list.length; i++) {
-      if (t.indexOf(list[i].name.toLowerCase()) >= 0) {
-        if (!exact || list[i].name.length > exact.name.length) exact = list[i];
-        continue;
+      if (t.indexOf(list[i].name.toLowerCase()) >= 0) exacts.push(list[i]);
+    }
+    exacts.sort(function (a, b) { return b.name.length - a.name.length; });
+    var pool = exacts;
+    if (exacts.length === 1) {
+      // v68 item 3: "maya" matched exactly, but "maya e-wallet" shares the
+      // name — pull the co-candidates in so the multi-kind check can run.
+      var baseN = exacts[0].name.toLowerCase();
+      for (var k = 0; k < list.length; k++) {
+        if (list[k] !== exacts[0] && list[k].name.toLowerCase().indexOf(baseN) >= 0 && pool.indexOf(list[k]) < 0) pool.push(list[k]);
       }
     }
-    if (!exact) {
+    if (!exacts.length) {
       for (var j = 0; j < list.length; j++) {
         var wds = list[j].name.toLowerCase().split(/[\s/]+/);
         for (var w = 0; w < wds.length; w++) {
           if (wds[w].length >= 4 && t.indexOf(wds[w]) >= 0) {
-            if (words.indexOf(list[j]) < 0) words.push(list[j]);
+            if (pool.indexOf(list[j]) < 0) pool.push(list[j]);
             break;
           }
         }
       }
     }
-    return { exact: exact, words: words };
+    if (!pool.length) return { exact: null, words: [] };
+    if (pool.length > 1) {
+      var kinds = [];
+      for (var q = 0; q < pool.length; q++) if (kinds.indexOf(pool[q].kind) < 0) kinds.push(pool[q].kind);
+      if (kinds.length > 1) {
+        var hint = kindHintIn(t);
+        if (hint) {
+          // the user said which one — take the longest candidate of that kind
+          var best = null;
+          for (var h = 0; h < pool.length; h++) {
+            if (pool[h].kind === hint && (!best || pool[h].name.length > best.name.length)) best = pool[h];
+          }
+          if (best) return { exact: best, words: [] };
+        } else {
+          // v68 item 3: the same word is several different kinds and the text
+          // doesn't say which — ask instead of guessing. Only when the
+          // candidates really share the matched word (not two unrelated
+          // accounts in one sentence).
+          var byLen = pool.slice().sort(function (a, b) { return a.name.length - b.name.length; });
+          var shortN = byLen[0].name.toLowerCase();
+          var shared = true;
+          for (var s = 1; s < byLen.length; s++) {
+            if (byLen[s].name.toLowerCase().indexOf(shortN) < 0) { shared = false; break; }
+          }
+          if (shared) return { exact: null, words: [], ambiguous: { word: byLen[0].name, cands: pool } };
+        }
+      }
+    }
+    if (exacts.length) return { exact: exacts[0], words: [] };
+    return { exact: null, words: pool };
   }
   function mentionOf(name, text) {
     var n = String(name || '').toLowerCase().trim();
@@ -417,10 +466,50 @@
       line('• <b>Charge check</b> — “can I charge 2,500 on Maya?”') +
       line('• <b>Urgent expense</b> — tell me something unplanned and I’ll map the options') +
       line('• <b>Spending</b> — what you’ve logged in this app this week / month') +
-      line('• <b>Story mode</b> — tell me changes in plain words: “my salary in october is 25k, water went up to 1,800” — I draft them and you confirm before anything is written') +
+      line('• <b>Story mode</b> — tell me changes in plain words: “my salary in october is 25k, food budget up 10%, water in december same as last month +500” — I draft them and you confirm before anything is written') +
       line('• <b>Open questions</b> — when I’m connected to the online coach (Settings), I can reason about your numbers in my own words; it needs signal'),
       'Try: “urgent: car repair 8,000 this week”', 'good');
     return { html: h };
+  }
+
+  // v68 (Jan add-on): the rotating examples under the chat header — each is a
+  // phrase the rule engine answers locally (status / prepay, plans, log, charge
+  // check, urgent, story mode incl. the v68 percent / delta / payday grammar).
+  // Deterministic + offline; tapping the strip sends it.
+  var TIPS = [
+    'how much is free?',
+    'my 14th prepay',
+    'what’s coming up?',
+    'log expense 500 food on maya',
+    'can i charge 2,500 on Maya?',
+    'urgent: car repair 8,000 this week',
+    'my salary in october is 25k',
+    'water in october same as last month +500',
+    'one-off: power bill 1,500 after payday'
+  ];
+  var tipIdx = 0;
+  function renderTip(text) {
+    var el = byId('chatTipText');
+    if (el) el.textContent = text;
+  }
+  // The info panel shows the exact "What I can do" card (intentHelp's own
+  // output, so it can never drift from typing help) with a way back.
+  function openInfoView() {
+    var ov = byId('coachOv');
+    var view = byId('chatInfoView');
+    var body = byId('chatInfoBody');
+    if (!ov || !view || !body) return;
+    var r = intentHelp('help');
+    body.innerHTML = r && r.html ? r.html : '';
+    view.hidden = false;
+    ov.classList.add('info-open');
+  }
+  function closeInfoView() {
+    var ov = byId('coachOv');
+    var view = byId('chatInfoView');
+    if (!ov || !view) return;
+    view.hidden = true;
+    ov.classList.remove('info-open');
   }
 
   function intentGreet(t, ctx) {
@@ -532,7 +621,7 @@
     var worst = /\bworst[- ]?case\b|\bemergenc/.test(t);
     var monthWord = t.match(new RegExp('\\b' + MONAME + '\\b'));
     var nextM = /\bnext month\b/.test(t);
-    var general = /\b(project|projection|forecast|runway|trajectory|next (?:few )?months|how (?:far|long) (?:will|does)|will i (?:make it|be ok|be fine)|break even|through february|the plan)\b/.test(t);
+    var general = /\b(project|projection|forecast|runway|trajectory|next (?:few )?months|how (?:far|long) (?:will|does)|will i (?:make it|be ok|be fine)|break even|through february|the plan|dips?|worst (?:case|month))\b/.test(t);
     if (!borrow && !worst && !monthWord && !nextM && !general) return null;
     if (borrow && ctx.snap && ctx.snap.bridge) {
       var b = ctx.snap.bridge;
@@ -669,7 +758,10 @@
     if (!am || !(am.amt > 0)) {
       return { html: block('Add a plan', line('Give me the amount.'), 'e.g. “plan: shoes 1,500 on the 20th” — date optional, defaults to today.', 'good') + freshness(ctx) };
     }
-    var name = rest2.replace(am.raw, ' ').replace(/\s+/g, ' ').replace(/^[\s:,-]+|[\s:,-]+$/g, '')
+    // v68 items 5/9: "monthly" / "every month" → a recurring plan
+    var repM = /\bevery month\b|\beach month\b|\bmonthly\b|\bper month\b/.test(rest2);
+    var nameSrc = repM ? rest2.replace(/\b(?:every|each)\s+month\b|\bmonthly\b|\bper month\b/g, ' ') : rest2;
+    var name = nameSrc.replace(am.raw, ' ').replace(/\s+/g, ' ').replace(/^[\s:,-]+|[\s:,-]+$/g, '')
       .replace(/^(?:for|of|about|on)\s+/, '').replace(/\s+(?:for|of|about|on)$/, '').trim();
     if (!name) {
       return { html: block('Add a plan', line('What is it for?'), 'e.g. “plan: car repair 8,000 this week”', 'good') + freshness(ctx) };
@@ -677,9 +769,9 @@
     var date = dm ? dm.iso : todayISO();
     return {
       html: block('New plan',
-        kv(whenLabel(date) + ' · ' + esc(name), money(am.amt)),
+        kv(whenLabel(date) + ' · ' + esc(name) + (repM ? ' · monthly' : ''), money(am.amt)),
         'It goes to your plans (Money tab) and feeds the Home insights.', 'good'),
-      actions: [{ label: 'Add plan: ' + esc(name), act: 'add_plan', payload: { name: name, amount: am.amt, date: date } }]
+      actions: [{ label: (repM ? 'Add monthly plan: ' : 'Add plan: ') + esc(name), act: 'add_plan', payload: { name: name, amount: am.amt, date: date, repeat: repM ? 'monthly' : null } }]
     };
   }
 
@@ -787,17 +879,20 @@
     var acct = p.exactAcct || p.cashAcct || p.cardAcct || biggestCash(ctx) || { name: '', kind: 'debit' }; // v65
     var cat = p.cat || '';
     var date = p.date || todayISO();
+    var learned = p.catSource === 'learned'; // v68 item 1: filed by the learned merchant map
     var h = block('Log expense',
       kv(esc(acct.name || 'Cash'), money(A)) +
-      kv('Category', esc(cat || 'Unsorted')) +
+      kv('Category', esc(cat || 'Unsorted') + (learned ? ' <span class="note">(learned from your log)</span>' : '')) +
       kv('Date', esc(fmtDate(date))),
-      'Tap to log it — it lands in the Ledger on this phone.', 'good');
+      learned
+        ? 'Filed under ' + esc(cat) + ' — that’s what I learned from your logs. Tap to log it.'
+        : 'Tap to log it — it lands in the Ledger on this phone.', 'good');
     return {
       html: h + freshness(ctx),
       actions: [{
         label: 'Log ' + esc(money(A)) + (acct.name ? ' · ' + esc(acct.name) : ''),
         act: 'log_expense',
-        payload: { amount: A, kind: acct.kind === 'card' ? 'card_charge' : 'cash_out', account: acct.name || '', category: cat, note: '' }
+        payload: { amount: A, kind: acct.kind === 'card' ? 'card_charge' : 'cash_out', account: acct.name || '', category: cat, note: p.what || '' } // v68 item 1: keep the merchant word — the map learns from it
       }]
     };
   }
@@ -817,7 +912,10 @@
   // through F.applyBaseChanges on confirm; the app validates and saves the base.
   function findAmounts(text) {
     var out = [];
-    var rx = /(?:php|₱|pesos?)\s*([\d][\d,]*(?:\.\d{1,2})?)\s*(k\b)|(?:php|₱|pesos?)\s*([\d][\d,]*(?:\.\d{1,2})?)|([\d][\d,]*\.\d{1,2})|([\d][\d,]*)(\s*k\b)?/g;
+    // v68 item 2: a number immediately followed by "%" is a percent, never an
+    // amount — the guard spans digit/comma/dot continuations so greedy
+    // backtracking can't peel "10%" down to a "1".
+    var rx = /(?:php|₱|pesos?)\s*([\d][\d,]*(?:\.\d{1,2})?)(?![\d,.]*\s*%)\s*(k\b)|(?:php|₱|pesos?)\s*([\d][\d,]*(?:\.\d{1,2})?)(?![\d,.]*\s*%)|([\d][\d,]*\.\d{1,2})(?![\d,.]*\s*%)|([\d][\d,]*)(?![\d,.]*\s*%)(\s*k\b)?/g;
     // v37: non-participating groups are '' under JScript (undefined in browsers) —
     // accept only a non-empty group string, like lev() uses charAt, not bracket indexing.
     function grp(m, i) { var v = m[i]; return (typeof v === 'string' && v !== '') ? v : null; }
@@ -951,8 +1049,14 @@
     var entBudget = fuzzyNameIn(names.budgets, cl);
     var entDebt = fuzzyNameIn(names.debts, cl);
     var entAccount = null;
+    var kindHint = kindHintIn(cl); // v68 item 3: "maya card" resolves a name tie
     for (var iA = 0; iA < names.accounts.length; iA++) {
-      if (nameScore(names.accounts[iA].name, toks) >= 1) { entAccount = names.accounts[iA]; break; }
+      if (kindHint && names.accounts[iA].kind === kindHint && nameScore(names.accounts[iA].name, toks) >= 1) { entAccount = names.accounts[iA]; break; }
+    }
+    if (!entAccount) {
+      for (var iC = 0; iC < names.accounts.length; iC++) {
+        if (nameScore(names.accounts[iC].name, toks) >= 1) { entAccount = names.accounts[iC]; break; }
+      }
     }
 
     var ai = semAmtIn(r, rs, allAmt, t);
@@ -1034,8 +1138,9 @@
         if (fO2 && fO2[1].trim().length >= 3 && !isMonthWord(fO2[1].trim())) nmO2 = fO2[1].trim();
       }
       if (nmO2 && hasAmt) {
-        var moO2 = monthHere || storyMonth(t) || cur;
-        return { line: { label: 'One-off · ' + nmO2 + ' · ' + monthLabel(moO2), change: { type: 'one_off', month: moO2, name: nmO2, amount: amt } } };
+        var pdO2 = /\b(?:after|before|around|right after|just after|by|on)\s+payday\b/.test(cl); // v68 item 2: payday-anchored timing
+        var moO2 = monthHere || (pdO2 ? cur : null) || storyMonth(t) || cur;
+        return { line: { label: 'One-off · ' + nmO2 + ' · ' + monthLabel(moO2) + (pdO2 ? ' · payday' : ''), change: { type: 'one_off', month: moO2, name: nmO2, amount: amt } } };
       }
       return null;
     }
@@ -1095,6 +1200,104 @@
         }
       }
 
+      // 1b. v68 item 2: percent of a stored value — "bump food budget by 10%".
+      //     Value computed locally from the stored budget; the % guard in
+      //     findAmounts keeps "10" from being read as a peso amount.
+      var pctM = cl.match(/\b(\d+(?:\.\d+)?)\s*%/);
+      var nmP = pctM ? fuzzyNameIn(names.budgets, cl) : null;
+      if (pctM && !salM && !isQuestion(cl) && (/\bbudget(?:ing)?\b/.test(cl) || nmP)) {
+        if (!nmP) {
+          var fP = cl.match(/\bfor\s+([a-z'&\- ]{2,40}?)(?:\s+(?:is|was|in|this|on|by|to)\b|[,;]|$)/);
+          if (fP && fP[1].trim().length >= 3 && !isMonthWord(fP[1].trim())) nmP = fP[1].trim();
+        }
+        if (nmP) {
+          var baseP = Number((ctx.base.budgets || {})[nmP]) || 0;
+          if (baseP > 0) {
+            var dirP = /\b(?:down|lower|cut|decrease|reduce|less)\b/.test(cl) ? -1 : 1;
+            var newP = Math.max(0, Math.round(baseP * (1 + dirP * Number(pctM[1]) / 100)));
+            var moP = monthHere || (/\bthis month\b/.test(cl) ? cur : null);
+            var pctTag = pctM[1] + '% ' + (dirP > 0 ? 'up' : 'down') + ' from ' + money(baseP);
+            lines.push(moP
+              ? { label: 'Budget · ' + nmP + ' · ' + monthLabel(moP) + ' · ' + pctTag, change: { type: 'budget_override', month: moP, name: nmP, amount: newP } }
+              : { label: 'Budget · ' + nmP + ' · ' + pctTag, change: { type: 'budget', name: nmP, amount: newP } });
+            return;
+          }
+          asks.push('What should the ' + nmP + ' budget be? I don’t have a stored number for it yet.');
+          return;
+        }
+        asks.push('Which budget is the ' + pctM[1] + '% change for?');
+        return;
+      }
+
+      // 1c. v68 item 2: "same as last month (, +500)" — last month's stored value
+      //     for the named item (salary / budget / one-off / debt) plus an
+      //     optional signed delta, computed locally from Your numbers.
+      if (/\bsame as (?:last|previous) month\b/.test(cl) && !isQuestion(cl)) {
+        var moT = monthHere || (/\bthis month\b/.test(cl) ? cur : null) || cur;
+        var prevM = monthPrev(moT);
+        var dAmt = 0, dSigned = false;
+        for (var dp2 = 0; dp2 < 2 && !dSigned; dp2++) {
+          var rr2 = null;
+          for (var x2 = 0; x2 < rs.length; x2++) if (rs[x2].s === r.s && rs[x2].e === r.e) { rr2 = dp2 === 0 ? rs[x2] : (rs[x2 + 1] || null); break; }
+          if (!rr2) break;
+          for (var i2 = 0; i2 < allAmt.length; i2++) {
+            var a2 = allAmt[i2];
+            if (a2.idx < rr2.s || a2.idx >= rr2.e) continue;
+            var pre2 = t.slice(Math.max(0, a2.idx - 9), a2.idx);
+            var sgn2 = 1;
+            if (/[+-]$/.test(pre2)) sgn2 = pre2.charAt(pre2.length - 1) === '-' ? -1 : 1;
+            else if (/\bminus\s*$/.test(pre2)) sgn2 = -1;
+            else if (/\b(?:plus|more|higher|above)\s*$/.test(pre2)) sgn2 = 1;
+            else if (dp2 === 0) sgn2 = 1; // bare number in the same clause: "… same as last month 500" = +500
+            else if (!/[+-]|\b(?:plus|minus)\b/.test(t.slice(rr2.s, rr2.e))) continue; // a bare number in the NEXT clause is not a delta
+            dAmt = Math.round(a2.amt * sgn2 * 100) / 100;
+            dSigned = true;
+            break;
+          }
+        }
+        var kindS = null, nmS = null, valS = null;
+        if (salM) {
+          var soS = (ctx.base.salary_overrides || {})[prevM];
+          valS = soS != null ? Number(soS) : Number(ctx.base.salary);
+          kindS = 'salary'; nmS = '';
+        } else {
+          var nmBd = fuzzyNameIn(names.budgets, cl) || fuzzyNameIn(names.budgets, t);
+          var nmOo = fuzzyNameIn(names.oneoffs, cl) || fuzzyNameIn(names.oneoffs, t);
+          var nmDb = fuzzyNameIn(names.debts, cl) || fuzzyNameIn(names.debts, t);
+          if (nmBd) {
+            var boS = (ctx.base.budget_overrides || {})[prevM] || {};
+            valS = boS[nmBd] != null ? Number(boS[nmBd]) : Number((ctx.base.budgets || {})[nmBd]);
+            kindS = 'budget'; nmS = nmBd;
+          } else if (nmOo) {
+            var ooS = (ctx.base.one_offs || {})[prevM] || {};
+            valS = ooS[nmOo] != null ? Number(ooS[nmOo]) : null;
+            kindS = 'one_off'; nmS = nmOo;
+          } else if (nmDb) {
+            var dbS = (ctx.base.debts || {})[nmDb];
+            valS = dbS && dbS.payments && dbS.payments[prevM] != null ? Number(dbS.payments[prevM]) : null;
+            kindS = 'debt'; nmS = nmDb;
+          }
+        }
+        if (kindS && valS != null && valS > 0) {
+          var newS = Math.max(0, Math.round((valS + dAmt) * 100) / 100);
+          var dTag = 'same as ' + monthLabel(prevM) + ' (' + money(valS) + (dSigned ? (dAmt >= 0 ? ' +' : ' −') + money(Math.abs(dAmt)) : '') + ')';
+          if (kindS === 'salary') lines.push({ label: 'Salary · ' + monthLabel(moT) + ' · ' + dTag, change: { type: 'salary', month: moT, amount: newS } });
+          else if (kindS === 'budget') lines.push({ label: 'Budget · ' + nmS + ' · ' + monthLabel(moT) + ' · ' + dTag, change: { type: 'budget_override', month: moT, name: nmS, amount: newS } });
+          else if (kindS === 'one_off') lines.push({ label: 'One-off · ' + nmS + ' · ' + monthLabel(moT) + ' · ' + dTag, change: { type: 'one_off', month: moT, name: nmS, amount: newS } });
+          else lines.push({ label: 'Debt payment · ' + nmS + ' · ' + monthLabel(moT) + ' · ' + dTag, change: { type: 'debt_payment', name: nmS, month: moT, amount: newS } });
+          return;
+        }
+        if (kindS) {
+          asks.push(kindS === 'salary'
+            ? 'What was the salary in ' + monthLabel(prevM) + '?'
+            : 'I don’t have ' + nmS + ' for ' + monthLabel(prevM) + ' — what was the amount?');
+          return;
+        }
+        if (lines.length > 0 && !dSigned) return; // a bare "same as last month" after an already-drafted line is a restatement
+        asks.push('Which one should be the same as last month? Name it — e.g. “water, same as last month +500”');
+        return;
+      }
+
       // 2. budget with an explicit cue — "budget for food is 8k"
       var budM = cl.match(/\bbudget(?:ing)?(?:\s+for)?\b/);
       if (budM) {
@@ -1130,8 +1333,9 @@
             if (fO && fO[1].trim().length >= 3 && !isMonthWord(fO[1].trim())) nmO = fO[1].trim();
           }
           if (nmO) {
-            var moO = monthHere || storyMonth(t) || cur;
-            lines.push({ label: 'One-off · ' + nmO + ' · ' + monthLabel(moO), change: { type: 'one_off', month: moO, name: nmO, amount: aO.amt } });
+            var pdO = /\b(?:after|before|around|right after|just after|by|on)\s+payday\b/.test(cl); // v68 item 2: payday-anchored timing
+            var moO = monthHere || (pdO ? cur : null) || storyMonth(t) || cur;
+            lines.push({ label: 'One-off · ' + nmO + ' · ' + monthLabel(moO) + (pdO ? ' · payday' : ''), change: { type: 'one_off', month: moO, name: nmO, amount: aO.amt } });
             return;
           }
         }
@@ -1165,7 +1369,8 @@
           if (aiD != null) {
             consumed.push(aiD);
             var aD = allAmt[aiD];
-            var moD = monthHere || storyMonth(t);
+            var pdD = /\b(?:after|before|around|right after|just after|by|on)\s+payday\b/.test(cl); // v68 item 2: payday-anchored timing
+            var moD = monthHere || (pdD ? cur : null) || storyMonth(t);
             if (moD) {
               lines.push({ label: 'Debt payment · ' + nmD + ' · ' + monthLabel(moD), change: { type: 'debt_payment', name: nmD, month: moD, amount: aD.amt } });
               return;
@@ -1194,8 +1399,14 @@
 
       // 7. account balance update — "gcash balance is 50k"
       var nmA = null;
+      var kindHintA = kindHintIn(cl); // v68 item 3: "maya card" resolves a name tie
       for (var iA = 0; iA < names.accounts.length; iA++) {
-        if (nameScore(names.accounts[iA].name, clToks) >= 1) { nmA = names.accounts[iA]; break; }
+        if (kindHintA && names.accounts[iA].kind === kindHintA && nameScore(names.accounts[iA].name, clToks) >= 1) { nmA = names.accounts[iA]; break; }
+      }
+      if (!nmA) {
+        for (var iD = 0; iD < names.accounts.length; iD++) {
+          if (nameScore(names.accounts[iD].name, clToks) >= 1) { nmA = names.accounts[iD]; break; }
+        }
       }
       if (nmA && /\b(?:balance|left|has|have|got|showing|available)\b/.test(cl)) {
         var aiA = amtIn(r, null, consumed);
@@ -1324,6 +1535,13 @@
     Object.keys(spend).forEach(function (c2) { top.push([c2, spend[c2]]); });
     top.sort(function (a, b) { return b[1] - a[1]; });
     if (top.length) L.push('- logged this month ' + money(total) + ': ' + top.slice(0, 4).map(function (z) { return z[0] + ' ' + money(z[1]); }).join(', '));
+    // v68 item 12: the top deterministic findings (app.js coachRows) ride in
+    // the shared snapshot — the coach phrases findings instead of raw numbers.
+    // The fp already hashes the full text, so a new finding re-calls the coach.
+    if (F && typeof F.coachFindings === 'function') {
+      var fnds = F.coachFindings();
+      for (var f = 0; f < fnds.length; f++) L.push('- finding: ' + fnds[f]);
+    }
     var text = L.join('\n');
     return { text: text, fp: (ctx.at || '') + '|' + text };
   }
@@ -1554,9 +1772,9 @@
   }
 
   // ---------- dispatch ----------
-  function handle(raw, ctx) {
+  function handleCore(raw, ctx) {
     var t = norm(raw);
-    if (!t) return intentFallback('');
+    if (!t) { var fb0 = intentFallback(''); fb0.__path = 'fallback'; return fb0; }
     if (!ctx.eff) {
       // v47: a few intents work with no numbers yet (greet, help, plans) — those
       // run first. Anything else is setup: it goes to the online coach when one is
@@ -1581,70 +1799,138 @@
         ]
       };
     }
-    // v55: coach-first. While the online coach is available and "Coach answers
-    // everything" is on (default), it handles the message BEFORE the rule
-    // engine — including drafting change stories (v61: the moment a change is
-    // clear) and correcting an open draft. The rule engine stays the offline
-    // fallback (and the only writer either way).
-    var FAI0 = typeof window !== 'undefined' ? window.FinAI : null;
-    if (FAI0 && FAI0.remoteAvailable() && FAI0.forceOnline()) {
-      var aiFirst = aiCoach(t, ctx);
-      if (aiFirst) return aiFirst;
+    // v68 item 10: rules-first. The rule engine ALWAYS runs first — every
+    // command and story it owns is answered locally, offline, instantly. The
+    // online coach only sees what slips past the rules (the open-question
+    // path below), and only while the repurposed toggle is on (default).
+    // The rule engine stays the only writer either way.
+    // v68 item 3: the parse is a function so a "which one?" kind answer can
+    // re-parse the joined message through exactly the same path.
+    function mkParse(t) {
+      var dm = findDateSpan(t);
+      var amtText = dm ? t.replace(dm.raw, ' ') : t;
+      var am = findAmount(amtText);
+      var fa = findAccounts(t, ctx);
+      var whatW = extractWhat(amtText, am);
+      // v68 item 1: the learned merchant→category map (app.js, from the logged
+      // txns) is consulted after stored budget names and before Unsorted — and
+      // only for categories that still exist in Your numbers.
+      var learnedCat = (typeof window !== 'undefined' && window.FinApp && window.FinApp.merchantCatFor)
+        ? window.FinApp.merchantCatFor(whatW) : null;
+      if (learnedCat && !(ctx.base.budgets && ctx.base.budgets[learnedCat])) learnedCat = null;
+      return {
+        date: dm ? dm.iso : null,
+        amt: am ? am.amt : null,
+        cat: mentionedBudget(t, ctx) || learnedCat,
+        catSource: mentionedBudget(t, ctx) ? 'budget' : (learnedCat ? 'learned' : ''),
+        what: whatW,
+        exactAcct: fa.exact,
+        cardAcct: fa.exact && fa.exact.kind === 'card' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'card'; })[0] || null),
+        cashAcct: fa.exact && fa.exact.kind === 'debit' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'debit'; })[0] || null), // v65
+        fa: fa
+      };
     }
-    var dm = findDateSpan(t);
-    var amtText = dm ? t.replace(dm.raw, ' ') : t;
-    var am = findAmount(amtText);
-    var fa = findAccounts(t, ctx);
-    var p = {
-      date: dm ? dm.iso : null,
-      amt: am ? am.amt : null,
-      cat: mentionedBudget(t, ctx),
-      what: extractWhat(amtText, am),
-      exactAcct: fa.exact,
-      cardAcct: fa.exact && fa.exact.kind === 'card' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'card'; })[0] || null),
-      cashAcct: fa.exact && fa.exact.kind === 'debit' ? fa.exact : (fa.words.filter(function (w) { return w.kind === 'debit'; })[0] || null) // v65
-    };
+    var p = mkParse(t);
     // v38: a pending "One number short" ask is completed by the very next bare
     // number, named amount, or bare month — re-parsed as question + answer
     // through the same validated story flow. Anything else closes the
     // question and routes normally.
     if (pendingAsk) {
       var namedOk = RX_ANS_NAMED.test(t) && pendingAsk.ent && nameScore(pendingAsk.ent, t.split(' ')) >= 1;
+      var kindOk = pendingAsk.kind === 'kind' && RX_KIND_ANS.test(t); // v68 item 3: a bare kind word
       var ansOk = pendingAsk.kind === 'month'
         ? RX_ANS_MONTH.test(t)
-        : (RX_ANS_AMT.test(t) || namedOk);
+        : (pendingAsk.kind === 'kind' ? kindOk : (RX_ANS_AMT.test(t) || namedOk));
       if (ansOk) {
         var joined = pendingAsk.t + ' ' + t;
+        var wasKind = pendingAsk.kind === 'kind';
         pendingAsk = null;
-        var rj = intentStory(joined, ctx, p);
-        if (rj && rj.storyLines && rj.storyLines.length) return rj; // completed draft
-        if (rj && rj.storyAsk) return rj; // still short — new ask, pendingAsk re-set
-        return {
-          html: block('Didn’t connect that',
-            line('Try one full sentence — e.g. <b>“my salary in october is 24k”</b>. The question is closed.'),
-            null, 'warn'),
-          actions: []
-        };
+        if (wasKind) {
+          // v68 item 3: the kind answer completes the original message —
+          // re-parse the joined text and let it route through the rules below.
+          t = joined;
+          p = mkParse(t);
+        } else {
+          var rj = intentStory(joined, ctx, p);
+          if (rj && rj.storyLines && rj.storyLines.length) return rj; // completed draft
+          if (rj && rj.storyAsk) return rj; // still short — new ask, pendingAsk re-set
+          return {
+            html: block('Didn’t connect that',
+              line('Try one full sentence — e.g. <b>“my salary in october is 24k”</b>. The question is closed.'),
+              null, 'warn'),
+            actions: []
+          };
+        }
+      } else {
+        pendingAsk = null;
       }
-      pendingAsk = null;
+    }
+    // v68 item 3: "maya" is several different kinds and the message doesn't
+    // say which — ask. The bare kind answer ("card", "cash") completes it.
+    if (p.fa && p.fa.ambiguous) {
+      var amb = p.fa.ambiguous;
+      var opts = amb.cands.map(function (c) {
+        return (c.kind === 'card' ? 'the card' : 'the cash') + ' — ' + c.name;
+      }).join(' or ');
+      pendingAsk = { t: t, kind: 'kind', ent: null };
+      return {
+        html: block('Which ' + amb.word + '?',
+          line(esc(opts)) + line('<span class="note">answer with the kind — e.g. “card” or “cash”</span>'),
+          'Nothing is written yet — just tell me which one.', 'good') + freshness(ctx),
+        actions: []
+      };
     }
     var order = [intentHelp, intentGreet, intentPlanRemove, intentPlanAdd, intentPlanList,
       intentUrgent, intentLog, intentDeficit, intentSpend, intentStory,
       intentDebt, intentOneOff, intentSinking, intentFuture, intentStatus];
     for (var i = 0; i < order.length; i++) {
       var r = order[i](t, ctx, p);
-      if (r) return r;
+      if (r) { r.__path = 'rule:' + (order[i].name || 'intent'); return r; } // v68 item 11: shadow tag
     }
-    // v49: nothing the rules own matched — this is an open question. It goes to
-    // the online coach (when available); otherwise the plain fallback card.
-    var aiRes = aiCoach(t, ctx);
-    if (aiRes) return aiRes;
-    return intentFallback(t);
+    // v49 + v68 item 10: nothing the rules own matched — an open question.
+    // The repurposed toggle ("let the coach answer questions the rules don't
+    // own", default ON) gates this path: on → the online coach (when
+    // available); off, or coach unavailable → the plain fallback card.
+    var FAI0 = typeof window !== 'undefined' ? window.FinAI : null;
+    var aiRes = (FAI0 && FAI0.forceOnline()) ? aiCoach(t, ctx) : null;
+    if (aiRes) { aiRes.__path = 'llm'; return aiRes; } // v68 item 11: shadow tag
+    var fbR = intentFallback(t);
+    fbR.__path = 'fallback';
+    return fbR;
+  }
+  // v68 item 11: shadow mode — every message logs its answering path
+  // (rule intent / llm / fallback) + what was drafted; the rule engine's own
+  // flows (asks, offers, pending loops) tag as rule:flow. Fire-and-forget;
+  // logging can never break the answer.
+  function handle(raw, ctx) {
+    var r = handleCore(raw, ctx);
+    try {
+      if (r) {
+        var a = '';
+        if (r.actions && r.actions.length) a = r.actions.map(function (x) { return x.label; }).slice(0, 3).join('; ');
+        else if (r.html) a = String(r.html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (F.shadowLog) F.shadowLog({ at: Date.now(), t: String(raw || ''), path: r.__path || 'rule:flow', a: a });
+      }
+    } catch (e) {}
+    return r;
   }
 
   // ---------- chat store + message UI ----------
   var inputEl = null, msgsEl = null;
   var CHIPS = ['How much is free?', 'My cc prepay', 'What’s coming up?', 'Urgent expense'];
+  function capFirst(s) { var x = String(s || ''); return x ? x.charAt(0).toUpperCase() + x.slice(1) : x; }
+  // v68 item 9: alert-driven chips — the active coach alerts pick the first
+  // slots; with nothing active, the standing four stand in.
+  function dynamicChips() {
+    var ca = (typeof window !== 'undefined' && window.FinApp && window.FinApp.coachAlerts) ? window.FinApp.coachAlerts() : null;
+    if (!ca || !(ca.alerts || []).length) return CHIPS;
+    var out = [];
+    if (ca.recurring) out.push('Add plan: ' + capFirst(ca.recurring.merchant) + ' ' + fmtNum(ca.recurring.amount) + ' monthly');
+    if (ca.alerts.indexOf('prepay') >= 0) out.push('My cc prepay');
+    if (ca.alerts.indexOf('floor') >= 0 || ca.alerts.indexOf('dip') >= 0) out.push('When does cash dip?');
+    CHIPS.forEach(function (c) { if (out.indexOf(c) < 0 && out.length < 4) out.push(c); });
+    return out.slice(0, 4);
+  }
 
   function chatId() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function loadChat() {
@@ -1720,7 +2006,7 @@
       return;
     }
     if (a.act === 'add_plan') {
-      F.addPlan({ name: pl.name, amount: pl.amount, date: pl.date }).then(function () {
+      F.addPlan({ name: pl.name, amount: pl.amount, date: pl.date, repeat: pl.repeat || null }).then(function () { // v68 item 5: monthly plans from chat
         markDone(m);
         pushBot('Added to your plans: <b>' + esc(pl.name) + '</b> · ' + esc(fmtDate(pl.date)) + ' · ' + esc(money(pl.amount)) + '. It shows on Home and the Money tab.');
       });
@@ -1924,6 +2210,7 @@
       '<div class="ins-line">Try: <b>“how much is free?”</b> · <b>“plan: shoes 1,500 on the 20th”</b> · <b>“urgent: car repair 8,000 this week”</b> · <b>“my salary in october is 25k, water went up to 1,800”</b></div></div>';
   }
   function openChat() {
+    closeInfoView(); // v68 (Jan add-on): a fresh open starts at the chat, not the info panel
     if (window.FinAI && window.FinAI.refreshLed) window.FinAI.refreshLed();
     loadChat().then(function (rows) {
       if (!rows.length) {
@@ -1962,7 +2249,7 @@
     var el = byId('chatChips');
     if (!el) return;
     el.innerHTML = '';
-    CHIPS.forEach(function (c) {
+    dynamicChips().forEach(function (c) {
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'chip';
@@ -1976,8 +2263,18 @@
     msgsEl = byId('chatMsgs');
     if (!inputEl || !msgsEl) return;
     renderChips();
-    var c = byId('chatClose');
-    if (c) c.onclick = closeChat;
+    // v68 (Jan add-on): the header's ✕ is the 'i' info button — close is scrim / Esc only
+    var inf = byId('chatInfo');
+    if (inf) inf.onclick = openInfoView;
+    var ib = byId('chatInfoBack');
+    if (ib) ib.onclick = closeInfoView;
+    var tip = byId('chatTip');
+    if (tip) {
+      renderTip(TIPS[tipIdx]);
+      tip.onclick = function () { send(TIPS[tipIdx]); };
+      // ~8s rotation — deterministic: a fixed list, a plain counter
+      setInterval(function () { tipIdx = (tipIdx + 1) % TIPS.length; renderTip(TIPS[tipIdx]); }, 8000);
+    }
     var s = byId('chatSend');
     if (s) s.onclick = function () { send(inputEl.value); inputEl.value = ''; };
     if (inputEl) inputEl.addEventListener('keydown', function (e) {
@@ -1998,12 +2295,19 @@
     fuzzyNameIn: fuzzyNameIn,
     open: openChat,
     close: closeChat,
+    // v68 (Jan add-on): Esc closes the info panel first (true = it was open)
+    closeInfo: function () {
+      var v = byId('chatInfoView');
+      if (v && !v.hidden) { closeInfoView(); return true; }
+      return false;
+    },
     // v47: kick off the guided "set up my numbers" conversation (used by the
     // empty-state buttons in the app shell)
     startSetup: function () { send('Let’s set up my numbers'); },
     // v55: the shared month snapshot + ctx loader — the Home "Coach's note"
     // card (app.js) uses these instead of a second numbers computation
     coachSnapshot: coachSnapshot,
+    refreshChips: renderChips, // v68 item 9: the app re-renders chips when the numbers change
     ctx: loadCtx
   };
 

@@ -4,11 +4,11 @@
  * either as a Cloudflare Worker URL (the Worker holds the provider key) or
  * bring-your-own key (the phone calls the provider directly). What remains:
  *  - the rule engine stays the only writer; the coach produces chat text
- *  - open questions the rules can't answer go to the online coach, or to a
- *    "needs the online coach" card when it's off / offline / not configured
- *  - "Coach answers everything" (Settings, default ON — v55): while the coach
- *    is available, EVERY question goes to the online coach first; the rule
- *    engine stays the offline fallback and the only writer
+ *  - rules-first (v68): the rule engine answers EVERY message it owns first
+ *    — the v55 "coach answers everything first" pass is removed
+ *  - "Let the coach answer questions the rules don't own" (Settings, default
+ *    ON): open questions that slip past the rules go to the online coach, or
+ *    to a "needs the online coach" card when off / offline / not configured
  *  - all remote settings persist in this device's localStorage; a BYO key is
  *    sent only to its own provider
  */
@@ -21,7 +21,7 @@
   // --- the online coach: a Cloudflare Worker URL, or bring-your-own key ----
   var REMOTE_KEY = 'fin.ai.remote.v1';
   var REMOTE_URL_KEY = 'fin.ai.remote.url.v1';
-  var FORCE_KEY = 'fin.ai.forceonline.v1'; // v55: "Coach answers everything" — ON unless explicitly '0'
+  var FORCE_KEY = 'fin.ai.forceonline.v1'; // v68: "let the coach answer questions the rules don't own" — ON unless explicitly '0'
   var lastSource = 'remote';        // always 'remote' — the coach is online-only
   var remoteFailAt = 0;             // circuit breaker: skip remote right after a failure
   var REMOTE_COOL_MS = 30000;
@@ -51,10 +51,12 @@
   }
   function workerConfigured() { var u = remoteUrl(); return !!u && /^https:\/\//i.test(u); }
 
-  // v55: "Coach answers everything" — DEFAULT ON. While the online coach is
-  // available, EVERY question goes to it first (the rule engine stays the
-  // offline fallback and the only writer). Only an explicit '0' turns it off;
-  // the value is always written so a cleared key can't flip the default.
+  // v68 (was v55 "Coach answers everything"): "let the coach answer questions
+  // the rules don't own" — DEFAULT ON. Gates only the open-question path:
+  // on → the online coach answers what the rule engine doesn't own (when
+  // available); off → the fallback card. The rule engine runs first either
+  // way and stays the only writer. Only an explicit '0' turns it off; the
+  // value is always written so a cleared key can't flip the default.
   function forceOnline() { try { return localStorage.getItem(FORCE_KEY) !== '0'; } catch (e) { return true; } }
   function setForceOnline(v) {
     try { localStorage.setItem(FORCE_KEY, v ? '1' : '0'); } catch (e) {}

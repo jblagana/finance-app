@@ -1059,6 +1059,33 @@
       '<button type="button" class="addrow" data-add="dpay">+ payment by month</button>' +
       '</div>';
   }
+  // v68 item 6: goal math note — required ₱/mo to hit the deadline vs the
+  // planned pace, and the boost that gets there on time.
+  function sinkNote(s) {
+    var goal = Number(s.goal) || 0, funded = Number(s.funded) || 0;
+    var dl = String(s.deadline || '').slice(0, 7);
+    if (goal <= 0 || funded >= goal || !/^\d{4}-\d{2}$/.test(dl)) return '';
+    var nowM = todayISO().slice(0, 7);
+    if (dl < nowM) return '';
+    var pp = dl.split('-'), qq = nowM.split('-');
+    var monthsLeft = (Number(pp[0]) - Number(qq[0])) * 12 + (Number(pp[1]) - Number(qq[1]));
+    if (monthsLeft < 1) monthsLeft = 1;
+    var needed = r2((goal - funded) / monthsLeft);
+    var planned = 0;
+    Object.keys(s.payments || {}).forEach(function (m) {
+      if (m >= nowM) planned = Math.max(planned, Number(s.payments[m]) || 0);
+    });
+    if (planned + 0.004 < needed) {
+      return '<div class="bchips"><span class="note" style="margin:2px 0">needs ' + money(needed) + '/mo by ' + monthLabel(dl) +
+        ' — on ' + money(planned) + '/mo, add ' + money(r2(needed - planned)) + ' to hit it</span></div>';
+    }
+    var ma = planned > 0 ? Math.ceil((goal - funded) / planned) : 0;
+    if (ma > 0) {
+      return '<div class="bchips"><span class="note" style="margin:2px 0">on pace — ' + money(planned) + '/mo clears it in ' +
+        ma + ' month' + (ma === 1 ? '' : 's') + '</span></div>';
+    }
+    return '<div class="bchips"><span class="note" style="margin:2px 0">no payments yet — needs ' + money(needed) + '/mo by ' + monthLabel(dl) + '</span></div>';
+  }
   function sinkBlock(s) {
     s = s || {};
     var pays = s.payments ? Object.keys(s.payments).map(function (m) { return payRow(m, s.payments[m]); }).join('') : '';
@@ -1067,6 +1094,7 @@
       brow('<span class="bnote">goal</span><input data-r="goal" type="number" inputmode="decimal" step="0.01" value="' + (s.goal != null ? s.goal : '') + '">' +
         '<span class="bnote">funded</span><input data-r="funded" type="number" inputmode="decimal" step="0.01" value="' + (s.funded != null ? s.funded : '') + '>') +
       brow('<span class="bnote">by</span><input data-r="deadline" type="date" value="' + esc(s.deadline || '') + '">') +
+      sinkNote(s) +
       '<div data-r="pays">' + pays + '</div>' +
       '<button type="button" class="addrow" data-add="spay">+ payment by month</button>' +
       '</div>';
@@ -1134,6 +1162,30 @@
     });
     h += bsec('Sinking funds') + '<div id="rowsSink">' + sinkBlocks + '</div>' +
       '<button type="button" class="addrow" data-add="sink">+ goal</button>';
+    // v68 item 1: learned merchant→category map — learned automatically from
+    // the ledger; the user can hide (✕) or block (⊘) any entry, both reversible.
+    var learned = learnedMerchantCat();
+    var mmov = merchantOv();
+    var mmNames = Object.keys(learned).sort();
+    var mmRows = '';
+    mmNames.forEach(function (nm) {
+      var e = learned[nm];
+      var cls = mmov.blocked[nm] ? ' mm-b' : (mmov.deleted[nm] ? ' mm-d' : '');
+      var pill = mmov.blocked[nm] ? ' <span class="pill warn">blocked</span>'
+        : (mmov.deleted[nm] ? ' <span class="pill">hidden</span>' : '');
+      mmRows += '<div class="brow mmrow' + cls + '">' +
+        '<span class="grow bnote mmname" title="' + esc(nm) + '">' + esc(nm) + '</span>' +
+        '<b class="mmc">' + esc(e.cat) + '</b>' +
+        '<span class="bnote">' + e.n + '×' + pill + '</span>' +
+        '<button type="button" class="mini" data-mm="' + esc(nm) + '" data-mmact="block" aria-label="' + (mmov.blocked[nm] ? 'Unblock' : 'Block') + ' auto-category for ' + esc(nm) + '">' + (mmov.blocked[nm] ? '⊘' : '⊘') + '</button>' +
+        '<button type="button" class="mini" data-mm="' + esc(nm) + '" data-mmact="delete" aria-label="' + (mmov.deleted[nm] ? 'Show again' : 'Hide') + ' ' + esc(nm) + '">' + (mmov.deleted[nm] ? '↺' : '✕') + '</button>' +
+        '</div>';
+    });
+    h += bsec('Merchant categories (learned from your log)') +
+      (mmNames.length
+        ? '<div id="rowsMm">' + mmRows + '</div>' +
+          '<div class="note">Learned automatically — log <b>jollibee</b> under Food a couple of times and “log 200 jollibee” is filed under Food. ✕ hides an entry, ⊘ blocks it (both come back if you tap again).</div>'
+        : '<div class="note">Log a few expenses with a note and a category and I’ll start filing similar ones for you.</div>');
     bb.innerHTML = h;
     renderBaseStatus();
   }
@@ -1398,6 +1450,119 @@
     var spentM = 0;
     state.txns.forEach(function (t) { if (String(t.date).slice(0, 7) === monthPrefix) spentM += Number(t.amount) || 0; });
     var pace = now.getDate() > 0 ? r2(spentM / now.getDate()) : 0;
+    // v68 item 4: per-category pace — this month's daily run-rate vs the
+    // trailing-3-month daily average; flag >25% above (₱500 noise floor).
+    var catPace = [];
+    (function () {
+      function pk(n) { return (n < 10 ? '0' : '') + n; }
+      var mKeys = [], trDays = 0;
+      for (var q = 1; q <= 3; q++) {
+        var dm2 = new Date(now.getFullYear(), now.getMonth() - q, 1);
+        mKeys.push(dm2.getFullYear() + '-' + pk(dm2.getMonth() + 1));
+        trDays += new Date(dm2.getFullYear(), dm2.getMonth() + 1, 0).getDate();
+      }
+      var byNow = {}, byTr = {};
+      state.txns.forEach(function (t) {
+        var mk = String(t.date).slice(0, 7);
+        var a = Number(t.amount) || 0;
+        var c = String(t.category || '').trim() || 'Unsorted';
+        if (mk === monthPrefix) byNow[c] = (byNow[c] || 0) + a;
+        else if (mKeys.indexOf(mk) >= 0) byTr[c] = (byTr[c] || 0) + a;
+      });
+      var elapsed = now.getDate();
+      Object.keys(byNow).forEach(function (c) {
+        var nowT = byNow[c];
+        if (nowT < 500 || elapsed < 3) return;
+        var dailyNow = nowT / elapsed;
+        var dailyTr = trDays > 0 ? (byTr[c] || 0) / trDays : 0;
+        if (dailyTr > 0 && dailyNow > dailyTr * 1.25) {
+          catPace.push({ cat: c, now: r2(nowT), dailyNow: r2(dailyNow), dailyTr: r2(dailyTr), over: Math.round((dailyNow / dailyTr - 1) * 100) });
+        }
+      });
+      catPace.sort(function (a, b) { return b.over - a.over; });
+    })();
+    // v68 item 5: recurring-payment detection — same merchant note + amount
+    // (±10%) in ≥2 different months over the last 3; already-planned is out.
+    var recurringGuess = [];
+    (function () {
+      function pk(n) { return (n < 10 ? '0' : '') + n; }
+      var mKeys = [];
+      for (var q = 1; q <= 3; q++) {
+        var dm3 = new Date(now.getFullYear(), now.getMonth() - q, 1);
+        mKeys.push(dm3.getFullYear() + '-' + pk(dm3.getMonth() + 1));
+      }
+      var winFrom = mKeys[2];
+      var byMer = {};
+      state.txns.forEach(function (t) {
+        var mk = String(t.date).slice(0, 7);
+        if (mk < winFrom) return;
+        var nm = String(t.note || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+        var a = Number(t.amount) || 0;
+        if (nm.length < 3 || a <= 0) return;
+        var e = (byMer[nm] = byMer[nm] || { months: {}, amts: [] });
+        e.months[mk] = (e.months[mk] || 0) + 1;
+        e.amts.push(a);
+      });
+      Object.keys(byMer).forEach(function (nm) {
+        var e = byMer[nm];
+        var months = Object.keys(e.months);
+        if (months.length < 2) return;
+        var avg = e.amts.reduce(function (s, a) { return s + a; }, 0) / e.amts.length;
+        var close = e.amts.filter(function (a) { return a >= avg * 0.9 && a <= avg * 1.1; }).length;
+        if (close * 2 < e.amts.length) return; // amounts too inconsistent
+        var planned = false;
+        state.plans.forEach(function (p) {
+          var pa = Number(p.amount) || 0;
+          if (pa < avg * 0.9 || pa > avg * 1.1) return;
+          var pw = String(p.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 3; });
+          var mw = nm.split(' ').filter(function (w) { return w.length >= 3; });
+          if (pw.some(function (w) { return mw.indexOf(w) >= 0; })) planned = true;
+        });
+        if (planned) return;
+        recurringGuess.push({ merchant: nm, amount: Math.round(avg), months: months.length });
+      });
+      recurringGuess.sort(function (a, b) { return b.months - a.months || b.amount - a.amount; });
+    })();
+    // v68 item 6: goal math — sinking funds (required ₱/mo vs planned, months
+    // at pace) and debts (months to payoff at the current pace).
+    var goals = [];
+    Object.keys((state.base && state.base.sinking) || {}).forEach(function (nm) {
+      var f = state.base.sinking[nm] || {};
+      var goal = Number(f.goal) || 0, funded = Number(f.funded) || 0;
+      var dl = String(f.deadline || '').slice(0, 7);
+      if (goal <= 0 || funded >= goal || !/^\d{4}-\d{2}$/.test(dl) || dl < monthPrefix) return;
+      var pp = dl.split('-'), qq = monthPrefix.split('-');
+      var monthsLeft = (Number(pp[0]) - Number(qq[0])) * 12 + (Number(pp[1]) - Number(qq[1]));
+      if (monthsLeft < 1) monthsLeft = 1;
+      var needed = r2((goal - funded) / monthsLeft);
+      var planned = 0;
+      var ndg = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      var nextMg = ndg.getFullYear() + '-' + ((ndg.getMonth() + 1) < 10 ? '0' : '') + (ndg.getMonth() + 1);
+      Object.keys(f.payments || {}).forEach(function (mk) {
+        if (mk >= monthPrefix && mk <= nextMg) planned = Math.max(planned, Number(f.payments[mk]) || 0);
+      });
+      goals.push({ kind: 'sink', name: nm, goal: goal, funded: funded, deadline: dl, monthsLeft: monthsLeft, needed: needed, planned: planned,
+        shortfall: r2(Math.max(0, needed - planned)), monthsAtPace: planned > 0 ? Math.ceil((goal - funded) / planned) : null });
+    });
+    ((s.obligations && s.obligations.debts) || []).forEach(function (dd) {
+      var bal = Number(dd.balance);
+      if (bal == null || bal <= 0) return;
+      var pay = Number(dd.this_month) || Number(dd.monthly) || 0;
+      if (pay <= 0) {
+        var lastP = 0;
+        (dd.schedule || []).forEach(function (x) { if (String(x.month) <= monthPrefix) lastP = Math.max(lastP, Number(x.amount) || 0); });
+        pay = lastP;
+      }
+      if (pay > 0) goals.push({ kind: 'debt', name: dd.name, balance: bal, pay: pay, monthsToPayoff: Math.ceil(bal / pay) });
+    });
+    // v68 item 7: the LOWEST projected month of the 6-month matrix
+    var lowestDip = null;
+    if (state.snapshot && state.snapshot.matrix && state.snapshot.matrix.base) {
+      state.snapshot.matrix.base.forEach(function (row) {
+        var rv = Number(row.running) || 0;
+        if (!lowestDip || rv < lowestDip.v) lowestDip = { v: rv, m: row.month };
+      });
+    }
     return {
       s: s, now: now, today: today, monthPrefix: monthPrefix, daysLeft: daysLeft,
       meal: meal, free: free,
@@ -1408,6 +1573,8 @@
       weekCost: weekCost, laterCount: laterCount, laterAmt: r2(laterAmt),
       monthPlans: r2(monthPlans), monthPlanCount: monthPlanCount,
       spentM: spentM, pace: pace,
+      catPace: catPace.slice(0, 5), recurringGuess: recurringGuess.slice(0, 2), // v68 items 4–5
+      goals: goals, lowestDip: lowestDip, // v68 items 6–7
       freeAfterPace: r2(free - r2(pace * Math.max(0, daysLeft - 1)))
     };
   }
@@ -1490,6 +1657,10 @@
         if (info.alerts.indexOf(k) >= 0) return;
         if (k === 'prepay') bits.push(info.prepayPaid ? 'the prepay you handled is off the list' : 'the prepay is past its window');
         else if (k === 'floor') bits.push('the cash floor alert cleared');
+        else if (k === 'dip') bits.push('the tight-month flag cleared'); // v68 item 7
+        else if (k === 'sink') bits.push('a goal alert cleared'); // v68 item 6
+        else if (k.indexOf('recurring:') === 0) bits.push('the recurring suggestion cleared'); // v68 item 5
+        else if (k.indexOf('pace:') === 0) bits.push('the ' + k.slice(5) + ' pace flag cleared'); // v68 item 4
       });
       if (bits.length) sub = 'Since your last check: ' + bits.slice(0, 2).join('; ') + '. ' + sub;
       else if (info.alerts.length && (mem.alerts || []).join() === info.alerts.join()) {
@@ -1505,6 +1676,13 @@
     if (body) {
       var html = '';
       rows.forEach(function (rw) {
+        // v68 item 5: the recurring row carries a one-tap "make it a monthly plan"
+        if (rw.act === 'make_plan') {
+          html += '<button type="button" class="dig warn" data-makeplan="' + esc(rw.payload.name) + '|' + rw.payload.amount + '">' +
+            '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
+            '<span class="dg-r">' + esc(rw.r) + '</span></button>';
+          return;
+        }
         html += '<button type="button" class="dig ' + rw.cls + '" data-digto="money">' +
           '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
           '<span class="dg-r">' + esc(rw.r) + '</span></button>';
@@ -1513,6 +1691,15 @@
       var btns = body.querySelectorAll('[data-digto]');
       for (var i = 0; i < btns.length; i++) {
         btns[i].onclick = function () { setTab(this.getAttribute('data-digto')); };
+      }
+      var mpb = body.querySelectorAll('[data-makeplan]');
+      for (var j = 0; j < mpb.length; j++) {
+        mpb[j].onclick = (function (b) {
+          return function () {
+            var parts = b.getAttribute('data-makeplan').split('|');
+            addPlan({ name: parts[0], amount: Number(parts[1]) || 0, date: todayISO(), repeat: 'monthly' });
+          };
+        })(mpb[j]);
       }
     }
     // ---- one-tap actions ----
@@ -1841,14 +2028,20 @@
     }
     var floor = Number(s.floor) || 0;
     if (floor > 0 && state.snapshot && state.snapshot.matrix && state.snapshot.matrix.base) {
-      var baseDip = null;
+      // v68 item 7: surface the LOWEST projected month — below the floor as a
+      // bad row, within 25% above it as a "tightest month" warning.
+      var baseDip = null, lowest = null;
       state.snapshot.matrix.base.forEach(function (row) {
         var rv = Number(row.running) || 0;
-        if (!baseDip && rv < floor) baseDip = { v: rv, m: row.month };
+        if (rv < floor && (!baseDip || rv < baseDip.v)) baseDip = { v: rv, m: row.month };
+        if (!lowest || rv < lowest.v) lowest = { v: rv, m: row.month };
       });
       if (baseDip) { rows.push({ cls: 'bad', tag: 'Cash floor',
         text: 'Cash dips to ' + money(baseDip.v) + ' in ' + monthLabel(baseDip.m) + ' — floor is ' + money(floor) + '.',
         r: 'below floor' }); alerts.push('floor'); }
+      else if (lowest && lowest.v < floor * 1.25) { rows.push({ cls: 'warn', tag: 'Tightest month',
+        text: 'Lowest cash is ' + money(lowest.v) + ' in ' + monthLabel(lowest.m) + ' — close to the ' + money(floor) + ' floor.',
+        r: money(lowest.v) }); alerts.push('dip'); }
     }
     var sink = state.snapshot && state.snapshot.sinking;
     var nowM = d.monthPrefix;
@@ -1870,13 +2063,46 @@
           if (pm >= nowM && pm <= nextM) planned = Math.max(planned, Number(x.amount) || 0);
         });
         if (planned + 0.004 < needed) {
+          // v68 item 6: months-to-clear at the current pace + the boost that hits the deadline
+          var maS = planned > 0 ? Math.ceil((goal - funded) / planned) : null;
           rows.push({ cls: planned > 0 ? 'warn' : 'bad', tag: 'Sinking behind',
-            text: f.name + ' needs about ' + money(needed) + '/month to reach ' + money(goal) + ' by ' + monthLabel(dl) + '; it is on ' + money(planned) + '/month.',
+            text: f.name + ' needs about ' + money(needed) + '/month to reach ' + money(goal) + ' by ' + monthLabel(dl) + '; it is on ' + money(planned) + '/month' +
+              (maS ? ' — that clears it in ' + maS + ' months, past the deadline' : '') + '. Add ' + money(needed - planned) + ' and it is on time.',
             r: money(needed - planned) + ' short' });
           alerts.push('sink');
+        } else if (planned > 0) {
+          var maS2 = Math.ceil((goal - funded) / planned);
+          if (maS2 <= monthsLeft) {
+            rows.push({ cls: 'done', tag: 'Sinking on pace',
+              text: f.name + ' is on pace — ' + money(planned) + '/month clears ' + money(goal) + ' in ' + maS2 + ' months.',
+              r: 'on pace' });
+          }
         }
       });
     }
+    // v68 item 4: per-category pace anomaly (worst one; the pace section shows up to 3)
+    var pcTop = (d.catPace || [])[0];
+    if (pcTop && pcTop.over >= 25) {
+      rows.push({ cls: 'warn', tag: 'Pace · ' + pcTop.cat,
+        text: pcTop.cat + ' is ' + pcTop.over + '% over its usual pace — ' + money(pcTop.dailyNow) + '/day vs ' + money(pcTop.dailyTr) + '.',
+        r: money(pcTop.now) });
+      alerts.push('pace:' + pcTop.cat.toLowerCase());
+    }
+    // v68 item 5: recurring-payment suggestion — one-tap "make it a monthly plan"
+    var recG = (d.recurringGuess || [])[0];
+    if (recG) {
+      rows.push({ cls: 'warn', tag: 'Looks recurring',
+        text: recG.merchant + ' · ' + money(recG.amount) + ' in ' + recG.months + ' recent months — make it a monthly plan?',
+        r: 'make it a plan', act: 'make_plan', payload: { name: recG.merchant, amount: recG.amount } });
+      alerts.push('recurring:' + recG.merchant);
+    }
+    // v68 item 6: debt payoff at the current pace
+    (d.goals || []).forEach(function (g) {
+      if (g.kind !== 'debt') return;
+      if (g.monthsToPayoff > 12) rows.push({ cls: 'warn', tag: 'Debt · ' + g.name,
+        text: g.monthsToPayoff + ' months to clear ' + money(g.balance) + ' at ' + money(g.pay) + '/month.',
+        r: g.monthsToPayoff + ' mo' });
+    });
     var urgent = [];
     state.plans.forEach(function (p) {
       planOccurrences(p).forEach(function (od) {
@@ -1973,6 +2199,14 @@
       note.innerHTML = projected > free
         ? '<span class="low">At this pace, ' + esc(monthLabel(mp)) + ' spend (' + money(projected) + ') would exceed free cash (' + money(free) + ').</span>'
         : 'Leaves ' + money(r2(free - projected)) + ' of free cash unspent at this pace.';
+      // v68 item 4: per-category pace anomalies, under the monthly pace
+      var dP = insightsData();
+      var anoms = (dP && dP.catPace || []).slice(0, 3);
+      if (anoms.length) {
+        note.innerHTML += '<div class="pace-anom">' + anoms.map(function (c) {
+          return '<span class="low">' + esc(c.cat) + ' is ' + c.over + '% over its usual pace (' + money(c.dailyNow) + '/day vs ' + money(c.dailyTr) + ').</span>';
+        }).join(' ') + '</div>';
+      }
     }
   }
   function renderAddEmpty() {
@@ -2397,7 +2631,8 @@
     } else {
       blob = new Blob([JSON.stringify({
         app: 'finances-pwa', exportedAt: new Date().toISOString(),
-        base: state.base, txns: txns, plans: plans, owed: state.owed.people
+        base: state.base, txns: txns, plans: plans, owed: state.owed.people,
+        shadowLog: state.shadowLog || [] // v68 item 11: the rule-coverage evidence
       }, null, 2)], { type: 'application/json' });
       name = 'finances-export-' + stamp + '.json';
     }
@@ -2593,7 +2828,105 @@
     });
     sel.innerHTML = html;
   }
-  function render() { emit('ui'); }
+  // ---------- v68 item 1: learned merchant→category map ----------
+  // The map is ALWAYS recomputed from the logged txns (note words → the
+  // category the txn was actually filed under). Meta stores only the
+  // user's overrides from Your numbers: 'deleted' hides an entry from
+  // auto-categorization, 'blocked' hard-blocks it (e.g. a note word that
+  // collides with something else). Neither flag writes anything — they only
+  // change how the coach files future entries.
+  var MERCHANT_MAP_KEY = 'merchantMap';
+  function normMerchant(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  function merchantOv() {
+    var v = state.merchantMap;
+    return { deleted: (v && v.deleted) || {}, blocked: (v && v.blocked) || {} };
+  }
+  function learnedMerchantCat() {
+    var counts = {};
+    (state.txns || []).forEach(function (t) {
+      var nm = normMerchant(t.note);
+      var cat = String(t.category || '').trim();
+      if (!nm || !cat) return;
+      var c = (counts[nm] = counts[nm] || {});
+      c[cat] = (c[cat] || 0) + 1;
+    });
+    var out = {};
+    Object.keys(counts).forEach(function (nm) {
+      var total = 0, best = null, bestN = 0;
+      Object.keys(counts[nm]).forEach(function (cat) {
+        total += counts[nm][cat];
+        if (counts[nm][cat] > bestN) { bestN = counts[nm][cat]; best = cat; }
+      });
+      // only learn what is certain: at least 2 logs and a clear majority
+      if (best && bestN >= 2 && bestN * 2 >= total) out[nm] = { cat: best, n: bestN };
+    });
+    return out;
+  }
+  function effectiveMerchantMap() {
+    var learned = learnedMerchantCat(), ov = merchantOv(), out = {};
+    Object.keys(learned).forEach(function (nm) {
+      if (!ov.deleted[nm] && !ov.blocked[nm]) out[nm] = learned[nm];
+    });
+    return out;
+  }
+  function merchantCatFor(note) {
+    var nm = normMerchant(note);
+    if (!nm) return null;
+    var e = effectiveMerchantMap()[nm];
+    return e ? e.cat : null;
+  }
+  function toggleMerchantFlag(nm, flag) {
+    var ov = merchantOv();
+    if (ov[flag][nm]) delete ov[flag][nm]; else ov[flag][nm] = 1;
+    state.merchantMap = ov;
+    idbPut(STORE_META, { key: MERCHANT_MAP_KEY, value: ov }).catch(function () {});
+    renderBaseEditor();
+  }
+  // v68 item 11: shadow mode — every chat message logs its answering path
+  // (rule intent / llm / fallback) + what was drafted; capped at 200 in a meta
+  // key and included in the JSON export — the rule-coverage evidence.
+  var SHADOW_KEY = 'shadowLog';
+  var SHADOW_CAP = 200;
+  function shadowLog(entry) {
+    if (!entry || !entry.path) return;
+    state.shadowLog = state.shadowLog || [];
+    state.shadowLog.push({ at: entry.at || Date.now(), t: String(entry.t || '').slice(0, 120), path: entry.path, a: String(entry.a || '').slice(0, 200) });
+    if (state.shadowLog.length > SHADOW_CAP) state.shadowLog = state.shadowLog.slice(-SHADOW_CAP);
+    idbPut(STORE_META, { key: SHADOW_KEY, value: state.shadowLog }).catch(function () {});
+  }
+  // Add-sheet prefill: only when nothing is selected yet (Unsorted) and the
+  // learned category is still one of the real budget options.
+  function autoCatFromNote(noteEl) {
+    var sel = byId('f_category');
+    if (!sel || sel.value) return;
+    var cat = merchantCatFor(noteEl.value);
+    if (!cat) return;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === cat) { sel.value = cat; return; }
+    }
+  }
+  // v68 item 9: the active coach alerts, for the chat's dynamic chips
+  function coachAlerts() {
+    var d = insightsData();
+    if (!d) return null;
+    var info = coachRows(d);
+    return { alerts: info.alerts, recurring: (d.recurringGuess || [])[0] || null, prepayIn: d.prepayIn, prepayAmt: d.prepayAmt };
+  }
+  // v68 item 12: the top deterministic findings, for the Coach's-note prompt —
+  // the LLM phrases findings instead of re-deriving them from raw numbers;
+  // the deterministic coach rows stay the offline default (they render on
+  // Home regardless of whether the coach is available).
+  function coachFindings() {
+    try {
+      var d = insightsData();
+      if (!d) return [];
+      var info = coachRows(d);
+      return ((info && info.rows) || []).slice(0, 3).map(function (r) { return r.tag + ': ' + r.text; });
+    } catch (e) { return []; }
+  }
+  function render() { emit('ui'); if (window.__financeChat && window.__financeChat.refreshChips) window.__financeChat.refreshChips(); }
 
   // ---------- bridge for chat.js (the chat writes through the app's own actions) ----------
   window.FinApp = {
@@ -2603,6 +2936,12 @@
     deleteTxn: deleteTxn,
     applyBaseChanges: applyBaseChanges,
     undoBaseStory: undoBaseStory,
+    merchantCatFor: merchantCatFor, // v68 item 1: learned merchant→category lookup for the coach
+    effectiveMerchantMap: effectiveMerchantMap,
+    coachAlerts: coachAlerts, // v68 item 9: alert-driven chat chips
+    coachFindings: coachFindings, // v68 item 12: findings for the Coach's-note prompt
+    shadowLog: shadowLog, // v68 item 11: shadow-mode answering-path log
+    exportData: exportData, // v68 item 11: lets the smoke read what the JSON export contains
     snack: snack,
     render: render,
     setTab: setTab,
@@ -2705,6 +3044,8 @@
     };
     var amtEl = byId('f_amount');
     if (amtEl) amtEl.addEventListener('input', function () { addAmtEq(amtEl); updateChargeHint(); });
+    var noteEl = byId('f_note'); // v68 item 1: learned merchant→category prefill
+    if (noteEl) noteEl.addEventListener('input', function () { autoCatFromNote(noteEl); });
     var mlf = byId('mlFilter');
     if (mlf) mlf.onchange = function () { mlFilterCat = mlf.value; renderMoneyLog(); };
 
@@ -2734,7 +3075,7 @@
     if (nco) nco.onclick = function () { startSetup(); };
     var scrim = byId('scrim');
     if (scrim) scrim.onclick = function () { closeCoach(); closeSheets(); };
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeCoach(); closeSheets(); } });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { if (window.__financeChat && window.__financeChat.closeInfo && window.__financeChat.closeInfo()) return; closeCoach(); closeSheets(); } }); // v68 Jan add-on: Esc closes the info panel first
     // a11y: trap Tab focus inside the open sheet
     document.addEventListener('keydown', function (e) {
       if (!openSheetEl || e.key !== 'Tab') return;
@@ -2768,6 +3109,8 @@
         if (!t || !t.getAttribute) return;
         var add = t.getAttribute('data-add');
         if (add) { addBaseRow(add); return; }
+        var mmact = t.getAttribute('data-mmact'); // v68 item 1: hide/block a learned merchant→category entry
+        if (mmact) { toggleMerchantFlag(t.getAttribute('data-mm'), mmact === 'block' ? 'blocked' : 'deleted'); return; }
         var dk = t.getAttribute('data-dk'); // v56: remove a coach-recorded detail
         if (dk) {
           if (window.confirm('Remove this detail?')) {
@@ -2822,6 +3165,8 @@
         else if (m.key === 'adj') { state.adj = m.value; hasAdj = true; }
         else if (m.key === 'adjSig') { state.adjSig = m.value || ''; }
         else if (m.key === 'coachMem') { state.coachMem = m.value; }
+        else if (m.key === MERCHANT_MAP_KEY) { state.merchantMap = (m.value && typeof m.value === 'object') ? m.value : {}; } // v68 item 1
+        else if (m.key === SHADOW_KEY) { state.shadowLog = (m.value && m.value.length) ? m.value.slice(-SHADOW_CAP) : []; } // v68 item 11
         else if (m.key === 'moneyLog') { state.moneyLog = m.value || []; }
         else if (m.key === 'owed') {
           state.owed = (m.value && Array.isArray(m.value.people)) ? m.value : { people: [] };

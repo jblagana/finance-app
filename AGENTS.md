@@ -38,11 +38,13 @@ session). Rules to keep them from clobbering each other:
   renumbered above v65/v66 in September 2026).
 - **`INSTRUCTIONS.md` is append-at-top.** New entries go above all others;
   if a rebase conflicts there, keep **both** sides, newest on top.
-- **Structural gate.** `check_site.py` (and `test_chat_parser.py`) live in
-  the local session's workspace, *outside* the repo — the HPC session
-  cannot run them yet. Until they move into `tools/` (next release), the
-  HPC-side gates are `node --check` on changed JS plus a targeted
-  geometry/visual read-back, and the local side runs the full structural
-  gate before any `main` push.
+- **Structural gate (v68: now in the repo).** `tools/check_site.py` +
+  `tools/test_chat_parser.py` are the SHARED gate — both sessions run the
+  same checks (paths are file-relative, run from anywhere). Before ANY
+  `main` push: `python tools/check_site.py` (must print "all checks passed")
+  + `python tools/test_chat_parser.py` ("all parser checks passed"), plus
+  `node --check` on the changed JS as a fast pre-check. The on-duty pusher
+  bumps the gate's version assertions together with the release (item 3
+  above).
 - **Docs-only changes** (this file, `INSTRUCTIONS.md`, `README.md`) do not
   bump the version counter and need no shell gate.

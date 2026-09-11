@@ -34,13 +34,14 @@ with one-tap undo — the rule engine stays the only writer.
 Plain language: status, debts, one-offs, sinking funds, cash in any month,
 add/list/remove plans, urgent-expense advice.
 
-- **Coach-first (v55, default)** — while the online coach is available
-  ("Coach answers everything" in Settings → Coach (online), default ON), it
-  answers every message. For a money change (v61) it drafts it as a draft card
-  the moment the change is clear — you confirm by tapping the card's Confirm
-  button; when a detail is missing it asks first, and your short answer
-  completes that same change. A reply to an open draft **corrects that draft**
-  instead of stacking a new one.
+- **Rules-first (v68, default)** — the local rule engine answers every
+  command and story it owns, offline and instantly. Only an open question the
+  rules don't own goes to the online coach — and only while "let the coach
+  answer questions the rules don't own" is on (Settings → Coach (online),
+  default ON); off, or the coach unavailable, gives a "needs the online
+  coach" card. When the coach handles a money change it drafts it as a draft
+  card — you confirm by tapping the card's Confirm button; a reply to an open
+  draft **corrects that draft** instead of stacking a new one.
 - **Extensible table (v56)** — the numbers table grows with you: ask the coach
   to record any other fact about an account or budget (a card's credit limit,
   APR, due day, penalty, anything) and it proposes a **detail** change — same
@@ -72,9 +73,10 @@ Connect in **Settings → Coach (online)**, either way:
 - **Bring-your-own key (direct)** — the phone calls the provider with your own
   key (**Groq** default, or any OpenAI-compatible base URL + model); the key
   stays in this device's localStorage and is sent only to that provider.
-- **Coach answers everything** (Settings → Coach (online), default ON) — while
-  the coach is available, every question goes to it first; turning it off
-  sends only open questions online (rule engine handles the rest).
+- **Let the coach answer questions the rules don't own** (Settings → Coach
+  (online), default ON) — the rule engine always answers first (v68); this
+  only decides what happens to an open question it doesn't own: the online
+  coach (on, while available) or the "needs the online coach" card (off).
 
 Worker first, direct second, with a 30-second circuit breaker so a dead remote
 never hangs the chat. Change requests come back as a strict-JSON draft,
