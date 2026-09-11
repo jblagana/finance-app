@@ -475,6 +475,8 @@ def main():
           'id="baseSave"' in html and "function markBaseDirty" in js
           and "function setBaseClean" in js and "function commitIfDirtyBase" in js
           and "openSheetEl.id === 'numSheet'" in js)
+    check("ledger adds with no category get a blank category: the row title is Unsorted, not the account name (v71.6)",
+          "c: t.category || ''" in js)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):

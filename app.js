@@ -903,7 +903,10 @@
     var e = {
       at: Date.now(), a: action, tid: t.id,
       l: (t.category || t.account || 'entry') + (t.note ? ' · ' + t.note : ''),
-      c: t.category || t.account || 'entry', nt: t.note || '', m: t.account || '',
+      // v71: the row title is the CATEGORY — blank stays blank, so a no-category
+      // (Unsorted) add is titled "Unsorted", not the account (e.g. "Cash").
+      // The account name lives in m (shown under the date) exactly as before.
+      c: t.category || '', nt: t.note || '', m: t.account || '',
       n: amt, k: t.kind === 'card_charge' ? 'c' : 'x'
     };
     e.f = r2(s.cash ? s.cash.free : 0);
@@ -2941,7 +2944,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 71.5, live: new Date(2026, 8, 11, 18, 26) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 71.6, live: new Date(2026, 8, 11, 22, 40) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
