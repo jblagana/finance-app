@@ -483,12 +483,15 @@ def main():
           'class="coachnote-av"' in html and ".coachnote-av{" in html
           and '<use href="#botFace"/>' in html)
 
-    print("\n== v72: coach note offline-only sub line (dot releases v72.x) ==")
+    print("\n== v72: coach note offline-only sub line + gear glyph (dot releases v72.x) ==")
     check("the coach note sub line is offline-only (v72.1): stale shows 'Coach Fin is unavailable right now.'; a fresh note shows no sub line (both old variants gone)",
           "'Coach Fin is unavailable right now.'" in js
           and "sub.style.display = sub.textContent ? '' : 'none'" in js
           and "'the online coach reads your numbers" not in js
           and "'the online coach is not reachable right now" not in js)
+    check("the settings gear glyph is enlarged to 20px (v72.2); the 44px tap target stays (a11y block)",
+          "font-size:20px;flex:0 0 auto;line-height:1}" in html
+          and "button.gear{width:44px;height:44px}" in html)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):
