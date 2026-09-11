@@ -7,16 +7,16 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-11 — Chat: "hm" = "how much"
-Status: in progress — code + gates green; v70 release unit done; commit + push pending
-Progress: 90% — ETA ~10m
+Status: done — v70 pushed to origin/main: `6644266` (SHELL_RELEASE v70, live 2026-09-11 12:54)
+Progress: 100%
 ### Subtasks
 - [x] Log the instruction verbatim (first action)
 - [x] `chat.js` intentStatus: bare `hm` (any trailing punctuation) — or bare `how much` (which previously fell through to LLM/fallback) — sets `want.all` → the full "Where you stand" summary via the rule engine
 - [x] Info panel Status line gains the "hm" hint
 - [x] Gates: parser mirror `route()` += bare hm/how-much rule + 3 route tests (`hm`, `hm?`, `how much`); check_site.py v70 bump (sw cache, footer stamp) + new "hm" check; local mirrors re-synced (SITE line → finances/finance-app)
 - [x] smoke_v68.js += v70 live checks: `hm` / `hm?` / `hm.` / `how much` all → `rule:intentStatus` + "Where you stand" (exit 0); full suite green ×2 (repo + local) + node --check ×4 + smoke_app_v68
-- [x] Release unit: sw.js `finances-pwa-v70`, SHELL_RELEASE v: 70 (live stamp at push), README line
-- [ ] Commit + push to origin/main; log done + commit hash
+- [x] Release unit: sw.js `finances-pwa-v70`, SHELL_RELEASE v: 70 (live stamp set at 12:54, right before push), README line
+- [x] Commit + push to origin/main — `6644266` (d473516..6644266 main -> main), worktree clean, HEAD == origin/main
 ### Instruction (verbatim)
 > -in chat 'hm' is understood as how much
 ### Interpretation (agent — user may edit this section)
