@@ -737,18 +737,11 @@
     logMoney('add', t);
     return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () {
       emit('txn');
-      snack('Added ' + money(t.amount) + ' · ' + esc(t.category || t.account), function () { undoAddTxn(id); });
+      // v71: no Undo on the add toast (user's call — the ledger's ✕ is the
+      // deletion path); the snack just confirms.
+      snack('Added ' + money(t.amount) + ' · ' + esc(t.category || t.account));
       return Promise.resolve();
     }).then(function () { return id; });
-  }
-  function undoAddTxn(id) {
-    var t = null;
-    for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === id) t = state.txns[i];
-    if (!t) return;
-    state.txns = state.txns.filter(function (x) { return x.id !== id; });
-    addAdj(txnAdj(t), -1);
-    logMoney('del', t);
-    Promise.all([idbDel(STORE_TX, id), saveAdj()]).then(function () { emit('txn'); });
   }
   function deleteTxn(id) {
     var t = null;
@@ -2815,7 +2808,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 71.2, live: new Date(2026, 8, 11, 16, 59) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 71.3, live: new Date(2026, 8, 11, 17, 4) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

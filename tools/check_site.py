@@ -459,6 +459,13 @@ def main():
           and "function baseDragStart" in js and "function baseDragMove" in js
           and "function baseDragEnd" in js and "insertBefore(dragSt.row" in js
           and "touch-action:none" in html and ".bdrag{" in html)
+    snack_rule = ""
+    if "#snack{" in html:
+        snack_rule = html.split("#snack{", 1)[1].split("}", 1)[0]
+    check("add snack centered robustly (v71.3): left:0;right:0 + margin auto (no left:50% transform); the add toast has NO undo (ledger ✕ is the delete path)",
+          "left:0;right:0;margin:0 auto" in snack_rule and "width:fit-content" in snack_rule
+          and "snack('Added ' + money(t.amount) + ' \u00b7 ' + esc(t.category || t.account));" in js
+          and "undoAddTxn" not in js)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):
