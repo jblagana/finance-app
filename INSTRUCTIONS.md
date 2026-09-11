@@ -32,8 +32,8 @@ Progress: 100%
 
 
 ## 2026-09-12 00:29 — v72: 11-item batch + push/order/streamline discipline
-Status: in progress
-Progress: 80% — ETA ~05:00
+Status: done — all 11 items shipped (dots v72.1–v72.12, v72.12 shipped early by user edit)
+Progress: 100%
 ### Instruction (verbatim)
 > The original 11-item batch instruction arrived in the previous session; its
 > exact wording is not in this session's context — logged here as a marked
@@ -195,8 +195,8 @@ Progress: 80% — ETA ~05:00
 - [x] v72.12 — emoji allowed in the LLM voice prompts (user edit 02:16; shipped ahead of the remaining batch) — pushed e2f710f (live 02:26); gates green
 - [x] v72.9 — ledger edit keeps position + original date/time — pushed 0118152 (live 02:51); gates green + 10 new smoke checks (position/timestamp preservation, delta rebase of the row's own f/o + the tail incl. month lines, real Undo driven through the snack stub, full un-rebase on undo)
 - [x] v72.10 — owed → ledger "Owed" entries (sign by flow) + editable subentries — pushed 89b745d (live 03:41); gates green + 14 new smoke checks (cash/card out+in kinds, net math, tpf note-only, txn link, in-place edit w/ canonical note, delete+undo of entry AND txn)
-- [ ] v72.11 — draggable floating bot, 4 corner snaps
-- [ ] Final: full gates, clean tree, master entry done
+- [x] v72.11 — draggable floating bot, 4 corner snaps — pushed f2482fa (live 04:02); gates green + 7 new smoke checks (snap geometry, nearest-corner pick, viewport clamp, persistence round-trip, garbage fallback, no-bubble no-op)
+- [x] Final: full gates (release.ps1 all green), clean tree, master entry done
 
 
 
