@@ -923,7 +923,10 @@
   function mlDate(ts) {
     var d = new Date(ts);
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return MO[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+    // v71: the time (12-hour AM/PM) sits next to the date on every ledger row.
+    var h = d.getHours(), h12 = h % 12 || 12, ap = h >= 12 ? 'PM' : 'AM';
+    return MO[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear() +
+      ' \u00b7 ' + h12 + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes() + ' ' + ap;
   }
   function mlParts(e) {
     var lab, note = '';
@@ -2944,7 +2947,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 71.6, live: new Date(2026, 8, 11, 22, 40) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 71.7, live: new Date(2026, 8, 11, 22, 44) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3165,6 +3168,7 @@
     addTxn: addTxn,
     deleteTxn: deleteTxn,
     saveTxnEdit: saveTxnEdit, // v71: editable ledger entries
+    mlDate: mlDate,           // v71: ledger row date+time (AM/PM)
     applyBaseChanges: applyBaseChanges,
     undoBaseStory: undoBaseStory,
     merchantCatFor: merchantCatFor, // v68 item 1: learned merchant→category lookup for the coach

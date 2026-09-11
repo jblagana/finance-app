@@ -477,6 +477,8 @@ def main():
           and "openSheetEl.id === 'numSheet'" in js)
     check("ledger adds with no category get a blank category: the row title is Unsorted, not the account name (v71.6)",
           "c: t.category || ''" in js)
+    check("ledger rows show the 12-hour AM/PM time next to the date; mlDate exported to the chat parser (v71.7)",
+          "h12 = h % 12 || 12" in js and "mlDate: mlDate," in js)
 
     print("\n== local brain is GONE (v50 final) ==")
     for _n, _s in (("app.js", js), ("chat.js", chatjs), ("ai.js", aijs), ("sw.js", sw)):
