@@ -21,7 +21,22 @@ Progress: 100%
   3. **New line** — release process for THIS batch: push live per subtask, each push bumps a dot version (v71.1 … v71.8). All eight items were already implemented in one tree, so the pushes are a cumulative sequence: push k ships items 1..k as a complete, gate-green state (sw cache `finances-pwa-v71.k`, `SHELL_RELEASE v: 71.k` — the existing prefix-based version assertions still pass, so only the per-item structural checks are staged in check_site.py; the live stamp is set seconds before each push). The final state after v71.8 equals the implemented feature tree (verified by diff).
 - This dot-release preference is noted for future sessions: when work arrives incrementally, push + dot-bump per completed app-affecting subtask.
 
-## 2026-09-11 — go (proceed with the next dot release: v71.5)
+## 2026-09-11 — go pon (continue until the last v71 change is done)
+Status: done — v71.6/7/8 pushed as a00ab95 / 1f3a588 / 9048281 (live 22:40 / 22:44 / 22:47); v71 batch complete
+Progress: 100%
+### Instruction (verbatim)
+> go pon
+> continue till ur done with the last change
+### Interpretation (agent — user may edit this section)
+- "go pon" read as "go on" (typo): run the remaining dot releases back-to-back without waiting for further go-signals — v71.6 (item 6), v71.7 (item 7), v71.8 (item 8) — until the last v71 change is live. "the last change" = item 8 (chat coach note), i.e. finish the whole v71 batch including the final gates.
+- Same discipline as v71.5 per release: byte-splice from _v71_final_backup (python script — em-dash safe), staged gate check, stamps (sw.js / SHELL_RELEASE / README), live stamp seconds before each push, per-push log update (done + hash).
+- After v71.8: final diff vs the backup must be empty (align the staged check labels to the backup's final ones), full gates, then one-off cleanup (_mkdiff.py, _splice_*.py, _diff_*.txt, _v71_final_backup/).
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] v71.6 — item 6 (ledger adds with no category = Unsorted, not the account name): splice + gate + stamps + push (a00ab95) + log
+- [x] v71.7 — item 7 (ledger rows show 12-hour AM/PM time next to the date; mlDate exported): splice + gate + stamps + push (1f3a588) + log
+- [x] v71.8 — item 8 (chat coach note; avatar untouched): splice + gate + stamps + push (9048281) + log
+- [x] Final: full gates (smoke ×2 exit 0, node --check ×4, check_site repo + mirror, parser); final diff vs backup = index.html byte-identical, app.js only the live-stamp line (expected); one-offs removed; master entry done
 Status: done — v71.5 pushed as de97593 (live stamp 18:26); next dot release is v71.6 (item 6: ledger row title = category, "Unsorted" for no-category)
 Progress: 100%
 ### Instruction (verbatim)
@@ -39,8 +54,8 @@ Progress: 100%
 - [x] Set live stamp (18:26) → commit → push (de97593) → log hash + status done
 
 ## 2026-09-11 — v71: Your-numbers (keyboard, drag-reorder, save button), ledger (editable, AM/PM time, Unsorted title), toast, coach avatar
-Status: in progress — per the user's dot-release edit, shipping as v71.1 … v71.8 (one live push per subtask, cumulative); v71.1–v71.5 shipped, v71.6 (ledger Unsorted title) next
-Progress: 62% — ETA ~19:00 (v71.6…v71.8 dot pushes + final gates left)
+Status: done — all 8 items shipped as v71.1 … v71.8 (one live push per subtask, cumulative); final gates green; final tree matches _v71_final_backup (app.js except the live-stamp line, which is re-stamped at each push by design)
+Progress: 100%
 ### Instruction (verbatim)
 > -allow quicksum keyboard on 'your numbers'
 > -allow the entries in the 'your numbers' to be rearranged by dragging
@@ -77,9 +92,9 @@ Progress: 62% — ETA ~19:00 (v71.6…v71.8 dot pushes + final gates left)
 - [x] v71.2 pushed (item 2 — drag-to-reorder rows): `7494e67`, live 16:53 — gates green (check_site + parser + node --check)
 - [x] v71.3 pushed (item 3 — centered add snack, no undo): `115bcbc`, live 17:04 — gates green (check_site + parser + node --check)
 - [x] v71.4 pushed (item 4 — editable ledger entries): `2a7f9fd`, live 17:51 — gates green (check_site + parser + node --check); item-4 code byte-spliced from _v71_final_backup (removeTxnRow/restoreTxnRow/deleteTxnFromLog refactor/saveTxnEdit/editingTxn/openTxnEdit/exitTxnEdit + add-sheet wiring + hint + staged gate check); remaining diff vs backup = items 5–8 + version stamps only
-- [ ] v71.5…v71.8 (items 5,6,7,8) — one live push per subtask, cumulative, gate-green; source hunks identified in the backup diff (item 5: baseSaveBar/baseDirty/commitIfDirtyBase + drag/import/merchant/detail pre-commits + HTML save bar; item 6: logMoney `c: t.category || ''`; item 7: mlDate AM/PM + export; item 8: coachnote avatar CSS/HTML)
-- [ ] Gates at v71.8: smoke_app_v68.js += v71 live checks (saveTxnEdit identity/unsorted/AM/PM); local mirrors re-synced (SITE line → finances/finance-app); full suite ×2 + node --check ×4; final tree == implemented feature tree (diff vs _v71_final_backup)
-- [ ] Log done with hashes; worktree clean, HEAD == origin/main
+- [x] v71.5…v71.8 (items 5,6,7,8) — pushed de97593 (live 18:26) / a00ab95 (22:40) / 1f3a588 (22:44) / 9048281 (22:47); each gate-green; item 5 also fixed a v71.2 gap ("+"-added budget/override/one-off rows lacked drag handles)
+- [x] Gates at v71.8: smoke_app_v68.js already matched the backup's v71 live checks (exit 0, incl. "mlDate renders Mon D, YYYY · h:mm AM/PM"); smoke_v68 exit 0; local mirrors re-synced (SITE line); check_site repo + mirror + parser all passed; node --check ×4; final tree == backup (index.html byte-identical; app.js = live-stamp line only, by design)
+- [x] Log done with hashes (de97593 / a00ab95 / 1f3a588 / 9048281); worktree clean, HEAD == origin/main
 
 ## 2026-09-11 — Chat: "hm" = "how much"
 Status: done — v70 pushed to origin/main: `6644266` (SHELL_RELEASE v70, live 2026-09-11 12:54)
