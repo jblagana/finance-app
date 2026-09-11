@@ -8,7 +8,7 @@ commit is not done.
 
 ## 2026-09-12 00:29 — v72: 11-item batch + push/order/streamline discipline
 Status: in progress
-Progress: 26% — ETA ~05:30
+Progress: 32% — ETA ~05:30
 ### Instruction (verbatim)
 > The original 11-item batch instruction arrived in the previous session; its
 > exact wording is not in this session's context — logged here as a marked
@@ -97,7 +97,7 @@ Progress: 26% — ETA ~05:30
   - **v72.3 personality (item 7)** — voice only in the LLM paths:
     AI_REMOTE_SYSTEM (chat.js) + note() prompt (ai.js): light/funny, dry
     wink, ≤1 short joke line, numbers + draft protocol always win, ≤60
-    words, no emoji; one light self-aware line in the chat welcome.
+    words, no emoji (yes to emoji, prioritize this); one light self-aware line in the chat welcome.
     Rule-engine functional replies stay plain.
   - **v72.4 account kinds (item 8)** — the account-row picker offers
     exactly Debit / Credit ("Credit" = internal kind `card`, "Debit" =
@@ -145,8 +145,8 @@ Progress: 26% — ETA ~05:30
 - [x] v72.1 — coach card offline-only sub line ("Coach Fin is unavailable right now.") — pushed 39b752e (live 00:56); gates green
 - [x] v72.2 — settings gear glyph 16px → 20px — pushed a1f9225 (live 01:01); gates green
 - [x] v72.3 — funny personality (LLM voice: chat + note prompts, welcome line) — pushed 59c61eb (live 01:06); gates green
-- [ ] v72.4 — account kind = credit or debit only
-- [ ] v72.5 — 5-minute chat memory (session window + adaptive trim)
+- [x] v72.4 — account kind = credit or debit only — pushed 680f3b9 (live 01:13); gates green
+- [x] v72.5 — 5-minute chat memory (session window + adaptive trim) — pushed 828b5fa (live 01:21); gates green + 3 new smoke checks
 - [ ] v72.6 — quicksum stores the computed total
 - [ ] v72.7 — owed people drag + sort (default recent)
 - [ ] v72.8 — export/import data-loss fix (moneyLog + chat)
