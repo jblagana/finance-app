@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-11 — Chat header: info button replaces ✕ + rotating tip (Jan add-on)
-Status: in progress (implemented + gate-green; ships in the v68 release unit with the push — done means pushed)
-Progress: 90% — ETA: the v68 release unit
+Status: done — shipped in the v68 release: feature commit `b32595c` + release commit `b1c8261` (SHELL_RELEASE v68, live 2026-09-11 09:41), both pushed to origin/main
+Progress: 100%
 ### Instruction (verbatim)
 > Jan - (do this after u finish the 12 things u gotta do) in the chatbot, instead of the x button on the right of the main header, replace it with an 'i' info button that contains the full details of what the bot can do. also, add a rotating tip pinned below the main header of the bot, on what can be done/typed in the bot.
 
@@ -25,8 +25,8 @@ Progress: 90% — ETA: the v68 release unit
 - [x] Gate assertion in the v68 check_site.py unit — required-id list swaps chatClose → chatInfo (+ chatTip/chatTipText/chatInfoView/chatInfoBody/chatInfoBack) and a new "chat header (v68 Jan add-on)" check (✕ absent, i button + info panel + rotating tip present, closeInfo wired in app.js); test_chat_parser.py gains a "the rotating tips are rule-owned" section (each tip must route to a rule, never the open-question fallback) — full suite green (check_site, parser, both smokes, node --check ×4)
 
 ## 2026-09-11 01:56 — Implement all 12 rule-engine improvements (v68)
-Status: in progress (items 1–12 + Jan add-on (own entry above) ALL done + verified, full suite green; release unit in progress: gate v68 bump + tools/ add-on, then feature commit → v68 shell bump → push)
-Progress: 92% — ETA ~30m
+Status: done — v68 pushed: feature commit `b32595c` (items 1–12 + Jan add-on + tools/ gate + AGENTS.md) + release commit `b1c8261` (SW cache finances-pwa-v68, SHELL_RELEASE v68 live 2026-09-11 09:41, README, gate v68 assertions), both pushed to origin/main; final full suite green (repo tools/ gates + local mirror + node --check ×4 + both smokes)
+Progress: 100%
 ### Instruction (verbatim)
 > i want u to do all 12 of them
 ### Interpretation (agent — user may edit this section)
@@ -55,15 +55,15 @@ Progress: 92% — ETA ~30m
 - [x] Item 1: learned merchant→category map + Your-numbers view — map always recomputed from ledger (note words → filed category, ≥2 logs + majority), overrides in meta `merchantMap` ({deleted,blocked}); Your-numbers section with hide (✕) / block (⊘) toggles; chat matcher consults it after stored budget names, before Unsorted, budget-validated, with "learned from your log" reply note; Add-sheet prefill when note matches; log payload now keeps the merchant word (note: p.what) so the map self-reinforces
 - [x] Item 2: story grammar (percent / delta / payday) — findAmounts % guard (backtrack-proof); cue 1b "bump food budget by 10%" (up/down, stored value × pct, month → budget_override); cue 1c "same as last month (+/− delta)" for salary/budget/one-off/debt with override-aware resolution (prev-month override → base → missing ask); payday phrases anchor to the current month + label, "payday" is a name-exclusion stopword; smoke-verified in Node (9 cases)
 - [x] Item 3: kind-disambiguation ask — kindHintIn (card/cc vs debit/cash/wallet/gcash) resolves name ties in findAccounts + semClause + cue 7; shared-word multi-kind match with no hint → "Which Maya?" ask card, pendingAsk kind 'kind', bare kind answer re-parses the joined message through mkParse (parse extracted to a function); smoke-verified ask→answer round-trip
-- [ ] Item 13 (Jan add-on, own entry above): chat header "i" info button + rotating tip strip — after items 1–12, before the push
+- [x] Item 13 (Jan add-on, own entry above): chat header "i" info button + rotating tip strip — done + shipped (b32595c; own entry has the details)
 - [x] Items 4–7: insight computations (per-category pace, recurring, goal math, dips) — all in insightsData; coach rows: pace anomaly (worst 1, 'pace:' alert), recurring (one-tap make_plan), sinking behind/on-pace + debt months-to-payoff, floor/tightest-month dip ('floor'/'dip'); sinkNote math under the sinking editor; coachMem clear bits for pace:/dip/sink/recurring:
 - [x] Items 8–9: coach card rows/alerts + dynamic chips — coachRows feeds coachMem; renderCoach wires the make_plan row to addPlan(repeat:'monthly'); coachAlerts() bridge + FinApp.coachAlerts; chat dynamicChips (recurring chip → drafts the plan, prepay/floor/dip chips) with the static four as fallback; render() calls refreshChips; plan: "… monthly" grammar + add_plan repeat passthrough
 - [x] Item 10: rules-first routing + setting repurpose — v55 LLM first-pass removed from handle() (rule engine always runs first); the FORCE_KEY toggle (same key, default ON, stored value keeps its meaning) now gates ONLY the v49 open-question path: `(FAI0 && FAI0.forceOnline()) ? aiCoach(t, ctx) : null` → off/unavailable gives the fallback card; label + help reworded in index.html ("Let the coach answer questions the rules don't own"), ai.js/chat.js docstrings + repo README rewritten; check_site.py v55 assertions replaced with rules-first assertions (first-pass strings absent, gate present); test_chat_parser.py gate mirror renamed open_question_to_coach — gate + parser tests green
 - [x] Item 11: shadow log + export — app.js shadowLog(): {at,t≤120,path,a≤200} entries, capped at 200 (FIFO), meta key `shadowLog` (idbPut fire-and-forget; load re-slices to cap); exportData JSON carries `shadowLog: state.shadowLog || []`; chat.js handle() wraps handleCore() in try/catch, tags `__path` (rule:<intent> / llm / fallback; rule flows tag rule:flow), fire-and-forget F.shadowLog — the answer is never mutated; FinApp.exportData bridge line so the smoke can read the export; Node-verified end-to-end (shape, no-path ignored, caps, 200-cap FIFO, meta persistence through the real idbPut plumbing, export inclusion — smoke_app_v68.js all PASS)
 - [x] Item 12: findings in the coach-note prompt — app.js coachFindings() = top 3 coachRows() rows as "tag: text" (deterministic, offline-safe); chat.js coachSnapshot appends "- finding: …" lines — the fp hashes the full text, so a new finding re-calls the coach, and offline the last note is kept; Node-verified on the seeded state (pace-anomaly + recurring findings, ≤3 strings — smoke_app_v68.js all PASS)
-- [ ] Gates: test_chat_parser.py mirror cases + check_site.py assertions; node --check ×5; gate green
-- [ ] (add-on) gate files into finance-app/tools/ + AGENTS.md docs
-- [ ] Release unit: sw.js v68, SHELL_RELEASE v68 @ push, README; fetch/rebase; commit + push
+- [x] Gates: test_chat_parser.py mirror cases (items 2/3 + Jan add-on tips section) + check_site.py assertions (item 10 rules-first, Jan add-on header, items 11/12); node --check ×4 (ai, app, chat, sw); repo tools/ gates + local mirror both "all checks passed"
+- [x] (add-on) gate files into finance-app/tools/ + AGENTS.md docs — tools/check_site.py (path adjusted: site = repo parent) + tools/test_chat_parser.py committed in b32595c; repo + workspace AGENTS.md both rewritten ("gate is canonical in tools/, run the repo copies, mirrors via Copy-Item")
+- [x] Release unit: sw.js v68 + SHELL_RELEASE v68 (live 2026-09-11 09:41, set right before push) + README + gate v68 bump — commit b1c8261, pushed `83f5457..b1c8261` to origin/main (fetch first: no remote drift, no agent branches — push possible)
 
 ## 2026-09-11 (night, after v67) — ok: sync local, bump gate, add coordination rules
 Status: done
