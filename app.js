@@ -771,31 +771,47 @@
   }
   // v71: the delete + edit paths share one remove/restore pair, so an edit is
   // "delete the row, re-log it with the new values, keep the same id".
-  function removeTxnRow(tid) {
-    var t = null;
-    for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) t = state.txns[i];
-    var removed = (state.moneyLog || []).filter(function (e) { return e && e.tid === tid; });
+  // v72.9: the pair also carries the ORIGINAL positions (txn index, log-row
+  // indices), so Undo puts the original row back where it was, not at the end.
+  // keepInStore: for Undo — leave the persistent row in place (the edited row,
+  // at its position); restoreTxnRow's put then REPLACES it by id instead of
+  // delete+re-add filing the original at the end of the store.
+  function removeTxnRow(tid, keepInStore) {
+    var t = null, txIdx = -1;
+    for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) { t = state.txns[i]; txIdx = i; }
+    var log = state.moneyLog || [];
+    var removed = [], logIdxs = [];
+    for (var j = 0; j < log.length; j++) if (log[j] && log[j].tid === tid) { removed.push(log[j]); logIdxs.push(j); }
     if (!t && !removed.length) return null;
     if (t) {
       state.txns = state.txns.filter(function (x) { return x.id !== tid; });
       addAdj(txnAdj(t), -1);
     }
-    state.moneyLog = (state.moneyLog || []).filter(function (e) { return !(e && e.tid === tid); });
+    state.moneyLog = log.filter(function (e) { return !(e && e.tid === tid); });
     idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
-    var done = t ? Promise.all([idbDel(STORE_TX, tid), saveAdj()]) : Promise.resolve();
-    return { t: t, removed: removed, persist: done };
+    var done = t
+      ? (keepInStore ? Promise.resolve() : Promise.all([idbDel(STORE_TX, tid), saveAdj()]))
+      : Promise.resolve();
+    return { t: t, removed: removed, txIdx: txIdx, logIdxs: logIdxs, persist: done };
   }
   function restoreTxnRow(r) {
     if (r.t) {
       // an edited version (same id) may be there now — it goes, the original comes back
       state.txns = state.txns.filter(function (x) { return x.id !== r.t.id; });
-      state.txns.push(r.t);
+      // v72.9: back at the original index (clamped — the list may have shrunk)
+      var ti = (typeof r.txIdx === 'number' && r.txIdx >= 0) ? Math.min(r.txIdx, state.txns.length) : state.txns.length;
+      state.txns.splice(ti, 0, r.t);
       addAdj(txnAdj(r.t), 1);
       idbPut(STORE_TX, r.t).catch(function () {});
     }
     if (r.removed.length) {
       state.moneyLog = (state.moneyLog || []).filter(function (e) { return !(e && r.t && e.tid === r.t.id); });
-      r.removed.forEach(function (e) { state.moneyLog.push(e); });
+      // v72.9: each log row back at its original index (1-row-per-tid in practice)
+      var idxs = r.logIdxs || [];
+      r.removed.forEach(function (e, k) {
+        var li = (typeof idxs[k] === 'number' && idxs[k] >= 0) ? Math.min(idxs[k], state.moneyLog.length) : state.moneyLog.length;
+        state.moneyLog.splice(li, 0, e);
+      });
       if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
       idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
     }
@@ -812,25 +828,95 @@
       });
     });
   }
-  // v71: editable ledger entries — re-logs the txn (same id, same created
-  // stamp) with the edited values. The old money-log row is replaced by the
-  // new one, so the ledger shows one corrected entry; Undo restores the
-  // ORIGINAL entry (values AND log rows), not the edited one.
+  // the month a money-log row's s (month-spent) line belongs to: the row's OWN
+  // txn's date-month — logMoney stamps s from the txn date, not the log time.
+  function monthOfTxn(tid) {
+    for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) return String(state.txns[i].date || '').slice(0, 7);
+    return '';
+  }
+  // v71: editable ledger entries — same id, same created stamp.
+  // v72.9: the edit is IN PLACE — the txn keeps its index in state.txns and the
+  // money-log row keeps its index AND its ORIGINAL timestamp; the row's values
+  // are rewritten in place. The audit chain stays honest because every row's
+  // running f/o/s was snapshotted WITH the original entry's effect, so the
+  // edit's constant delta (Δfree / Δcard) is added to the edited row AND every
+  // row recorded after it. Month-spent: a row's s line belongs to its own txn's
+  // date-month, so same-month edits add (new−old) to that month's lines, and a
+  // month change pulls oldAmt out of the old month's lines and newAmt into the
+  // new month's; the edited row's own month line is dropped when the entry
+  // crosses months (the new month's running spend isn't derivable from the log
+  // alone — totals come from txns via monthSpendSum, so only the row's line
+  // goes). Undo is the exact inverse: un-rebase the tail, then swap the
+  // ORIGINAL row (values + timestamp) back where the edited row sits.
   function saveTxnEdit(tid, data) {
-    var r = removeTxnRow(tid);
-    if (!r) return Promise.resolve();
+    var o = null, oIdx = -1;
+    for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) { o = state.txns[i]; oIdx = i; }
+    if (!o) return Promise.resolve();
     var t = {
       id: tid, date: data.date, account: data.account, kind: data.kind,
       category: data.category, amount: data.amount, note: data.note,
-      created: (r.t && r.t.created) || new Date().toISOString()
+      created: o.created || new Date().toISOString()
     };
-    state.txns.push(t);
+    state.txns[oIdx] = t; // in place — position preserved
     addAdj(txnAdj(t), 1);
-    logMoney('add', t);
+    addAdj(txnAdj(o), -1);
+    var oldAmt = Number(o.amount) || 0, newAmt = Number(t.amount) || 0;
+    // effect delta (new − old): a cash entry pulls free cash down, a card
+    // charge pushes card owed up
+    var dFree = (t.kind === 'card_charge' ? 0 : -newAmt) - (o.kind === 'card_charge' ? 0 : -oldAmt);
+    var dCard = (t.kind === 'card_charge' ? newAmt : 0) - (o.kind === 'card_charge' ? oldAmt : 0);
+    var M_old = String(o.date || '').slice(0, 7), M_new = String(t.date || '').slice(0, 7);
+    function rebase(e, dF, dC, sMode) {
+      if (e.f != null) e.f = r2(e.f + dF);
+      if (e.o != null) e.o = r2(e.o + dC);
+      if (e.s != null && sMode) {
+        var m = monthOfTxn(e.tid);
+        if (M_old === M_new) { if (m === M_old) e.s = r2(e.s + (newAmt - oldAmt) * sMode); }
+        else if (m === M_old) e.s = r2(e.s - oldAmt * sMode);
+        else if (m === M_new) e.s = r2(e.s + newAmt * sMode);
+      }
+    }
+    var log = state.moneyLog || [];
+    var li = -1;
+    for (var j = 0; j < log.length; j++) if (log[j] && log[j].tid === tid) { li = j; break; }
+    var origRow = li >= 0 ? Object.assign({}, log[li]) : null; // BEFORE the rewrite — Undo's payload
+    if (li >= 0) {
+      var e0 = log[li];
+      e0.n = newAmt;
+      e0.k = t.kind === 'card_charge' ? 'c' : 'x';
+      e0.c = t.category || '';
+      e0.nt = t.note || '';
+      e0.m = t.account || '';
+      e0.l = (t.category || t.account || 'entry') + (t.note ? ' · ' + t.note : '');
+      // e.at is UNTOUCHED — the original date/time stays on the row
+      rebase(e0, dFree, dCard, 1);
+      if (M_old !== M_new) delete e0.s; // month line no longer fits (see the note above)
+      for (var k = li + 1; k < log.length; k++) { if (log[k]) rebase(log[k], dFree, dCard, 1); }
+      idbPut(STORE_META, { key: 'moneyLog', value: log }).catch(function () {});
+    }
     return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () {
       emit('txn');
       snack('Updated ' + money(t.amount) + ' · ' + esc(t.category || 'Unsorted'), function () {
-        restoreTxnRow(r);
+        // undo: the exact inverse — un-rebase everything after the edited row
+        // (a row logged AFTER the edit already reflects the NEW values; it is
+        // left as-is — undoing an edit after interleaved new entries is a
+        // sub-second edge the 5.2 s snack window makes unlikely), then swap the
+        // ORIGINAL row back where the edited row sits now.
+        var lg = state.moneyLog || [];
+        var liE = -1;
+        for (var x = 0; x < lg.length; x++) if (lg[x] && lg[x].tid === tid) { liE = x; break; }
+        if (liE >= 0) {
+          for (var y = liE + 1; y < lg.length; y++) { if (lg[y]) rebase(lg[y], -dFree, -dCard, -1); }
+          idbPut(STORE_META, { key: 'moneyLog', value: lg }).catch(function () {});
+        }
+        var r = removeTxnRow(tid, true); // keep the persistent row (see above)
+        if (!r) {
+          restoreTxnRow({ t: o, txIdx: oIdx, removed: origRow ? [origRow] : [], logIdxs: li >= 0 ? [li] : [] });
+          return;
+        }
+        r.t = o; // original values; r.txIdx/logIdxs = the edited row's CURRENT positions
+        r.removed = origRow ? [origRow] : [];
+        r.persist.then(function () { restoreTxnRow(r); }); // restore re-puts in place by id (+ saveAdj)
       });
       return tid;
     });
@@ -3131,7 +3217,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.12, live: new Date(2026, 8, 12, 2, 24) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.9, live: new Date(2026, 8, 12, 2, 51) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

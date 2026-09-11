@@ -520,6 +520,16 @@ def main():
           and "sanitizeChatRows(data.chat)" in js
           and "sanitizeMoneyLogRows(data.moneyLog)" in js
           and "if (!data.adj) computeAdjFromTxns()" in js)
+    check("ledger edits stay in place (v72.9): the edit rewrites the txn at its OWN index (no re-file at the end), keeps the money-log row's ORIGINAL timestamp, and rebases that row + every later row by the constant delta (month lines by each row's own txn month); Undo is the exact inverse (un-rebase + original row at its position, no delete+re-add)",
+          "state.txns[oIdx] = t; // in place — position preserved" in js
+          and "rebase(e0, dFree, dCard, 1)" in js
+          and "for (var k = li + 1; k < log.length; k++) { if (log[k]) rebase(log[k], dFree, dCard, 1); }" in js
+          and "function monthOfTxn(tid)" in js
+          and "var origRow = li >= 0 ? Object.assign({}, log[li]) : null;" in js
+          and "function removeTxnRow(tid, keepInStore)" in js
+          and "return { t: t, removed: removed, txIdx: txIdx, logIdxs: logIdxs, persist: done };" in js
+          and "state.txns.splice(ti, 0, r.t);" in js
+          and "var r = removeTxnRow(tid, true); // keep the persistent row (see above)" in js)
     check("emoji allowed, kept light, in the voice paths only (v72.12): the v72.3 'no emojis' flips to at most one where it fits (chat + note prompts); the setup prompt stays plain; the welcome carries one on its ramen line",
           "at most one emoji and only where it genuinely fits" in chatjs
           and "at most one emoji and only where it genuinely fits" in aijs
