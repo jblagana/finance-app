@@ -560,12 +560,18 @@ def main():
           and "touch-action:none" in html
           and "fabSnapPoints" not in js
           and "fabBubbleRect" not in js)
-    check("the bot's drag feels smooth, not stiff (v72.13): while dragging left/top track the finger 1:1 with no left/top transition (fabHold on pointerdown) and only the transform animates — the scale(1.06) 'lift'; on release the bot GLEIDES to the snap over .28s ease-out (fabGlide) and the resize/orientation settle glides too",
-          "var FAB_GLIDE = 'left .28s cubic-bezier(.2,.8,.25,1), top .28s cubic-bezier(.2,.8,.25,1), transform .2s ease'" in js
+    check("the bot's drag feels smooth, not stiff (v72.13): while dragging left/top track the finger 1:1 with no left/top transition (fabHold on pointerdown) and only the transform animates — the scale(1.06) 'lift'; on release the bot GLEIDES to the edge over .28s ease-out (fabGlide) and the resize/orientation settle glides too",
+          "var FAB_GLIDE = 'left .28s cubic-bezier(.2,.8,.25,1), top .28s cubic-bezier(.2,.8,.25,1)," in js
           and "function fabGlide()" in js
           and "function fabHold()" in js
           and "fabHold(); // v72.13: kill any glide — the drag tracks the finger 1:1" in js
           and "transform:scale(1.06)" in html)
+    check("the settle has feel polish (v72.16): the settle's transform runs a slight overshoot bezier (the lift scales down past 1 and catches — a small pop; left/top stay ease-out so the bot never crosses the screen edge), a guarded 8ms haptic tick fires the moment a drag starts, and prefers-reduced-motion falls back to an instant settle (no glide, no overshoot)",
+          "transform .2s cubic-bezier(.3,1.4,.5,1)" in js
+          and "if (navigator.vibrate) navigator.vibrate(8)" in js
+          and "function fabReduceMotion()" in js
+          and "matchMedia('(prefers-reduced-motion: reduce)')" in js
+          and "fab.style.transition = 'none';" in js)
     check("emoji allowed, kept light, in the voice paths only (v72.12): the v72.3 'no emojis' flips to at most one where it fits (chat + note prompts); the setup prompt stays plain; the welcome carries one on its ramen line",
           "at most one emoji and only where it genuinely fits" in chatjs
           and "at most one emoji and only where it genuinely fits" in aijs

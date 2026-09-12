@@ -27,7 +27,7 @@ Progress: 0%
 
 ## 2026-09-13 02:14 — Coach bubble GO (core + feel polish) + owed "+ entry" placement + toast center/size
 Status: in progress
-Progress: 30% — ETA ~03:45
+Progress: 50% — ETA ~03:40
 
 ### Instruction (verbatim)
 > -core +feel polish
@@ -46,7 +46,7 @@ Progress: 30% — ETA ~03:45
 - [x] Log the instruction (first action)
 - [x] Investigate owed "+ entry" placement + toast snack CSS/JS (owed direction fixed by the user edit → 02:29 entry: button to the card TOP; toast = `#snack` — the v71 "robust" centering exists but the user still sees it left, so v72.18 re-centers bulletproof-style (X-offset inside the transform in BOTH states, like `#swToast`) and shrinks the pill)
 - [x] v72.15: bubble follows bot + docked handle + edge settle + safe-area clamp + fabPos.v2 — code + gate + smoke green (release.ps1 v72.15, 03:01)
-- [ ] release.ps1 v72.15, commit, push
+- [x] release.ps1 v72.15, commit, push — pushed fb4d1b2 (live 03:05)
 - [ ] v72.16: overshoot + haptic + reduced-motion — gate + smoke
 - [ ] release.ps1 v72.16, commit, push
 - [ ] v72.17: owed "+ entry" placement — gate

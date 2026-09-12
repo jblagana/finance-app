@@ -3506,7 +3506,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.15, live: new Date(2026, 8, 13, 3, 3) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.16, live: new Date(2026, 8, 13, 3, 16) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3597,7 +3597,14 @@
   // scale-up reads as a "lift"). On release, and on the resize/orientation
   // settle, left/top GLEIDE to the edge over ~.28s ease-out instead of the
   // v72.11 teleport (transition:'none' + jump = the "stiff" feel).
-  var FAB_GLIDE = 'left .28s cubic-bezier(.2,.8,.25,1), top .28s cubic-bezier(.2,.8,.25,1), transform .2s ease';
+  // v72.16: the settle overshoot — the transform (lift scale-down) runs a
+  // slight overshoot bezier so the bot settles past scale 1 and catches, a
+  // small pop. left/top stay ease-out: the bot must never cross the edge.
+  var FAB_GLIDE = 'left .28s cubic-bezier(.2,.8,.25,1), top .28s cubic-bezier(.2,.8,.25,1), transform .2s cubic-bezier(.3,1.4,.5,1)';
+  // v72.16: the reduced-motion fallback — instant settle, no glide, no overshoot
+  function fabReduceMotion() {
+    try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
+  }
   function fabGlide() { var f = byId('coachFab'); if (f) f.style.transition = FAB_GLIDE; }
   function fabHold() { var f = byId('coachFab'); if (f) f.style.transition = 'transform .15s ease'; }
   // the safe area — env() insets aren't readable from JS, so measure them
@@ -3679,7 +3686,9 @@
     if (!fab) return null;
     var pos = fabPosLoad() || { edge: 'bottom', u: 1 };
     var p = fabEdgePos(pos.edge, pos.u);
-    if (instant) { fabHold(); } else { fabGlide(); } // v72.13: the settle glides
+    // v72.16: prefers-reduced-motion -> instant settle (no glide, no overshoot)
+    if (fabReduceMotion()) { fab.style.transition = 'none'; }
+    else if (instant) { fabHold(); } else { fabGlide(); } // v72.13: the settle glides
     fab.style.right = 'auto';
     fab.style.left = p.x + 'px';
     fab.style.top = p.y + 'px';
@@ -3753,7 +3762,12 @@
     fab.addEventListener('pointermove', function (ev) {
       if (!st) return;
       var dx = ev.clientX - st.x, dy = ev.clientY - st.y;
-      if (!st.drag && Math.sqrt(dx * dx + dy * dy) > FAB_DRAG_THRESH) st.drag = true;
+      if (!st.drag && Math.sqrt(dx * dx + dy * dy) > FAB_DRAG_THRESH) {
+        st.drag = true;
+        // v72.16: a barely-there tick the moment the drag starts (guarded —
+        // navigator.vibrate is absent on iOS Safari and in the smoke stub)
+        try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) {}
+      }
       if (!st.drag) return; // under the threshold this is still a tap
       ev.preventDefault();
       fab.classList.add('dragging');
