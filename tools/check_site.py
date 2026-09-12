@@ -22,6 +22,7 @@ except Exception:
         pass
 
 # tools/ sits INSIDE the repo (finance-app/tools/), so the site is the parent dir
+# tools/ sits INSIDE the repo (finance-app/tools/), so the site is the parent dir
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITE = os.path.dirname(HERE)
 
@@ -343,7 +344,7 @@ def main():
           "^(?:hm|how much)" in chatjs and "want.all = true" in chatjs)
     check("shadow mode (v68 item 11): every chat message logs its answering path (rule intent / llm / fallback) + what was drafted, capped at 200 in a meta key, included in the JSON export",
           "SHADOW_KEY = 'shadowLog'" in js and "SHADOW_CAP = 200" in js
-          and "shadowLog: state.shadowLog || []" in js
+          and "obj.shadowLog = state.shadowLog || [];" in js
           and "r.__path = 'rule:'" in chatjs and "aiRes.__path = 'llm'" in chatjs
           and "fbR.__path = 'fallback'" in chatjs and "F.shadowLog" in chatjs)
     check("coach findings in the note prompt (v68 item 12): the LLM phrases the top deterministic findings instead of raw numbers; the coach rows stay the offline default",
@@ -513,16 +514,27 @@ def main():
           "function owedSortedPeople" in js and "state.owed.sort || 'recent'" in js
           and 'id="owedSort"' in html and "data-ow-drag" in js
           and "state.owed.sort = 'custom'" in js and "p.updated = new Date().toISOString()" in js)
-    check("export/import cover the whole app (v72.8): the JSON backup is async (reads the chat store) and carries the chat thread, the Ledger money log, the overlay (adj+sig) and the owed sort; the import restores all of them, recomputing adj from txns when a pre-72.8 backup lacks it",
-          "idbAll(STORE_CHAT).then" in js and "chat: chat" in js
-          and "moneyLog: (state.moneyLog || []).slice(-ML_CAP)" in js
-          and "adj: state.adj, adjSig: state.adjSig || ''" in js
-          and "owedSort: state.owed.sort || 'recent'" in js
+    check("export/import cover the whole app (v72.8, selectable in v72.23): the JSON backup is async (reads the chat store) and, by default, carries the chat thread, the Ledger money log, the overlay (adj+sig) and the owed sort; the import restores all of them, recomputing adj from txns when a pre-72.8 backup lacks it",
+          "idbAll(STORE_CHAT).then" in js and "obj.chat = chat" in js
+          and "obj.moneyLog = (state.moneyLog || []).slice(-ML_CAP)" in js
+          and "obj.adj = state.adj; obj.adjSig = state.adjSig || ''" in js
+          and "obj.owedSort = state.owed.sort || 'recent'" in js
           and "sanitizeChatRows(data.chat)" in js
           and "sanitizeMoneyLogRows(data.moneyLog)" in js
           and "if (!data.adj) computeAdjFromTxns()" in js)
     check("import sanitizer keeps every row flavor (v72.14): the k allow-list covers c/x/p/i — the v72.8 list (c/x only) silently stripped the v72.10 card_payment/cash_in flavors on import, rendering them as spends with inverted before/after",
           "if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i') m.k = e.k" in js)
+    check("the Backup section lets the user choose what goes into the JSON export (v72.23, user: 'a backup section in settings where u can choose which data u wanna export etc e.g. owed tab entries only'): six checkboxes in Settings (base/txns/plans/owed/log/chat), the choice persists (fin.bkSel.v1, default = everything), the export holds ONLY the ticked sections and lists them in `sections`, and the import restores only what the file holds (hasSec) — unlisted sections stay as the phone's own data",
+          'id="bkBase"' in html and 'id="bkTxns"' in html and 'id="bkPlans"' in html
+          and 'id="bkOwed"' in html and 'id="bkLog"' in html and 'id="bkChat"' in html
+          and "function backupSelRead()" in js and "function backupSelWrite()" in js
+          and "localStorage.getItem('fin.bkSel.v1')" in js
+          and "obj.sections = inc" in js
+          and "function hasSec(n) { return !secs || secs.indexOf(n) >= 0; }" in js
+          and "if (hasSec('txns')) state.txns = data.txns || [];" in js
+          and "if (hasSec('owed')) saveOwed();" in js
+          and "if (id === 'setSheet') { renderBaseStatus(); backupSelSync(); }" in js
+          and "backupSelRead: backupSelRead" in js)
     check("ledger edits stay in place (v72.9): the edit rewrites the txn at its OWN index (no re-file at the end), keeps the money-log row's ORIGINAL timestamp, and rebases that row + every later row by the constant delta (month lines by each row's own txn month); Undo is the exact inverse (un-rebase + original row at its position, no delete+re-add)",
           "state.txns[oIdx] = t; // in place — position preserved" in js
           and "rebase(e0, dFree, dCard, 1)" in js

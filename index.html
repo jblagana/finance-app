@@ -746,8 +746,15 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
     
     <section class="card" style="margin-top:16px">
       <h2 style="margin-top:0">Backup</h2>
-      <p class="note" style="margin:4px 0 10px">Download everything this phone holds — your numbers, every entry, your plans and your owed notes. JSON holds it all; CSV holds the ledger only. Import restores a backup.</p>
-      <div class="row">
+      <p class="note" style="margin:4px 0 10px">Download a backup of this phone's data — choose what goes in the JSON, import restores it (only what the file holds; the rest stays as it is). CSV holds the ledger only.</p>
+      <div style="font-size:13px;font-weight:700;margin:2px 0 6px">What to include (JSON)</div>
+      <label style="display:flex;align-items:center;gap:10px;margin:6px 0;cursor:pointer"><input type="checkbox" id="bkBase" checked style="width:auto"><span style="font-size:13.5px">Your numbers (accounts, salary, debts)</span></label>
+      <label style="display:flex;align-items:center;gap:10px;margin:6px 0;cursor:pointer"><input type="checkbox" id="bkTxns" checked style="width:auto"><span style="font-size:13.5px">Ledger entries</span></label>
+      <label style="display:flex;align-items:center;gap:10px;margin:6px 0;cursor:pointer"><input type="checkbox" id="bkPlans" checked style="width:auto"><span style="font-size:13.5px">Plans</span></label>
+      <label style="display:flex;align-items:center;gap:10px;margin:6px 0;cursor:pointer"><input type="checkbox" id="bkOwed" checked style="width:auto"><span style="font-size:13.5px">Owed — people + entries</span></label>
+      <label style="display:flex;align-items:center;gap:10px;margin:6px 0;cursor:pointer"><input type="checkbox" id="bkLog" checked style="width:auto"><span style="font-size:13.5px">Money log + balance overlay</span></label>
+      <label style="display:flex;align-items:center;gap:10px;margin:6px 0;cursor:pointer"><input type="checkbox" id="bkChat" checked style="width:auto"><span style="font-size:13.5px">Coach chat thread</span></label>
+      <div class="row" style="margin-top:10px">
         <div><button class="act" id="expJson" type="button">Export JSON</button></div>
         <div><button class="act" id="expCsv" type="button">Export CSV</button></div>
       </div>

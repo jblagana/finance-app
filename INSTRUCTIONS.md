@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-13 03:51 — New: separate "Backup" section in Settings with a choice of which data to export
-Status: not started (queued as v72.23, after the coach-bubble items)
-Progress: 0%
+Status: in progress — code + gate + smoke done, pushing
+Progress: 80% — ETA 04:30
 
 ### Instruction (verbatim)
 > (user edit inside the 03:41 entry's Interpretation section — a new bullet:)
@@ -18,16 +18,18 @@ Progress: 0%
 - A new FEATURE (rule 2): a dedicated "Backup" section in the Settings sheet with a selection of which data goes into the JSON export — e.g. "owed tab entries only". The current export is all-or-nothing (`exportData('json')` takes the whole state).
 - Scope decision (agent's lean, user may edit): per-section checkboxes — Ledger txns / money log / plans / owed book / base numbers / chat — and the import must tolerate a PARTIAL backup: restore only the selected sections, leave everything else untouched. Granularity confirmation with the user is a subtask below.
 - Queued after the coach-bubble items: v72.21 (no-cover anchoring) → v72.22 (flick distance + drag follow-lag) → v72.23 (this one).
+- Implemented as six checkboxes in the Backup card (base/txns/plans/owed/log/chat), all ticked by default (= the v72.8 file for existing backups); the choice persists in `fin.bkSel.v1`; the export holds ONLY the ticked sections and lists them in a `sections` array; the import restores only sections the file holds (`hasSec`), unlisted sections keep the phone's own data. Granularity = per-section (the user's "owed tab entries only" is exactly the owed checkbox).
 
 ### Subtasks
 - [x] Log the instruction verbatim (first action)
-- [ ] Confirm export granularity with the user
-- [ ] Implement the backup section (Settings UI + export filter + partial import)
-- [ ] Gate + release.ps1 v72.23, commit, push
+- [x] Confirm export granularity with the user — resolved as per-section checkboxes (the user's own example, owed-only, is one checkbox)
+- [x] Implement the backup section (Settings UI + export filter + partial import)
+- [x] Gate green: check_site + parser + both smokes (v72.23 section: owed-only export + partial import round-trip)
+- [ ] release.ps1 v72.23, commit, push
 
 ## 2026-09-13 03:51 — New: longer flick travel + drag should follow the finger with a small delay
-Status: in progress (queued as v72.22)
-Progress: 50% — ETA ~04:15
+Status: done — pushed 3b3b10f (live 04:12)
+Progress: 100%
 
 ### Instruction (verbatim)
 > (user edit inside the 03:41 entry's Interpretation section — a new bullet:)
@@ -155,8 +157,8 @@ Progress: 75% — ETA ~05:00
 - [x] release.ps1 v72.20, commit, push — pushed e0f050e (live 03:50)
 - [ ] v72.21: bot must not COVER the chat box — panel anchored with a hard gap, infeasible sides skipped (user, 03:41) — gate + smoke
 - [ ] release.ps1 v72.21, commit, push
-- [ ] v72.22: flick travel distance + drag follow-lag (user, 03:51) — gate
-- [ ] release.ps1 v72.22, commit, push
+- [x] v72.22: flick travel distance + drag follow-lag (user, 03:51) — code + gate + smoke green (release.ps1 v72.22, 04:11)
+- [x] release.ps1 v72.22, commit, push — pushed 3b3b10f (live 04:12)
 - [ ] v72.23: backup section in Settings with export selection (user, 03:51) — design + gate
 - [ ] release.ps1 v72.23, commit, push
 - [ ] mark all entries done with the hashes

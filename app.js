@@ -1176,7 +1176,7 @@
     sh.classList.add('show');
     openSheetEl = sh;
     if (id === 'numSheet') renderBaseEditor();
-    else if (id === 'setSheet') renderBaseStatus();
+    else if (id === 'setSheet') { renderBaseStatus(); backupSelSync(); } // v72.23: show the stored "what to include"
     // a11y: move focus into the sheet (first field, else first control).
     // The Settings and Your-numbers sheets are skipped: they hold many text
     // inputs and an auto-focus would pop the keyboard on open.
@@ -3360,6 +3360,30 @@
   function owedImportSort(v) {
     return v === 'az' || v === 'custom' || v === 'recent' ? v : 'recent';
   }
+  // v72.23: the Backup section — the user picks which data goes into the
+  // JSON export (e.g. "owed tab entries only"). The choice persists;
+  // default = everything (old behaviour).
+  var BK_SELS = [['base', 'bkBase'], ['txns', 'bkTxns'], ['plans', 'bkPlans'],
+    ['owed', 'bkOwed'], ['log', 'bkLog'], ['chat', 'bkChat']];
+  function backupSelRead() {
+    var out = {};
+    try {
+      var raw = JSON.parse(localStorage.getItem('fin.bkSel.v1') || 'null');
+      BK_SELS.forEach(function (s) { out[s[0]] = raw && typeof raw === 'object' ? !!raw[s[0]] : true; });
+    } catch (e) { BK_SELS.forEach(function (s) { out[s[0]] = true; }); }
+    return out;
+  }
+  function backupSelWrite() {
+    var out = {};
+    BK_SELS.forEach(function (s) { var el = byId(s[1]); out[s[0]] = el ? el.checked : true; });
+    try { localStorage.setItem('fin.bkSel.v1', JSON.stringify(out)); } catch (e) {}
+    return out;
+  }
+  // sync the Settings checkboxes to the stored choice (on sheet open)
+  function backupSelSync() {
+    var sel = backupSelRead();
+    BK_SELS.forEach(function (s) { var el = byId(s[1]); if (el) el.checked = !!sel[s[0]]; });
+  }
   function exportData(kind) {
     var txns = state.txns.slice().sort(function (a, b) {
       if (a.date !== b.date) return a.date < b.date ? -1 : 1;
@@ -3389,15 +3413,26 @@
     // the live overlay (adj + its sig), and the coach chat thread (an IDB
     // store, read here) — so a reinstall + import loses nothing.
     function jsonBlob(chat) {
-      return new Blob([JSON.stringify({
-        app: 'finances-pwa', exportedAt: new Date().toISOString(),
-        base: state.base, txns: txns, plans: plans, owed: state.owed.people,
-        owedSort: state.owed.sort || 'recent',
-        shadowLog: state.shadowLog || [], // v68 item 11: the rule-coverage evidence
-        moneyLog: (state.moneyLog || []).slice(-ML_CAP), // v72.8: the Ledger tab's audit
-        adj: state.adj, adjSig: state.adjSig || '',      // v72.8: the live overlay (exact numbers)
-        chat: chat                                       // v72.8: the coach chat thread
-      }, null, 2)], { type: 'application/json' });
+      // v72.23: only what the user ticked under Settings → Backup
+      // ("what to include"); the default is everything (the v72.8 file).
+      // `sections` lists what the file holds, so the import can tell a
+      // user-deselected section from an empty one.
+      var sel = backupSelRead();
+      var inc = [];
+      var obj = { app: 'finances-pwa', exportedAt: new Date().toISOString() };
+      if (sel.base) { obj.base = state.base; inc.push('base'); }
+      if (sel.txns) { obj.txns = txns; inc.push('txns'); }
+      if (sel.plans) { obj.plans = plans; inc.push('plans'); }
+      if (sel.owed) { obj.owed = state.owed.people; obj.owedSort = state.owed.sort || 'recent'; inc.push('owed'); }
+      if (sel.log) {
+        obj.shadowLog = state.shadowLog || []; // v68 item 11: the rule-coverage evidence
+        obj.moneyLog = (state.moneyLog || []).slice(-ML_CAP); // v72.8: the Ledger tab's audit
+        obj.adj = state.adj; obj.adjSig = state.adjSig || ''; // v72.8: the live overlay (exact numbers)
+        inc.push('log');
+      }
+      if (sel.chat) { obj.chat = chat; inc.push('chat'); }
+      obj.sections = inc; // v72.23: what this backup holds (partial import)
+      return new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
     }
     idbAll(STORE_CHAT).then(function (chatRows) {
       download(jsonBlob(sanitizeChatRows(chatRows)), 'finances-export-' + stamp + '.json');
@@ -3433,11 +3468,16 @@
       try {
         var data = JSON.parse(String(fr.result || ''));
         if (!data || data.app !== 'finances-pwa') throw new Error('not a Fin.AI PWA backup');
+        // v72.23: a PARTIAL backup — `sections` lists what the file holds;
+        // restore only those, leave the rest untouched. No `sections`
+        // (a pre-72.23 file) = the full v72.8 restore, exactly as before.
+        var secs = Array.isArray(data.sections) ? data.sections : null;
+        function hasSec(n) { return !secs || secs.indexOf(n) >= 0; }
         // v71: fold any unsaved "Your numbers" edits into state before the
         // import replaces it (readBaseForm is synchronous; no save race).
         if (baseDirty) { var _nb = readBaseForm(); if (_nb) state.base = migrateBaseKinds(_nb); baseDirty = false; }
         var nb = defaultBase();
-        if (data.base && (data.base.accounts || data.base.salary)) {
+        if (hasSec('base') && data.base && (data.base.accounts || data.base.salary)) {
           Object.keys(nb).forEach(function (k) { if (data.base[k] !== undefined) nb[k] = data.base[k]; });
           nb.details = sanitizeDetails(nb.details); // v56
           state.base = migrateBaseKinds(nb); // v65
@@ -3448,36 +3488,43 @@
         // restored on the first path below) — so a fresh install + import
         // loses nothing, and a mid-lifespan import keeps every tab consistent.
         var saves = [];
-        state.txns.forEach(function (t) { saves.push(idbDel(STORE_TX, t.id)); });
-        state.plans.forEach(function (p) { saves.push(idbDel(STORE_PLANS, p.id)); });
+        if (hasSec('txns')) state.txns.forEach(function (t) { saves.push(idbDel(STORE_TX, t.id)); });
+        if (hasSec('plans')) state.plans.forEach(function (p) { saves.push(idbDel(STORE_PLANS, p.id)); });
         idbAll(STORE_CHAT).then(function (chatRows) {
-          (chatRows || []).forEach(function (r) { if (r && r.id) saves.push(idbDel(STORE_CHAT, r.id)); });
+          if (hasSec('chat')) (chatRows || []).forEach(function (r) { if (r && r.id) saves.push(idbDel(STORE_CHAT, r.id)); });
           return Promise.all(saves);
         }).then(function () {
           var puts = [];
-          (data.txns || []).forEach(function (t) { if (t && t.id && t.date) puts.push(idbPut(STORE_TX, t)); });
-          (data.plans || []).forEach(function (p) { if (p && p.id) puts.push(idbPut(STORE_PLANS, p)); });
-          sanitizeChatRows(data.chat).forEach(function (r) { puts.push(idbPut(STORE_CHAT, r)); });
+          if (hasSec('txns')) (data.txns || []).forEach(function (t) { if (t && t.id && t.date) puts.push(idbPut(STORE_TX, t)); });
+          if (hasSec('plans')) (data.plans || []).forEach(function (p) { if (p && p.id) puts.push(idbPut(STORE_PLANS, p)); });
+          if (hasSec('chat')) sanitizeChatRows(data.chat).forEach(function (r) { puts.push(idbPut(STORE_CHAT, r)); });
           return Promise.all(puts);
         }).then(function () {
-          state.txns = data.txns || [];
-          state.plans = data.plans || [];
-          var owedPeople = (data.owed || []).filter(function (p) {
-            return p && typeof p.name === 'string' && p.name.trim() &&
-              (p.entries || []).every(function (e) {
-                return e && e.id && OWED_DIRS[e.dir] && (Number(e.amt) || 0) > 0 && e.d;
-              });
-          }).map(function (p) {
-            return { id: p.id || owedUid('ow'), name: p.name.trim(), entries: p.entries || [],
-              updated: typeof p.updated === 'string' ? p.updated : '' }; // v72.7: recent-sort key
-          });
-          state.owed = { people: owedPeople, sort: owedImportSort(data.owedSort) };
-          var mlRows = sanitizeMoneyLogRows(data.moneyLog);
-          state.moneyLog = mlRows;
-          state.adj = sanitizeAdj(data.adj);
-          state.adjSig = typeof data.adjSig === 'string' ? data.adjSig : snapSig(state.snapshot);
-          state.adjLoaded = true;
-          if (!data.adj) computeAdjFromTxns(); // v72.8: a pre-72.8 backup has no adj — recompute from the imported txns
+          // v72.23: restore ONLY the sections this file holds — the others
+          // (the phone's own data) stay exactly as they were
+          if (hasSec('txns')) state.txns = data.txns || [];
+          if (hasSec('plans')) state.plans = data.plans || [];
+          var owedPeople = [];
+          if (hasSec('owed')) {
+            owedPeople = (data.owed || []).filter(function (p) {
+              return p && typeof p.name === 'string' && p.name.trim() &&
+                (p.entries || []).every(function (e) {
+                  return e && e.id && OWED_DIRS[e.dir] && (Number(e.amt) || 0) > 0 && e.d;
+                });
+            }).map(function (p) {
+              return { id: p.id || owedUid('ow'), name: p.name.trim(), entries: p.entries || [],
+                updated: typeof p.updated === 'string' ? p.updated : '' }; // v72.7: recent-sort key
+            });
+            state.owed = { people: owedPeople, sort: owedImportSort(data.owedSort) };
+          }
+          if (hasSec('log')) {
+            var mlRows = sanitizeMoneyLogRows(data.moneyLog);
+            state.moneyLog = mlRows;
+            state.adj = sanitizeAdj(data.adj);
+            state.adjSig = typeof data.adjSig === 'string' ? data.adjSig : snapSig(state.snapshot);
+            state.adjLoaded = true;
+            if (!data.adj) computeAdjFromTxns(); // v72.8: a pre-72.8 backup has no adj — recompute from the imported txns
+          }
           // v47: persist the base too. The old code re-derived the snapshot from
           // the imported base in memory (and saved the snapshot) but never wrote
           // the base back to IndexedDB, so on the next launch the stale stored
@@ -3485,17 +3532,25 @@
           // saveBase() writes base + snapshot + adj through the same path the
           // Settings editor uses, so an import sticks.
           return saveBase(state.base).then(function () {
-            saveOwed();
-            return Promise.all([
+            if (hasSec('owed')) saveOwed();
+            var metaPuts = [];
+            if (hasSec('log')) metaPuts = [
               idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }),
               idbPut(STORE_META, { key: 'adj', value: state.adj }),
               idbPut(STORE_META, { key: 'adjSig', value: state.adjSig })
-            ]);
+            ];
+            return Promise.all(metaPuts);
           }).then(function () {
             renderBaseEditor();
             renderBaseStatus();
             render();
-            snack('Imported ' + (data.txns || []).length + ' entries · ' + (data.plans || []).length + ' plans · ' + owedPeople.length + ' owed people' + (state.base.migrated_from_snapshot || (data.base && data.base.accounts) ? ' · numbers restored' : ''));
+            // v72.23: the snack names only what this file restored
+            var parts = [];
+            if (hasSec('txns')) parts.push((data.txns || []).length + ' entries');
+            if (hasSec('plans')) parts.push((data.plans || []).length + ' plans');
+            if (hasSec('owed')) parts.push(owedPeople.length + ' owed people');
+            if (hasSec('base') && (state.base.migrated_from_snapshot || (data.base && data.base.accounts))) parts.push('numbers restored');
+            snack('Imported ' + (parts.length ? parts.join(' \u00b7 ') : 'nothing \u2014 this backup had no sections selected'));
           });
         });
       } catch (err) {
@@ -3509,7 +3564,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.22, live: new Date(2026, 8, 13, 4, 13) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.23, live: new Date(2026, 8, 13, 4, 38) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -4067,6 +4122,7 @@
     coachFindings: coachFindings, // v68 item 12: findings for the Coach's-note prompt
     shadowLog: shadowLog, // v68 item 11: shadow-mode answering-path log
     exportData: exportData, // v68 item 11: lets the smoke read what the JSON export contains
+    backupSelRead: backupSelRead, // v72.23: the Backup "what to include" choice (smoke)
     importData: importData, // v72.8: the full-restore path (smoke)
     snack: snack,
     render: render,
@@ -4233,6 +4289,12 @@
     });
     var ej = byId('expJson');
     if (ej) ej.onclick = function () { exportData('json'); };
+    // v72.23: the Backup section's "what to include" — persist on change
+    BK_SELS.forEach(function (s) {
+      var el = byId(s[1]);
+      if (el) el.onchange = function () { backupSelWrite(); };
+    });
+    backupSelSync();
     var ec = byId('expCsv');
     if (ec) ec.onclick = function () { exportData('csv'); };
     var ib = byId('impBtn');
