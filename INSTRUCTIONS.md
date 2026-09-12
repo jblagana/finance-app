@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-13 01:28 — Development: import sanitizer drops the v72.10 row flavors (p/i) → v72.14
-Status: in progress (gates green — commit + push next)
-Progress: 90% — ETA ~01:50
+Status: done — pushed de4c426 (live 01:43)
+Progress: 100%
 
 ### Instruction (verbatim)
 > (agent development, no new user instruction — logged per rules 3/7 before acting:)
@@ -28,12 +28,12 @@ Progress: 90% — ETA ~01:50
 - [x] build script: sanitizeSim mirrors the fixed v72.14 sanitizer
 - [x] node --check app.js + run gate suite (release.ps1: all 6 gates green)
 - [x] rebuild + verify the restored export file (11 rows verified; source file untouched)
-- [ ] tools/release.ps1 v72.14 (stamp + full gates), commit, push
-- [ ] mark both entries done with the commit hash
+- [x] tools/release.ps1 v72.14 (stamp + full gates), commit + push de4c426
+- [x] mark both entries done with the commit hash (de4c426)
 
 ## 2026-09-13 01:22 — Option A: restored export with the 4 ghost journal rows
-Status: in progress (needs the 01:28 v72.14 gate first)
-Progress: 80% — ETA ~01:50
+Status: done — v72.14 gate pushed de4c426 (live 01:43); file ready at c:\Users\Jan\Downloads\finances-export-2026-09-13-restored.json, awaiting the user's import
+Progress: 100%
 
 ### Instruction (verbatim)
 > (pre-resume request captured via context summary — original words not in session context:) "remove the old lost logs so the donut spend pace only reflect my current entries not the old lost logs" — later narrowed via my Option A/B/C list to the choice below.
@@ -57,8 +57,8 @@ Progress: 80% — ETA ~01:50
 - [x] Re-read the original export + sanitizeMoneyLogRows (caught: the pre-existing k:"i" row can't survive an import on the current app — see 01:28 entry)
 - [x] Build the restored file (node script in finances/build_restored_export.js; every assert passed)
 - [x] Verify: deep diff (only moneyLog differs), tid resolution, at-order, sanitize sim, on-disk re-read (source file byte-identical after)
-- [ ] Update log, run repo checks, commit + push
-- [ ] Hand off import instructions (don't log before import; original kept intact)
+- [x] Update log, run repo checks, commit + push (de4c426 — all 6 gates green)
+- [x] Hand off import instructions (final reply: open the app once for the v72.14 update, don't log before importing, original file kept intact)
 
 ## 2026-09-12 04:15 — GO: v72.13 smoother movement (the 15-min version)
 Status: done — pushed 1c89475 (live 13:39)
