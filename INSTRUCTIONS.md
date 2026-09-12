@@ -6,6 +6,44 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-13 03:51 — New: separate "Backup" section in Settings with a choice of which data to export
+Status: not started (queued as v72.23, after the coach-bubble items)
+Progress: 0%
+
+### Instruction (verbatim)
+> (user edit inside the 03:41 entry's Interpretation section — a new bullet:)
+> -seaprte a backup section in settings where u can choose which data u wanna export etc e.g. owed tab entries only
+
+### Interpretation (agent — user may edit this section)
+- A new FEATURE (rule 2): a dedicated "Backup" section in the Settings sheet with a selection of which data goes into the JSON export — e.g. "owed tab entries only". The current export is all-or-nothing (`exportData('json')` takes the whole state).
+- Scope decision (agent's lean, user may edit): per-section checkboxes — Ledger txns / money log / plans / owed book / base numbers / chat — and the import must tolerate a PARTIAL backup: restore only the selected sections, leave everything else untouched. Granularity confirmation with the user is a subtask below.
+- Queued after the coach-bubble items: v72.21 (no-cover anchoring) → v72.22 (flick distance + drag follow-lag) → v72.23 (this one).
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [ ] Confirm export granularity with the user
+- [ ] Implement the backup section (Settings UI + export filter + partial import)
+- [ ] Gate + release.ps1 v72.23, commit, push
+
+## 2026-09-13 03:51 — New: longer flick travel + drag should follow the finger with a small delay
+Status: not started (queued as v72.22)
+Progress: 0%
+
+### Instruction (verbatim)
+> (user edit inside the 03:41 entry's Interpretation section — a new bullet:)
+> -increase flicked bot travelled distance. and make the dragging smoother further, add a delay from finger like the bubble is following the finger.
+
+### Interpretation (agent — user may edit this section)
+- Two feel tweaks (rule 2), one dot release v72.22:
+  1. "increase flicked bot travelled distance" — strengthen the flick projection (FAB_FLICK_MS 150 → ~320ms) so a flick carries the bot further toward (and past) the aimed edge.
+  2. "add a delay from finger like the bubble is following the finger" — replace the 1:1 pointer tracking with a small follow-lag: the bot chases the finger with a short exponential smoothing (rAF loop, ~40-70ms time constant) so it reads as trailing the finger, not welded to it. The flick velocity is computed from the FINGER target (not the smoothed position), and reduced-motion keeps instant 1:1 tracking.
+- The v72.13 "1:1 tracking" gate wording needs a matching update for v72.22.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [ ] v72.22: flick distance + follow-lag drag + gate
+- [ ] release.ps1 v72.22, commit, push
+
 ## 2026-09-13 03:41 — "also, the bot should not cover the chatbox"
 Status: in progress (new dot release v72.21 — toast v72.20 goes first, already coded)
 Progress: 0%
@@ -17,8 +55,9 @@ Progress: 0%
 - Follow-up to the 03:26 "keep it in front of the chatbox" (v72.18 z-order): the bot must not COVER the panel's content either. Both requirements together = the panel anchors with a GUARANTEED gap from the bot, and the bot stays on top as the safety net.
 - Root cause: `fabPlacePanel` clamps the panel into the safe rect, and that clamp can push the panel back over the bot's spot (e.g. bot at the bottom edge: the "above" slot doesn't fit, the panel is clamped down and its bottom intrudes onto the bot).
 - Fix (v72.21): the chosen side's gap becomes a HARD constraint — a side that can't keep FAB_PANEL_GAP away from the bot's face inside the safe rect is INFEASIBLE and the next side is tried (order above/below/left/right). Only if no side can keep the gap (tiny screen) does it fall back to the least-clamping side, where the v72.18 z-order (bot in front) is the safety net. New pure helper `fabPanelPick(c, r, b, allowCover)` (smoke-testable); `fabPlacePanel` calls it.
-- Sequence: v72.20 (toast — code done, gate pending) pushes first; then v72.21.
+- Sequence: v72.20 (toast) pushed — e0f050e (live 03:50); v72.21 next; the user then added two more bullets → logged as 03:51 entries (v72.22 feel, v72.23 backup section).
 -increase flicked bot travelled distance. and make the dragging smoother further, add a delay from finger like the bubble is following the finger.
+-seaprte a backup section in settings where u can choose which data u wanna export etc e.g. owed tab entries only 
 
 ### Subtasks
 - [x] Log the instruction verbatim (first action)
@@ -83,7 +122,7 @@ Progress: 0%
 
 ## 2026-09-13 02:14 — Coach bubble GO (core + feel polish) + owed "+ entry" placement + toast center/size
 Status: in progress
-Progress: 65% — ETA ~04:30
+Progress: 75% — ETA ~05:00
 
 ### Instruction (verbatim)
 > -core +feel polish
@@ -112,10 +151,14 @@ Progress: 65% — ETA ~04:30
 - [x] release.ps1 v72.18, commit, push — pushed 485159c (live 03:29)
 - [x] v72.19: owed "+ entry" placement — code + gate green (release.ps1 v72.19, 03:36)
 - [x] release.ps1 v72.19, commit, push — pushed 03fe2c5 (live 03:36)
-- [ ] v72.20: toast centered + smaller — gate
-- [ ] release.ps1 v72.20, commit, push
+- [x] v72.20: toast centered + smaller — code + gate green (release.ps1 v72.20, 03:47)
+- [x] release.ps1 v72.20, commit, push — pushed e0f050e (live 03:50)
 - [ ] v72.21: bot must not COVER the chat box — panel anchored with a hard gap, infeasible sides skipped (user, 03:41) — gate + smoke
 - [ ] release.ps1 v72.21, commit, push
+- [ ] v72.22: flick travel distance + drag follow-lag (user, 03:51) — gate
+- [ ] release.ps1 v72.22, commit, push
+- [ ] v72.23: backup section in Settings with export selection (user, 03:51) — design + gate
+- [ ] release.ps1 v72.23, commit, push
 - [ ] mark all entries done with the hashes
 
 ## 2026-09-13 02:04 — Coach bubble: "make it totally better" (plan requested in plan mode)

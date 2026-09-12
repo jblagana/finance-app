@@ -3509,7 +3509,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.20, live: new Date(2026, 8, 13, 3, 47) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.21, live: new Date(2026, 8, 13, 3, 59) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3721,6 +3721,32 @@
       right: { x: r.right + FAB_PANEL_GAP, y: cy - H / 2 }
     };
   }
+  // v72.21: pick the panel's side — the chosen side keeps a HARD gap
+  // (FAB_PANEL_GAP) between the panel and the bot's face on that axis: the
+  // panel must never cover the bot (a clamped panel used to intrude onto it).
+  // A side that can't respect the gap inside the safe bounds b is infeasible
+  // and skipped (order above/below/left/right — above wins ties).
+  // allowCover = the tiny-screen fallback, where the v72.18 z-order (bot in
+  // front) is the safety net instead.
+  function fabPanelPick(c, r, b, allowCover) {
+    var order = ['above', 'below', 'left', 'right'];
+    var best = null;
+    for (var i = 0; i < order.length; i++) {
+      var side = order[i];
+      var p = c[side];
+      var px = Math.max(b.minX, Math.min(p.x, b.maxX));
+      var py = Math.max(b.minY, Math.min(p.y, b.maxY));
+      if (!allowCover) {
+        if (side === 'above' && py + c.H > r.top - FAB_PANEL_GAP) continue;
+        if (side === 'below' && py < r.bottom + FAB_PANEL_GAP) continue;
+        if (side === 'left' && px + c.W > r.left - FAB_PANEL_GAP) continue;
+        if (side === 'right' && px < r.right + FAB_PANEL_GAP) continue;
+      }
+      var d = Math.abs(p.x - px) + Math.abs(p.y - py);
+      if (!best || d < best.d) best = { side: side, x: px, y: py, d: d };
+    }
+    return best;
+  }
   // anchor the open panel to the bot: the side needing the least clamping
   // wins (above first on a tie), clamp into the safe area, aim the scale-in
   // origin at the bot
@@ -3730,18 +3756,15 @@
     var c = fabPanelCandidates(fab, ov);
     if (!c) return null;
     var s = fabSafe();
-    var minX = s.left + FAB_PANEL_M, minY = s.top + FAB_PANEL_M;
-    var maxX = Math.max(minX, window.innerWidth - s.right - FAB_PANEL_M - c.W);
-    var maxY = Math.max(minY, window.innerHeight - s.bottom - FAB_PANEL_M - c.H);
-    var order = ['above', 'below', 'left', 'right'];
-    var best = null, bd = Infinity;
-    for (var i = 0; i < order.length; i++) {
-      var p = c[order[i]];
-      var px = Math.max(minX, Math.min(p.x, maxX));
-      var py = Math.max(minY, Math.min(p.y, maxY));
-      var d = Math.abs(p.x - px) + Math.abs(p.y - py);
-      if (d < bd) { bd = d; best = { side: order[i], x: px, y: py }; }
-    }
+    var b = {
+      minX: s.left + FAB_PANEL_M, minY: s.top + FAB_PANEL_M,
+      maxX: Math.max(s.left + FAB_PANEL_M, window.innerWidth - s.right - FAB_PANEL_M - c.W),
+      maxY: Math.max(s.top + FAB_PANEL_M, window.innerHeight - s.bottom - FAB_PANEL_M - c.H)
+    };
+    var r = fab.getBoundingClientRect();
+    // v72.21: never cover the bot; only if no side can keep the gap (tiny
+    // screen) fall back to plain least-clamping — the z-order covers that
+    var best = fabPanelPick(c, r, b, false) || fabPanelPick(c, r, b, true);
     if (!best) return null;
     ov.style.right = 'auto';
     ov.style.bottom = 'auto';
@@ -3987,6 +4010,7 @@
     fabNearestEdge: fabNearestEdge,
     fabEdgeFromPoint: fabEdgeFromPoint,
     fabPanelCandidates: fabPanelCandidates,
+    fabPanelPick: fabPanelPick,
     fabPlacePanel: fabPlacePanel,
     fabPosSave: fabPosSave,
     fabPosLoad: fabPosLoad,

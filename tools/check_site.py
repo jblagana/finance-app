@@ -590,6 +590,12 @@ def main():
           and "font-size:12.5px" in snack_rule
           and "max-width:min(88vw,380px)" in snack_rule
           and "border-radius:10px" in snack_rule)
+    check("the panel never covers the bot (v72.21, user: 'the bot should not cover the chatbox' — with v72.18 keeping the bot on top as the safety net): fabPanelPick makes the chosen side's gap a hard constraint — a side that can't keep FAB_PANEL_GAP from the bot's face inside the safe bounds is infeasible and skipped (above/below/left/right, above wins ties); only the tiny-screen allowCover fallback may overlap",
+          "function fabPanelPick(c, r, b, allowCover)" in js
+          and "if (side === 'above' && py + c.H > r.top - FAB_PANEL_GAP) continue;" in js
+          and "if (side === 'right' && px < r.right + FAB_PANEL_GAP) continue;" in js
+          and "fabPanelPick(c, r, b, false) || fabPanelPick(c, r, b, true)" in js
+          and "fabPanelPick: fabPanelPick" in js)
     check("emoji allowed, kept light, in the voice paths only (v72.12): the v72.3 'no emojis' flips to at most one where it fits (chat + note prompts); the setup prompt stays plain; the welcome carries one on its ramen line",
           "at most one emoji and only where it genuinely fits" in chatjs
           and "at most one emoji and only where it genuinely fits" in aijs
