@@ -3506,7 +3506,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.11, live: new Date(2026, 8, 12, 4, 2) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.13, live: new Date(2026, 8, 12, 13, 39) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3583,6 +3583,14 @@
   // today's spot) and is re-snapped on resize / orientation change.
   var FAB_POS_KEY = 'fin.fabPos.v1';
   var FAB_SIZE = 58, FAB_GAP = 10, FAB_MARGIN = 4, FAB_DRAG_THRESH = 8;
+  // v72.13: the smoothness pass — while dragging, left/top track the finger
+  // 1:1 (NO left/top transition; only the transform animates, so the
+  // scale-up reads as a "lift"). On release, and on the resize/orientation
+  // settle, left/top GLEIDE to the snap over ~.28s ease-out instead of the
+  // v72.11 teleport (transition:'none' + jump = the "stiff" feel).
+  var FAB_GLIDE = 'left .28s cubic-bezier(.2,.8,.25,1), top .28s cubic-bezier(.2,.8,.25,1), transform .2s ease';
+  function fabGlide() { var f = byId('coachFab'); if (f) f.style.transition = FAB_GLIDE; }
+  function fabHold() { var f = byId('coachFab'); if (f) f.style.transition = 'transform .15s ease'; }
   function fabSnapPoints(bub) {
     if (!bub || !window.innerWidth || !window.innerHeight) return [];
     var maxL = window.innerWidth - FAB_SIZE - FAB_MARGIN;
@@ -3637,6 +3645,7 @@
     if (want) p = fabNearestSnap(want.x + FAB_SIZE / 2, want.y + FAB_SIZE / 2, pts);
     if (!p) for (var i = 0; i < pts.length; i++) if (pts[i].key === (defaultKey || 'br')) p = pts[i];
     if (!p) p = pts[3];
+    fabGlide(); // v72.13: the settle glides (first load just lands — CSS auto has nothing to animate from)
     fab.style.left = p.x + 'px';
     fab.style.top = p.y + 'px';
     fabPosSave(p.x, p.y);
@@ -3653,6 +3662,7 @@
     var st = null;
     fab.addEventListener('pointerdown', function (ev) {
       if (ev.button !== undefined && ev.button !== 0) return;
+      fabHold(); // v72.13: kill any glide — the drag tracks the finger 1:1
       var r = fab.getBoundingClientRect();
       st = { x: ev.clientX, y: ev.clientY, left: r.left, top: r.top, drag: false };
       if (fab.setPointerCapture) { try { fab.setPointerCapture(ev.pointerId); } catch (e) {} }
@@ -3672,9 +3682,9 @@
       if (!st) return;
       var wasDrag = st.drag;
       st = null;
-      fab.classList.remove('dragging');
       if (wasDrag) {
         fabLastDragAt = Date.now(); // a click right after a drag must NOT open the coach
+        fabGlide(); // v72.13: GLEIDE to the snap (transform .2s = the scale-down) — no more teleport
         var r = fab.getBoundingClientRect();
         var pts = fabSnapPoints(fabBubbleRect());
         var p = pts.length ? fabNearestSnap(r.left + FAB_SIZE / 2, r.top + FAB_SIZE / 2, pts) : null;
@@ -3684,6 +3694,7 @@
           fabPosSave(p.x, p.y);
         }
       }
+      fab.classList.remove('dragging');
     }
     fab.addEventListener('pointerup', release);
     fab.addEventListener('pointercancel', release);

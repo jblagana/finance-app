@@ -549,6 +549,12 @@ def main():
           and "fabLastDragAt = Date.now(); // a click right after a drag must NOT open the coach" in js
           and "window.addEventListener('orientationchange', fabSettleAny);" in js
           and "touch-action:none" in html)
+    check("the bot's drag feels smooth, not stiff (v72.13): while dragging left/top track the finger 1:1 with no left/top transition (fabHold on pointerdown) and only the transform animates — the scale(1.06) 'lift'; on release the bot GLEIDES to the snap over .28s ease-out (fabGlide) and the resize/orientation settle glides too",
+          "var FAB_GLIDE = 'left .28s cubic-bezier(.2,.8,.25,1), top .28s cubic-bezier(.2,.8,.25,1), transform .2s ease'" in js
+          and "function fabGlide()" in js
+          and "function fabHold()" in js
+          and "fabHold(); // v72.13: kill any glide — the drag tracks the finger 1:1" in js
+          and "transform:scale(1.06)" in html)
     check("emoji allowed, kept light, in the voice paths only (v72.12): the v72.3 'no emojis' flips to at most one where it fits (chat + note prompts); the setup prompt stays plain; the welcome carries one on its ramen line",
           "at most one emoji and only where it genuinely fits" in chatjs
           and "at most one emoji and only where it genuinely fits" in aijs
