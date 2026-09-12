@@ -463,8 +463,9 @@ def main():
     snack_rule = ""
     if "#snack{" in html:
         snack_rule = html.split("#snack{", 1)[1].split("}", 1)[0]
-    check("add snack centered robustly (v71.3): left:0;right:0 + margin auto (no left:50% transform); the add toast has NO undo (ledger ✕ is the delete path)",
-          "left:0;right:0;margin:0 auto" in snack_rule and "width:fit-content" in snack_rule
+    check("add snack centered bulletproof (v71.3, re-done in v72.20): left:50% with translateX(-50%) carried INSIDE the transform in BOTH the base and .show states (the #swToast pattern — the v71 left:0;right:0 + margin auto variant still floated left on the user's phone, so no state may be able to drop the X offset); the add toast has NO undo (ledger ✕ is the delete path)",
+          "left:50%" in snack_rule and "transform:translate(-50%,10px)" in snack_rule
+          and "#snack.show{opacity:1;transform:translate(-50%,0)" in html
           and "snack('Added ' + money(t.amount) + ' \u00b7 ' + esc(t.category || t.account));" in js
           and "undoAddTxn" not in js)
     check("ledger entries are editable (v71.4): tap a row -> the Add sheet opens pre-filled (title/button flip to Edit/Save); Save re-logs via saveTxnEdit (same id; Undo restores the ORIGINAL entry)",
@@ -584,6 +585,11 @@ def main():
           _ow_btn > -1 and _ow_note > -1 and _ow_btn < _ow_note
           and 'add the first one above.' in js
           and 'add the first one below.' not in js)
+    check("the snack toast is smaller (v72.20, user: 'reduce its size'): the pill shrinks — padding 8px 12px, 12.5px type, 88vw/380px cap (was 10px 14px / 13px / 92vw/480px), radius 10",
+          "padding:8px 12px" in snack_rule
+          and "font-size:12.5px" in snack_rule
+          and "max-width:min(88vw,380px)" in snack_rule
+          and "border-radius:10px" in snack_rule)
     check("emoji allowed, kept light, in the voice paths only (v72.12): the v72.3 'no emojis' flips to at most one where it fits (chat + note prompts); the setup prompt stays plain; the welcome carries one on its ramen line",
           "at most one emoji and only where it genuinely fits" in chatjs
           and "at most one emoji and only where it genuinely fits" in aijs

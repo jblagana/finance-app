@@ -6,6 +6,25 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-13 03:41 — "also, the bot should not cover the chatbox"
+Status: in progress (new dot release v72.21 — toast v72.20 goes first, already coded)
+Progress: 0%
+
+### Instruction (verbatim)
+> also, the bot should not cover the chatbox
+
+### Interpretation (agent — user may edit this section)
+- Follow-up to the 03:26 "keep it in front of the chatbox" (v72.18 z-order): the bot must not COVER the panel's content either. Both requirements together = the panel anchors with a GUARANTEED gap from the bot, and the bot stays on top as the safety net.
+- Root cause: `fabPlacePanel` clamps the panel into the safe rect, and that clamp can push the panel back over the bot's spot (e.g. bot at the bottom edge: the "above" slot doesn't fit, the panel is clamped down and its bottom intrudes onto the bot).
+- Fix (v72.21): the chosen side's gap becomes a HARD constraint — a side that can't keep FAB_PANEL_GAP away from the bot's face inside the safe rect is INFEASIBLE and the next side is tried (order above/below/left/right). Only if no side can keep the gap (tiny screen) does it fall back to the least-clamping side, where the v72.18 z-order (bot in front) is the safety net. New pure helper `fabPanelPick(c, r, b, allowCover)` (smoke-testable); `fabPlacePanel` calls it.
+- Sequence: v72.20 (toast — code done, gate pending) pushes first; then v72.21.
+-increase flicked bot travelled distance. and make the dragging smoother further, add a delay from finger like the bubble is following the finger.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [ ] v72.21: fabPanelPick with the no-cover constraint + fallback + gate + smoke
+- [ ] release.ps1 v72.21, commit, push
+
 ## 2026-09-13 03:26 — User edit on the 02:14 entry: flick physics (confirms v72.17) + bot must stay IN FRONT of the open chat box
 Status: in progress (new dot release v72.18 — owed → v72.19, toast → v72.20)
 Progress: 40% — ETA ~03:35
@@ -18,11 +37,12 @@ Progress: 40% — ETA ~03:35
 - Clause 1 ("its motion follows physics") = the flick instruction from the 03:17 entry, confirmed in the physics framing — that is exactly what v72.17 ships (release velocity projects the settle; the glide + overshoot play the throw; no extra work).
 - Clause 2 is a NEW bug: with the chat open the bot can render BEHIND the panel (`#coachOv` z-25 > `#coachFab` z-24, and the clamped panel can overlap the bot's spot). Fix: while the bubble is open, the bot sits on top — `#coachOv.show ~ #coachFab { z-index: 30 }` — so it reads as the bubble's handle and stays tappable (tap = close).
 - Renumber: v72.18 = z-order fix → owed "+ entry" = v72.19 → toast = v72.20. v72.17 (committed, gate green) is unaffected and pushes first.
+-in owed adn ledger, when enrties are more than 7, hide the old ones in a 'see more' which when clicked shows the old ones (not all, limit it so that clicking 'see more' shows the few old ones and another 'see more')
 
 ### Subtasks
 - [x] Log the user edit verbatim (this entry, first action after detecting it)
 - [x] v72.18: `#coachOv.show ~ #coachFab { z-index: 30 }` + gate check — code + gate green (release.ps1 v72.18, 03:28)
-- [ ] release.ps1 v72.18, commit, push — 485159c committed, pushing now (gate green)
+- [x] release.ps1 v72.18, commit, push — pushed 485159c (live 03:29)
 
 ## 2026-09-13 03:17 — User edit on the 02:14 entry: the bot should FLICK AWAY with the gesture's velocity
 Status: in progress (new dot release v72.17 — owed/toast renumbered v72.18 / v72.19)
@@ -57,8 +77,8 @@ Progress: 0%
 
 ### Subtasks
 - [x] Log the user edit verbatim (this entry, first action after detecting it)
-- [ ] Move + entry button + form to the card top (owedPersonHTML)
-- [ ] Gate check for the new card order
+- [x] Move + entry button + form to the card top (owedPersonHTML)
+- [x] Gate check for the new card order — code + gate green (release.ps1 v72.19, 03:36)
 - [ ] (release: folded into the 02:14 entry's v72.19 subtask — renumbered by the 03:26 user edit)
 
 ## 2026-09-13 02:14 — Coach bubble GO (core + feel polish) + owed "+ entry" placement + toast center/size
@@ -90,10 +110,12 @@ Progress: 65% — ETA ~04:30
 - [x] release.ps1 v72.17, commit, push — pushed 6fcdb37 (live 03:25)
 - [x] v72.18: bot in FRONT of the open chat box (z-order, user edit 03:26) — code + gate green (release.ps1 v72.18, 03:28)
 - [x] release.ps1 v72.18, commit, push — pushed 485159c (live 03:29)
-- [ ] v72.19: owed "+ entry" placement — gate
-- [ ] release.ps1 v72.19, commit, push
+- [x] v72.19: owed "+ entry" placement — code + gate green (release.ps1 v72.19, 03:36)
+- [x] release.ps1 v72.19, commit, push — pushed 03fe2c5 (live 03:36)
 - [ ] v72.20: toast centered + smaller — gate
 - [ ] release.ps1 v72.20, commit, push
+- [ ] v72.21: bot must not COVER the chat box — panel anchored with a hard gap, infeasible sides skipped (user, 03:41) — gate + smoke
+- [ ] release.ps1 v72.21, commit, push
 - [ ] mark all entries done with the hashes
 
 ## 2026-09-13 02:04 — Coach bubble: "make it totally better" (plan requested in plan mode)
