@@ -578,6 +578,12 @@ def main():
           and "if (sp > FAB_FLICK_MIN) { cx += st.vx * FAB_FLICK_MS; cy += st.vy * FAB_FLICK_MS; }" in js)
     check("the bot stays in front of the open chat box (v72.18): while the bubble is showing, #coachFab rides above the panel (z 30 > 25) — it is the bubble's handle, and the clamped panel can overlap the bot's spot; the face stays tappable (tap = close)",
           "#coachOv.show ~ #coachFab{z-index:30}" in html)
+    _ow_btn = js.find('class="addrow" data-ow-toggle=')
+    _ow_note = js.find("(rows || '<p class=\"note\"")
+    check("the owed '+ entry' sits at the TOP of the person card (v72.19, user request): the addrow button + its hidden form render right after the card header, BEFORE the entry rows — an opened form expands next to its button and pushes the list down; the empty-card note points 'above' now",
+          _ow_btn > -1 and _ow_note > -1 and _ow_btn < _ow_note
+          and 'add the first one above.' in js
+          and 'add the first one below.' not in js)
     check("emoji allowed, kept light, in the voice paths only (v72.12): the v72.3 'no emojis' flips to at most one where it fits (chat + note prompts); the setup prompt stays plain; the welcome carries one on its ramen line",
           "at most one emoji and only where it genuinely fits" in chatjs
           and "at most one emoji and only where it genuinely fits" in aijs

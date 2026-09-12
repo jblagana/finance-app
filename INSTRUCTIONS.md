@@ -8,7 +8,7 @@ commit is not done.
 
 ## 2026-09-13 03:26 — User edit on the 02:14 entry: flick physics (confirms v72.17) + bot must stay IN FRONT of the open chat box
 Status: in progress (new dot release v72.18 — owed → v72.19, toast → v72.20)
-Progress: 0%
+Progress: 40% — ETA ~03:35
 
 ### Instruction (verbatim)
 > (user edit inside the 02:14 entry's Interpretation section — a new bullet:)
@@ -21,8 +21,8 @@ Progress: 0%
 
 ### Subtasks
 - [x] Log the user edit verbatim (this entry, first action after detecting it)
-- [ ] v72.18: `#coachOv.show ~ #coachFab { z-index: 30 }` + gate check
-- [ ] release.ps1 v72.18, commit, push
+- [x] v72.18: `#coachOv.show ~ #coachFab { z-index: 30 }` + gate check — code + gate green (release.ps1 v72.18, 03:28)
+- [ ] release.ps1 v72.18, commit, push — 485159c committed, pushing now (gate green)
 
 ## 2026-09-13 03:17 — User edit on the 02:14 entry: the bot should FLICK AWAY with the gesture's velocity
 Status: in progress (new dot release v72.17 — owed/toast renumbered v72.18 / v72.19)
@@ -88,8 +88,8 @@ Progress: 65% — ETA ~04:30
 - [x] release.ps1 v72.16, commit, push — pushed e871e2d (live 03:18)
 - [x] v72.17: flick — release velocity carries the bot toward the flicked edge (user edit, 03:17 entry) — code + gate green (release.ps1 v72.17, 03:24)
 - [x] release.ps1 v72.17, commit, push — pushed 6fcdb37 (live 03:25)
-- [ ] v72.18: bot in FRONT of the open chat box (z-order, user edit 03:26) — gate
-- [ ] release.ps1 v72.18, commit, push
+- [x] v72.18: bot in FRONT of the open chat box (z-order, user edit 03:26) — code + gate green (release.ps1 v72.18, 03:28)
+- [x] release.ps1 v72.18, commit, push — pushed 485159c (live 03:29)
 - [ ] v72.19: owed "+ entry" placement — gate
 - [ ] release.ps1 v72.19, commit, push
 - [ ] v72.20: toast centered + smaller — gate

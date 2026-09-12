@@ -2742,7 +2742,9 @@
     return '<section class="card ow-p" data-ow-pid="' + esc(p.id) + '">' +
       '<div class="ow-h"><span class="bdrag" data-ow-drag="1" aria-label="Drag to reorder" title="Drag to reorder">\u287F</span><b>' + esc(p.name) + '</b>' + owedBalHTML(b) +
       '<button type="button" class="sheet-x" data-ow-del="' + esc(p.id) + '" aria-label="Remove person">\u2715</button></div>' +
-      (rows || '<p class="note" style="margin:8px 0 0">No entries yet — add the first one below.</p>') +
+      // v72.19: "+ entry" (and its hidden form) sits at the TOP of the card —
+      // right under the header, above the entry list (user request); an opened
+      // form expands next to its button and pushes the list down
       '<button type="button" class="addrow" data-ow-toggle="' + esc(p.id) + '">+ entry</button>' +
       '<form class="oent" data-ow-for="' + esc(p.id) + '" style="display:none" autocomplete="off">' +
       '<div class="oent-grid">' +
@@ -2771,6 +2773,7 @@
       '<input type="text" class="oent-note" maxlength="60" autocomplete="off">' +
       '<div style="margin-top:14px"><button class="act" type="submit">Add entry</button></div>' +
       '</form>' +
+      (rows || '<p class="note" style="margin:8px 0 0">No entries yet — add the first one above.</p>') +
       '</section>';
   }
   // v72.7: person order — A–Z / recent / custom (drag). Default = recent:
@@ -3506,7 +3509,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.18, live: new Date(2026, 8, 13, 3, 29) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.19, live: new Date(2026, 8, 13, 3, 36) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
