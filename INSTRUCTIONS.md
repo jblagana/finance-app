@@ -6,6 +6,74 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-13 02:29 — User edit on the 02:14 entry: owed "+ entry" goes to the TOP of the card
+Status: in progress (implements as the 02:14 entry's v72.17 subtask)
+Progress: 0%
+
+### Instruction (verbatim)
+> (user edit inside the 02:14 entry's Interpretation section — the agent's bullet now reads:)
+> - New fix: Owed tab — i want the "+ entry" button to sit at the top; layout intent to be confirmed in code before choosing the fix (likely: move it out of the top, e.g. to the list end or a proper header row).
+
+### Interpretation (agent — user may edit this section)
+- The user edited the agent's interpretation bullet between 02:14 and 02:29: "i want the '+ entry' button to sit at the top". Per rule 2 the edit is the new instruction — no clarifying question needed.
+- Fact check that shaped the implementation: in the current code the per-card "+ entry" button + its hidden form sit at the BOTTOM of each person card (below the entry rows; unchanged since v22). So "top" means: right under the person header, above the entry list. Both imported people have entries, so the empty-card note is the only other touchpoint.
+- Implementation: in `owedPersonHTML`, move the `+ entry` button AND its hidden form to right after the `ow-h` header (before the entry rows) so an opened form expands next to its button; flip the empty-state note ("add the first one below" → "above").
+
+### Subtasks
+- [x] Log the user edit verbatim (this entry, first action after detecting it)
+- [ ] Move + entry button + form to the card top (owedPersonHTML)
+- [ ] Gate check for the new card order
+- [ ] (release: folded into the 02:14 entry's v72.17 subtask)
+
+## 2026-09-13 02:14 — Coach bubble GO (core + feel polish) + owed "+ entry" placement + toast center/size
+Status: in progress
+Progress: 30% — ETA ~03:45
+
+### Instruction (verbatim)
+> -core +feel polish
+> -also, in owed tab, the '+ entry' is on the top
+> -fix the toast, its still in the left side and not in the middle, and reduce its size
+
+### Interpretation (agent — user may edit this section)
+- Answer to the scope question in the 02:04 entry: ship **v72.15 (core)** + **v72.16 (feel polish)**.
+  - v72.15: the chat panel follows the bot (auto side by available space, safe-area clamped), the bot docks as the panel's handle while open (tap = close), nearest-EDGE settle replaces the 4 corner snaps, drag clamp becomes safe-area-aware, new `fin.fabPos.v2` persistence (edge + normalized offset, migrates v1).
+  - v72.16: settle overshoot (drag stays 1:1), micro-haptic on drag start, `prefers-reduced-motion` → instant settle.
+- New fix: Owed tab — i want the "+ entry" button to sit at the top; layout intent to be confirmed in code before choosing the fix (likely: move it out of the top, e.g. to the list end or a proper header row).
+- New fix: the "Added …" toast is still left-aligned (the v72.3 decision was centered) and too big — center it AND reduce its size.
+- Sequence, one dot release per item (edit → gate check in tools/check_site.py → tools/release.ps1 → commit → push): v72.15 → v72.16 → owed "+ entry" (v72.17) → toast (v72.18).
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Investigate owed "+ entry" placement + toast snack CSS/JS (owed direction fixed by the user edit → 02:29 entry: button to the card TOP; toast = `#snack` — the v71 "robust" centering exists but the user still sees it left, so v72.18 re-centers bulletproof-style (X-offset inside the transform in BOTH states, like `#swToast`) and shrinks the pill)
+- [x] v72.15: bubble follows bot + docked handle + edge settle + safe-area clamp + fabPos.v2 — code + gate + smoke green (release.ps1 v72.15, 03:01)
+- [ ] release.ps1 v72.15, commit, push
+- [ ] v72.16: overshoot + haptic + reduced-motion — gate + smoke
+- [ ] release.ps1 v72.16, commit, push
+- [ ] v72.17: owed "+ entry" placement — gate
+- [ ] release.ps1 v72.17, commit, push
+- [ ] v72.18: toast centered + smaller — gate
+- [ ] release.ps1 v72.18, commit, push
+- [ ] mark all entries done with the hashes
+
+## 2026-09-13 02:04 — Coach bubble: "make it totally better" (plan requested in plan mode)
+Status: done — plan delivered; scope approved in the 02:14 entry (core + feel polish)
+Progress: 100%
+
+### Instruction (verbatim)
+> how to make the coach-bubble totally better
+
+### Interpretation (agent — user may edit this section)
+- Plan-mode request: a comprehensive upgrade path for the coach bubble, grounded in the v72.11–v72.14 code.
+- Key finding that shaped the plan: the chat panel (`#coachOv`) is hard-fixed bottom-right and never follows the bot; the 4 corner snaps are anchored to the panel's corners, so the bot reads as magnetized home. Flagship = panel anchored to the bot + nearest-edge settle.
+- Plan offered in 4 layers: (1) core — panel follows bot, auto side, docked bot handle while open, edge settle, safe-area clamp, fabPos.v2; (2) feel polish — settle overshoot, haptic tick, reduced-motion; (3) attention cues — unread dot / peek / pulse (NOT chosen this round); (4) housekeeping — dim the bot over the add sheet.
+- Logged late: plan mode had no edit tools, so the log entry was deferred to act mode (the user was told up front).
+
+### Subtasks
+- [x] Read the current FAB implementation (app.js ~3559–3701, index.html #coachOv/#coachFab CSS)
+- [x] Present the structured plan with options + recommendation (4 layers, one dot release each)
+- [x] Scope approved — "core + feel polish" (implementation owned by the 02:14 entry)
+- [x] Log the instruction verbatim (this entry, first act-mode action for it)
+
 ## 2026-09-13 01:28 — Development: import sanitizer drops the v72.10 row flavors (p/i) → v72.14
 Status: done — pushed de4c426 (live 01:43)
 Progress: 100%

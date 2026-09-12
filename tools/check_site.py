@@ -542,15 +542,24 @@ def main():
           and "if (editId) updateOwedEntry(pid, editId, payload);" in js
           and "function updateOwedEntry(pid, eid, data)" in js
           and "if (names.indexOf('Owed') < 0) names.push('Owed');" in js)
-    check("the floating bot is draggable with four corner snaps (v72.11): pointer drag (>8px = drag, tap still opens the coach), settle to the nearest of tl/tr/bl/br around the bubble's OPEN geometry (closed transform ignored, centered on the corner's x, 10px gap, viewport-clamped), the spot persists in fin.fabPos.v1 (default br) and re-snaps on resize/orientation",
-          "var FAB_POS_KEY = 'fin.fabPos.v1'" in js
-          and "function fabSnapPoints(bub)" in js
-          and "function fabNearestSnap(cx, cy, pts)" in js
-          and "ov.style.transform = 'none';" in js
+    check("the floating bot owns the bubble (v72.15): pointer drag (>8px = drag, tap still toggles the coach), on release the bot settles to the NEAREST screen EDGE, sliding along it to the finger's spot, clamped into the SAFE area (status bar above, the 88px tab bar below, 16px sides — the v72.11 corner snaps + bubble-geometry math are gone); the open panel anchors to the bot's face (least-clamping side wins, above breaks ties, scale-in origin aimed at the bot) and the bot stays visible as the bubble's handle; the spot persists as fin.fabPos.v2 {edge,u} with a one-time fin.fabPos.v1 migration and re-derives on resize/orientation",
+          "var FAB_POS_KEY = 'fin.fabPos.v2'" in js
+          and "var FAB_POS_V1 = 'fin.fabPos.v1'" in js
+          and "function fabSafe()" in js
+          and "function fabEdgePos(edge, u, s)" in js
+          and "function fabNearestEdge(cx, cy)" in js
+          and "function fabEdgeFromPoint(cx, cy)" in js
+          and "function fabPanelCandidates(fab, ov)" in js
+          and "function fabPlacePanel()" in js
+          and "fabPlacePanel(); // v72.15: anchor the panel to the bot BEFORE the scale-in" in js
+          and "ov.style.right = 'auto';" in js
+          and "fabPosSave(m);" in js
           and "fab.addEventListener('pointermove'" in js
           and "fabLastDragAt = Date.now(); // a click right after a drag must NOT open the coach" in js
           and "window.addEventListener('orientationchange', fabSettleAny);" in js
-          and "touch-action:none" in html)
+          and "touch-action:none" in html
+          and "fabSnapPoints" not in js
+          and "fabBubbleRect" not in js)
     check("the bot's drag feels smooth, not stiff (v72.13): while dragging left/top track the finger 1:1 with no left/top transition (fabHold on pointerdown) and only the transform animates — the scale(1.06) 'lift'; on release the bot GLEIDES to the snap over .28s ease-out (fabGlide) and the resize/orientation settle glides too",
           "var FAB_GLIDE = 'left .28s cubic-bezier(.2,.8,.25,1), top .28s cubic-bezier(.2,.8,.25,1), transform .2s ease'" in js
           and "function fabGlide()" in js

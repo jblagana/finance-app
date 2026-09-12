@@ -3506,7 +3506,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.14, live: new Date(2026, 8, 13, 1, 43) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.15, live: new Date(2026, 8, 13, 3, 3) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3562,6 +3562,7 @@
   function openCoach() {
     var ov = byId('coachOv');
     if (!ov) return;
+    fabPlacePanel(); // v72.15: anchor the panel to the bot BEFORE the scale-in
     ov.classList.add('show');
     var sc = byId('scrim');
     if (sc) sc.classList.add('show');
@@ -3573,90 +3574,172 @@
     var sc = byId('scrim');
     if (sc && !openSheetEl) sc.classList.remove('show');
   }
-  // ---------- v72.11: the floating bot is draggable ----------
-  // Pointer drag (>8px = drag, a plain tap still opens the coach). On release
-  // the bot settles to the nearest of FOUR snaps measured from the coach
-  // bubble's OPEN geometry (computed style, the closed transform ignored):
-  // above the top-left / top-right corners, below the bottom-left /
-  // bottom-right corners — centered on the corner's x, 10px gap, clamped to
-  // the viewport. The settled spot persists (fin.fabPos.v1; default br =
-  // today's spot) and is re-snapped on resize / orientation change.
-  var FAB_POS_KEY = 'fin.fabPos.v1';
-  var FAB_SIZE = 58, FAB_GAP = 10, FAB_MARGIN = 4, FAB_DRAG_THRESH = 8;
+  // ---------- v72.15: the floating bot is draggable AND owns the bubble ----------
+  // The chat panel no longer lives at a fixed screen corner. On open it is
+  // anchored to the bot's CURRENT position: the side (above / below / left /
+  // right) that needs the least clamping wins (above breaks ties — the
+  // classic spot), the panel is clamped into the safe area and its scale-in
+  // transform-origin aims at the bot. The bot is never hidden while the
+  // bubble is open: it docks beside it as the handle — tap the face to close.
+  // The gesture is the v72.13 one (pointer drag, >8px = drag, a plain tap
+  // still toggles the coach, 1:1 tracking, the scale lift); on release the
+  // bot settles to the NEAREST screen EDGE, sliding along it to the finger's
+  // spot — the v72.11 four corner snaps + bubble-geometry math are gone.
+  // Persistence: fin.fabPos.v2 = { v:2, edge, u } — the edge name plus the
+  // normalized 0..1 position along it (resolution-independent, re-derived on
+  // resize / orientation). A fin.fabPos.v1 pixel spot migrates once.
+  var FAB_POS_KEY = 'fin.fabPos.v2';
+  var FAB_POS_V1 = 'fin.fabPos.v1'; // read once for the migration, then orphaned
+  var FAB_SIZE = 58, FAB_DRAG_THRESH = 8, FAB_PANEL_GAP = 10, FAB_PANEL_M = 12;
+  var FAB_EDGES = ['left', 'right', 'top', 'bottom'];
   // v72.13: the smoothness pass — while dragging, left/top track the finger
   // 1:1 (NO left/top transition; only the transform animates, so the
   // scale-up reads as a "lift"). On release, and on the resize/orientation
-  // settle, left/top GLEIDE to the snap over ~.28s ease-out instead of the
+  // settle, left/top GLEIDE to the edge over ~.28s ease-out instead of the
   // v72.11 teleport (transition:'none' + jump = the "stiff" feel).
   var FAB_GLIDE = 'left .28s cubic-bezier(.2,.8,.25,1), top .28s cubic-bezier(.2,.8,.25,1), transform .2s ease';
   function fabGlide() { var f = byId('coachFab'); if (f) f.style.transition = FAB_GLIDE; }
   function fabHold() { var f = byId('coachFab'); if (f) f.style.transition = 'transform .15s ease'; }
-  function fabSnapPoints(bub) {
-    if (!bub || !window.innerWidth || !window.innerHeight) return [];
-    var maxL = window.innerWidth - FAB_SIZE - FAB_MARGIN;
-    var maxT = window.innerHeight - FAB_SIZE - FAB_MARGIN;
-    function cl(x) { return Math.max(FAB_MARGIN, Math.min(x, maxL)); }
-    function ct(y) { return Math.max(FAB_MARGIN, Math.min(y, maxT)); }
-    return [
-      { key: 'tl', x: cl(bub.left - FAB_SIZE / 2), y: ct(bub.top - FAB_GAP - FAB_SIZE) },
-      { key: 'tr', x: cl(bub.right - FAB_SIZE / 2), y: ct(bub.top - FAB_GAP - FAB_SIZE) },
-      { key: 'bl', x: cl(bub.left - FAB_SIZE / 2), y: ct(bub.bottom + FAB_GAP) },
-      { key: 'br', x: cl(bub.right - FAB_SIZE / 2), y: ct(bub.bottom + FAB_GAP) }
-    ];
+  // the safe area — env() insets aren't readable from JS, so measure them
+  // with a 0-width sentinel (status bar top, home inset bottom); the 88px
+  // tab bar + 16px side gutters keep the bot off the controls
+  function fabSafe() {
+    var top = 0, bottom = 0;
+    try {
+      var el = document.createElement('div');
+      el.style.cssText = 'position:fixed;left:0;top:0;width:0;visibility:hidden;';
+      document.body.appendChild(el);
+      el.style.height = 'env(safe-area-inset-top)';
+      top = Math.max(0, el.getBoundingClientRect().height);
+      el.style.height = 'env(safe-area-inset-bottom)';
+      bottom = Math.max(0, el.getBoundingClientRect().height);
+      if (el.parentNode) el.parentNode.removeChild(el);
+    } catch (e) {}
+    return { left: 16, right: 16, top: top + 12, bottom: 88 + bottom };
   }
-  function fabNearestSnap(cx, cy, pts) {
-    var best = null, bd = Infinity;
-    (pts || []).forEach(function (p) {
-      var dx = p.x + FAB_SIZE / 2 - cx, dy = p.y + FAB_SIZE / 2 - cy;
-      var d = dx * dx + dy * dy;
-      if (d < bd) { bd = d; best = p; }
-    });
-    return best;
+  // edge + u (0..1 along the edge) -> the bot's top-left px
+  function fabEdgePos(edge, u, s) {
+    s = s || fabSafe();
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var tv = Math.max(0, vh - s.top - s.bottom - FAB_SIZE);
+    var th = Math.max(0, vw - s.left - s.right - FAB_SIZE);
+    var x, y;
+    if (edge === 'left') { x = s.left; y = s.top + u * tv; }
+    else if (edge === 'right') { x = vw - s.right - FAB_SIZE; y = s.top + u * tv; }
+    else if (edge === 'top') { y = s.top; x = s.left + u * th; }
+    else { y = vh - s.bottom - FAB_SIZE; x = s.left + u * th; }
+    return { x: Math.round(x), y: Math.round(y) };
   }
-  // the bubble's OPEN rect — the closed state carries translateY(12px)
-  // scale(.97); drop the transform for one synchronous read (no paint between)
-  function fabBubbleRect() {
-    var ov = byId('coachOv');
-    if (!ov) return null;
-    var t = ov.style.transform;
-    ov.style.transform = 'none';
-    var r = ov.getBoundingClientRect();
-    ov.style.transform = t;
-    return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+  // the screen edge nearest a point (distances to the viewport borders)
+  function fabNearestEdge(cx, cy) {
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var d = [['left', cx], ['right', vw - cx], ['top', cy], ['bottom', vh - cy]];
+    d.sort(function (a, b) { return a[1] - b[1]; });
+    return d[0][0];
   }
-  function fabPosSave(x, y) {
-    try { localStorage.setItem(FAB_POS_KEY, JSON.stringify({ x: Math.round(x), y: Math.round(y) })); } catch (e) {}
+  // a point (the bot's center at release) -> { edge, u }
+  function fabEdgeFromPoint(cx, cy) {
+    var s = fabSafe();
+    var e = fabNearestEdge(cx, cy);
+    var tv = Math.max(0, window.innerHeight - s.top - s.bottom - FAB_SIZE);
+    var th = Math.max(0, window.innerWidth - s.left - s.right - FAB_SIZE);
+    var u = (e === 'left' || e === 'right')
+      ? (tv ? (cy - s.top) / tv : 0)
+      : (th ? (cx - s.left) / th : 0);
+    return { edge: e, u: Math.max(0, Math.min(1, u)) };
+  }
+  function fabPosSave(pos) {
+    try {
+      localStorage.setItem(FAB_POS_KEY, JSON.stringify({ v: 2, edge: pos.edge, u: Math.round(pos.u * 1000) / 1000 }));
+    } catch (e) {}
   }
   function fabPosLoad() {
     try {
       var v = JSON.parse(localStorage.getItem(FAB_POS_KEY) || 'null');
-      if (v && isFinite(v.x) && isFinite(v.y)) return v;
+      if (v && v.v === 2 && FAB_EDGES.indexOf(v.edge) >= 0 && isFinite(v.u)) {
+        return { edge: v.edge, u: Math.max(0, Math.min(1, v.u)) };
+      }
+    } catch (e) {}
+    // one-time migration: a v1 spot was raw px at whatever viewport it was
+    // saved on — re-home it to the nearest edge + along-edge position
+    try {
+      var o = JSON.parse(localStorage.getItem(FAB_POS_V1) || 'null');
+      if (o && isFinite(o.x) && isFinite(o.y)) {
+        var m = fabEdgeFromPoint(o.x + FAB_SIZE / 2, o.y + FAB_SIZE / 2);
+        fabPosSave(m);
+        return m;
+      }
     } catch (e) {}
     return null;
   }
-  // place the bot on the snap nearest the stored spot (fall back to the
-  // default key, then br) and persist the result
-  function fabSettle(defaultKey) {
+  // place the bot on its persisted edge+u (default = the old bottom-right
+  // spot: bottom edge, u=1 = right side). instant = land without a glide.
+  function fabSettle(instant) {
     var fab = byId('coachFab');
-    var pts = fabSnapPoints(fabBubbleRect());
-    if (!fab || !pts.length) return null;
-    var want = fabPosLoad();
-    var p = null;
-    if (want) p = fabNearestSnap(want.x + FAB_SIZE / 2, want.y + FAB_SIZE / 2, pts);
-    if (!p) for (var i = 0; i < pts.length; i++) if (pts[i].key === (defaultKey || 'br')) p = pts[i];
-    if (!p) p = pts[3];
-    fabGlide(); // v72.13: the settle glides (first load just lands — CSS auto has nothing to animate from)
+    if (!fab) return null;
+    var pos = fabPosLoad() || { edge: 'bottom', u: 1 };
+    var p = fabEdgePos(pos.edge, pos.u);
+    if (instant) { fabHold(); } else { fabGlide(); } // v72.13: the settle glides
+    fab.style.right = 'auto';
     fab.style.left = p.x + 'px';
     fab.style.top = p.y + 'px';
-    fabPosSave(p.x, p.y);
     return p;
   }
-  function fabSettleAny() { fabSettle('br'); }
+  function fabSettleAny() {
+    var ov = byId('coachOv');
+    var open = ov && ov.classList.contains('show');
+    fabSettle(open); // glides when closed; instant + re-anchor while the bubble is open
+    if (open) fabPlacePanel();
+  }
+  // the open panel's ideal slot on each side, anchored to the bot's face
+  function fabPanelCandidates(fab, ov) {
+    if (!fab || !ov) return null;
+    var W = ov.offsetWidth, H = ov.offsetHeight;
+    var r = fab.getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    return {
+      W: W, H: H,
+      above: { x: cx - W / 2, y: r.top - FAB_PANEL_GAP - H },
+      below: { x: cx - W / 2, y: r.bottom + FAB_PANEL_GAP },
+      left: { x: r.left - FAB_PANEL_GAP - W, y: cy - H / 2 },
+      right: { x: r.right + FAB_PANEL_GAP, y: cy - H / 2 }
+    };
+  }
+  // anchor the open panel to the bot: the side needing the least clamping
+  // wins (above first on a tie), clamp into the safe area, aim the scale-in
+  // origin at the bot
+  function fabPlacePanel() {
+    var fab = byId('coachFab'), ov = byId('coachOv');
+    if (!fab || !ov) return null;
+    var c = fabPanelCandidates(fab, ov);
+    if (!c) return null;
+    var s = fabSafe();
+    var minX = s.left + FAB_PANEL_M, minY = s.top + FAB_PANEL_M;
+    var maxX = Math.max(minX, window.innerWidth - s.right - FAB_PANEL_M - c.W);
+    var maxY = Math.max(minY, window.innerHeight - s.bottom - FAB_PANEL_M - c.H);
+    var order = ['above', 'below', 'left', 'right'];
+    var best = null, bd = Infinity;
+    for (var i = 0; i < order.length; i++) {
+      var p = c[order[i]];
+      var px = Math.max(minX, Math.min(p.x, maxX));
+      var py = Math.max(minY, Math.min(p.y, maxY));
+      var d = Math.abs(p.x - px) + Math.abs(p.y - py);
+      if (d < bd) { bd = d; best = { side: order[i], x: px, y: py }; }
+    }
+    if (!best) return null;
+    ov.style.right = 'auto';
+    ov.style.bottom = 'auto';
+    ov.style.left = Math.round(best.x) + 'px';
+    ov.style.top = Math.round(best.y) + 'px';
+    var origin = { above: '50% 100%', below: '50% 0%', left: '100% 50%', right: '0% 50%' };
+    ov.style.transformOrigin = origin[best.side];
+    return best;
+  }
   function fabInitDrag() {
     var fab = byId('coachFab');
     if (!fab || fabInitDrag.wired) return;
     fabInitDrag.wired = true;
-    fabSettle('br'); // first run: default br = today's spot
+    fabSettle(true); // first paint: land on the persisted edge, no glide
     window.addEventListener('resize', fabSettleAny);
     window.addEventListener('orientationchange', fabSettleAny);
     var st = null;
@@ -3674,9 +3757,12 @@
       if (!st.drag) return; // under the threshold this is still a tap
       ev.preventDefault();
       fab.classList.add('dragging');
-      var maxL = window.innerWidth - FAB_SIZE - FAB_MARGIN, maxT = window.innerHeight - FAB_SIZE - FAB_MARGIN;
-      fab.style.left = Math.max(FAB_MARGIN, Math.min(st.left + dx, maxL)) + 'px';
-      fab.style.top = Math.max(FAB_MARGIN, Math.min(st.top + dy, maxT)) + 'px';
+      // v72.15: the drag clamps into the SAFE area — the bot can never be
+      // dragged onto the status bar or the tab bar
+      var s = fabSafe();
+      var maxL = window.innerWidth - s.right - FAB_SIZE, maxT = window.innerHeight - s.bottom - FAB_SIZE;
+      fab.style.left = Math.max(s.left, Math.min(st.left + dx, maxL)) + 'px';
+      fab.style.top = Math.max(s.top, Math.min(st.top + dy, maxT)) + 'px';
     });
     function release(ev) {
       if (!st) return;
@@ -3684,15 +3770,13 @@
       st = null;
       if (wasDrag) {
         fabLastDragAt = Date.now(); // a click right after a drag must NOT open the coach
-        fabGlide(); // v72.13: GLEIDE to the snap (transform .2s = the scale-down) — no more teleport
         var r = fab.getBoundingClientRect();
-        var pts = fabSnapPoints(fabBubbleRect());
-        var p = pts.length ? fabNearestSnap(r.left + FAB_SIZE / 2, r.top + FAB_SIZE / 2, pts) : null;
-        if (p) {
-          fab.style.left = p.x + 'px';
-          fab.style.top = p.y + 'px';
-          fabPosSave(p.x, p.y);
-        }
+        var m = fabEdgeFromPoint(r.left + FAB_SIZE / 2, r.top + FAB_SIZE / 2);
+        fabPosSave(m);
+        var ov = byId('coachOv');
+        var open = ov && ov.classList.contains('show');
+        fabSettle(!!open); // v72.13 glide when closed; instant while the bubble is open…
+        if (open) fabPlacePanel(); // …so the bubble tracks the bot it was just moved
       }
       fab.classList.remove('dragging');
     }
@@ -3864,9 +3948,13 @@
     delOwedEntry: delOwedEntry,
     delOwedPerson: delOwedPerson,
     effectiveSnap: effectiveSnap,
-    // v72.11: the FAB drag/snap geometry (smoke drives the pure math)
-    fabSnapPoints: fabSnapPoints,
-    fabNearestSnap: fabNearestSnap,
+    // v72.15: the FAB edge-settle + bubble-anchor geometry (smoke drives the pure math)
+    fabSafe: fabSafe,
+    fabEdgePos: fabEdgePos,
+    fabNearestEdge: fabNearestEdge,
+    fabEdgeFromPoint: fabEdgeFromPoint,
+    fabPanelCandidates: fabPanelCandidates,
+    fabPlacePanel: fabPlacePanel,
     fabPosSave: fabPosSave,
     fabPosLoad: fabPosLoad,
     fabSettle: fabSettle,
@@ -4007,7 +4095,7 @@
     if (ab) ab.onclick = function () { openSheet('addSheet'); };
     var cfab = byId('coachFab');
     if (cfab) {
-      fabInitDrag(); // v72.11: draggable bot (settles to a corner snap on release)
+      fabInitDrag(); // v72.15: draggable bot — settles to the nearest edge, the bubble anchors to it
       cfab.onclick = function () {
         // v72.11: a click that just finished a DRAG must not open the coach
         if (Date.now() - fabLastDragAt < 400) return;
