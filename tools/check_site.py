@@ -520,6 +520,8 @@ def main():
           and "sanitizeChatRows(data.chat)" in js
           and "sanitizeMoneyLogRows(data.moneyLog)" in js
           and "if (!data.adj) computeAdjFromTxns()" in js)
+    check("import sanitizer keeps every row flavor (v72.14): the k allow-list covers c/x/p/i — the v72.8 list (c/x only) silently stripped the v72.10 card_payment/cash_in flavors on import, rendering them as spends with inverted before/after",
+          "if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i') m.k = e.k" in js)
     check("ledger edits stay in place (v72.9): the edit rewrites the txn at its OWN index (no re-file at the end), keeps the money-log row's ORIGINAL timestamp, and rebases that row + every later row by the constant delta (month lines by each row's own txn month); Undo is the exact inverse (un-rebase + original row at its position, no delete+re-add)",
           "state.txns[oIdx] = t; // in place — position preserved" in js
           and "rebase(e0, dFree, dCard, 1)" in js

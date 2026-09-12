@@ -3340,7 +3340,7 @@
       if (typeof e.nt === 'string') m.nt = e.nt.slice(0, 120);
       if (typeof e.m === 'string') m.m = e.m.slice(0, 60);
       if (typeof e.n === 'number' && isFinite(e.n)) m.n = e.n;
-      if (e.k === 'c' || e.k === 'x') m.k = e.k;
+      if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i') m.k = e.k; // v72.14: the v72.10 p/i flavors must survive an import too
       if (typeof e.f === 'number' && isFinite(e.f)) m.f = e.f;
       if (typeof e.o === 'number' && isFinite(e.o)) m.o = e.o;
       if (typeof e.s === 'number' && isFinite(e.s)) m.s = e.s;
@@ -3506,7 +3506,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.13, live: new Date(2026, 8, 12, 13, 39) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.14, live: new Date(2026, 8, 13, 1, 43) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

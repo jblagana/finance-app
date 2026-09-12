@@ -6,6 +6,60 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-13 01:28 — Development: import sanitizer drops the v72.10 row flavors (p/i) → v72.14
+Status: in progress (gates green — commit + push next)
+Progress: 90% — ETA ~01:50
+
+### Instruction (verbatim)
+> (agent development, no new user instruction — logged per rules 3/7 before acting:)
+> While building the Option-A file, the sanitizer simulation caught the CURRENT app's import dropping row 10's flavor: the existing 554.16 "Owed · Vhal" cash-in row carries k:"i", but sanitizeMoneyLogRows (v72.8) only keeps k ∈ {c,x} — so on ANY import the v72.10 p/i flavors are stripped and that row renders as −₱554.16 (a spend, free 10,547.38 → 9,993.22) instead of +₱554.16 (an inflow, free 9,439.06 → 9,993.22).
+
+### Interpretation (agent — user may edit this section)
+- The import I'm about to instruct will corrupt that existing row's display unless the sanitizer is fixed first — the Option-A plan's "no app code changes" premise is invalidated by evidence.
+- Fix = **v72.14**, one line in app.js: extend the k allow-list to c/x/p/i (logMoney + renderMoneyLog already use the p/i flavors correctly; only the import sanitizer's allow-list is stale).
+- Add a gate check for the allow-list (check_site.py root mirror; release.ps1 stamps/syncs the tools/ copy), standard dot release via tools/release.ps1 v72.14 right before commit (stamps app.js/sw.js/README/tools-check_site, syncs root mirrors, runs the full gate suite incl. smokes), then push.
+- The restored export file is unaffected by this fix (it keeps k:"i"); it just must be imported on the v72.14 shell — the user opens the app once to pick up the SW update before importing.
+- User-visible Option-A outcome unchanged: 11 Ledger rows, donut/pace unchanged, Money tab unchanged.
+
+### Subtasks
+- [x] Log the development (first action)
+- [x] app.js: k allow-list c/x/p/i + v72.14 comment
+- [x] check_site.py: new v72.14 gate check (tools/ canonical; release.ps1 synced the root mirror)
+- [x] build script: sanitizeSim mirrors the fixed v72.14 sanitizer
+- [x] node --check app.js + run gate suite (release.ps1: all 6 gates green)
+- [x] rebuild + verify the restored export file (11 rows verified; source file untouched)
+- [ ] tools/release.ps1 v72.14 (stamp + full gates), commit, push
+- [ ] mark both entries done with the commit hash
+
+## 2026-09-13 01:22 — Option A: restored export with the 4 ghost journal rows
+Status: in progress (needs the 01:28 v72.14 gate first)
+Progress: 80% — ETA ~01:50
+
+### Instruction (verbatim)
+> (pre-resume request captured via context summary — original words not in session context:) "remove the old lost logs so the donut spend pace only reflect my current entries not the old lost logs" — later narrowed via my Option A/B/C list to the choice below.
+> A
+> -whats that month spent line
+> -why didnt the old 4 entries show up when theyre just written the same way as the new entries in the json file
+> -what if i just have edit the file and import it
+> -(One cosmetic note: the 4 restored rows won't show the "month spent" line — that historical value was never stored, and I'd rather omit it than fake it.)
+> in that sttement of urs, what does that mean
+> [switched to act mode] The user approved switching to act mode. Continue with the approved plan now.
+
+### Interpretation (agent — user may edit this section)
+- User chose **Option A**: restore visibility of the 4 Sep-11 ghost entries (Momarcs ₱105, Laundry ₱84, sister's tuition ₱4,050, Gotcha grape yogurt ₱145) by rebuilding their missing moneyLog rows — keep ALL 11 txns, no deletions.
+- Output: `c:\Users\Jan\Downloads\finances-export-2026-09-13-restored.json` — byte-identical to the original export except `moneyLog` 7→11 rows. Row shape: at = the entry's `created`; a="add"; tid/l/c/nt/m/n/k from the entry; f/o chained backwards from the first real row (last ghost ends at free 10,121.97 / card 21,690.84, flowing into the real row's 10,121.97 → 10,041.72); **no `s`** (month-spent value unrecoverable; the renderer guards `e.s != null`).
+- Donut/spend pace keep counting all 11 (user-accepted); Money tab unchanged (adj/adjSig untouched); the original export file stays untouched.
+- ~~No app code changes → no version bump~~ **superseded by the 01:28 entry:** the import sanitizer drops the v72.10 p/i flavors, so a one-line v72.14 fix ships FIRST (the restored file itself stays as planned).
+- The plan-mode questions were informational (month-spent line = the row's `s` field; ghosts invisible because import copies txns + moneyLog as-is and never writes journal rows for imported entries; hand-edit + import is the same mechanism, needing valid JSON + tid match).
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Re-read the original export + sanitizeMoneyLogRows (caught: the pre-existing k:"i" row can't survive an import on the current app — see 01:28 entry)
+- [x] Build the restored file (node script in finances/build_restored_export.js; every assert passed)
+- [x] Verify: deep diff (only moneyLog differs), tid resolution, at-order, sanitize sim, on-disk re-read (source file byte-identical after)
+- [ ] Update log, run repo checks, commit + push
+- [ ] Hand off import instructions (don't log before import; original kept intact)
+
 ## 2026-09-12 04:15 — GO: v72.13 smoother movement (the 15-min version)
 Status: done — pushed 1c89475 (live 13:39)
 Progress: 100%
