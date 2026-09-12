@@ -26,8 +26,8 @@ Progress: 0%
 - [ ] Gate + release.ps1 v72.23, commit, push
 
 ## 2026-09-13 03:51 — New: longer flick travel + drag should follow the finger with a small delay
-Status: not started (queued as v72.22)
-Progress: 0%
+Status: in progress (queued as v72.22)
+Progress: 50% — ETA ~04:15
 
 ### Instruction (verbatim)
 > (user edit inside the 03:41 entry's Interpretation section — a new bullet:)
@@ -41,12 +41,12 @@ Progress: 0%
 
 ### Subtasks
 - [x] Log the instruction verbatim (first action)
-- [ ] v72.22: flick distance + follow-lag drag + gate
+- [x] v72.22: flick distance (FAB_FLICK_MS 150→320) + follow-lag drag (rAF + fabLagEase, 50ms) + gate + smoke
 - [ ] release.ps1 v72.22, commit, push
 
 ## 2026-09-13 03:41 — "also, the bot should not cover the chatbox"
 Status: in progress (new dot release v72.21 — toast v72.20 goes first, already coded)
-Progress: 0%
+Progress: 100% — pushed de06cae (live 04:00)
 
 ### Instruction (verbatim)
 > also, the bot should not cover the chatbox
@@ -61,8 +61,8 @@ Progress: 0%
 
 ### Subtasks
 - [x] Log the instruction verbatim (first action)
-- [ ] v72.21: fabPanelPick with the no-cover constraint + fallback + gate + smoke
-- [ ] release.ps1 v72.21, commit, push
+- [x] v72.21: fabPanelPick with the no-cover constraint + fallback + gate + smoke — code + gate + smoke green (release.ps1 v72.21, 03:58)
+- [x] release.ps1 v72.21, commit, push — pushed de06cae (live 04:00)
 
 ## 2026-09-13 03:26 — User edit on the 02:14 entry: flick physics (confirms v72.17) + bot must stay IN FRONT of the open chat box
 Status: in progress (new dot release v72.18 — owed → v72.19, toast → v72.20)

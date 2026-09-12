@@ -561,11 +561,14 @@ def main():
           and "touch-action:none" in html
           and "fabSnapPoints" not in js
           and "fabBubbleRect" not in js)
-    check("the bot's drag feels smooth, not stiff (v72.13): while dragging left/top track the finger 1:1 with no left/top transition (fabHold on pointerdown) and only the transform animates — the scale(1.06) 'lift'; on release the bot GLEIDES to the edge over .28s ease-out (fabGlide) and the resize/orientation settle glides too",
+    check("the bot's drag feels smooth (v72.13, re-tuned v72.22): no left/top transition while dragging (fabHold on pointerdown) and only the transform animates — the scale(1.06) 'lift'; v72.22 the bot TRAILS the finger with a small follow-lag (rAF loop + fabLagEase exponential smoothing, ~50ms time constant, reduced-motion = instant 1:1) instead of 1:1 tracking; on release the bot GLEIDES to the edge over .28s ease-out (fabGlide) and the resize/orientation settle glides too",
           "var FAB_GLIDE = 'left .28s cubic-bezier(.2,.8,.25,1), top .28s cubic-bezier(.2,.8,.25,1)," in js
           and "function fabGlide()" in js
           and "function fabHold()" in js
-          and "fabHold(); // v72.13: kill any glide — the drag tracks the finger 1:1" in js
+          and "fabHold(); // v72.13: kill the left/top glide" in js
+          and "var FAB_LAG_MS = 50" in js
+          and "function fabLagStep()" in js
+          and "requestAnimationFrame(fabLagStep)" in js
           and "transform:scale(1.06)" in html)
     check("the settle has feel polish (v72.16): the settle's transform runs a slight overshoot bezier (the lift scales down past 1 and catches — a small pop; left/top stay ease-out so the bot never crosses the screen edge), a guarded 8ms haptic tick fires the moment a drag starts, and prefers-reduced-motion falls back to an instant settle (no glide, no overshoot)",
           "transform .2s cubic-bezier(.3,1.4,.5,1)" in js
@@ -573,10 +576,16 @@ def main():
           and "function fabReduceMotion()" in js
           and "matchMedia('(prefers-reduced-motion: reduce)')" in js
           and "fab.style.transition = 'none';" in js)
-    check("the bot flicks (v72.17): the drag state tracks the last move sample's velocity; on release a fast flick (speed > 0.5px/ms) projects the bot's center forward by 150ms of that velocity BEFORE the edge settle, so the bot is thrown to the edge the flick aimed at — a slow release settles by position alone",
-          "var FAB_FLICK_MS = 150, FAB_FLICK_MIN = 0.5" in js
+    check("the bot flicks (v72.17, travel increased in v72.22): the drag state tracks the last FINGER move sample's velocity; on release the lag stops, the bot snaps to the finger's clamped target, and a fast flick (speed > 0.5px/ms) projects the center forward by 320ms of that velocity BEFORE the edge settle — a flick carries the bot far to the aimed edge; a slow release settles by position alone",
+          "var FAB_FLICK_MS = 320, FAB_FLICK_MIN = 0.5" in js
           and "st.vx = (ev.clientX - st.lastX) / dt" in js
           and "if (sp > FAB_FLICK_MIN) { cx += st.vx * FAB_FLICK_MS; cy += st.vy * FAB_FLICK_MS; }" in js)
+    check("the drag has a follow-lag (v72.22, user: 'add a delay from finger like the bubble is following the finger'): pointermove only sets the finger TARGET (st.tx/st.ty); an rAF loop moves the bot partway toward it each frame (fabLagEase, ~50ms time constant, reduced-motion snaps instant); the flick velocity is sampled from the finger, and release stops the lag and starts the flick from the finger's clamped target",
+          "st.tx = st.left + (ev.clientX - st.x)" in js
+          and "st.curL = fabLagEase(st.curL, st.tx, Date.now() - st.lastFrame, fabReduceMotion() ? 0 : FAB_LAG_MS)" in js
+          and "function fabLagEase(cur, target, dt, tc)" in js
+          and "fabLagStart();" in js and "fabLagStop();" in js
+          and "fabLagEase: fabLagEase" in js)
     check("the bot stays in front of the open chat box (v72.18): while the bubble is showing, #coachFab rides above the panel (z 30 > 25) — it is the bubble's handle, and the clamped panel can overlap the bot's spot; the face stays tappable (tap = close)",
           "#coachOv.show ~ #coachFab{z-index:30}" in html)
     _ow_btn = js.find('class="addrow" data-ow-toggle=')

@@ -3509,7 +3509,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.21, live: new Date(2026, 8, 13, 3, 59) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.22, live: new Date(2026, 8, 13, 4, 13) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3597,7 +3597,20 @@
   // v72.17: flick momentum — a fast release projects the bot's center forward
   // this long into the finger's velocity before the edge settle; below
   // FAB_FLICK_MIN (px/ms) a release is a slow drop and settles by position
-  var FAB_FLICK_MS = 150, FAB_FLICK_MIN = 0.5;
+  // v72.22: FAB_FLICK_MS raised 150 -> 320 — a flick travels further
+  var FAB_FLICK_MS = 320, FAB_FLICK_MIN = 0.5;
+  // v72.22: the follow-lag — while dragging the bot trails the finger with a
+  // small exponential smoothing (rAF, ~50ms time constant) instead of 1:1
+  // tracking, so it reads as following, not welded to the finger
+  var FAB_LAG_MS = 50;
+  var fabLagRaf = 0;
+  // v72.22: one step of the follow-lag — move `cur` partway toward `target`
+  // (exponential smoothing, tc = time constant in ms). dt >= tc or tc <= 0
+  // snaps all the way (instant = the reduced-motion path)
+  function fabLagEase(cur, target, dt, tc) {
+    var k = tc <= 0 ? 1 : Math.min(1, dt / tc);
+    return cur + (target - cur) * k;
+  }
   var FAB_EDGES = ['left', 'right', 'top', 'bottom'];
   // v72.13: the smoothness pass — while dragging, left/top track the finger
   // 1:1 (NO left/top transition; only the transform animates, so the
@@ -3782,12 +3795,35 @@
     window.addEventListener('resize', fabSettleAny);
     window.addEventListener('orientationchange', fabSettleAny);
     var st = null;
+    // v72.22: the follow-lag loop — each frame the bot moves partway toward
+    // the finger's (safe-area clamped) target via fabLagEase, so it TRAILS
+    // the finger instead of being welded to it. The flick velocity is sampled
+    // from the FINGER in pointermove, never from the lagged position.
+    function fabLagStep() {
+      fabLagRaf = 0;
+      if (!st || !st.drag) return;
+      var f = byId('coachFab');
+      if (!f) return;
+      var s = fabSafe();
+      st.tx = Math.max(s.left, Math.min(st.tx, window.innerWidth - s.right - FAB_SIZE));
+      st.ty = Math.max(s.top, Math.min(st.ty, window.innerHeight - s.bottom - FAB_SIZE));
+      st.curL = fabLagEase(st.curL, st.tx, Date.now() - st.lastFrame, fabReduceMotion() ? 0 : FAB_LAG_MS);
+      st.curT = fabLagEase(st.curT, st.ty, Date.now() - st.lastFrame, fabReduceMotion() ? 0 : FAB_LAG_MS);
+      f.style.left = st.curL + 'px';
+      f.style.top = st.curT + 'px';
+      st.lastFrame = Date.now();
+      fabLagRaf = requestAnimationFrame(fabLagStep);
+    }
+    function fabLagStart() { if (!fabLagRaf) fabLagRaf = requestAnimationFrame(fabLagStep); }
+    function fabLagStop() { if (fabLagRaf) { cancelAnimationFrame(fabLagRaf); fabLagRaf = 0; } }
     fab.addEventListener('pointerdown', function (ev) {
       if (ev.button !== undefined && ev.button !== 0) return;
-      fabHold(); // v72.13: kill any glide — the drag tracks the finger 1:1
+      fabHold(); // v72.13: kill the left/top glide — the lag loop writes left/top raw
       var r = fab.getBoundingClientRect();
       st = { x: ev.clientX, y: ev.clientY, left: r.left, top: r.top, drag: false,
-             vx: 0, vy: 0, lastX: ev.clientX, lastY: ev.clientY, lastT: Date.now() };
+             tx: r.left, ty: r.top, curL: r.left, curT: r.top,
+             vx: 0, vy: 0, lastX: ev.clientX, lastY: ev.clientY, lastT: Date.now(),
+             lastFrame: Date.now() };
       if (fab.setPointerCapture) { try { fab.setPointerCapture(ev.pointerId); } catch (e) {} }
     });
     fab.addEventListener('pointermove', function (ev) {
@@ -3807,12 +3843,12 @@
       st.lastX = ev.clientX; st.lastY = ev.clientY; st.lastT = now;
       ev.preventDefault();
       fab.classList.add('dragging');
-      // v72.15: the drag clamps into the SAFE area — the bot can never be
-      // dragged onto the status bar or the tab bar
-      var s = fabSafe();
-      var maxL = window.innerWidth - s.right - FAB_SIZE, maxT = window.innerHeight - s.bottom - FAB_SIZE;
-      fab.style.left = Math.max(s.left, Math.min(st.left + dx, maxL)) + 'px';
-      fab.style.top = Math.max(s.top, Math.min(st.top + dy, maxT)) + 'px';
+      // v72.22: the finger only sets the TARGET — the lag loop (rAF) trails
+      // it with the ~50ms exponential smoothing; safe-area clamping happens
+      // inside the loop, so the bot can never reach the status/tab bars
+      st.tx = st.left + (ev.clientX - st.x);
+      st.ty = st.top + (ev.clientY - st.y);
+      fabLagStart();
     });
     function release(ev) {
       if (!st) return;
@@ -3820,11 +3856,17 @@
       st = null;
       if (wasDrag) {
         fabLastDragAt = Date.now(); // a click right after a drag must NOT open the coach
-        var r = fab.getBoundingClientRect();
-        // v72.17: the flick — a fast release projects the bot's center forward
-        // by 150ms of the finger's velocity, so a flick toward an edge carries
-        // the bot there (even across the screen); a slow release settles as-is
-        var cx = r.left + FAB_SIZE / 2, cy = r.top + FAB_SIZE / 2;
+        fabLagStop();
+        // v72.22: the flick starts from where the FINGER is (the bot was
+        // trailing it): snap the bot to the finger's clamped target, then
+        // project its center forward by the velocity (FAB_FLICK_MS 320 —
+        // a flick carries the bot far); a slow release settles as-is
+        var s = fabSafe();
+        var tx = Math.max(s.left, Math.min(st.tx, window.innerWidth - s.right - FAB_SIZE));
+        var ty = Math.max(s.top, Math.min(st.ty, window.innerHeight - s.bottom - FAB_SIZE));
+        fab.style.left = tx + 'px';
+        fab.style.top = ty + 'px';
+        var cx = tx + FAB_SIZE / 2, cy = ty + FAB_SIZE / 2;
         var sp = Math.sqrt(st.vx * st.vx + st.vy * st.vy);
         if (sp > FAB_FLICK_MIN) { cx += st.vx * FAB_FLICK_MS; cy += st.vy * FAB_FLICK_MS; }
         var m = fabEdgeFromPoint(cx, cy);
@@ -4011,6 +4053,7 @@
     fabEdgeFromPoint: fabEdgeFromPoint,
     fabPanelCandidates: fabPanelCandidates,
     fabPanelPick: fabPanelPick,
+    fabLagEase: fabLagEase,
     fabPlacePanel: fabPlacePanel,
     fabPosSave: fabPosSave,
     fabPosLoad: fabPosLoad,
