@@ -6,6 +6,41 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-12 04:15 — GO: v72.13 smoother movement (the 15-min version)
+Status: done — pushed 1c89475 (live 13:39)
+Progress: 100%
+
+### Instruction (verbatim)
+> go with the 15min version
+
+### Interpretation (agent — user may edit this section)
+- Green light for the proposed v72.13 (the 04:10 entry): release glide to the snap,
+  drag-start transition clear (drag stays 1:1), subtle scale-up while dragging,
+  glide settle on resize/orientation. NOT the ~+30 min spring/lag version.
+
+### Subtasks
+- [x] Log the go (first action)
+- [x] app.js/index.html: `FAB_GLIDE`/`fabGlide()`/`fabHold()` — pointerdown kills the glide (drag 1:1), release + resize settle glide .28s ease-out, `.dragging` gains `scale(1.06)` lift (transform-only animation, left/top never lag the finger)
+- [x] gate (new v72.13 check) + smoke, `release.ps1 v72.13` all green, code pushed 1c89475 (live 13:39), instructions pushed with it
+
+## 2026-09-12 04:10 — smoother bubble movement (estimate asked; proposed v72.13)
+Status: done — estimate given, greenlit (04:15 entry), shipped as v72.13 (1c89475)
+Progress: 100%
+
+### Instruction (verbatim)
+> howlong will it tak eu to ak \e the bubble move smoother, the current movement is kinda stiff
+
+### Interpretation (agent — user may edit this section)
+- A timing/effort estimate for making the v72.11 FAB feel less stiff; user decides whether to proceed.
+- Where the stiffness actually is: on RELEASE the bot **teleports** to the snap (the release handler sets `transition:'none'` and jumps left/top — no glide to the corner), and during the drag there is no scale-up, so the 1:1 finger tracking reads as flat/board-like.
+- The 1:1 tracking DURING the drag is intentional (platform-standard FAB behavior — no lag/inertia); spring-lag during the drag would be extra work (~+30 min) and is not the recommended feel.
+- The fix (small, ~10 lines): glide to the snap on release (~0.28s ease-out), clear the transition on drag start so dragging stays 1:1, a subtle `scale(1.06)` + shadow while dragging, and the same glide on the resize/orientation settle.
+- If greenlit, ships as **v72.13**: edit + gate/smoke assertions + `release.ps1` + commit + instructions + push.
+
+### Subtasks
+- [ ] (awaiting go) app.js/index.html: release glide, drag-start transition clear, .dragging scale
+- [ ] (awaiting go) gate + smoke checks, release.ps1 v72.13, commit, instructions, push
+
 ## 2026-09-12 02:16 — User edit: v72.3 emoji note amplified ("prioritize this … here")
 Status: done — shipped as v72.12
 Progress: 100%
