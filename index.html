@@ -185,6 +185,10 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
   box-shadow:0 6px 18px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;
   touch-action:none} /* v72.11: draggable — pointer events own the gesture */
 #coachFab.dragging{cursor:grabbing;z-index:26;box-shadow:0 10px 26px rgba(0,0,0,.6);transform:scale(1.06)} /* v72.13: the lift — scale animates via the inline transform transition */
+/* v72.18: while the bubble is open the bot stays IN FRONT of the panel (z 30 >
+   25) — it is the bubble's handle, and the clamped panel can overlap the bot's
+   spot; the face stays tappable (tap = close) */
+#coachOv.show ~ #coachFab{z-index:30}
 #coachFab:active{filter:brightness(1.15)}
 #coachFab svg{display:block;width:38px;height:38px}
 button.gear{cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--mut);width:34px;height:34px;

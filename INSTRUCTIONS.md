@@ -6,9 +6,27 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-13 03:26 — User edit on the 02:14 entry: flick physics (confirms v72.17) + bot must stay IN FRONT of the open chat box
+Status: in progress (new dot release v72.18 — owed → v72.19, toast → v72.20)
+Progress: 0%
+
+### Instruction (verbatim)
+> (user edit inside the 02:14 entry's Interpretation section — a new bullet:)
+> -when i flick the bot bubble, its motion follows physics. also, keep it in front of the chatbox, currently, opening the chtbox hides the bubble behind.
+
+### Interpretation (agent — user may edit this section)
+- Clause 1 ("its motion follows physics") = the flick instruction from the 03:17 entry, confirmed in the physics framing — that is exactly what v72.17 ships (release velocity projects the settle; the glide + overshoot play the throw; no extra work).
+- Clause 2 is a NEW bug: with the chat open the bot can render BEHIND the panel (`#coachOv` z-25 > `#coachFab` z-24, and the clamped panel can overlap the bot's spot). Fix: while the bubble is open, the bot sits on top — `#coachOv.show ~ #coachFab { z-index: 30 }` — so it reads as the bubble's handle and stays tappable (tap = close).
+- Renumber: v72.18 = z-order fix → owed "+ entry" = v72.19 → toast = v72.20. v72.17 (committed, gate green) is unaffected and pushes first.
+
+### Subtasks
+- [x] Log the user edit verbatim (this entry, first action after detecting it)
+- [ ] v72.18: `#coachOv.show ~ #coachFab { z-index: 30 }` + gate check
+- [ ] release.ps1 v72.18, commit, push
+
 ## 2026-09-13 03:17 — User edit on the 02:14 entry: the bot should FLICK AWAY with the gesture's velocity
 Status: in progress (new dot release v72.17 — owed/toast renumbered v72.18 / v72.19)
-Progress: 10% — ETA ~03:40
+Progress: 60% — ETA ~03:30
 
 ### Instruction (verbatim)
 > (user edit inside the 02:14 entry's Interpretation section — a new bullet:)
@@ -21,8 +39,8 @@ Progress: 10% — ETA ~03:40
 
 ### Subtasks
 - [x] Log the user edit verbatim (this entry, first action after detecting it)
-- [ ] v72.17: flick velocity projection in the release handler + gate check
-- [ ] release.ps1 v72.17, commit, push
+- [x] v72.17: flick velocity projection in the release handler + gate check — code + gate green (release.ps1 v72.17, 03:24)
+- [x] release.ps1 v72.17, commit, push — pushed 6fcdb37 (live 03:25)
 
 ## 2026-09-13 02:29 — User edit on the 02:14 entry: owed "+ entry" goes to the TOP of the card
 Status: in progress (implements as the 02:14 entry's v72.17 subtask)
@@ -41,11 +59,11 @@ Progress: 0%
 - [x] Log the user edit verbatim (this entry, first action after detecting it)
 - [ ] Move + entry button + form to the card top (owedPersonHTML)
 - [ ] Gate check for the new card order
-- [ ] (release: folded into the 02:14 entry's v72.17 subtask)
+- [ ] (release: folded into the 02:14 entry's v72.19 subtask — renumbered by the 03:26 user edit)
 
 ## 2026-09-13 02:14 — Coach bubble GO (core + feel polish) + owed "+ entry" placement + toast center/size
 Status: in progress
-Progress: 55% — ETA ~04:15
+Progress: 65% — ETA ~04:30
 
 ### Instruction (verbatim)
 > -core +feel polish
@@ -68,12 +86,14 @@ Progress: 55% — ETA ~04:15
 - [x] release.ps1 v72.15, commit, push — pushed fb4d1b2 (live 03:05)
 - [x] v72.16: overshoot + haptic + reduced-motion — code + gate + smoke green (release.ps1 v72.16, 03:16)
 - [x] release.ps1 v72.16, commit, push — pushed e871e2d (live 03:18)
-- [ ] v72.17: flick — release velocity carries the bot toward the flicked edge (user edit, 03:17 entry) — gate
-- [ ] release.ps1 v72.17, commit, push
-- [ ] v72.18: owed "+ entry" placement — gate
+- [x] v72.17: flick — release velocity carries the bot toward the flicked edge (user edit, 03:17 entry) — code + gate green (release.ps1 v72.17, 03:24)
+- [x] release.ps1 v72.17, commit, push — pushed 6fcdb37 (live 03:25)
+- [ ] v72.18: bot in FRONT of the open chat box (z-order, user edit 03:26) — gate
 - [ ] release.ps1 v72.18, commit, push
-- [ ] v72.19: toast centered + smaller — gate
+- [ ] v72.19: owed "+ entry" placement — gate
 - [ ] release.ps1 v72.19, commit, push
+- [ ] v72.20: toast centered + smaller — gate
+- [ ] release.ps1 v72.20, commit, push
 - [ ] mark all entries done with the hashes
 
 ## 2026-09-13 02:04 — Coach bubble: "make it totally better" (plan requested in plan mode)
