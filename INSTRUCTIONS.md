@@ -6,6 +6,24 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-13 03:17 — User edit on the 02:14 entry: the bot should FLICK AWAY with the gesture's velocity
+Status: in progress (new dot release v72.17 — owed/toast renumbered v72.18 / v72.19)
+Progress: 10% — ETA ~03:40
+
+### Instruction (verbatim)
+> (user edit inside the 02:14 entry's Interpretation section — a new bullet:)
+> -when i flick the bot bubble, it should flick away accordingly.
+
+### Interpretation (agent — user may edit this section)
+- A new instruction (rule 2): a fast FLECK of the bot must carry it with momentum — the release VELOCITY, not just the release position, decides where it settles.
+- Implementation: track the last move sample in the drag state; on release, if the flick speed is over ~0.5px/ms (a deliberate flick, not a slow drag), project the bot's center forward by ~150ms of that velocity and run the existing edge-settle on the projected point. A fast flick toward an edge wins the edge (even across the screen); a slow release settles exactly as today. The glide (with the v72.16 overshoot) plays the travel, so the flick reads as a throw.
+- This is a new dot release: v72.17 flick → owed "+ entry" becomes v72.18 → toast becomes v72.19. v72.16 (already committed, gate green) is unaffected and pushes first.
+
+### Subtasks
+- [x] Log the user edit verbatim (this entry, first action after detecting it)
+- [ ] v72.17: flick velocity projection in the release handler + gate check
+- [ ] release.ps1 v72.17, commit, push
+
 ## 2026-09-13 02:29 — User edit on the 02:14 entry: owed "+ entry" goes to the TOP of the card
 Status: in progress (implements as the 02:14 entry's v72.17 subtask)
 Progress: 0%
@@ -27,7 +45,7 @@ Progress: 0%
 
 ## 2026-09-13 02:14 — Coach bubble GO (core + feel polish) + owed "+ entry" placement + toast center/size
 Status: in progress
-Progress: 50% — ETA ~03:40
+Progress: 55% — ETA ~04:15
 
 ### Instruction (verbatim)
 > -core +feel polish
@@ -38,6 +56,7 @@ Progress: 50% — ETA ~03:40
 - Answer to the scope question in the 02:04 entry: ship **v72.15 (core)** + **v72.16 (feel polish)**.
   - v72.15: the chat panel follows the bot (auto side by available space, safe-area clamped), the bot docks as the panel's handle while open (tap = close), nearest-EDGE settle replaces the 4 corner snaps, drag clamp becomes safe-area-aware, new `fin.fabPos.v2` persistence (edge + normalized offset, migrates v1).
   - v72.16: settle overshoot (drag stays 1:1), micro-haptic on drag start, `prefers-reduced-motion` → instant settle.
+  -when i flick the bot bubble, its motion follows physics. also, keep it in front of the chatbox, currently, opening the chtbox hides the bubble behind.
 - New fix: Owed tab — i want the "+ entry" button to sit at the top; layout intent to be confirmed in code before choosing the fix (likely: move it out of the top, e.g. to the list end or a proper header row).
 - New fix: the "Added …" toast is still left-aligned (the v72.3 decision was centered) and too big — center it AND reduce its size.
 - Sequence, one dot release per item (edit → gate check in tools/check_site.py → tools/release.ps1 → commit → push): v72.15 → v72.16 → owed "+ entry" (v72.17) → toast (v72.18).
@@ -47,12 +66,14 @@ Progress: 50% — ETA ~03:40
 - [x] Investigate owed "+ entry" placement + toast snack CSS/JS (owed direction fixed by the user edit → 02:29 entry: button to the card TOP; toast = `#snack` — the v71 "robust" centering exists but the user still sees it left, so v72.18 re-centers bulletproof-style (X-offset inside the transform in BOTH states, like `#swToast`) and shrinks the pill)
 - [x] v72.15: bubble follows bot + docked handle + edge settle + safe-area clamp + fabPos.v2 — code + gate + smoke green (release.ps1 v72.15, 03:01)
 - [x] release.ps1 v72.15, commit, push — pushed fb4d1b2 (live 03:05)
-- [ ] v72.16: overshoot + haptic + reduced-motion — gate + smoke
-- [ ] release.ps1 v72.16, commit, push
-- [ ] v72.17: owed "+ entry" placement — gate
+- [x] v72.16: overshoot + haptic + reduced-motion — code + gate + smoke green (release.ps1 v72.16, 03:16)
+- [x] release.ps1 v72.16, commit, push — pushed e871e2d (live 03:18)
+- [ ] v72.17: flick — release velocity carries the bot toward the flicked edge (user edit, 03:17 entry) — gate
 - [ ] release.ps1 v72.17, commit, push
-- [ ] v72.18: toast centered + smaller — gate
+- [ ] v72.18: owed "+ entry" placement — gate
 - [ ] release.ps1 v72.18, commit, push
+- [ ] v72.19: toast centered + smaller — gate
+- [ ] release.ps1 v72.19, commit, push
 - [ ] mark all entries done with the hashes
 
 ## 2026-09-13 02:04 — Coach bubble: "make it totally better" (plan requested in plan mode)

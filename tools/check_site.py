@@ -572,6 +572,10 @@ def main():
           and "function fabReduceMotion()" in js
           and "matchMedia('(prefers-reduced-motion: reduce)')" in js
           and "fab.style.transition = 'none';" in js)
+    check("the bot flicks (v72.17): the drag state tracks the last move sample's velocity; on release a fast flick (speed > 0.5px/ms) projects the bot's center forward by 150ms of that velocity BEFORE the edge settle, so the bot is thrown to the edge the flick aimed at — a slow release settles by position alone",
+          "var FAB_FLICK_MS = 150, FAB_FLICK_MIN = 0.5" in js
+          and "st.vx = (ev.clientX - st.lastX) / dt" in js
+          and "if (sp > FAB_FLICK_MIN) { cx += st.vx * FAB_FLICK_MS; cy += st.vy * FAB_FLICK_MS; }" in js)
     check("emoji allowed, kept light, in the voice paths only (v72.12): the v72.3 'no emojis' flips to at most one where it fits (chat + note prompts); the setup prompt stays plain; the welcome carries one on its ramen line",
           "at most one emoji and only where it genuinely fits" in chatjs
           and "at most one emoji and only where it genuinely fits" in aijs

@@ -3506,7 +3506,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.16, live: new Date(2026, 8, 13, 3, 16) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.17, live: new Date(2026, 8, 13, 3, 24) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3591,6 +3591,10 @@
   var FAB_POS_KEY = 'fin.fabPos.v2';
   var FAB_POS_V1 = 'fin.fabPos.v1'; // read once for the migration, then orphaned
   var FAB_SIZE = 58, FAB_DRAG_THRESH = 8, FAB_PANEL_GAP = 10, FAB_PANEL_M = 12;
+  // v72.17: flick momentum — a fast release projects the bot's center forward
+  // this long into the finger's velocity before the edge settle; below
+  // FAB_FLICK_MIN (px/ms) a release is a slow drop and settles by position
+  var FAB_FLICK_MS = 150, FAB_FLICK_MIN = 0.5;
   var FAB_EDGES = ['left', 'right', 'top', 'bottom'];
   // v72.13: the smoothness pass — while dragging, left/top track the finger
   // 1:1 (NO left/top transition; only the transform animates, so the
@@ -3756,7 +3760,8 @@
       if (ev.button !== undefined && ev.button !== 0) return;
       fabHold(); // v72.13: kill any glide — the drag tracks the finger 1:1
       var r = fab.getBoundingClientRect();
-      st = { x: ev.clientX, y: ev.clientY, left: r.left, top: r.top, drag: false };
+      st = { x: ev.clientX, y: ev.clientY, left: r.left, top: r.top, drag: false,
+             vx: 0, vy: 0, lastX: ev.clientX, lastY: ev.clientY, lastT: Date.now() };
       if (fab.setPointerCapture) { try { fab.setPointerCapture(ev.pointerId); } catch (e) {} }
     });
     fab.addEventListener('pointermove', function (ev) {
@@ -3769,6 +3774,11 @@
         try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) {}
       }
       if (!st.drag) return; // under the threshold this is still a tap
+      // v72.17: keep the last move sample — the release flicks with velocity
+      var now = Date.now();
+      var dt = now - st.lastT;
+      if (dt > 0 && dt < 100) { st.vx = (ev.clientX - st.lastX) / dt; st.vy = (ev.clientY - st.lastY) / dt; }
+      st.lastX = ev.clientX; st.lastY = ev.clientY; st.lastT = now;
       ev.preventDefault();
       fab.classList.add('dragging');
       // v72.15: the drag clamps into the SAFE area — the bot can never be
@@ -3785,7 +3795,13 @@
       if (wasDrag) {
         fabLastDragAt = Date.now(); // a click right after a drag must NOT open the coach
         var r = fab.getBoundingClientRect();
-        var m = fabEdgeFromPoint(r.left + FAB_SIZE / 2, r.top + FAB_SIZE / 2);
+        // v72.17: the flick — a fast release projects the bot's center forward
+        // by 150ms of the finger's velocity, so a flick toward an edge carries
+        // the bot there (even across the screen); a slow release settles as-is
+        var cx = r.left + FAB_SIZE / 2, cy = r.top + FAB_SIZE / 2;
+        var sp = Math.sqrt(st.vx * st.vx + st.vy * st.vy);
+        if (sp > FAB_FLICK_MIN) { cx += st.vx * FAB_FLICK_MS; cy += st.vy * FAB_FLICK_MS; }
+        var m = fabEdgeFromPoint(cx, cy);
         fabPosSave(m);
         var ov = byId('coachOv');
         var open = ov && ov.classList.contains('show');
