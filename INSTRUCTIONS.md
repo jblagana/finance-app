@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-13 03:51 — New: separate "Backup" section in Settings with a choice of which data to export
-Status: in progress — code + gate + smoke done, pushing
-Progress: 80% — ETA 04:30
+Status: done — pushed f647281 (live 04:38)
+Progress: 100%
 
 ### Instruction (verbatim)
 > (user edit inside the 03:41 entry's Interpretation section — a new bullet:)
@@ -25,7 +25,7 @@ Progress: 80% — ETA 04:30
 - [x] Confirm export granularity with the user — resolved as per-section checkboxes (the user's own example, owed-only, is one checkbox)
 - [x] Implement the backup section (Settings UI + export filter + partial import)
 - [x] Gate green: check_site + parser + both smokes (v72.23 section: owed-only export + partial import round-trip)
-- [ ] release.ps1 v72.23, commit, push
+- [x] release v72.23 (sw cache finances-pwa-v72.23, SHELL_RELEASE live-stamped 04:38), commit f647281, pushed
 
 ## 2026-09-13 03:51 — New: longer flick travel + drag should follow the finger with a small delay
 Status: done — pushed 3b3b10f (live 04:12)
