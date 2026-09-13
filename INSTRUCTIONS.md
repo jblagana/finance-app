@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-14 01:0x — v72.32: remake the toasts into a top banner (7s, swipe-up dismisses)
-Status: in progress
-Progress: 80% — ETA a few more minutes (release + push)
+Status: **done**
+Progress: 100% — completed 2026-09-14 01:1x; commit `4b6547d` pushed to origin/main (v72.32, live 01:12, SW cache `finances-pwa-v72.32`)
 
 ### Instruction (verbatim)
 > for the toasts, remake them into a banner on the top of screen which stays for 7 seconds but can be swiped up to remove immediately. kinda similar to the new version toast.
@@ -24,7 +24,7 @@ Progress: 80% — ETA a few more minutes (release + push)
 - [x] Inspect: #snack CSS/HTML + snack()/hideSnack/snackTimer, #swToast structure to mirror, existing touch-drag patterns
 - [x] Implement: top banner (CSS), 7s default, swipe-up gesture (pointer follow + 0.85 resistance, -60px/40% threshold dismiss, spring back, Undo button not a drag handle, touch-action:none)
 - [x] Gate + smoke: v72.32 checks added (centering check updated to the top anchor), check_site + parser + smoke all green
-- [ ] Release v72.32 (release.ps1: stamps + mirror sync + full gates), commit, push
+- [x] Release v72.32 (release.ps1: stamps + mirror sync + full gates all green), code commit `4b6547d` pushed to origin/main
 
 ## 2026-09-14 00:3x — v72.31: X button on the Ledger's Adjustment rows — undo the override in Settings
 Status: **done**
