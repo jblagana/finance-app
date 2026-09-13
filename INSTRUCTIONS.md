@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-13 23:0x — User edit on v72.29: "see more" paging for Owed + Ledger entries (5 at a time)
-Status: in progress (v72.29) — implemented; gates all green (release.ps1 v72.29); releasing with the rest of v72.29
-Progress: 95% — ETA ~23:30
+Status: **done**
+Progress: 100% — completed 2026-09-13 23:1x; commit `a74860a` pushed to origin/main (v72.29, live 23:08)
 
 ### Instruction (verbatim)
 > (user edit on the 22:4x entry's Interpretation section, 2026-09-13 — a line inserted, quoted exactly as edited, typos included:)
@@ -26,11 +26,11 @@ Progress: 95% — ETA ~23:30
 - [x] Implement owed "See more" (5 at a time, per person card) — in-memory `owedShown` map; `owedPersonHTML` slices the first 5 + a `data-ow-more` addrow button; the click handler bumps by 5 and re-renders
 - [x] Implement ledger "See more" (5 at a time) — in-memory `mlShownCount`; `limited = shown.slice(0, mlShownCount)` + an `#mlMore` addrow button (+5 on tap); a filter change resets to 5
 - [x] Gate + smoke updates (local mirror + tools/) — 4th v72.29 gate check; 2 new smoke checks (7-entry card → 5 rows + button; 4-entry card → none); the 72.29 What's-new note got the See-more line — GATES: all green (release.ps1 v72.29, 11 v72.29 smoke checks)
-- [ ] Re-run release v72.29, gates green, commit, push (with the earlier v72.29 scope)
+- [x] Release v72.29 — commit `a74860a` pushed to origin/main (live 23:08)
 
 ## 2026-09-13 22:4x — User edit on v72.29: scope additions (settings "What's new", in-place edit, editable person name, cat+acc row, 'Unsorted' always)
-Status: in progress (v72.29) — all implemented; gates all green (release.ps1 v72.29); committing + pushing
-Progress: 95% — ETA ~23:30
+Status: **done**
+Progress: 100% — completed 2026-09-13 23:1x; commit `a74860a` pushed to origin/main (v72.29, live 23:08)
 
 ### Instruction (verbatim)
 > (user edit on the 22:5x entry's Interpretation section, 2026-09-13 — two bullets appended, quoted exactly as edited, typos included:)
@@ -56,11 +56,11 @@ add this: -in owed and ledger, when enrties are more than 5, hide the old ones i
 - [x] Implement owedCatOptions 'Unsorted' always + stale-category preservation — budgets lead, 'Unsorted' always appended, stale saved category still appended
 - [x] Implement settings "What's new in <version>" section — SHELL_NOTES (72.24–72.29, plain wording) + `shellNotesFor` (running version, closest-older fallback) + `renderWhatNew` into the new `wnSec` Settings card
 - [x] Gate + smoke updates (local mirror + tools/) — 3 v72.29 gate checks; smoke: v72.28 options assertion flipped (Unsorted listed) + 6 new v72.29 checks — GATES: all green (release.ps1 v72.29)
-- [ ] Release v72.29 (stamps set), commit, push
+- [x] Release v72.29 — commit `a74860a` pushed to origin/main (live 23:08)
 
 ## 2026-09-13 22:5x — Edit button on every owed entry (including legacy ones)
-Status: in progress (v72.29) — implemented: edit button unconditional in owedPersonHTML + export for smoke; gate + smoke updated; releasing
-Progress: 85% — ETA ~23:00
+Status: **done**
+Progress: 100% — completed 2026-09-13 23:1x; commit `a74860a` pushed to origin/main (v72.29, live 23:08)
 
 ### Instruction (verbatim)
 > can u add edit button for all owed entries, including the old ones from old versions
@@ -76,7 +76,7 @@ Progress: 85% — ETA ~23:00
 - [x] Inspect owed entry rendering + edit flow in app.js — root cause: the v72.10 row template only rendered the edit button when `e.txnId` existed, so every non-filed entry (all ipf/itb/tmb under v72.28, plus all pre-v72.10 legacy entries) had no edit affordance; the edit-open + updateOwedEntry paths were already legacy-tolerant (ee.dir || 'ipf', ee.acc || '', owedCatOptions(ee.cat || ''), todayISO fallback)
 - [x] Implement the fix — button unconditional in owedPersonHTML (chip stays filed-only); owedPersonHTML exported for the smoke; index.html CSS comment refresh pending
 - [x] Gate + smoke adjustments (local mirror + tools/) — new v72.29 gate check; v7229Section drives the real renderer with 4 legacy shapes
-- [ ] Bump v72.29 (sw cache + SHELL_RELEASE live at push), gates green, commit, push
+- [x] Bump v72.29 (sw cache + SHELL_RELEASE live 23:08 at push), gates green — commit `a74860a` pushed to origin/main
 
 ## 2026-09-13 21:2x — User edit on the v72.28 interpretation: keep the Account section (ipf/itb/tmb), tpf fallback = 'Unsorted'
 Status: **done**
