@@ -3599,7 +3599,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.25, live: new Date(2026, 8, 13, 14, 20) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.26, live: new Date(2026, 8, 13, 14, 33) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3687,10 +3687,11 @@
   // v72.17: flick momentum — a fast release projects the bot's center forward
   // this long into the finger's velocity before the edge settle; below
   // FAB_FLICK_MIN (px/ms) a release is a slow drop and settles by position.
-  // v72.22: 150 -> 320. v72.24: 320 -> 420 and a two-part THROW (fly +
-  // bounce): FAB_FLY_MS is the SHORT projection the fast launch ends at;
-  // FAB_FLICK_STALE_MS — a release this long after the last finger move has
-  // no momentum (a held pause, not a flick).
+  // v72.22: 150 -> 320. v72.24: 320 -> 420 and a fast THROW flight: FAB_FLY_MS
+  // is the SHORT projection the fast launch ends at; FAB_FLICK_STALE_MS — a
+  // release this long after the last finger move has no momentum (a held
+  // pause, not a flick). v72.26: the bounce (squash/overshoot) is gone — the
+  // flight is a clean two-segment ease-out that lands exactly on the settle.
   var FAB_FLICK_MS = 420, FAB_FLICK_MIN = 0.4, FAB_FLY_MS = 170, FAB_FLICK_STALE_MS = 80;
   // v72.22: the follow-lag — while dragging the bot trails the finger with a
   // small exponential smoothing (rAF, ~50ms time constant) instead of 1:1
@@ -3726,19 +3727,20 @@
   function fabFlightCancel() {
     if (fabFlightAnim) { try { fabFlightAnim.cancel(); } catch (e) {} fabFlightAnim = null; }
   }
-  // fast launch to the fly point, on to the edge settle with an impact
-  // squash, a clamped along-edge rebound, back to rest. Duration scales with
-  // the travel so a hard flick reads fast and a soft one doesn't crawl.
+  // v72.26: the bouncy feel is GONE (user: 'remove the bouncy feel of the
+  // bubble') — no scale squash/stretch, no along-edge overshoot. The flight
+  // is a clean two-segment ease-out: a fast launch to the fly point, then a
+  // decelerating run into the settle point, landing exactly there. Duration
+  // scales with the travel so a hard flick reads fast and a soft one doesn't
+  // crawl.
   function fabFlightStart(fab, g, fromL, fromT) {
     var d = Math.sqrt(Math.pow(g.settle.x - fromL, 2) + Math.pow(g.settle.y - fromT, 2));
-    var dur = Math.max(360, Math.min(900, 360 + d * 0.5));
+    var dur = Math.max(300, Math.min(750, 300 + d * 0.45));
     var px = function (p) { return p + 'px'; };
     var kf = [
-      { left: px(fromL), top: px(fromT), transform: 'scale(1)', offset: 0, easing: 'cubic-bezier(.16,.85,.3,1)' },
-      { left: px(g.fly.x), top: px(g.fly.y), transform: 'scale(1.05)', offset: 0.3, easing: 'cubic-bezier(.3,.35,.4,1)' },
-      { left: px(g.settle.x), top: px(g.settle.y), transform: 'scale(0.93)', offset: 0.6, easing: 'cubic-bezier(.34,.06,.4,1)' },
-      { left: px(g.bounce.x), top: px(g.bounce.y), transform: 'scale(1.04)', offset: 0.82, easing: 'ease-out' },
-      { left: px(g.settle.x), top: px(g.settle.y), transform: 'scale(1)', offset: 1 }
+      { left: px(fromL), top: px(fromT), offset: 0, easing: 'cubic-bezier(.14,.86,.24,1)' },
+      { left: px(g.fly.x), top: px(g.fly.y), offset: 0.38, easing: 'cubic-bezier(.22,.61,.36,1)' },
+      { left: px(g.settle.x), top: px(g.settle.y), offset: 1 }
     ];
     var land = function () {
       fabFlightAnim = null;
@@ -3809,27 +3811,15 @@
   // vw x vh viewport; the finger's release velocity is (vx, vy) px/ms:
   //  fly    = from + v*FAB_FLY_MS, clamped — where the fast launch ends
   //  settle = the edge + u from the LONGER projection (v*FAB_FLICK_MS) — the
-  //           spot the momentum carries the bot to
-  //  bounce = settle + 12% of the along-edge flight leg, clamped into the
-  //           safe area — the rebound never leaves the screen (a straight
-  //           throw into an edge has no along-edge leg, so bounce = settle
-  //           and the scale squash sells that landing)
+  //           spot the momentum carries the bot to. v72.26: the bounce point
+  //           is gone (the bouncy feel was removed) — the flight lands
+  //           exactly on the settle.
   function fabFlickGeo(s, vw, vh, fromL, fromT, vx, vy) {
     var fx = Math.max(s.left, Math.min(fromL + vx * FAB_FLY_MS, vw - s.right - FAB_SIZE));
     var fy = Math.max(s.top, Math.min(fromT + vy * FAB_FLY_MS, vh - s.bottom - FAB_SIZE));
     var m = fabEdgeFromPoint(fromL + FAB_SIZE / 2 + vx * FAB_FLICK_MS, fromT + FAB_SIZE / 2 + vy * FAB_FLICK_MS);
     var sp = fabEdgePos(m.edge, m.u, s);
-    var alongY = (m.edge === 'left' || m.edge === 'right');
-    var od = ((alongY ? sp.y - fy : sp.x - fx) || 0) * 0.12;
-    var bx = alongY ? sp.x : sp.x + od;
-    var by = alongY ? sp.y + od : sp.y;
-    return {
-      edge: m.edge, u: m.u, settle: sp, fly: { x: fx, y: fy },
-      bounce: {
-        x: Math.max(s.left, Math.min(bx, vw - s.right - FAB_SIZE)),
-        y: Math.max(s.top, Math.min(by, vh - s.bottom - FAB_SIZE))
-      }
-    };
+    return { edge: m.edge, u: m.u, settle: sp, fly: { x: fx, y: fy } };
   }
   function fabPosLoad() {
     try {
@@ -4026,9 +4016,10 @@
         var ov = byId('coachOv');
         var open = ov && ov.classList.contains('show');
         if (sp > FAB_FLICK_MIN && !open && !fabReduceMotion() && fab.animate) {
-          // v72.24: the THROW — fly (fast launch to the short projection),
-          // squash on impact, rebound along the edge, rest. The animation
-          // starts from the bot's RENDERED spot (it trailed the finger).
+          // v72.24: the THROW — fly fast to the short projection, then ease
+          // out to the edge settle. v72.26: no bounce — it lands exactly.
+          // The animation starts from the bot's RENDERED spot (it trailed
+          // the finger).
           var g = fabFlickGeo(s, vw, vh, tx, ty, vx, vy);
           fabPosSave(g);
           var r0 = fab.getBoundingClientRect();

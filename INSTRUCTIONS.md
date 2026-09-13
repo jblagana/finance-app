@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-13 13:5x — Remove the bouncy feel of the bubble
-Status: not started (queued as v72.26, after v72.25)
-Progress: 0%
+Status: in progress (v72.26) — coded + gate green, pushing
+Progress: 90%
 
 ### Instruction (verbatim)
 > (user edit inside the 04:52 entry's Interpretation section — a new bullet:)
@@ -22,12 +22,12 @@ Progress: 0%
 
 ### Subtasks
 - [x] Log the instruction verbatim (first action)
-- [ ] Simplify fabFlightStart (no transform keyframes, no overshoot) + fabFlickGeo (drop bounce) + gate/smoke
+- [x] Simplify fabFlightStart (3 keyframes, no transform, no overshoot; dur 300–750ms scaled by travel) + fabFlickGeo (bounce dropped) + gate (v72.24 check re-worded, asserts no scale(.93)/no g.bounce) + smoke (bounce checks replaced; new 'geometry is bounce-free' check)
 - [ ] Bump v72.26, commit, push
 
 ## 2026-09-13 13:56 — User edits: owed-category clarifications + photo cleanup task (finances/pics)
-Status: not started (clarifications fold into v72.25; the photo task is new, after v72.25)
-Progress: 0%
+Status: in progress — v72.24 pushed 82d28d4 (13:56), v72.25 pushed 5544f46 (14:20); photo task pending
+Progress: 80% — ETA 14:40
 
 ### Instruction (verbatim)
 > (two user edits inside the 04:52 entry's Interpretation section:)
@@ -42,13 +42,13 @@ Progress: 0%
 
 ### Subtasks
 - [x] Log the edits verbatim (first action)
-- [ ] Push v72.24 (code + gate already green)
-- [ ] v72.25 with the edit-1 rules (position kept, summary 'Owed' = unassigned only)
+- [x] Push v72.24 (code + gate already green) — pushed 82d28d4
+- [x] v72.25 with the edit-1 rules (position kept — smoke proves id + index stay; summary 'Owed' = unassigned only by construction) — pushed 5544f46
 - [ ] Inspect finances/pics; confirm with the user what "remove the details i scratched" means; do it
 
 ## 2026-09-13 04:52 — New: category options on owed entries (ledger categorizes accordingly, default 'Owed')
-Status: in progress (v72.25) — coded + gate green, pushing
-Progress: 90%
+Status: done — pushed 5544f46 (live 14:20; header time mislabeled, see the 13:56 clock note)
+Progress: 100%
 
 ### Instruction (verbatim)
 > (user edit inside the 04:46 entry's Interpretation section — a new bullet:)
@@ -65,7 +65,7 @@ Progress: 90%
 - [x] Log the instruction verbatim (first action)
 - [x] Read the owed entry → ledger txn flow — balance from entry records (untouched); no coach logic keys off category 'Owed'; add-sheet list = budgets + forced 'Owed'; user confirmed in-place rewrite keeps position and the summary 'Owed' bucket = unassigned entries only
 - [x] Implement: category picker on the entry form (default 'Owed', budget options, stale values selectable, hidden with the account row for tpf); addOwedEntry stores e.cat + files the txn under it; updateOwedEntry rewrites the linked txn's category in place (id + position kept); edit prefill + reset; owedCatOptions exported
-- [ ] Gate + smoke, bump v72.25, commit, push
+- [x] Gate + smoke (9 new v72.25 checks) green; bump v72.25 (sw cache + SHELL_RELEASE live 14:20); pushed 5544f46
 
 ## 2026-09-13 04:46 — Flicking the bot does nothing — it should fly and be kinda bouncy
 Status: done — pushed 82d28d4 (live 13:56; header time mislabeled, see the 13:56 clock note)
