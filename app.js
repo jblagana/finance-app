@@ -618,14 +618,19 @@
     });
     return b;
   }
-  function saveBase(b) {
+  function saveBase(b, opts) {
     var prevBase = state.base; // v72.30: a balance override files the diff
     b.edited = new Date().toISOString();
     state.base = migrateBaseKinds(b); // v65
     refreshLocalSnapshot();
-    accountBalanceDiffs(prevBase, state.base).forEach(function (d) {
-      fileBalanceAdjustment(d.name, d.kind, d.diff);
-    });
+    // v72.31: the ✕ on an Adjustment row reverses a filed diff through this
+    // same path — that reversal must not file a NEW Adjustment (no audit of
+    // the audit), so the undo passes skipAdjustment.
+    if (!(opts && opts.skipAdjustment)) {
+      accountBalanceDiffs(prevBase, state.base).forEach(function (d) {
+        fileBalanceAdjustment(d.name, d.kind, d.diff);
+      });
+    }
     return Promise.all([
       idbPut(STORE_META, { key: 'base', value: b }).catch(function () {}),
       persistSnapshot(),
@@ -680,6 +685,63 @@
     state.moneyLog.push(e);
     if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
     idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
+  }
+
+  // v72.31 (user: 'add x button in ledger for adjustment, it undoes the
+  // record in settings'): the ✕ on an Adjustment row (k==='a') confirms, then
+  // deletes the audit record AND reverses the balance change it filed — the
+  // account's value in Settings → Your numbers moves by the NEGATIVE of the
+  // row's signed diff (single override: back to the pre-override value; a
+  // chain of overrides: this record's contribution is removed). The reversal
+  // is a base save with Adjustment-filing suppressed, and the toast Undo
+  // restores row + value. Account gone from Settings (removed/renamed since)
+  // → the row is simply deleted (nothing to reverse against).
+  function findAdjAccount(name) {
+    var nm = String(name || '').trim().toLowerCase();
+    if (!nm) return null;
+    var acc = null;
+    ((state.base && state.base.accounts) || []).forEach(function (a) {
+      if (!a || (a.kind !== 'debit' && a.kind !== 'card')) return;
+      if (!acc && String(a.name || '').trim().toLowerCase() === nm) acc = a;
+    });
+    return acc;
+  }
+  function askDeleteAdjustment(idx) {
+    var e = (state.moneyLog || [])[idx];
+    if (!e || e.k !== 'a') return;
+    var acc = findAdjAccount(e.m);
+    var amt = money(Math.abs(Number(e.n) || 0));
+    confirmAsk(acc
+      ? 'Undo this balance override? The <b>Adjustment</b> record is removed and <b>' + esc(e.m || 'the account') + '</b> goes back by <b>' + amt + '</b> — you can undo right after.'
+      : 'Remove this <b>Adjustment</b> record? ' + esc(e.m || 'The account') + ' is no longer in Your numbers, so only the ledger row is removed — you can undo right after.',
+      'Remove', function () { deleteAdjustment(idx); });
+  }
+  function deleteAdjustment(idx) {
+    var log = state.moneyLog || [];
+    var e = log[idx];
+    if (!e || e.k !== 'a') return;
+    var acc = findAdjAccount(e.m);
+    var oldVal = acc ? r2(Number(acc.value) || 0) : null;
+    state.moneyLog = log.filter(function (x) { return x !== e; });
+    idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
+    if (acc) {
+      acc.value = r2((Number(acc.value) || 0) - Number(e.n));
+      saveBase(state.base, { skipAdjustment: true });
+    }
+    emit('txn');
+    snack('Removed the ' + money(Math.abs(Number(e.n) || 0)) + ' adjustment' +
+      (acc ? ' — ' + esc(acc.name) + ' is back to ' + money(oldVal) : ''), function () {
+      // the toast Undo: the row back at its index, the account value back
+      var mlog = state.moneyLog || [];
+      mlog.splice(Math.min(idx, mlog.length), 0, e);
+      state.moneyLog = mlog;
+      idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
+      if (acc) {
+        acc.value = oldVal;
+        saveBase(state.base, { skipAdjustment: true });
+      }
+      emit('txn');
+    });
   }
 
   // ---------- v35: story mode — the coach chat writes base changes through this path ----------
@@ -1204,6 +1266,12 @@
         var editAttr = (add && e.tid) ? ' data-ml-edit="' + esc(e.tid) + '" title="Tap to edit" style="cursor:pointer"' : '';
         var delBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-del="' + esc(e.tid) +
           '" aria-label="Delete this expense" title="Delete this expense">\u2715</button>' : '';
+        // v72.31: Adjustment rows (no txn behind them) get their own ✕ — it
+        // removes the record and reverses the override in Settings. The key is
+        // the row's index in state.moneyLog (true at render time; every change
+        // re-renders the list before another click can land).
+        var adjDel = isAdj ? '<button type="button" class="mini" data-adj-del="' + log.indexOf(e) +
+          '" aria-label="Remove this adjustment" title="Remove the record — it takes the override back">\u2715</button>' : '';
         var down = add ? !inflow : inflow; // spend down / come-back up vs inflow up / take-back down
         var amtTxt = (down ? '−' : '+') + money(e.n);
         var freeTxt = '<span class="ml-f">free ' + money(before) + ' → ' + money(e.f) + '</span>';
@@ -1218,7 +1286,7 @@
           (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
           '<div class="ml-meta">' + mlDate(e.at) + (p.m ? ' · ' + esc(p.m) : '') + '</div></div>' +
           '<div class="ml-r"><b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b>' +
-          freeTxt + extra + delBtn + '</div></div>';
+          freeTxt + extra + delBtn + adjDel + '</div></div>';
       }).join('') +
       // v72.30 (user edit: 'see less beside see more'): the buttons share one
       // row — See less re-hides 5 per tap down to the first page (hidden there)
@@ -1230,6 +1298,11 @@
     for (var di = 0; di < dl.length; di++) dl[di].onclick = function (ev) {
       ev.stopPropagation(); // v71: ✕ deletes — it must not also open the editor
       askDeleteTxn(this.getAttribute('data-ml-del'));
+    };
+    var adj = body.querySelectorAll('[data-adj-del]'); // v72.31: ✕ on Adjustment rows
+    for (var aj = 0; aj < adj.length; aj++) adj[aj].onclick = function (ev) {
+      ev.stopPropagation();
+      askDeleteAdjustment(Number(this.getAttribute('data-adj-del')));
     };
     var ed = body.querySelectorAll('[data-ml-edit]');
     for (var ei = 0; ei < ed.length; ei++) ed[ei].onclick = function () { openTxnEdit(this.getAttribute('data-ml-edit')); };
@@ -3816,12 +3889,17 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.30, live: new Date(2026, 8, 14, 0, 8) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.31, live: new Date(2026, 8, 14, 0, 46) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.31': [
+      'Ledger: an Adjustment row has a \u2715 now \u2014 it removes the record and takes the balance override in Your numbers back',
+      'Card overrides work the same way \u2014 the card balance goes back, your free cash never moves',
+      'The undo is on the toast, as always'
+    ],
     '72.30': [
       'Your numbers: set an account\u2019s balance to what it really is \u2014 the difference is filed in the Ledger under \u201CAdjustment\u201D',
       'Owed: the edit form\u2019s Cancel now actually closes the form',
@@ -4486,6 +4564,9 @@
     shellNotesFor: shellNotesFor, // v72.29: the What's-new notes for a version (smoke drives it)
     owedShown: owedShown, // v72.30: the per-person See more/less page (smoke drives the paging render)
     getBase: function () { return state.base; }, // v72.30: the current base (smoke reads account values for the override test)
+    askDeleteAdjustment: askDeleteAdjustment, // v72.31: the ✕ on an Adjustment row (smoke drives it; the stub has no confirm dialog → auto-yes)
+    deleteAdjustment: deleteAdjustment, // v72.31: the undo itself (row out + the Settings value reversed, no new filing)
+    saveBase: saveBase, // v72.31: a base save (smoke: remove the account for the gone-account path)
     delOwedEntry: delOwedEntry,
     delOwedPerson: delOwedPerson,
     effectiveSnap: effectiveSnap,

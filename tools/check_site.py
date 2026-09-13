@@ -625,6 +625,14 @@ def main():
           and "names.push('Owed')" not in js
           and "prevTxn.category || 'Unsorted'" in js
           and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog]" in js)
+    check("v72.31 (user: 'add x button in ledger for adjustment, it undoes the record in settings'): an Adjustment row (k='a') carries its own ✕ (data-adj-del = the row's moneyLog index) — it confirms, removes the audit record, and reverses the balance change it filed: the account's Settings value moves by the NEGATIVE of the row's signed diff through the base save with Adjustment-filing SUPPRESSED (deleting an audit record must not file a new one); the account gone from Settings → the row is simply deleted; the toast Undo restores row + value",
+          "function findAdjAccount(name)" in js
+          and "function askDeleteAdjustment(idx)" in js
+          and "function deleteAdjustment(idx)" in js
+          and "data-adj-del" in js
+          and "var adjDel = isAdj ? " in js
+          and "saveBase(state.base, { skipAdjustment: true })" in js
+          and "if (!(opts && opts.skipAdjustment))" in js)
     check("the owed entry form shows only the trimmed labels (v72.27, user scratched the sub-texts out of a screenshot — 'remove the details i scratched'): 'Amount (₱)' without the 'number or quick sum' tail, 'Category' without 'where it lands in the ledger', no 'Filed in the ledger…' hint line, 'Note' without '(optional)'; the quick-sum input itself is unchanged (oent-amt + evalExpr); the v72.28 user edit kept the Account section (ipf/itb/tmb only)",
           '<label>Amount (\\u20b1)</label>' in js
           and '<label>Category</label>' in js
