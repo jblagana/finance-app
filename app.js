@@ -35,7 +35,8 @@
   var RENDER_BY_KEY = {
     txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote],
     plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote],
-    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories],
+    // v72.30: a base save can file 'Adjustment' ledger rows — the Ledger tab follows
+    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog],
     adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote],
     owed: [renderOwed],
     ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote]
@@ -618,14 +619,67 @@
     return b;
   }
   function saveBase(b) {
+    var prevBase = state.base; // v72.30: a balance override files the diff
     b.edited = new Date().toISOString();
     state.base = migrateBaseKinds(b); // v65
     refreshLocalSnapshot();
+    accountBalanceDiffs(prevBase, state.base).forEach(function (d) {
+      fileBalanceAdjustment(d.name, d.kind, d.diff);
+    });
     return Promise.all([
       idbPut(STORE_META, { key: 'base', value: b }).catch(function () {}),
       persistSnapshot(),
       saveAdj()
     ]);
+  }
+  // v72.30 (user: 'add a way to override the current accounts' amount/balances.
+  // add the difference in the ledger tab with category Adjustment'): the
+  // accounts present in BOTH the previous and the new base (matched by name,
+  // case-insensitive) whose value moved. New or removed accounts file nothing
+  // (a new one has no old tracked value; a removed one isn't necessarily
+  // emptied). Only the money accounts (debit / card) feed the tiles, so only
+  // they file. The base is the source of truth — refreshLocalSnapshot already
+  // rebased the live overlay to zero, so the filed row is an audit record,
+  // not a second move: it's a moneyLog row ONLY (no txn), which is also why
+  // the spend insights (pace / donut / per-category — all txn-based) can
+  // never be skewed by an override.
+  function accountBalanceDiffs(oldB, newB) {
+    var out = [];
+    var olds = (oldB && oldB.accounts) || [];
+    ((newB && newB.accounts) || []).forEach(function (a) {
+      if (!a || (a.kind !== 'debit' && a.kind !== 'card')) return;
+      var nm = String(a.name || '').trim().toLowerCase();
+      if (!nm) return;
+      var old = null;
+      olds.forEach(function (o) {
+        if (!o) return;
+        if (!old && String(o.name || '').trim().toLowerCase() === nm) old = o;
+      });
+      if (!old) return;
+      var diff = r2((Number(a.value) || 0) - (Number(old.value) || 0));
+      if (Math.abs(diff) > 0.004) out.push({ name: a.name, kind: a.kind, diff: diff });
+    });
+    return out;
+  }
+  // The audit row: category 'Adjustment', the SIGNED diff as n, k='a'. f = the
+  // effective free AFTER the base moved (a debit row's free chain derives from
+  // it: before = f − n); a card row carries o = the card owed after (the card
+  // chain, before = o − n — free never moves). No s line: an override is not
+  // spend. The row has no tid — it's the record (a wrong override is
+  // corrected by the next one, which files its own row).
+  function fileBalanceAdjustment(name, kind, diff) {
+    var s = effectiveSnap();
+    if (!s) return;
+    var e = {
+      at: Date.now(), a: 'add',
+      l: 'Adjustment', c: 'Adjustment', nt: 'balance override', m: name || '',
+      n: r2(diff), k: 'a'
+    };
+    e.f = r2(s.cash ? s.cash.free : 0);
+    if (kind === 'card') e.o = r2(s.card_owed || 0);
+    state.moneyLog.push(e);
+    if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
+    idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
   }
 
   // ---------- v35: story mode — the coach chat writes base changes through this path ----------
@@ -1124,32 +1178,54 @@
         var add = e.a === 'add';
         // v72.10: inflow rows (i cash in / p card payment) move free the OTHER
         // way — a row's before→after follows its flavor, not its add/del side.
+        // v72.30: 'a' = a balance override — n is SIGNED and there is no txn
+        // behind the row; a debit row's free moved by exactly the diff
+        // (before = f − n), a card row (o set) never moves free — only the
+        // card balance does (before = o − n).
+        var isAdj = e.k === 'a';
         var inflow = e.k === 'i' || e.k === 'p';
         var before = r2(e.f + (add ? (inflow ? -e.n : e.n) : (inflow ? e.n : -e.n)));
+        if (isAdj) before = r2(e.f - e.n);
         var extra = '';
         if (e.k === 'c' || e.k === 'p') {
           var oBefore = r2(e.o + (add ? (e.k === 'c' ? -e.n : e.n) : (e.k === 'c' ? e.n : -e.n)));
           extra = '<span class="ml-x">card ' + money(oBefore) + ' → ' + money(e.o) + '</span>';
+        } else if (isAdj && e.o != null) {
+          extra = '<span class="ml-x">card ' + money(r2(e.o - e.n)) + ' → ' + money(e.o) + '</span>';
         }
         if (e.s != null) {
           var sBefore = r2(e.s + (add ? (e.k === 'i' ? e.n : -e.n) : (e.k === 'i' ? -e.n : e.n)));
           extra += '<span class="ml-x">month spent ' + money(sBefore) + ' → ' + money(e.s) + '</span>';
         }
         var p = mlParts(e);
-        // v71: add rows with a live txn are editable — tap the row (not the ✕)
+        // v71: add rows with a live txn are editable — tap the row (not the ✕).
+        // Adjustment rows carry no txn: they are the audit record (a wrong
+        // override is corrected by the next one).
         var editAttr = (add && e.tid) ? ' data-ml-edit="' + esc(e.tid) + '" title="Tap to edit" style="cursor:pointer"' : '';
         var delBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-del="' + esc(e.tid) +
           '" aria-label="Delete this expense" title="Delete this expense">\u2715</button>' : '';
         var down = add ? !inflow : inflow; // spend down / come-back up vs inflow up / take-back down
+        var amtTxt = (down ? '−' : '+') + money(e.n);
+        var freeTxt = '<span class="ml-f">free ' + money(before) + ' → ' + money(e.f) + '</span>';
+        if (isAdj) {
+          var cardRow = e.o != null;
+          down = cardRow ? e.n > 0 : e.n < 0; // more owed (card) / less cash (debit) = the red side
+          amtTxt = (e.n > 0 ? '+' : '−') + money(Math.abs(e.n));
+          if (cardRow) freeTxt = ''; // a card override never moves free
+        }
         return '<div class="ml-row' + (add ? '' : ' del') + '"' + editAttr + '>' +
           '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
           (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
           '<div class="ml-meta">' + mlDate(e.at) + (p.m ? ' · ' + esc(p.m) : '') + '</div></div>' +
-          '<div class="ml-r"><b class="' + (down ? 'ml-down' : 'ml-up') + '">' + (down ? '−' : '+') + money(e.n) + '</b>' +
-          '<span class="ml-f">free ' + money(before) + ' → ' + money(e.f) + '</span>' + extra + delBtn + '</div></div>';
-      }).join('') + (shown.length > limited.length
-      ? '<button type="button" class="addrow" id="mlMore" style="margin-top:10px">See more</button>'
-      : '');
+          '<div class="ml-r"><b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b>' +
+          freeTxt + extra + delBtn + '</div></div>';
+      }).join('') +
+      // v72.30 (user edit: 'see less beside see more'): the buttons share one
+      // row — See less re-hides 5 per tap down to the first page (hidden there)
+      ((shown.length > limited.length || mlShownCount > 5) ? '<div class="ml-pag">' +
+      (shown.length > limited.length ? '<button type="button" class="addrow" id="mlMore">See more</button>' : '') +
+      (mlShownCount > 5 ? '<button type="button" class="addrow" id="mlLess">See less</button>' : '') +
+      '</div>' : '');
     var dl = body.querySelectorAll('[data-ml-del]');
     for (var di = 0; di < dl.length; di++) dl[di].onclick = function (ev) {
       ev.stopPropagation(); // v71: ✕ deletes — it must not also open the editor
@@ -1159,6 +1235,8 @@
     for (var ei = 0; ei < ed.length; ei++) ed[ei].onclick = function () { openTxnEdit(this.getAttribute('data-ml-edit')); };
     var more = byId('mlMore');
     if (more) more.onclick = function () { mlShownCount += 5; renderMoneyLog(); };
+    var less = byId('mlLess'); // v72.30: re-hide 5 per tap (floor: the first page)
+    if (less) less.onclick = function () { mlShownCount = Math.max(5, mlShownCount - 5); renderMoneyLog(); };
   }
 
   // ---------- bottom sheets (Add, Settings) ----------
@@ -1396,7 +1474,13 @@
     h += bsec('Salary overrides') + '<div id="rowsSal">' + salRows + '</div>' +
       '<button type="button" class="addrow" data-add="sal">+ override month</button>';
     var accRows = (b.accounts || []).map(accRow).join('');
-    h += bsec('Accounts (debit, credit)') + '<div id="rowsAcc">' + accRows + '</div>' +
+    // v72.30 (user: 'add a way to override the current accounts'
+    // amount/balances'): the third column is the account's CURRENT balance —
+    // a save that moves it files the difference in the Ledger under
+    // 'Adjustment' (saveBase → accountBalanceDiffs)
+    h += bsec('Accounts (debit, credit)') +
+      '<p class="note" style="margin:0 0 6px">name · kind · <b>current balance</b> · limit — set a balance to what it really is; the difference is filed in the Ledger under <b>Adjustment</b></p>' +
+      '<div id="rowsAcc">' + accRows + '</div>' +
       '<button type="button" class="addrow" data-add="acc">+ account</button>';
     var budRows = '';
     Object.keys(b.budgets || {}).forEach(function (k) {
@@ -2772,7 +2856,10 @@
       '</div>' +
       (edit
         ? '<div class="oent-btns"><button class="act" type="submit">Save changes</button>' +
-          '<button class="act ghost" type="button" data-ow-edit-cancel>Cancel</button></div>'
+          // v72.30 (user: 'the cancel button is not working'): the flag carries
+          // a value — a valueless attribute reads back as '' (falsy), so the
+          // click handler's branch never fired
+          '<button class="act ghost" type="button" data-ow-edit-cancel="1">Cancel</button></div>'
         : '<div style="margin-top:14px"><button class="act" type="submit">Add entry</button></div>');
   }
   function owedPersonHTML(p) {
@@ -2801,8 +2888,14 @@
         '<button type="button" class="ow-xbtn" data-ow-del-e="' + esc(e.id) + '" aria-label="Remove entry">\u2715</button>' +
         '</div>';
     });
-    if (ents.length > shownEnts.length) {
-      rows += '<button type="button" class="addrow" data-ow-more="' + esc(p.id) + '">See more</button>';
+    // v72.30 (user edit: 'see less beside see more'): the buttons share one
+    // row — See more reveals 5 older, See less re-hides 5 per tap down to the
+    // first page of 5 (it hides itself there)
+    if (ents.length > shownEnts.length || limit > 5) {
+      rows += '<div class="ow-pag">' +
+        (ents.length > shownEnts.length ? '<button type="button" class="addrow" data-ow-more="' + esc(p.id) + '">See more</button>' : '') +
+        (limit > 5 ? '<button type="button" class="addrow" data-ow-less="' + esc(p.id) + '">See less</button>' : '') +
+        '</div>';
     }
     return '<section class="card ow-p" data-ow-pid="' + esc(p.id) + '">' +
       '<div class="ow-h"><span class="bdrag" data-ow-drag="1" aria-label="Drag to reorder" title="Drag to reorder">\u287F</span><b class="ow-name" data-ow-name="' + esc(p.id) + '" title="Rename">' + esc(p.name) + '</b>' + owedBalHTML(b) +
@@ -3145,7 +3238,7 @@
           // inverse rebase; position + timestamp stay put
           u = saveTxnEdit(prevTxn.id, {
             date: prevTxn.date, account: prevTxn.account, kind: prevTxn.kind,
-            category: prevTxn.category || 'Owed', amount: prevTxn.amount, note: prevTxn.note || ''
+            category: prevTxn.category || 'Unsorted', amount: prevTxn.amount, note: prevTxn.note || ''
           }, { quiet: true });
         } else if (prevTxn && !doTxn) {
           u = restoreTxnQuiet(prevTxn);
@@ -3290,8 +3383,14 @@
         var cancelE = t.getAttribute && t.getAttribute('data-ow-edit-cancel');
         var nmE = t.getAttribute && t.getAttribute('data-ow-name');
         var moreE = t.getAttribute && t.getAttribute('data-ow-more');
+        var lessE = t.getAttribute && t.getAttribute('data-ow-less'); // v72.30: re-hide 5
         if (moreE) {
           owedShown[moreE] = (owedShown[moreE] || 5) + 5;
+          renderOwed();
+          return;
+        }
+        if (lessE) {
+          owedShown[lessE] = Math.max(5, (owedShown[lessE] || 5) - 5);
           renderOwed();
           return;
         }
@@ -3496,7 +3595,7 @@
       if (typeof e.nt === 'string') m.nt = e.nt.slice(0, 120);
       if (typeof e.m === 'string') m.m = e.m.slice(0, 60);
       if (typeof e.n === 'number' && isFinite(e.n)) m.n = e.n;
-      if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i') m.k = e.k; // v72.14: the v72.10 p/i flavors must survive an import too
+      if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i' || e.k === 'a') m.k = e.k; // v72.14: the v72.10 p/i flavors must survive an import too; v72.30: 'a' (the Adjustment override row)
       if (typeof e.f === 'number' && isFinite(e.f)) m.f = e.f;
       if (typeof e.o === 'number' && isFinite(e.o)) m.o = e.o;
       if (typeof e.s === 'number' && isFinite(e.s)) m.s = e.s;
@@ -3717,12 +3816,18 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.29, live: new Date(2026, 8, 13, 23, 8) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.30, live: new Date(2026, 8, 14, 0, 8) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.30': [
+      'Your numbers: set an account\u2019s balance to what it really is \u2014 the difference is filed in the Ledger under \u201CAdjustment\u201D',
+      'Owed: the edit form\u2019s Cancel now actually closes the form',
+      '\u201CSee less\u201D sits beside \u201CSee more\u201D in Owed and Ledger \u2014 it re-hides 5 at a time',
+      '\u201COwed\u201D left the category options (older ledger entries keep it)'
+    ],
     '72.29': [
       'Every Owed entry has an Edit button now — including entries added in older versions',
       'Editing an entry opens the form right at that entry, with Save and Cancel',
@@ -4240,8 +4345,9 @@
     if (!sel) return;
     var names = Object.keys((state.base && state.base.budgets) || {})
       .filter(function (n) { return String(n).trim(); });
-    // v72.10: 'Owed' is a real filing category (the owed tab's ledger entries)
-    if (names.indexOf('Owed') < 0) names.push('Owed');
+    // v72.30 (user: 'remove the Owed from the category'): 'Owed' is out of the
+    // options — tpf files under the picked category ('Unsorted' fallback)
+    // since v72.28; old 'Owed' ledger rows keep their data (no migration)
     var sig = names.join('|');
     if (sig === catSig) return;
     catSig = sig;
@@ -4378,6 +4484,8 @@
     owedPersonHTML: owedPersonHTML, // v72.29: the person card render (smoke drives it — the edit button on every row)
     oentFormHTML: oentFormHTML, // v72.29: the entry form's inner html (smoke drives it — the in-place edit form)
     shellNotesFor: shellNotesFor, // v72.29: the What's-new notes for a version (smoke drives it)
+    owedShown: owedShown, // v72.30: the per-person See more/less page (smoke drives the paging render)
+    getBase: function () { return state.base; }, // v72.30: the current base (smoke reads account values for the override test)
     delOwedEntry: delOwedEntry,
     delOwedPerson: delOwedPerson,
     effectiveSnap: effectiveSnap,

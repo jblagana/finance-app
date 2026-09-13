@@ -406,8 +406,8 @@ def main():
     check("add-sheet options = base budget names; Unsorted default when none",
           "Object.keys((state.base && state.base.budgets) || {})" in js
           and "'>Unsorted</option>" in js and "selected>Unsorted</option>" in html)
-    check("re-seeded automatically when the base changes (snap render list)",
-          "renderBaseStatus, renderCoachNote, seedCategories]" in js)
+    check("re-seeded automatically when the base changes (snap render list; v72.30: renderMoneyLog follows — a base save can file 'Adjustment' rows)",
+          "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog]" in js)
     check("chat matches only stored budget names: no hint list, no 'Other' fallback",
           "function mentionedBudget(t, ctx)" in chatjs
           and "cat: mentionedBudget(t, ctx)" in chatjs
@@ -521,8 +521,8 @@ def main():
           and "sanitizeChatRows(data.chat)" in js
           and "sanitizeMoneyLogRows(data.moneyLog)" in js
           and "if (!data.adj) computeAdjFromTxns()" in js)
-    check("import sanitizer keeps every row flavor (v72.14): the k allow-list covers c/x/p/i — the v72.8 list (c/x only) silently stripped the v72.10 card_payment/cash_in flavors on import, rendering them as spends with inverted before/after",
-          "if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i') m.k = e.k" in js)
+    check("import sanitizer keeps every row flavor (v72.14, v72.30): the k allow-list covers c/x/p/i/a — the v72.8 list (c/x only) silently stripped the v72.10 card_payment/cash_in flavors on import, rendering them as spends with inverted before/after; v72.30 adds 'a' (the Adjustment override row)",
+          "if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i' || e.k === 'a') m.k = e.k" in js)
     check("the Backup section lets the user choose what goes into the JSON export (v72.23, user: 'a backup section in settings where u can choose which data u wanna export etc e.g. owed tab entries only'): six checkboxes in Settings (base/txns/plans/owed/log/chat), the choice persists (fin.bkSel.v1, default = everything), the export holds ONLY the ticked sections and lists them in `sections`, and the import restores only what the file holds (hasSec) — unlisted sections stay as the phone's own data",
           'id="bkBase"' in html and 'id="bkTxns"' in html and 'id="bkPlans"' in html
           and 'id="bkOwed"' in html and 'id="bkLog"' in html and 'id="bkChat"' in html
@@ -544,7 +544,7 @@ def main():
           and "return { t: t, removed: removed, txIdx: txIdx, logIdxs: logIdxs, persist: done };" in js
           and "state.txns.splice(ti, 0, r.t);" in js
           and "var r = removeTxnRow(tid, true); // keep the persistent row (see above)" in js)
-    check("owed entries: only 'they paid for me' is a real ledger txn (v72.10, the filing rule was finalized in the v72.28 follow-ups — the ledger records CONSUMPTION, not loans: ipf/itb/tmb are ledger-silent, tpf always files a Cash cash_out): inflow kinds cash_in / card_payment remain the exact inverse of their spend twins (txnAdj, manual ledger use), the log row flavor i/p renders before→after correctly and nets month spend, the Account section stays on ipf/itb/tmb as an informational record (user edit: 'dont drop it anymore' — never a txn), subentries edit the linked txn in place (v72.9) and delete/undo cover entry + txn together; 'Owed' joins the add-sheet categories; the v72.28 sections + filing rules are the NEXT check",
+    check("owed entries: only 'they paid for me' is a real ledger txn (v72.10, the filing rule was finalized in the v72.28 follow-ups — the ledger records CONSUMPTION, not loans: ipf/itb/tmb are ledger-silent, tpf always files a Cash cash_out): inflow kinds cash_in / card_payment remain the exact inverse of their spend twins (txnAdj, manual ledger use), the log row flavor i/p renders before→after correctly and nets month spend, the Account section stays on ipf/itb/tmb as an informational record (user edit: 'dont drop it anymore' — never a txn), subentries edit the linked txn in place (v72.9) and delete/undo cover entry + txn together; 'Owed' joined the add-sheet categories (out again in v72.30); the v72.28 sections + filing rules are the NEXT check",
           "if (t.kind === 'card_payment') return { cash: 0, free: -amt, card: -amt, prepay: -amt };" in js
           and "if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };" in js
           and "k: t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x'" in js
@@ -553,7 +553,7 @@ def main():
           and "category: e.cat, amount: e.amt, note: 'Owed \u00b7 ' + p.name" in js
           and "if (editId) updateOwedEntry(pid, editId, payload);" in js
           and "function updateOwedEntry(pid, eid, data)" in js
-          and "if (names.indexOf('Owed') < 0) names.push('Owed');" in js)
+          and "if (names.indexOf('Owed') < 0) names.push('Owed');" not in js)
     check("the owed form's sections + ledger filing follow 'What happened' (v72.28 + follow-ups, user: the 4 directions, then 'maybe we should remove the ledger entries for i paid for them and they paid me back' — the settle-by-purchase offset double-counted — an interpretation edit — 'dont drop it anymore' the Account section + the tpf 'Unsorted' fallback): the ledger records CONSUMPTION, not loans — ONLY tpf files a ledger txn (Cash implicitly, the picked category from Your numbers' budgets with 'Unsorted' fallback, negative cash_out); ipf = Account + Note, itb and tmb = Account only, all three NEVER touch the ledger (a pure loan cycle nets to zero in cash; an offset lands in the tpf entry's true category; their account pick is stored on the entry informationally); existing entries adopt the rule ONLY on edit — the linked txn is rewritten in place (id + position kept), removed, or created fresh, and undo reverses it; NO migration of old entries; the owed balance still comes from the entry records",
           "function owedFormSections(form, dir)" in js
           and '<div class="oent-accrow">' in js and '<label>Account</label>' in js
@@ -582,7 +582,7 @@ def main():
     check("the owed edit expands in place (v72.29, user edit: 'when i edit an owed entry, i want the edit to expand in position'): the edit button inserts a prefilled oent-inline form right below that entry's row (Save changes + Cancel); the card-top form stays for '+ entry' adds; the person's name is tappable (data-ow-name → inline input; Enter/blur commits, empty keeps the old name, Escape cancels); Category + Account share one two-column row (oent-pair); the category options always carry 'Unsorted' (never lost when the budgets change) and a stale saved category is still appended",
           "function oentFormHTML(edit)" in js
           and "'<div class=\"oent-pair\">'" in js
-          and "data-ow-edit-cancel" in js
+          and "data-ow-edit-cancel=\"1\"" in js  # v72.30: the flag carries a value (valueless read '' = falsy → dead branch, Cancel looked broken)
           and "Save changes</button>" in js
           and "row.insertAdjacentHTML('afterend'" in js
           and "class=\"oent oent-inline\"" in js
@@ -607,6 +607,24 @@ def main():
           and 'id="mlMore"' in js
           and "mlShownCount += 5; renderMoneyLog();" in js
           and "mlFilterCat = mlf.value; mlShownCount = 5; renderMoneyLog();" in js)
+    check("v72.30 (user, four items): (1) 'Owed' is out of the add-sheet categories (old ledger rows keep their data — no migration); (2) the owed in-place edit Cancel closes the form — the valueless flag attribute read '' (falsy) so the handler branch never fired, it carries a value now; (3) 'See less' beside 'See more' in Owed (data-ow-less; re-hides 5 per tap, floor = the first page of 5; hides itself there) and the Ledger (mlLess, same floor); (4) the account balance override: the account row's third column is labeled the current balance, and a saveBase that moves a debit/card account's value files the SIGNED diff as a moneyLog-ONLY row (no txn — the base rebase already zeroed the overlay, and the spend insights sum txns, so they can never be skewed) under category 'Adjustment' (k='a', f = the new effective free, o = the card owed after on card rows, no tid = an audit record corrected by the next override); 'snap' re-renders the ledger for this; the import sanitizer keeps the 'a' flavor",
+          "function accountBalanceDiffs(oldB, newB)" in js
+          and "function fileBalanceAdjustment(name, kind, diff)" in js
+          and "accountBalanceDiffs(prevBase, state.base).forEach" in js
+          and "l: 'Adjustment', c: 'Adjustment'" in js
+          and "n: r2(diff), k: 'a'" in js
+          and "set a balance to what it really is" in js
+          and "var isAdj = e.k === 'a';" in js
+          and "if (cardRow) freeTxt = ''" in js
+          and "data-ow-edit-cancel=\"1\"" in js
+          and "var lessE = t.getAttribute && t.getAttribute('data-ow-less');" in js
+          and "owedShown[lessE] = Math.max(5, (owedShown[lessE] || 5) - 5);" in js
+          and "ow-pag" in js and "ow-pag" in html
+          and 'id="mlLess"' in js and "ml-pag" in js and "ml-pag" in html
+          and "mlShownCount = Math.max(5, mlShownCount - 5);" in js
+          and "names.push('Owed')" not in js
+          and "prevTxn.category || 'Unsorted'" in js
+          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog]" in js)
     check("the owed entry form shows only the trimmed labels (v72.27, user scratched the sub-texts out of a screenshot — 'remove the details i scratched'): 'Amount (₱)' without the 'number or quick sum' tail, 'Category' without 'where it lands in the ledger', no 'Filed in the ledger…' hint line, 'Note' without '(optional)'; the quick-sum input itself is unchanged (oent-amt + evalExpr); the v72.28 user edit kept the Account section (ipf/itb/tmb only)",
           '<label>Amount (\\u20b1)</label>' in js
           and '<label>Category</label>' in js

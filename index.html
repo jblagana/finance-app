@@ -245,6 +245,9 @@ border-top:1px solid var(--line);background:var(--card)}
 .addrow{cursor:pointer;background:transparent;border:1px dashed var(--line);color:var(--mut);border-radius:9px;
  padding:9px 12px;font-size:12.5px;font-weight:700;margin-top:6px;width:100%}
 .addrow:active{border-color:var(--acc);color:var(--acc)}
+/* v72.30: "See more" + "See less" share one row (owed cards + the ledger) */
+.ow-pag{display:flex;gap:8px}.ow-pag .addrow{flex:1;margin-top:0}
+.ml-pag{display:flex;gap:8px;margin-top:10px}.ml-pag .addrow{flex:1;margin-top:0}
 /* ---- v22: Owed tab — who owes whom (standalone, never touches Money math) ---- */
 .ow-p{padding-bottom:10px}
 .ow-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
