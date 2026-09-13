@@ -6,7 +6,85 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-13 21:2x — User edit on the v72.28 interpretation: keep the Account section (ipf/itb/tmb), tpf fallback = 'Unsorted'
+Status: in progress (v72.28) — smoke fixed (e30 edit now resends the prefilled acc); gate string fixed ('oent-accrow' → '<div class="oent-accrow">', matching the template); re-running the release gate
+Progress: 95% — ETA ~22:30
+
+### Instruction (verbatim)
+> (user edit on the v72.28 entry's Interpretation section, 2026-09-13 — the five changed lines, quoted exactly as edited):
+> 1. ipf "I paid for them": Note only. NO ledger txn. with account.
+> 2. tpf "They paid for me": Category (budgets; 'Unsorted' fallback) + Note. Txn ALWAYS: Cash implicitly, picked category, negative (cash_out).
+> 3. itb "I paid them back": bare. NO ledger txn. with account.
+> 4. tmb "They paid me back": bare. NO ledger txn. with account.
+> Follow-up 3: the Account section is DROPPED (dont drop it anymore) entirely (no direction files a txn except tpf, which is implicit Cash) — ...
+
+### Interpretation (agent — user may edit this section)
+- The edit supersedes follow-up 3 (and the "just drop it" message) for the Account section — "(dont drop it anymore)": the Account section STAYS. It is present for ipf, itb and tmb (the tpf line carries no "with account" — tpf stays Category + Note, Cash-implicit). Final form sections: ipf = Account + Note; tpf = Category + Note; itb = Account only; tmb = Account only.
+- The picked account on ipf/itb/tmb is stored on the entry (e.acc) as the informational record of where the cash moved — it NEVER feeds a ledger txn (only tpf files: Cash, cash_out, picked category).
+- The tpf no-budgets category fallback is 'Unsorted' (not 'Owed'): owedCatOptions' fallback + the add/edit programmatic default. The add-sheet 'Owed' category (v72.10, manual ledger use) is untouched.
+- The ledger rule of follow-up 2 stands: only tpf files; ipf/itb/tmb are ledger-silent; old entries adopt on edit (their old ipf/tmb txns get removed, no migration).
+
+### Subtasks
+- [x] Log the user edit verbatim (first action)
+- [x] app.js: restore the Account section (form row + owedAccOptions + index.html CSS + payload + edit-prefill + reset) on ipf/itb/tmb (hidden for tpf); store e.acc informationally on ipf/itb/tmb (never tpf); tpf fallback 'Owed' → 'Unsorted' (owedCatOptions + addOwedEntry/updateOwedEntry)
+- [x] Gate: re-adjust the v72.10 / v72.28 / v72.27 checks to the FINAL design (account row back — positive assertions; 'Unsorted' fallback; doTxn = tpf only) — local mirror + tools/ synced
+- [x] Smoke: adjust the v7210/v7228 assertions (category fallback 'Owed' → 'Unsorted'; ipf/tmb still ledger-silent; ipf stores acc informationally)
+- [ ] Gates green, release v72.28 (live stamp at push), commit, push
+
+## 2026-09-13 15:0x — Owed form rework: sections + ledger filing per "What happened" (v72.28)
+Status: in progress (v72.28) — follow-ups + user edit logged; final rework (account section kept, 'Unsorted' fallback)
+Progress: 60% — ETA ~22:15
+
+### Instruction (verbatim)
+> Change the owed tab to the following
+>
+> when choice is:
+> 1. I paid for them, theres an account section only. Added to ledger with category 'Owed' and negative value.
+> 2. they paid for me, theres a category section only. Added to the ledger, categorized accordingly, negative value charged to cash.
+> 3. I paid them back, no account nor category section section only. Not added to the ledger.
+> 4. They paid me back, theres account section only. Added to the ledger, with 'Owed' category, positive value.
+>
+> the note section is present in 1 and 2 only.
+>
+> does this make sense
+> (follow-up, answering the migration question: "Leave them as-is; each entry adopts the new rule only when I edit it (recommended — no retroactive rewriting of past ledger months)")
+> (follow-up 2, 2026-09-13, verbatim: "additionally in v72.28, maybe we should remove the ledger entries for 'i paid for them' and 'they paid me back'? im thinking that if that i pay for them, its logged in the ledger as 'Owed' expense and neutralized if 'they pay me back'. but when they pay for me as a way to return what they owe me, its logged as another expense, doesnt it? any thoughts?")
+> (follow-up 3, 2026-09-13, answering the Account-section veto — verbatim: "just drop it, and resume task")
+
+### Interpretation (agent — user may edit this section)
+- "does this make sense" → yes, confirmed with the user: the invariant is that every real cash movement is recorded in the ledger exactly once (1→4 nets to zero while open; 2→3 leaves the spend in its true budget); the owed BALANCE stays purely entry-based.
+- Per-direction spec (form sections / ledger filing):
+  1. ipf "I paid for them": Account (+ the existing "— no account —" note-only fallback) + Note. Txn: picked account, category 'Owed', negative (cash_out/card_charge).
+  2. tpf "They paid for me": Category only (your budgets; 'Owed' fallback if none) + Note. Txn: ALWAYS, account = Cash implicitly, the picked category, negative (cash_out).
+  3. itb "I paid them back": no Account, no Category, no Note. NO ledger txn.
+  4. tmb "They paid me back": Account only (no Note). Txn: picked account, category 'Owed', positive (cash_in/card_payment).
+- Flips vs today: tpf note-only → always a ledger txn; itb cash_out txn → ledger-silent; ipf/tmb lose the v72.25 category picker (always 'Owed').
+- Existing entries: NO migration (user's choice) — each keeps its current filing until edited; an edit applies the new rule (txn created / removed / rewritten in place keeping id+position; undo reverses).
+- A note already on an itb/tmb entry is KEPT when the note section is hidden (not cleared).
+- catrow un-nests from accrow (independent visibility per direction); note gets its own wrapper div.
+- Version: v72.28.
+- Follow-up 2 (approved in act mode): the ledger records CONSUMPTION, not loans — ipf and tmb NO LONGER file ledger txns. Reason (confirmed in code): the settlement-by-purchase (offset) cases double-counted — ipf −500 'Owed' + tpf −500 category = −1000 vs −500 actual cash (and the mirror tpf→ipf); the 'Owed' entry only netted to zero on a cash repayment. FINAL per-direction rules:
+  1. ipf "I paid for them": Note only. NO ledger txn. with account.
+  2. tpf "They paid for me": Category (budgets; 'Unsorted' fallback) + Note. Txn ALWAYS: Cash implicitly, picked category, negative (cash_out).
+  3. itb "I paid them back": bare. NO ledger txn. with account.
+  4. tmb "They paid me back": bare. NO ledger txn. with account.
+  All four settlement paths (ipf→tmb, ipf→tpf, tpf→itb, tpf→ipf) now net the ledger exactly to the actual net cash; 'Owed' leaves the ledger except as the tpf no-budgets fallback.
+- Follow-up 3: the Account section is DROPPED (dont drop it anymore) entirely (no direction files a txn except tpf, which is implicit Cash) — the account row leaves the form; `owedAccOptions` and the `owedTxnKind` tmb branch (cash_in/card_payment) go away. Old entries keep their stored acc until edited; an edit clears acc + removes the txn (no migration, per the earlier decision).
+- Accepted cost: while an ipf is open the ledger cash is temporarily overstated by the open amount (the mirror of the existing tpf window, where the spend is filed before the cash moves) — accepted for exact settlements.
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] app.js: per-direction form sections + filing rules (add/edit/undo, owedCatOptions, tooltip) — owedFormSections (accrow: ipf/tmb; catrow: tpf only; noterow: ipf/tpf), per-dir doTxn in addOwedEntry/updateOwedEntry, toggle/edit-open/radio wired, catrow un-nested + initially hidden
+- [x] Log follow-ups 2+3 verbatim (this update) + interpret the final rules
+- [x] app.js refinements (follow-up 2): ipf/itb/tmb never file a txn (doTxn = tpf only in addOwedEntry/updateOwedEntry); tpf txn = Cash cash_out under the picked category; edit path removes old ipf/tmb txns (no migration)
+- [ ] app.js (user edit 21:2x): Account section stays on ipf/itb/tmb (hidden for tpf) — restore the account row + owedAccOptions + CSS + payload + prefill + reset; store e.acc informationally; tpf no-budgets fallback 'Unsorted'
+- [ ] Gate: rewrite the checks for the FINAL design (follow-ups + user edit) — local mirror + tools/
+- [ ] Smoke: rewrite the v72.25 block for the FINAL rules (v72.10 block must stay green)
+- [ ] Bump v72.28 (sw cache + SHELL_RELEASE live at push), gates green, commit, push
+
 ## 2026-09-13 14:4x — Photo task clarified: remove the SCRATCHED details from the owed form (screenshot attached)
+
+
 Status: done — pushed 3d85636 (live 14:57)
 Progress: 100%
 

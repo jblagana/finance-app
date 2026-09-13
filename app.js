@@ -2732,7 +2732,7 @@
         '<div class="ow-el"><b>' + esc(dir.label) + '</b>' +
         (e.note ? ' <span class="ow-x">' + esc(e.note) + '</span>' : '') +
         // v72.10: a ledger-filed entry wears a chip + its own edit button
-        (e.txnId ? ' <span class="ow-led" title="Filed in the ledger as Owed — the entry moves your numbers">· ledger</span>' : '') +
+        (e.txnId ? ' <span class="ow-led" title="Filed in the ledger — the entry moves your numbers">· ledger</span>' : '') +
         '<div class="ow-k">' + esc(fmtDate(e.d)) + (e.expr ? ' · ' + esc(e.expr) : '') + '</div></div>' +
         '<b class="ow-amt ' + (dir.sign > 0 ? 'plus' : 'minus') + '">' + (dir.sign > 0 ? '+' : '\u2212') + money(amt) + '</b>' +
         (e.txnId ? '<button type="button" class="ow-xbtn wide" data-ow-edit-e="' + esc(e.id) + '" aria-label="Edit entry">edit</button>' : '') +
@@ -2761,25 +2761,26 @@
       '<label><input type="radio" name="owdir" value="tpf"><span>They paid for me</span></label>' +
       '<label><input type="radio" name="owdir" value="tmb"><span>They paid me back</span></label>' +
       '</div>' +
-      // v72.10: the account dropdown — WITH an account the entry is a real
-      // ledger txn (flow from the direction); "no account" stays a balance-only
-      // note; "They paid for me" is always a note.
-      // v72.25: the category dropdown — where the txn lands in the ledger
-      // totals. 'Owed' (default) keeps the owed bucket; a budget category
-      // files it there instead. Both hide with the account row for tpf.
-      // v72.27: the labels are trimmed (user scratched the sub-texts out of a
-      // screenshot — 'remove the details i scratched'); the 'Filed in the
-      // ledger…' hint line is gone too.
+      // v72.25: the category dropdown. v72.27: labels trimmed (user scratched
+      // the sub-texts out of a screenshot).
+      // v72.28 (follow-ups + user edit): the sections follow "What happened"
+      // (owedFormSections): ipf = Account + Note; tpf = Category + Note (the
+      // ONLY direction that files a txn — always a Cash cash_out under the
+      // picked budget, 'Unsorted' fallback); itb / tmb = Account only.
+      // ipf/itb/tmb never touch the ledger; their account pick is stored on
+      // the entry as an informational record.
       '<div class="oent-accrow">' +
       '<label>Account</label>' +
       '<select class="oent-acc">' + owedAccOptions('CASH::Cash') + '</select>' +
-      '<div class="oent-catrow">' +
+      '</div>' +
+      '<div class="oent-catrow" style="display:none">' +
       '<label>Category</label>' +
-      '<select class="oent-cat">' + owedCatOptions('Owed') + '</select>' +
+      '<select class="oent-cat">' + owedCatOptions('') + '</select>' +
       '</div>' +
-      '</div>' +
+      '<div class="oent-noterow">' +
       '<label>Note</label>' +
       '<input type="text" class="oent-note" maxlength="60" autocomplete="off">' +
+      '</div>' +
       '<div style="margin-top:14px"><button class="act" type="submit">Add entry</button></div>' +
       '</form>' +
       (rows || '<p class="note" style="margin:8px 0 0">No entries yet — add the first one above.</p>') +
@@ -2839,19 +2840,14 @@
     people.forEach(function (p) { html += owedPersonHTML(p); });
     body.innerHTML = html;
   }
-  // ---------- v72.10: owed entries WITH an account are real ledger txns ----------
-  // The dropdown mirrors the add sheet's Paid-with list; '' = note only.
-  // Flow: ipf/itb move money OUT (cash_out / card_charge), tmb moves it IN
-  // (cash_in / card_payment), tpf never touches the ledger.
-  function owedAccName(acc) {
-    var s = String(acc || '').indexOf('::');
-    return s >= 0 ? String(acc).slice(s + 2) : String(acc || '');
-  }
-  function owedTxnKind(dir, acc) {
-    var isCard = String(acc).indexOf('CARD::') === 0;
-    if (dir === 'tmb') return isCard ? 'card_payment' : 'cash_in';
-    return isCard ? 'card_charge' : 'cash_out';
-  }
+  // ---------- v72.10→v72.28: the owed ledger rule ----------
+  // The ledger records CONSUMPTION, not loans: only tpf files a ledger txn
+  // (always a Cash cash_out under the entry's picked category). ipf / itb /
+  // tmb never touch the ledger — a pure loan cycle nets to zero in cash, and
+  // a settle-by-purchase offset lands in the tpf entry (the real spend)
+  // instead of double-counting through an 'Owed' bucket. The Account section
+  // (user edit 21:2x: "dont drop it anymore") stays on ipf/itb/tmb as an
+  // informational record — stored on the entry, never used for a txn.
   function owedAccOptions(sel) {
     var accounts = ((state.base && state.base.accounts) || [])
       .filter(function (a) { return a.kind === 'card' || a.kind === 'debit'; });
@@ -2864,29 +2860,37 @@
     });
     return html;
   }
-  // v72.25: the entry's CATEGORY options — 'Owed' first (the default; what
-  // existing entries mean), then Your numbers' budgets (the same list the
-  // add sheet uses). A saved category that has left Your numbers is appended
-  // so it stays selectable when the entry is re-opened for editing.
-  // The owed BALANCE never depends on this — it always comes from the entry
-  // records; only the ledger txn's filing category changes.
+  // v72.25→v72.28: the entry's CATEGORY options — Your numbers' budgets
+  // (the same list the add sheet uses); 'Unsorted' only as the fallback when
+  // there are no budgets (v72.28 user edit). A saved category that has left
+  // Your numbers is appended so it stays selectable when the entry is
+  // re-opened for editing. The owed BALANCE never depends on this — it
+  // always comes from the entry records; only the ledger txn's filing
+  // category changes.
   function owedCatOptions(sel) {
-    var d = String(sel || 'Owed').trim() || 'Owed';
+    var d = String(sel || '').trim();
     var names = Object.keys((state.base && state.base.budgets) || {})
-      .filter(function (n) { return String(n).trim(); });
-    var list = ['Owed'];
-    names.forEach(function (c) { if (c !== 'Owed' && list.indexOf(c) < 0) list.push(c); });
-    if (list.indexOf(d) < 0) list.push(d); // a stale saved category stays selectable
+      .filter(function (n) { return String(n).trim() && n !== 'Unsorted'; });
+    var list = names.length ? names.slice() : ['Unsorted'];
+    if (d && list.indexOf(d) < 0) list.push(d); // a stale saved category stays selectable
+    if (!d || list.indexOf(d) < 0) d = list[0];
     var html = '';
     list.forEach(function (c) {
       html += '<option value="' + esc(c) + '"' + (c === d ? ' selected' : '') + '>' + esc(c) + '</option>';
     });
     return html;
   }
-  // "They paid for me" is always a note — the account row hides for it.
-  function owedAccRowState(form, dir) {
-    var row = form && form.querySelector ? form.querySelector('.oent-accrow') : null;
-    if (row) row.style.display = dir === 'tpf' ? 'none' : '';
+  // v72.28 (follow-ups + user edit): which form sections "What happened"
+  // shows: ipf = Account + Note; tpf = Category + Note (Cash-implicit);
+  // itb / tmb = Account only.
+  function owedFormSections(form, dir) {
+    if (!form || !form.querySelector) return;
+    var a = form.querySelector('.oent-accrow');
+    if (a) a.style.display = dir === 'tpf' ? 'none' : '';
+    var c = form.querySelector('.oent-catrow');
+    if (c) c.style.display = dir === 'tpf' ? '' : 'none';
+    var n = form.querySelector('.oent-noterow');
+    if (n) n.style.display = (dir === 'ipf' || dir === 'tpf') ? '' : 'none';
   }
   // v72.10: back to a fresh, hidden add form (after a submit or edit save).
   function resetOentForm(f) {
@@ -2902,8 +2906,8 @@
     if (n) n.value = '';
     var s = f.querySelector('.oent-acc');
     if (s) s.value = 'CASH::Cash';
-    var c = f.querySelector('.oent-cat'); // v72.25: back to the 'Owed' default
-    if (c) c.innerHTML = owedCatOptions('Owed');
+    var c = f.querySelector('.oent-cat'); // v72.28: back to the budget default
+    if (c) c.innerHTML = owedCatOptions('');
     var radios = f.querySelectorAll('input[name="owdir"]');
     for (var i = 0; i < radios.length; i++) radios[i].checked = radios[i].value === 'ipf';
     var seg = f.querySelector('.seg');
@@ -2914,7 +2918,7 @@
         labs[j].className = inp && inp.checked ? 'sel' : '';
       }
     }
-    owedAccRowState(f, 'ipf');
+    owedFormSections(f, 'ipf');
     var sb = f.querySelector('[type="submit"]');
     if (sb) sb.textContent = 'Add entry';
     f.style.display = 'none';
@@ -2976,17 +2980,24 @@
       note: String(data.note || '').trim(), created: new Date().toISOString()
     };
     if (data.expr) e.expr = data.expr;
-    e.cat = String(data.cat || 'Owed').trim() || 'Owed'; // v72.25: the ledger category ('Owed' default)
-    // v72.10: WITH an account (and not tpf) the entry is a real ledger txn
-    var acc = data.acc || '';
-    if (acc && e.dir !== 'tpf') e.acc = acc;
-    var doTxn = !!e.acc;
+    // v72.28 (follow-ups + user edit): the ledger records CONSUMPTION, not
+    // loans — ONLY tpf files a ledger txn (Cash implicitly, the picked
+    // category, negative cash_out, 'Unsorted' fallback); ipf / itb / tmb
+    // never touch the ledger (a pure loan cycle nets to zero in cash; an
+    // offset settles through the tpf entry, which IS the real spend). Their
+    // account pick is stored on the entry as an informational record only.
+    var acc = String(data.acc || '').trim();
+    var cat = String(data.cat || '').trim();
+    if (!cat) cat = 'Unsorted'; // the no-budgets fallback
+    e.cat = cat;
+    var doTxn = e.dir === 'tpf';
+    if (!doTxn && acc) e.acc = acc; // ipf/itb/tmb: informational record only
     p.entries.push(e);
     p.updated = new Date().toISOString(); // v72.7: recent-sort key
     var step = Promise.resolve();
     if (doTxn) {
       step = addTxn({
-        date: e.d, account: owedAccName(e.acc), kind: owedTxnKind(e.dir, e.acc),
+        date: e.d, account: 'Cash', kind: 'cash_out',
         category: e.cat, amount: e.amt, note: 'Owed · ' + p.name
       }, { quiet: true }).then(function (id) {
         e.txnId = id; // the link persists with the entry (export/import carries it)
@@ -3045,25 +3056,34 @@
     if (e.txnId) {
       for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === e.txnId) prevTxn = Object.assign({}, state.txns[i]);
     }
-    var acc = data.acc || '';
+    // v72.28 (follow-ups + user edit): the same filing rule as addOwedEntry —
+    // only tpf files (Cash implicitly, cash_out, 'Unsorted' fallback).
+    // Editing is where OLD entries adopt it: an old ipf/tmb entry's ledger
+    // txn is REMOVED (no migration: leave them as-is until edited). The
+    // account pick is stored informationally on ipf/itb/tmb, never on tpf.
+    var acc = String(data.acc || '').trim();
+    var cat = String(data.cat || '').trim();
+    var nextDir = OWED_DIRS[data.dir] ? data.dir : e.dir;
+    if (nextDir === 'tpf' && !cat) cat = e.cat || 'Unsorted';
+    else if (!cat) cat = 'Unsorted';
     var next = {
       d: data.d || e.d, amt: r2(data.amt),
-      dir: OWED_DIRS[data.dir] ? data.dir : e.dir,
+      dir: nextDir,
       note: String(data.note || '').trim(),
-      cat: String(data.cat || e.cat || 'Owed').trim() || 'Owed' // v72.25
+      cat: cat
     };
-    if (acc && next.dir !== 'tpf') next.acc = acc;
+    var doTxn = next.dir === 'tpf';
     var step = Promise.resolve();
-    if (prevTxn && next.acc) {
+    if (prevTxn && doTxn) {
       step = saveTxnEdit(e.txnId, {
-        date: next.d, account: owedAccName(next.acc), kind: owedTxnKind(next.dir, next.acc),
+        date: next.d, account: 'Cash', kind: 'cash_out',
         category: next.cat, amount: next.amt, note: 'Owed · ' + p.name
       }, { quiet: true });
-    } else if (prevTxn && !next.acc) {
+    } else if (prevTxn && !doTxn) {
       step = removeTxnQuiet(e.txnId);
-    } else if (!prevTxn && next.acc) {
+    } else if (!prevTxn && doTxn) {
       step = addTxn({
-        date: next.d, account: owedAccName(next.acc), kind: owedTxnKind(next.dir, next.acc),
+        date: next.d, account: 'Cash', kind: 'cash_out',
         category: next.cat, amount: next.amt, note: 'Owed · ' + p.name
       }, { quiet: true }).then(function (id) {
         e.txnId = id;
@@ -3072,26 +3092,30 @@
     }
     return step.then(function () {
       e.d = next.d; e.amt = next.amt; e.dir = next.dir; e.note = next.note;
-      e.cat = next.cat; // v72.25
+      e.cat = next.cat; // v72.25→v72.28
       if (data.expr) e.expr = data.expr; else delete e.expr;
-      if (next.acc) e.acc = next.acc; else { delete e.acc; e.txnId = null; }
+      // tpf files to Cash implicitly (no acc stored); ipf/itb/tmb keep the
+      // informational account pick ('' = no account)
+      if (!doTxn && acc) e.acc = acc; else delete e.acc;
+      if (!doTxn) e.txnId = null;
       p.updated = new Date().toISOString(); // v72.7: recent-sort key
       return saveOwed();
     }).then(function () {
       emitOwed();
-      var undoNewId = !prevTxn && next.acc ? e.txnId : null; // the just-created link
+      var undoNewId = !prevTxn && doTxn ? e.txnId : null; // the just-created link
       snack('Updated ' + money(e.amt) + ' · ' + esc(p.name), function () {
         Object.keys(prev).forEach(function (k) { e[k] = prev[k]; });
+        if (prev.acc) e.acc = prev.acc; else delete e.acc;
         if (prev.txnId) e.txnId = prev.txnId; else delete e.txnId;
         var u = Promise.resolve();
-        if (prevTxn && next.acc) {
+        if (prevTxn && doTxn) {
           // re-run the in-place edit with the ORIGINAL values — the exact
           // inverse rebase; position + timestamp stay put
           u = saveTxnEdit(prevTxn.id, {
             date: prevTxn.date, account: prevTxn.account, kind: prevTxn.kind,
             category: prevTxn.category || 'Owed', amount: prevTxn.amount, note: prevTxn.note || ''
           }, { quiet: true });
-        } else if (prevTxn && !next.acc) {
+        } else if (prevTxn && !doTxn) {
           u = restoreTxnQuiet(prevTxn);
         } else if (undoNewId) {
           u = removeTxnQuiet(undoNewId);
@@ -3213,10 +3237,11 @@
         d: f.querySelector('.oent-date').value || todayISO(),
         amt: amt, dir: dirEl ? dirEl.value : 'ipf', expr: expr,
         note: (f.querySelector('.oent-note').value || '').trim(),
-        // v72.10: the account pick ('' = note only; hidden for tpf, ignored there)
+        // v72.28 (user edit): the account pick — informational on ipf/itb/tmb
+        // (never a txn), ignored for tpf (Cash implicit)
         acc: (f.querySelector('.oent-acc') || { value: '' }).value || '',
-        // v72.25: the category pick ('Owed' default; hidden for tpf with the account)
-        cat: (f.querySelector('.oent-cat') || { value: 'Owed' }).value || 'Owed'
+        // v72.25→v72.28: the category pick (shown for tpf only; 'Unsorted' fallback)
+        cat: (f.querySelector('.oent-cat') || { value: 'Unsorted' }).value || 'Unsorted'
       };
       var editId = f.getAttribute('data-ow-edit'); // v72.10: edit mode
       if (editId) updateOwedEntry(pid, editId, payload);
@@ -3261,9 +3286,9 @@
                 }
                 var s3 = f3.querySelector('.oent-acc');
                 if (s3) s3.value = ee.acc || '';
-                var c3 = f3.querySelector('.oent-cat'); // v72.25: rebuild options (a stale saved category stays selectable)
-                if (c3) c3.innerHTML = owedCatOptions(ee.cat || 'Owed');
-                owedAccRowState(f3, ee.dir || 'ipf');
+                var c3 = f3.querySelector('.oent-cat'); // v72.28: rebuild options (a stale saved category stays selectable)
+                if (c3) c3.innerHTML = owedCatOptions(ee.cat || '');
+                owedFormSections(f3, ee.dir || 'ipf');
                 var n3 = f3.querySelector('.oent-note');
                 if (n3) n3.value = ee.note || '';
                 var sb3 = f3.querySelector('[type="submit"]');
@@ -3281,6 +3306,8 @@
             var sb = f.querySelector('[type="submit"]');
             if (sb) sb.textContent = 'Add entry';
             f.style.display = f.style.display === 'none' ? '' : 'none';
+            var dirT = f.querySelector('input[name="owdir"]:checked'); // v72.28: sections follow the current choice
+            owedFormSections(f, dirT ? dirT.value : 'ipf');
             var d = f.querySelector('.oent-date');
             if (d && !d.value) { d.value = todayISO(); owedSyncDate(d); }
           }
@@ -3338,9 +3365,9 @@
             var inp = labs[i].getElementsByTagName('input')[0];
             labs[i].className = inp && inp.checked ? 'sel' : '';
           }
-          // v72.10: "They paid for me" is a note — hide the account row
+          // v72.28 (user edit): the sections follow the choice (account / category / note)
           var formEl = seg.closest ? seg.closest('.oent') : null;
-          owedAccRowState(formEl, t.value);
+          owedFormSections(formEl, t.value);
         }
       }
     });
@@ -3601,7 +3628,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.27, live: new Date(2026, 8, 13, 14, 57) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.28, live: new Date(2026, 8, 13, 22, 15) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

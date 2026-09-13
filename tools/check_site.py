@@ -544,31 +544,41 @@ def main():
           and "return { t: t, removed: removed, txIdx: txIdx, logIdxs: logIdxs, persist: done };" in js
           and "state.txns.splice(ti, 0, r.t);" in js
           and "var r = removeTxnRow(tid, true); // keep the persistent row (see above)" in js)
-    check("owed entries with an account are real ledger txns (v72.10, category made user-pickable in v72.25): inflow kinds cash_in / card_payment are the exact inverse of their spend twins (txnAdj), the log row flavor i/p renders before→after correctly and nets month spend, the owed form carries the account dropdown (default Cash, '' = note only, hidden for tpf), subentries edit the linked txn in place (v72.9) and delete/undo cover entry + txn together; 'Owed' joins the add-sheet categories; v72.25 the txn is filed under the ENTRY's category (e.cat, default 'Owed') instead of the hardcoded one",
+    check("owed entries: only 'they paid for me' is a real ledger txn (v72.10, the filing rule was finalized in the v72.28 follow-ups — the ledger records CONSUMPTION, not loans: ipf/itb/tmb are ledger-silent, tpf always files a Cash cash_out): inflow kinds cash_in / card_payment remain the exact inverse of their spend twins (txnAdj, manual ledger use), the log row flavor i/p renders before→after correctly and nets month spend, the Account section stays on ipf/itb/tmb as an informational record (user edit: 'dont drop it anymore' — never a txn), subentries edit the linked txn in place (v72.9) and delete/undo cover entry + txn together; 'Owed' joins the add-sheet categories; the v72.28 sections + filing rules are the NEXT check",
           "if (t.kind === 'card_payment') return { cash: 0, free: -amt, card: -amt, prepay: -amt };" in js
           and "if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };" in js
           and "k: t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x'" in js
-          and "function owedTxnKind(dir, acc)" in js
           and '<select class="oent-acc">' in js and "owedAccOptions('CASH::Cash')" in js
+          and "function owedTxnKind" not in js
           and "category: e.cat, amount: e.amt, note: 'Owed \u00b7 ' + p.name" in js
           and "if (editId) updateOwedEntry(pid, editId, payload);" in js
           and "function updateOwedEntry(pid, eid, data)" in js
           and "if (names.indexOf('Owed') < 0) names.push('Owed');" in js)
-    check("owed entries pick their ledger category (v72.25, user: 'add a category options in the owed entries, so that when theyre written in ledger, they categorize accordingly but by default, its Owed'): the entry form carries a category select inside the account row ('Owed' default + Your numbers' budgets; a stale saved category stays selectable; hidden with the row for tpf); addOwedEntry stores e.cat and files the txn under it; updateOwedEntry rewrites the linked txn's category in place (same id + position, undo restores the original); the owed balance still comes from the entry records — the ledger 'Owed' bucket now counts only unassigned entries",
-          "function owedCatOptions(sel)" in js
-          and '<select class="oent-cat">' in js
-          and "e.cat = String(data.cat || 'Owed').trim() || 'Owed'" in js
+    check("the owed form's sections + ledger filing follow 'What happened' (v72.28 + follow-ups, user: the 4 directions, then 'maybe we should remove the ledger entries for i paid for them and they paid me back' — the settle-by-purchase offset double-counted — an interpretation edit — 'dont drop it anymore' the Account section + the tpf 'Unsorted' fallback): the ledger records CONSUMPTION, not loans — ONLY tpf files a ledger txn (Cash implicitly, the picked category from Your numbers' budgets with 'Unsorted' fallback, negative cash_out); ipf = Account + Note, itb and tmb = Account only, all three NEVER touch the ledger (a pure loan cycle nets to zero in cash; an offset lands in the tpf entry's true category; their account pick is stored on the entry informationally); existing entries adopt the rule ONLY on edit — the linked txn is rewritten in place (id + position kept), removed, or created fresh, and undo reverses it; NO migration of old entries; the owed balance still comes from the entry records",
+          "function owedFormSections(form, dir)" in js
+          and '<div class="oent-accrow">' in js and '<label>Account</label>' in js
+          and "a.style.display = dir === 'tpf' ? 'none' : ''" in js
+          and "c.style.display = dir === 'tpf' ? '' : 'none'" in js
+          and "n.style.display = (dir === 'ipf' || dir === 'tpf') ? '' : 'none'" in js
+          and "var doTxn = e.dir === 'tpf';" in js
+          and "var doTxn = next.dir === 'tpf';" in js
+          and "if (!cat) cat = 'Unsorted';" in js
+          and "cat = e.cat || 'Unsorted';" in js
+          and "date: e.d, account: 'Cash', kind: 'cash_out'," in js
+          and "date: next.d, account: 'Cash', kind: 'cash_out'," in js
           and "category: e.cat, amount: e.amt, note: 'Owed \u00b7 ' + p.name" in js
-          and "cat: String(data.cat || e.cat || 'Owed').trim() || 'Owed'" in js
           and "category: next.cat, amount: next.amt, note: 'Owed \u00b7 ' + p.name" in js
-          and "c3.innerHTML = owedCatOptions(ee.cat || 'Owed')" in js
-          and "if (c) c.innerHTML = owedCatOptions('Owed');" in js
-          and "owedCatOptions: owedCatOptions" in js)
-    check("the owed entry form shows only the trimmed labels (v72.27, user scratched the sub-texts out of a screenshot — 'remove the details i scratched'): 'Amount (₱)' without the 'number or quick sum' tail, 'Account' without 'how the money moved', 'Category' without 'where it lands in the ledger', no 'Filed in the ledger…' hint line, 'Note' without '(optional)'; the quick-sum input itself is unchanged (oent-amt + evalExpr)",
+          and "owedFormSections(f, 'ipf')" in js
+          and "owedFormSections(formEl, t.value)" in js
+          and "owedFormSections(f3, ee.dir || 'ipf')" in js
+          and "owedCatOptions: owedCatOptions" in js
+          and '<select class="oent-cat">' in js
+          and 'owedAccRowState' not in js)
+    check("the owed entry form shows only the trimmed labels (v72.27, user scratched the sub-texts out of a screenshot — 'remove the details i scratched'): 'Amount (₱)' without the 'number or quick sum' tail, 'Category' without 'where it lands in the ledger', no 'Filed in the ledger…' hint line, 'Note' without '(optional)'; the quick-sum input itself is unchanged (oent-amt + evalExpr); the v72.28 user edit kept the Account section (ipf/itb/tmb only)",
           '<label>Amount (\\u20b1)</label>' in js
-          and '<label>Account</label>' in js
           and '<label>Category</label>' in js
           and '<label>Note</label>' in js
+          and '<label>Account</label>' in js
           and "number or quick sum" not in js
           and "how the money moved" not in js
           and '"note oent-acchint"' not in js
