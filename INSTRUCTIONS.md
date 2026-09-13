@@ -6,6 +6,26 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 00:3x — v72.31: X button on the Ledger's Adjustment rows — undo the override in Settings
+Status: **done**
+Progress: 100% — completed 2026-09-14 00:5x; commit `e74c3bd` pushed to origin/main (v72.31, live 00:46, SW cache `finances-pwa-v72.31`)
+
+### Instruction (verbatim)
+> add x button in ledger for adjustment, it undoes the record in settings
+
+### Interpretation (agent — user may edit this section)
+- v72.31. A small ✕ button appears on Adjustment rows (`k === 'a'`) in the Ledger (not on any other row kind).
+- Tapping it: (1) deletes the Adjustment row from the money log, (2) reverses the balance change it recorded in Settings → Your numbers → Accounts — the account's `value` is moved by the NEGATIVE of the row's signed diff (single-override case = restores the pre-override value exactly; if several overrides were filed, this removes only THIS record's contribution).
+- The reversal goes through the same base-save path (same overlay rebase), but with Adjustment-filing SUPPRESSED for this save — deleting an audit record must not file a new audit record.
+- If the account no longer exists in Settings (removed or renamed since), the row is simply deleted (nothing to reverse against).
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Inspect renderMoneyLog row render + click handler + saveBase filing block + ledger CSS — the row already had a `data-ml-del` ✕ pattern (txn rows only) + the confirm→delete→toast-Undo house pattern (askDeleteTxn/deleteTxnRow/snack); `confirmAsk` auto-confirms when no dialog exists (the smoke drives the user path)
+- [x] Implement: X button on Adjustment rows + the undo — `data-adj-del="<moneyLog index>"` on k='a' rows (own mini ✕, stopPropagation); `askDeleteAdjustment` (confirm, account-aware copy) → `deleteAdjustment` (row out, account value −= row's signed diff through `saveBase(b, {skipAdjustment: true})` — no audit of the audit, gone account = row-only delete, toast Undo restores row at its index + the value); `saveBase` gained the opts param; SHELL_NOTES '72.31'; FinApp bridge +exports (askDeleteAdjustment, deleteAdjustment, saveBase)
+- [x] Gate + smoke (v72.31 checks) — gate: new v72.31 structural check (root mirror re-synced); smoke: What's-new assert → 72.31 + v7231Section (8 checks: start state, debit undo, no new filing, toast Undo restores, card undo keeps free, fresh override files, gone-account row-only) — gate "all checks passed", "all smoke_app_v68 checks passed"
+- [x] Release v72.31 — `release.ps1 v72.31` all green (check_site repo + root mirror, chat parser, node --check, both smokes incl. the 8 v72.31 checks); commit `e74c3bd` pushed
+
 ## 2026-09-13 23:2x — v72.30: drop 'Owed' category, fix edit Cancel, 'See less', account balance override → 'Adjustment'
 Status: **done**
 Progress: 100% — completed 2026-09-14 00:1x; commit `474a930` pushed to origin/main (v72.30, live 00:08, SW cache `finances-pwa-v72.30`)
