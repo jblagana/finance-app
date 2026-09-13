@@ -2750,7 +2750,7 @@
       '<div class="oent-grid">' +
       '<div><label>Date</label><div class="dfield"><input type="date" class="oent-date">' +
       '<span class="dlabel empty" aria-hidden="true">Pick a date</span></div></div>' +
-      '<div><label>Amount (\u20b1) — number or quick sum</label>' +
+      '<div><label>Amount (\u20b1)</label>' +
       '<input type="text" class="oent-amt" maxlength="40" autocomplete="off">' +
       '<p class="oent-eq" aria-live="polite"></p></div>' +
       '</div>' +
@@ -2767,16 +2767,18 @@
       // v72.25: the category dropdown — where the txn lands in the ledger
       // totals. 'Owed' (default) keeps the owed bucket; a budget category
       // files it there instead. Both hide with the account row for tpf.
+      // v72.27: the labels are trimmed (user scratched the sub-texts out of a
+      // screenshot — 'remove the details i scratched'); the 'Filed in the
+      // ledger…' hint line is gone too.
       '<div class="oent-accrow">' +
-      '<label>Account — how the money moved</label>' +
+      '<label>Account</label>' +
       '<select class="oent-acc">' + owedAccOptions('CASH::Cash') + '</select>' +
       '<div class="oent-catrow">' +
-      '<label>Category — where it lands in the ledger</label>' +
+      '<label>Category</label>' +
       '<select class="oent-cat">' + owedCatOptions('Owed') + '</select>' +
       '</div>' +
-      '<p class="note oent-acchint">Filed in the ledger under its <b>category</b> — it moves your free cash.</p>' +
       '</div>' +
-      '<label>Note (optional)</label>' +
+      '<label>Note</label>' +
       '<input type="text" class="oent-note" maxlength="60" autocomplete="off">' +
       '<div style="margin-top:14px"><button class="act" type="submit">Add entry</button></div>' +
       '</form>' +
@@ -3599,7 +3601,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.26, live: new Date(2026, 8, 13, 14, 33) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.27, live: new Date(2026, 8, 13, 14, 57) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

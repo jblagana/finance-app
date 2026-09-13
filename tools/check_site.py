@@ -564,6 +564,15 @@ def main():
           and "c3.innerHTML = owedCatOptions(ee.cat || 'Owed')" in js
           and "if (c) c.innerHTML = owedCatOptions('Owed');" in js
           and "owedCatOptions: owedCatOptions" in js)
+    check("the owed entry form shows only the trimmed labels (v72.27, user scratched the sub-texts out of a screenshot — 'remove the details i scratched'): 'Amount (₱)' without the 'number or quick sum' tail, 'Account' without 'how the money moved', 'Category' without 'where it lands in the ledger', no 'Filed in the ledger…' hint line, 'Note' without '(optional)'; the quick-sum input itself is unchanged (oent-amt + evalExpr)",
+          '<label>Amount (\\u20b1)</label>' in js
+          and '<label>Account</label>' in js
+          and '<label>Category</label>' in js
+          and '<label>Note</label>' in js
+          and "number or quick sum" not in js
+          and "how the money moved" not in js
+          and '"note oent-acchint"' not in js
+          and '<input type="text" class="oent-amt" maxlength="40" autocomplete="off">' in js)
     check("the floating bot owns the bubble (v72.15): pointer drag (>8px = drag, tap still toggles the coach), on release the bot settles to the NEAREST screen EDGE, sliding along it to the finger's spot, clamped into the SAFE area (status bar above, the 88px tab bar below, 16px sides — the v72.11 corner snaps + bubble-geometry math are gone); the open panel anchors to the bot's face (least-clamping side wins, above breaks ties, scale-in origin aimed at the bot) and the bot stays visible as the bubble's handle; the spot persists as fin.fabPos.v2 {edge,u} with a one-time fin.fabPos.v1 migration and re-derives on resize/orientation",
           "var FAB_POS_KEY = 'fin.fabPos.v2'" in js
           and "var FAB_POS_V1 = 'fin.fabPos.v1'" in js

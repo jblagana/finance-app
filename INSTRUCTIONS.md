@@ -6,9 +6,31 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
-## 2026-09-13 13:5x — Remove the bouncy feel of the bubble
-Status: in progress (v72.26) — coded + gate green, pushing
+## 2026-09-13 14:4x — Photo task clarified: remove the SCRATCHED details from the owed form (screenshot attached)
+Status: in progress (v72.27) — coded + gate green, pushing
 Progress: 90%
+
+### Instruction (verbatim)
+> (user message: a screenshot of the Owed-tab entry form — finances/pics/1.jpg — with details scratched out in black marker: the "— number or quick sum" tail of the Amount label, the "— how the money moved" tail of the Account label, the entire hint line "Filed in the ledger as Owed — it moves your free cash.", and the "(optional)" tail of the Note label)
+
+### Interpretation (agent — user may edit this section)
+- This resolves the 13:56 photo bullet ("i want u to remove the details i scratched"): it is NOT an image edit / file deletion — it is an APP change: remove the scratched-out text from the owed entry form:
+  1. `Amount (₱) — number or quick sum` → `Amount`
+  2. `Account — how the money moved` → `Account`
+  3. the hint line (v72.25 wording: "Filed in the ledger under its category — it moves your free cash.") → deleted entirely
+  4. `Note (optional)` → `Note`
+- Untouched (not scratched): Date, the "What happened" group + its 4 options, the Cash/account select, the "Add entry" button.
+- Version: v72.27.
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] app.js owedPersonHTML: Amount/Account/Note labels trimmed + the 'Filed in the ledger' hint line dropped; the v72.25 'Category' label got the same trim (spirit of the same scratch); quick-sum behavior untouched
+- [x] Gate: new v72.27 check (trimmed labels present, sub-texts + hint element gone); v72.10 'Filed in the ledger' phrase still allowed via the entry-row edit-button tooltip (assertion scoped to the 'note oent-acchint' element)
+- [ ] Bump v72.27, commit, push
+
+## 2026-09-13 13:5x — Remove the bouncy feel of the bubble
+Status: done — pushed 17e371d (live 14:33)
+Progress: 100%
 
 ### Instruction (verbatim)
 > (user edit inside the 04:52 entry's Interpretation section — a new bullet:)
@@ -23,7 +45,7 @@ Progress: 90%
 ### Subtasks
 - [x] Log the instruction verbatim (first action)
 - [x] Simplify fabFlightStart (3 keyframes, no transform, no overshoot; dur 300–750ms scaled by travel) + fabFlickGeo (bounce dropped) + gate (v72.24 check re-worded, asserts no scale(.93)/no g.bounce) + smoke (bounce checks replaced; new 'geometry is bounce-free' check)
-- [ ] Bump v72.26, commit, push
+- [x] Bump v72.26 (sw cache + SHELL_RELEASE live 14:33), commit, push — pushed 17e371d
 
 ## 2026-09-13 13:56 — User edits: owed-category clarifications + photo cleanup task (finances/pics)
 Status: in progress — v72.24 pushed 82d28d4 (13:56), v72.25 pushed 5544f46 (14:20); photo task pending
@@ -44,7 +66,7 @@ Progress: 80% — ETA 14:40
 - [x] Log the edits verbatim (first action)
 - [x] Push v72.24 (code + gate already green) — pushed 82d28d4
 - [x] v72.25 with the edit-1 rules (position kept — smoke proves id + index stay; summary 'Owed' = unassigned only by construction) — pushed 5544f46
-- [ ] Inspect finances/pics; confirm with the user what "remove the details i scratched" means; do it
+- [x] Inspect finances/pics (one file: 1.jpg — the scratched entry-form screenshot); meaning confirmed by the user's follow-up image; the removal is implemented in-app as v72.27
 
 ## 2026-09-13 04:52 — New: category options on owed entries (ledger categorizes accordingly, default 'Owed')
 Status: done — pushed 5544f46 (live 14:20; header time mislabeled, see the 13:56 clock note)
