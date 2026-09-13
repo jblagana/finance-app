@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-13 14:4x — Photo task clarified: remove the SCRATCHED details from the owed form (screenshot attached)
-Status: in progress (v72.27) — coded + gate green, pushing
-Progress: 90%
+Status: done — pushed 3d85636 (live 14:57)
+Progress: 100%
 
 ### Instruction (verbatim)
 > (user message: a screenshot of the Owed-tab entry form — finances/pics/1.jpg — with details scratched out in black marker: the "— number or quick sum" tail of the Amount label, the "— how the money moved" tail of the Account label, the entire hint line "Filed in the ledger as Owed — it moves your free cash.", and the "(optional)" tail of the Note label)
@@ -26,7 +26,7 @@ Progress: 90%
 - [x] Log the instruction (first action)
 - [x] app.js owedPersonHTML: Amount/Account/Note labels trimmed + the 'Filed in the ledger' hint line dropped; the v72.25 'Category' label got the same trim (spirit of the same scratch); quick-sum behavior untouched
 - [x] Gate: new v72.27 check (trimmed labels present, sub-texts + hint element gone); v72.10 'Filed in the ledger' phrase still allowed via the entry-row edit-button tooltip (assertion scoped to the 'note oent-acchint' element)
-- [ ] Bump v72.27, commit, push
+- [x] Bump v72.27 (sw cache + SHELL_RELEASE live 14:57), commit, push — pushed 3d85636
 
 ## 2026-09-13 13:5x — Remove the bouncy feel of the bubble
 Status: done — pushed 17e371d (live 14:33)
@@ -48,8 +48,8 @@ Progress: 100%
 - [x] Bump v72.26 (sw cache + SHELL_RELEASE live 14:33), commit, push — pushed 17e371d
 
 ## 2026-09-13 13:56 — User edits: owed-category clarifications + photo cleanup task (finances/pics)
-Status: in progress — v72.24 pushed 82d28d4 (13:56), v72.25 pushed 5544f46 (14:20); photo task pending
-Progress: 80% — ETA 14:40
+Status: done — v72.24 pushed 82d28d4, v72.25 pushed 5544f46, photo task resolved + shipped as v72.27 (3d85636)
+Progress: 100%
 
 ### Instruction (verbatim)
 > (two user edits inside the 04:52 entry's Interpretation section:)
