@@ -241,6 +241,16 @@
         };
         eff.card_owed = r2((snap.card_owed || 0) + a.card);
         eff.total_prepay = r2((snap.total_prepay || 0) + a.prepay);
+        // v72.33: same live per-card prepay as the app's effectiveSnap — a
+        // prepay question about ONE card answers with that card's number
+        var byCard = a.prepayBy || {};
+        var utilT = base ? (Number(base.card_util_target) || 0) : 0;
+        eff.cards = (snap.cards || []).map(function (c) {
+          var bal = (Number(c.balance) || 0) + (Number(byCard[c.name]) || 0);
+          var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * utilT);
+          c.prepay = r2(Math.max(0, bal - tb));
+          return c;
+        });
       }
       return { snap: snap, eff: eff, base: base, plans: res[1] || [], txns: res[2] || [], at: at };
     });
@@ -572,7 +582,16 @@
     if (want.free) lines += kv('Free / unallocated', money(e.cash.free));
     if (want.cash) lines += kv('Liquid cash', money(e.cash.total));
     if (want.card) lines += kv('Cards owed', money(e.card_owed));
-    if (want.prepay) lines += kv(ordinal(e.prepay_day || 14) + ' prepay', money(e.total_prepay));
+    if (want.prepay) {
+      // v72.33: a prepay question about a specific card answers with THAT
+      // card's (live) prepay, not the total; no card mentioned = the total
+      var ppCards = (e.cards || []).filter(function (c) { return mentionOf(c.name, t); });
+      if (ppCards.length) {
+        ppCards.forEach(function (c) { lines += kv(c.name + ' prepay', money(c.prepay || 0)); });
+      } else {
+        lines += kv(ordinal(e.prepay_day || 14) + ' prepay', money(e.total_prepay));
+      }
+    }
     if (want.util) (e.cards || []).forEach(function (c) {
       if (c.util_pct != null) lines += kv(c.name + ' utilization', c.util_pct + '% of ' + money(c.limit));
     });
@@ -1572,7 +1591,11 @@
     var L = [];
     L.push('My numbers on this phone (as of ' + (ctx.at ? new Date(ctx.at).toLocaleDateString() : 'today') + '):');
     L.push('- liquid cash ' + money(e.cash.total) + ', free ' + money(e.cash.free) + ', floor ' + money(e.floor || 0));
-    L.push('- cards owed ' + money(e.card_owed || 0) + ', prepay on the ' + ordinal(e.prepay_day || 14) + ': ' + money(e.total_prepay || 0));
+    // v72.33: the per-card prepay breakdown, so a single-card prepay question
+    // is answered with that card's number, not the total
+    var ppList = (e.cards || []).filter(function (c) { return (Number(c.prepay) || 0) > 0; })
+      .map(function (c) { return c.name + ' ' + money(c.prepay); }).join(', ');
+    L.push('- cards owed ' + money(e.card_owed || 0) + ', prepay on the ' + ordinal(e.prepay_day || 14) + ': ' + money(e.total_prepay || 0) + (ppList ? ' (' + ppList + ')' : ''));
     // exact stored names, so a remote draft can name an existing
     // account/budget instead of inventing one.
     var sn = storyNames(ctx);
@@ -1665,7 +1688,8 @@
     'Personality (v72.3): light and funny - dry wit, at most one short quip per reply, like a friendly coach who gently teases about the pizza budget. The humor never overrides accuracy: the numbers, the ask-for-missing-detail flow, and the draft JSON below always win, and a JSON draft reply carries no quip at all. ' +
     'When the user tells you a change to their money (a new or updated number, or a story of several changes): if every detail you need is present (amount, month, which account), reply with ONLY the JSON draft of that change - it becomes a draft card with a Confirm button that the user presses, so do not ask "shall I record that?" and never wait for a yes. changes holds ONLY that change (a story means its lines, a single update means one line): never pad it with current balances, limits, or details of other accounts from the numbers list, they are already on the phone, and a card credit-limit update is a single field change (entity card, key credit_limit) on that card, not an account change. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes; the user\'s next short message (an amount, an account name, a corrected number) completes that same request - never drop it or start a different topic unless the user explicitly names one. ' +
     'If an UNCONFIRMED draft of changes is provided as context, the user\'s message is a reply to that draft: if they correct it, reply with the corrected JSON draft; if they confirm it (yes / record it), reply with the same JSON draft; if they switch topics, answer the new topic. ' +
-    'A draft is a JSON object and nothing else: {"say":"one short line presenting the draft (never past tense - the user still has to confirm)","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"debit|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123} | {"type":"field","entity":"debit|card|debt|loan|budget","name":"N","key":"short_snake_key","value":123}. Use only names from the numbers list or a new name the user stated. Numbers in [brackets] on a row are custom details the user recorded (credit limit, due day, anything). When the user wants to record any other fact about an account or budget — a credit limit, APR, due day, penalty, anything — record it as a field change with a short snake_case key; value null removes a recorded detail; ask for the value if the user did not state it. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.';
+    'A draft is a JSON object and nothing else: {"say":"one short line presenting the draft (never past tense - the user still has to confirm)","changes":[...]} where each change is exactly one of: {"type":"account","name":"N","kind":"debit|card|debt|loan","value":123,"limit":123} | {"type":"salary_base","amount":123} | {"type":"salary","month":"YYYY-MM","amount":123} | {"type":"budget","name":"N","amount":123} | {"type":"budget_override","month":"YYYY-MM","name":"N","amount":123} | {"type":"debt_payment","name":"N","month":"YYYY-MM","amount":123} | {"type":"one_off","name":"N","month":"YYYY-MM","amount":123} | {"type":"recurring","name":"N","amount":123} | {"type":"field","entity":"debit|card|debt|loan|budget","name":"N","key":"short_snake_key","value":123}. Use only names from the numbers list or a new name the user stated. Numbers in [brackets] on a row are custom details the user recorded (credit limit, due day, anything). When the user wants to record any other fact about an account or budget — a credit limit, APR, due day, penalty, anything — record it as a field change with a short snake_case key; value null removes a recorded detail; ask for the value if the user did not state it. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes. If the user is not asking to change anything, reply plain text only, never JSON.' +
+    ' The total prepay is across ALL cards: when the user asks about the prepay for ONE card, quote that card\'s amount from the per-card breakdown in the numbers list, never the total.';
   function aiPrompt(t, ctx, remote, hist) {
     return [
       { role: 'system', content: AI_REMOTE_SYSTEM },

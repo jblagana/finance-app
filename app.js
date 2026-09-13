@@ -23,7 +23,7 @@
     plans: [],
     base: null,
     snapshot: null,
-    adj: { cash: 0, free: 0, card: 0, prepay: 0 },
+    adj: { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {} },
     adjSig: '',
     adjLoaded: false,
     coachMem: null,
@@ -281,8 +281,11 @@
   // (overlay: effective free = snap.free − adj.free, owed = snap + adj.card.)
   function txnAdj(t) {
     var amt = Number(t.amount) || 0;
-    if (t.kind === 'card_charge') return { cash: 0, free: amt, card: amt, prepay: amt };
-    if (t.kind === 'card_payment') return { cash: 0, free: -amt, card: -amt, prepay: -amt };
+    // v72.33: the card rows carry the card name (acc) so the overlay tracks the
+    // prepay delta PER CARD — a prepay question about one card answers with
+    // that card's prepay, not the total
+    if (t.kind === 'card_charge') return { cash: 0, free: amt, card: amt, prepay: amt, acc: t.account };
+    if (t.kind === 'card_payment') return { cash: 0, free: -amt, card: -amt, prepay: -amt, acc: t.account };
     if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };
     return { cash: amt, free: amt, card: 0, prepay: 0 }; // cash_out (default, legacy rows)
   }
@@ -291,9 +294,14 @@
     state.adj.free = r2(state.adj.free + a.free * sign);
     state.adj.card = r2(state.adj.card + a.card * sign);
     state.adj.prepay = r2(state.adj.prepay + a.prepay * sign);
+    if (a.prepay && a.acc) {
+      if (!state.adj.prepayBy) state.adj.prepayBy = {};
+      state.adj.prepayBy[a.acc] = r2((state.adj.prepayBy[a.acc] || 0) + a.prepay * sign);
+      if (!state.adj.prepayBy[a.acc]) delete state.adj.prepayBy[a.acc]; // nets to zero → tidy
+    }
   }
   function computeAdjFromTxns() {
-    state.adj = { cash: 0, free: 0, card: 0, prepay: 0 };
+    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {} };
     state.txns.forEach(function (t) { addAdj(txnAdj(t), 1); });
   }
   function saveAdj() {
@@ -313,11 +321,11 @@
     state.snapshot = snap;
     var sig = snapSig(snap);
     // Sheet numbers moved (Balances/Config edited in the sheet) -> rebase: the sheet is source of truth again.
-    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0 };
+    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {} };
     state.adjSig = sig;
   }
   function resetAdj() {
-    state.adj = { cash: 0, free: 0, card: 0, prepay: 0 };
+    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {} };
     state.adjSig = snapSig(state.snapshot);
     saveAdj().then(function () { emit('adj'); });
   }
@@ -332,6 +340,17 @@
     };
     e.card_owed = r2((s.card_owed || 0) + state.adj.card);
     e.total_prepay = r2((s.total_prepay || 0) + state.adj.prepay);
+    // v72.33: the per-card prepay goes live too (the card's own balance delta
+    // from the overlay). Old snapshots without target_balance fall back to the
+    // stored card_util_target.
+    var byCard = state.adj.prepayBy || {};
+    var utilT = state.base ? (Number(state.base.card_util_target) || 0) : 0;
+    e.cards = (s.cards || []).map(function (c) {
+      var bal = (Number(c.balance) || 0) + (Number(byCard[c.name]) || 0);
+      var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * utilT);
+      c.prepay = r2(Math.max(0, bal - tb));
+      return c;
+    });
     return e;
   }
 
@@ -518,7 +537,7 @@
     var cards = [];
     Object.keys(pp.per).forEach(function (name) {
       var d = pp.per[name];
-      cards.push({ name: name, balance: d.balance, limit: d.limit, util_pct: d.util_pct, prepay: d.prepay });
+      cards.push({ name: name, balance: d.balance, limit: d.limit, util_pct: d.util_pct, prepay: d.prepay, target_balance: d.target_balance });
     });
     var cashAccounts = (b.accounts || []).filter(function (a) { return a.kind === 'debit'; }) // v65
       .map(function (a) { return { name: a.name, value: Number(a.value) || 0 }; });
@@ -595,7 +614,7 @@
     state.snapshot = state.base && !baseIsEmpty(state.base) ? baseToSnapshot(state.base) : null;
     var sig = snapSig(state.snapshot);
     // The base numbers moved (edited in Settings) -> rebase: the base is source of truth again.
-    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0 };
+    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {} };
     state.adjSig = sig;
   }
   function persistSnapshot() {
@@ -3948,12 +3967,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.32, live: new Date(2026, 8, 14, 1, 12) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.33, live: new Date(2026, 8, 14, 1, 48) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.33': [
+      'Ask the coach about one card\u2019s prepay and it answers that card\u2019s number \u2014 not the total across all cards'
+    ],
     '72.32': [
       'The little pop-ups are now banners at the top of the screen — like the “new version” one',
       'They stay for 7 seconds, and swiping one up makes it go away right away',

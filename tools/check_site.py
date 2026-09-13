@@ -555,7 +555,7 @@ def main():
           and "state.txns.splice(ti, 0, r.t);" in js
           and "var r = removeTxnRow(tid, true); // keep the persistent row (see above)" in js)
     check("owed entries: only 'they paid for me' is a real ledger txn (v72.10, the filing rule was finalized in the v72.28 follow-ups — the ledger records CONSUMPTION, not loans: ipf/itb/tmb are ledger-silent, tpf always files a Cash cash_out): inflow kinds cash_in / card_payment remain the exact inverse of their spend twins (txnAdj, manual ledger use), the log row flavor i/p renders before→after correctly and nets month spend, the Account section stays on ipf/itb/tmb as an informational record (user edit: 'dont drop it anymore' — never a txn), subentries edit the linked txn in place (v72.9) and delete/undo cover entry + txn together; 'Owed' joined the add-sheet categories (out again in v72.30); the v72.28 sections + filing rules are the NEXT check",
-          "if (t.kind === 'card_payment') return { cash: 0, free: -amt, card: -amt, prepay: -amt };" in js
+          "if (t.kind === 'card_payment') return { cash: 0, free: -amt, card: -amt, prepay: -amt, acc: t.account };" in js
           and "if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };" in js
           and "k: t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x'" in js
           and '<select class="oent-acc">' in js and "owedAccOptions('CASH::Cash')" in js
@@ -564,6 +564,15 @@ def main():
           and "if (editId) updateOwedEntry(pid, editId, payload);" in js
           and "function updateOwedEntry(pid, eid, data)" in js
           and "if (names.indexOf('Owed') < 0) names.push('Owed');" not in js)
+    check("v72.33 (user: 'when i ask the bot how much i should prepay in just my maribank cc, it shows the total amount i should prepay (maribank cc and maya cc combined), i want it to show only the prepay amount for the card asked'): a prepay question about ONE card answers with that card's LIVE prepay — the overlay tracks the prepay delta per card (the card txn's account name rides in txnAdj, adj.prepayBy, a delta netting to zero is dropped), the effective snapshot recomputes each card's prepay as max(0, live balance − target balance) (target_balance rides in the snapshot cards; the stored card_util_target is the fallback for old snapshots), the local status rule shows the mentioned card's prepay line (no card mentioned = the total, as before), and the coach prompt carries the per-card breakdown plus the never-quote-the-total guidance",
+          "if (t.kind === 'card_charge') return { cash: 0, free: amt, card: amt, prepay: amt, acc: t.account };" in js
+          and "state.adj.prepayBy[a.acc] = r2((state.adj.prepayBy[a.acc] || 0) + a.prepay * sign);" in js
+          and "target_balance: d.target_balance" in js
+          and "var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * utilT);" in js
+          and "var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * utilT);" in chatjs
+          and "var ppCards = (e.cards || []).filter(function (c) { return mentionOf(c.name, t); });" in chatjs
+          and "ppCards.forEach(function (c) { lines += kv(c.name + ' prepay', money(c.prepay || 0)); });" in chatjs
+          and "quote that card" in chatjs and "never the total" in chatjs)
     check("the owed form's sections + ledger filing follow 'What happened' (v72.28 + follow-ups, user: the 4 directions, then 'maybe we should remove the ledger entries for i paid for them and they paid me back' — the settle-by-purchase offset double-counted — an interpretation edit — 'dont drop it anymore' the Account section + the tpf 'Unsorted' fallback): the ledger records CONSUMPTION, not loans — ONLY tpf files a ledger txn (Cash implicitly, the picked category from Your numbers' budgets with 'Unsorted' fallback, negative cash_out); ipf = Account + Note, itb and tmb = Account only, all three NEVER touch the ledger (a pure loan cycle nets to zero in cash; an offset lands in the tpf entry's true category; their account pick is stored on the entry informationally); existing entries adopt the rule ONLY on edit — the linked txn is rewritten in place (id + position kept), removed, or created fresh, and undo reverses it; NO migration of old entries; the owed balance still comes from the entry records",
           "function owedFormSections(form, dir)" in js
           and '<div class="oent-accrow">' in js and '<label>Account</label>' in js

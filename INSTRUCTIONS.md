@@ -6,6 +6,25 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 01:3x — v72.33: the coach quotes the prepay amount of the card asked, not the total
+Status: in progress
+Progress: 90% — gates green, about to commit + push
+
+### Instruction (verbatim)
+> when i ask the bot how much i should prepay in just my maribank cc, it shows the total amount i should prepay (maribank cc and maya cc combined), i want it to show only the prepay amount for the card asked
+
+### Interpretation (agent — user may edit this section)
+- v72.33. When a user asks the coach how much to prepay on ONE specific card (e.g. MariBank CC), the answer must be that card's prepay amount only — not the combined total across all cards.
+- **Root cause (confirmed):** two paths both quoted the total. (1) The local status rule (`intentStatus`, `want.prepay`) answered every prepay question with `total_prepay`. (2) The coach prompt carried ONLY the total prepay (+ raw balances/limits) — the LLM had no per-card prepay to quote.
+- **Fix:** the overlay now tracks the prepay delta PER card (`adj.prepayBy`, from the card txn's account; net-zero dropped). `effectiveSnap` (app) and `loadCtx` (chat) recompute each card's prepay live: `max(0, live balance − target_balance)` (`target_balance` rides in the snapshot cards; `card_util_target` is the fallback for old snapshots). The local rule shows the MENTIONED card's prepay line (no card mentioned = the total, as before); the coach prompt gets the per-card breakdown + "never quote the total for a single-card question" guidance. Standing home chips/notes keep the total (they're standing alerts, not per-card answers).
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Inspect: prepay math in app.js (snapshot items, coachAlerts), coach prompt in ai.js/chat.js
+- [x] Implement: per-card prepay in the coach data + prompt guidance (app.js: txnAdj acc + adj.prepayBy + effectiveSnap + snapshot target_balance; chat.js: loadCtx eff cards + intentStatus mention rule + coachSnapshot breakdown + system-prompt guidance; SHELL_NOTES 72.33)
+- [x] Gate + smoke (v72.33 checks) — node --check clean; tools/check_site.py "all checks passed" (v72.33 check green); tools/test_chat_parser.py "all parser checks passed"; smoke_v68.js 3/3 v72.33 OK; smoke_app_v68.js "all checks passed" (per-card math absolute, total asserted relative — earlier smoke sections leave a base card behind)
+- [ ] Release v72.33, gates green, commit, push
+
 ## 2026-09-14 01:0x — v72.32: remake the toasts into a top banner (7s, swipe-up dismisses)
 Status: **done**
 Progress: 100% — completed 2026-09-14 01:1x; commit `4b6547d` pushed to origin/main (v72.32, live 01:12, SW cache `finances-pwa-v72.32`)
