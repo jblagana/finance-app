@@ -22,7 +22,6 @@ except Exception:
         pass
 
 # tools/ sits INSIDE the repo (finance-app/tools/), so the site is the parent dir
-# tools/ sits INSIDE the repo (finance-app/tools/), so the site is the parent dir
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITE = os.path.dirname(HERE)
 
@@ -588,10 +587,17 @@ def main():
           and "function fabReduceMotion()" in js
           and "matchMedia('(prefers-reduced-motion: reduce)')" in js
           and "fab.style.transition = 'none';" in js)
-    check("the bot flicks (v72.17, travel increased in v72.22): the drag state tracks the last FINGER move sample's velocity; on release the lag stops, the bot snaps to the finger's clamped target, and a fast flick (speed > 0.5px/ms) projects the center forward by 320ms of that velocity BEFORE the edge settle — a flick carries the bot far to the aimed edge; a slow release settles by position alone",
-          "var FAB_FLICK_MS = 320, FAB_FLICK_MIN = 0.5" in js
+    check("the bot flicks (v72.17, throw rebuilt in v72.24, user: 'flicking the bubble does nothing. i want it to fly and kinda bouncy'): the drag state tracks the last FINGER move sample's velocity; a fresh fast release (speed > 0.4px/ms, last move <80ms ago) launches a WAAPI THROW — fast launch to the 170ms-projection fly point, then on to the edge settle from the 420ms projection, with an impact squash (scale .93) and a clamped along-edge rebound (fabFlickGeo: 12% of the flight leg, never off-screen); duration scales with travel. Stale velocity, a slow drop, an open bubble or reduced motion keep the old snap+project+glide path (instant + panel re-anchor while open); grabbing the bot or a resize cancels the flight",
+          "var FAB_FLICK_MS = 420, FAB_FLICK_MIN = 0.4, FAB_FLY_MS = 170, FAB_FLICK_STALE_MS = 80" in js
           and "st.vx = (ev.clientX - st.lastX) / dt" in js
-          and "if (sp > FAB_FLICK_MIN) { cx += st.vx * FAB_FLICK_MS; cy += st.vy * FAB_FLICK_MS; }" in js)
+          and "if (Date.now() - rel.lastT > FAB_FLICK_STALE_MS) { vx = 0; vy = 0; }" in js
+          and "function fabFlickGeo(s, vw, vh, fromL, fromT, vx, vy)" in js
+          and "var od = ((alongY ? sp.y - fy : sp.x - fx) || 0) * 0.12" in js
+          and "sp > FAB_FLICK_MIN && !open && !fabReduceMotion() && fab.animate" in js
+          and "fab.animate(kf, { duration: dur })" in js
+          and "fabFlightCancel();" in js
+          and "if (sp > FAB_FLICK_MIN) { cx += vx * FAB_FLICK_MS; cy += vy * FAB_FLICK_MS; }" in js
+          and "fabFlickGeo: fabFlickGeo" in js)
     check("the drag has a follow-lag (v72.22, user: 'add a delay from finger like the bubble is following the finger'): pointermove only sets the finger TARGET (st.tx/st.ty); an rAF loop moves the bot partway toward it each frame (fabLagEase, ~50ms time constant, reduced-motion snaps instant); the flick velocity is sampled from the finger, and release stops the lag and starts the flick from the finger's clamped target",
           "st.tx = st.left + (ev.clientX - st.x)" in js
           and "st.curL = fabLagEase(st.curL, st.tx, Date.now() - st.lastFrame, fabReduceMotion() ? 0 : FAB_LAG_MS)" in js

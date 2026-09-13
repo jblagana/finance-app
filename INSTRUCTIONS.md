@@ -6,6 +6,67 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-13 13:56 — User edits: owed-category clarifications + photo cleanup task (finances/pics)
+Status: not started (clarifications fold into v72.25; the photo task is new, after v72.25)
+Progress: 0%
+
+### Instruction (verbatim)
+> (two user edits inside the 04:52 entry's Interpretation section:)
+> 1. (appended to the open-questions bullet:) (yes it rewrites the ledger but keep the position from edited entry. the 'Owed' catergory in ledger summary is computed only from entries with 'Owed' category - the entries in Owed tab with no catergory assigned. )
+> 2. (new bullet:) -in addtion, check finances/pics. theres a photo from the owed tab, i want u to remove the details i scratched.
+
+### Interpretation (agent — user may edit this section)
+- CLOCK NOTE: the wall clock jumped ~9h between v72.23 (live 04:38) and these afternoon messages — the "04:46" / "04:52" headers on the two entries below are mislabeled (they are afternoon ~13:5x messages); entry ORDER is what matters.
+- Edit 1 answers the v72.25 open questions (folded into that entry): editing an entry DOES rewrite its ledger txn, but must KEEP the txn's position in the ledger (v72.10 already does this for amount edits); and the 'Owed' category in the ledger summary counts ONLY entries that carry the 'Owed' category — i.e. owed-tab entries with no category assigned. So: assigned category → the ledger summary counts it under that category; unassigned → it stays in 'Owed'.
+- Edit 2 is a NEW task (queue: after v72.25): `finances/pics` (outside the repo, in the chat workspace) holds a photo of the Owed tab; the user scratched out ("scratched") some details in it and wants those details REMOVED. Ambiguous between (a) clean the photo so the scratched-out details are gone (image edit) and (b) delete the photo — inspect the folder/image first, then confirm with the user before changing anything.
+- The v72.24 flick release is already coded + green — it pushes FIRST (it was logged before these edits).
+
+### Subtasks
+- [x] Log the edits verbatim (first action)
+- [ ] Push v72.24 (code + gate already green)
+- [ ] v72.25 with the edit-1 rules (position kept, summary 'Owed' = unassigned only)
+- [ ] Inspect finances/pics; confirm with the user what "remove the details i scratched" means; do it
+
+## 2026-09-13 04:52 — New: category options on owed entries (ledger categorizes accordingly, default 'Owed')
+Status: not started (queued as v72.25, after the v72.24 flick fix; user clarified 05:0x — see above)
+Progress: 0%
+
+### Instruction (verbatim)
+> (user edit inside the 04:46 entry's Interpretation section — a new bullet:)
+> -additionally, can u add a category options in the owed entries, so that when theyre written in ledger, they categorize accordingly but by default, its 'Owed'.
+
+### Interpretation (agent — user may edit this section)
+- New FEATURE (rule 2): each owed entry gets an optional CATEGORY picker (the app's normal category list). The ledger txn the entry files (v72.10: ipf → cash_out / ifp → cash_in, note "Owed · Kaia") uses that category instead of the hardcoded 'Owed'. Default = 'Owed' (existing entries keep 'Owed').
+- Open questions to verify in code: how the owed BALANCE is computed (from the entry records, not the ledger category — must stay true after this), whether any coach/rule logic keys off category 'Owed' (alert "owed changed" etc.), and whether editing an entry's category rewrites the existing ledger txn in place (like the v72.10 amount edit does). (yes it rewrites the ledger but keep the position from edited entry. the 'Owed' catergory in ledger summary is computed only from entries with 'Owed' category - the entries in Owed tab with no catergory assigned. )
+-in addtion, check finances/pics. theres a photo from the owed tab, i want u to remove the details i scratched.
+- Version: v72.25.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [ ] Read the owed entry → ledger txn flow (addOwedEntry / updateOwedEntry / owed balance math / coach 'Owed' keying)
+- [ ] Implement: category picker on the entry form (default 'Owed'), txn category follows, in-place edit updates the txn, owed totals unaffected
+- [ ] Gate + smoke, bump v72.25, commit, push
+
+## 2026-09-13 04:46 — Flicking the bot does nothing — it should fly and be kinda bouncy
+Status: in progress — v72.24 coded + gate green, pushing
+Progress: 80% — ETA 05:15
+
+### Instruction (verbatim)
+> drag trail is now better, but flicking the bubble does nothing. i want it to fly and kinda bouncy
+
+### Interpretation (agent — user may edit this section)
+- Feedback on v72.22: the follow-lag drag feel is GOOD (keep it). But the flick momentum (v72.17: release velocity projects the settle point) is DEAD — flicking doesn't carry the bot anywhere. Diagnosis (from the v72.17→v72.22 diff): the flick DOES project the settle point, but it lands with the SAME .28s ease-out glide as a slow drop — no fast launch, no momentum read, and the 320ms carry often ends close to the finger, so it reads as "nothing".
+- Fix (v72.24): a real throw — WAAPI keyframe flight: fast launch to a short (170ms) projection "fly point", then on to the edge settle from a longer (420ms) projection; impact SQUASH (scale) + along-edge OVERSHOOT rebound (clamped into the safe area — never off-screen); duration scales with travel. Momentum must be fresh: release velocity older than 80ms = a drop, not a flick; threshold 0.5 → 0.4 px/ms.
+- Unchanged paths: reduced-motion = instant; bubble open = instant settle + panel re-anchor; slow drop = the existing snap + .28s glide. Grabbing the bot mid-flight or resize/orientation cancels the flight (fabFlightAnim.cancel()). New pure helper fabFlickGeo (smoke-testable).
+- The user also added a NEW instruction while this was in flight (owed-entry categories) — logged as its own 04:52 entry (v72.25), after this one.
+- reduced-motion stays instant (no fly, no bounce). Version: v72.24.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [x] Diagnose: flick projects the settle but settles with the same .28s glide as a slow drop (no launch, no bounce, short carry)
+- [ ] Implement fabFlickGeo + WAAPI flight (fly point → settle → squash → clamped overshoot) + fresh-momentum rule
+- [ ] Gate + smoke, bump v72.24, commit, push
+
 ## 2026-09-13 03:51 — New: separate "Backup" section in Settings with a choice of which data to export
 Status: done — pushed f647281 (live 04:38)
 Progress: 100%
