@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-14 01:3x — v72.33: the coach quotes the prepay amount of the card asked, not the total
-Status: in progress
-Progress: 90% — gates green, about to commit + push
+Status: **done**
+Progress: 100% — completed 2026-09-14 01:5x; commit `759d2b4` pushed to origin/main (v72.33, live 01:48, SW cache `finances-pwa-v72.33`)
 
 ### Instruction (verbatim)
 > when i ask the bot how much i should prepay in just my maribank cc, it shows the total amount i should prepay (maribank cc and maya cc combined), i want it to show only the prepay amount for the card asked
@@ -23,7 +23,7 @@ Progress: 90% — gates green, about to commit + push
 - [x] Inspect: prepay math in app.js (snapshot items, coachAlerts), coach prompt in ai.js/chat.js
 - [x] Implement: per-card prepay in the coach data + prompt guidance (app.js: txnAdj acc + adj.prepayBy + effectiveSnap + snapshot target_balance; chat.js: loadCtx eff cards + intentStatus mention rule + coachSnapshot breakdown + system-prompt guidance; SHELL_NOTES 72.33)
 - [x] Gate + smoke (v72.33 checks) — node --check clean; tools/check_site.py "all checks passed" (v72.33 check green); tools/test_chat_parser.py "all parser checks passed"; smoke_v68.js 3/3 v72.33 OK; smoke_app_v68.js "all checks passed" (per-card math absolute, total asserted relative — earlier smoke sections leave a base card behind)
-- [ ] Release v72.33, gates green, commit, push
+- [x] Release v72.33, gates green, commit, push — release.ps1 v72.33 "GATES: all green" (stamp + full suite), commit `759d2b4` pushed to origin/main
 
 ## 2026-09-14 01:0x — v72.32: remake the toasts into a top banner (7s, swipe-up dismisses)
 Status: **done**
