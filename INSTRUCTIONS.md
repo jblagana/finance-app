@@ -6,6 +6,33 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-13 23:2x — v72.30: drop 'Owed' category, fix edit Cancel, 'See less', account balance override → 'Adjustment'
+Status: **done**
+Progress: 100% — completed 2026-09-14 00:1x; commit `474a930` pushed to origin/main (v72.30, live 00:08, SW cache `finances-pwa-v72.30`)
+
+### Instruction (verbatim)
+> -remove the 'Owed' from the category
+> -when editing entries in owed tab, the cancel button is not working, i want the entry to close when cancel is clicked
+> -add a way to re-hide the entries after 'see more' in owed tab and ledger. maybe add 'see less' beside 'see more'
+> -add a way to override the current accounts' amount/balances. add the difference in the ledger tab with category 'Adjustment'
+
+### Interpretation (agent — user may edit this section)
+- v72.30, four items:
+  1. **Drop 'Owed' from the categories** — the v72.10 leftover in the add sheet's options (tpf files under the picked category / 'Unsorted' since v72.28); existing ledger rows that already landed in 'Owed' keep their data (no migration).
+  2. **Bug: the in-place edit's Cancel never fired** — the valueless `data-ow-edit-cancel` attribute reads as `''` (falsy) in the click handler, so the branch was dead. Cancel must close (remove) the inline form.
+  3. **'See less' beside 'See more'** in Owed cards + the Ledger — re-hides 5 at a time (floor = the default page of 5); hidden when there is nothing to collapse.
+  4. **Account balance override** — a way to set an account's actual current balance; the difference (actual − tracked) is filed in the Ledger under a new 'Adjustment' category so the tracked balance matches reality. (Exact shape pinned after inspecting the base editor + ledger model.)
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Inspect: design pinned — (2) the valueless `data-ow-edit-cancel` reads `''` (falsy) → dead branch, give it a value; (4) the override IS the account's `value` column in Your numbers (the one true current balance; chat "X balance is Y" funnels through the same `saveBase`), so `saveBase` diffs prev-vs-new accounts (name match, debit/card only, new/removed file nothing) and files the SIGNED diff as a **moneyLog-only row** (no txn) under category `Adjustment` (k='a', f = new effective free, o = card owed after on card rows): the base rebase already zeroed the overlay and the spend insights sum txns → no double-move, no insight skew; the `snap` render list gains `renderMoneyLog`; the import sanitizer's k allow-list gains `'a'`
+- [x] Remove 'Owed' from the category options (+ undo fallback → 'Unsorted')
+- [x] Fix the Cancel button (valueless attribute → `data-ow-edit-cancel="1"`)
+- [x] Add 'See less' (owed `data-ow-less` + `.ow-pag`; ledger `mlLess` + `.ml-pag`; both floor at 5)
+- [x] Implement the account balance override + the 'Adjustment' ledger entry (saveBase diff → moneyLog-only k='a' row; accounts column labeled; snap list + sanitizer updated; exports owedShown/getBase for smoke)
+- [x] Gate + smoke updates (tools/check_site.py: v72.10 flip, v72.14 'a', v72.29 Cancel tightened, new v72.30 check; smoke: strengthened assert + v7230Section — root mirror syncs via release.ps1)
+- [x] Release v72.30 — `release.ps1 v72.30` all green (check_site repo + root mirror, chat parser, node --check, both smokes incl. the new v7230Section); commit `474a930` pushed
+
 ## 2026-09-13 23:0x — User edit on v72.29: "see more" paging for Owed + Ledger entries (5 at a time)
 Status: **done**
 Progress: 100% — completed 2026-09-13 23:1x; commit `a74860a` pushed to origin/main (v72.29, live 23:08)
