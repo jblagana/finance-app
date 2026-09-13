@@ -6,6 +6,25 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-13 13:5x — Remove the bouncy feel of the bubble
+Status: not started (queued as v72.26, after v72.25)
+Progress: 0%
+
+### Instruction (verbatim)
+> (user edit inside the 04:52 entry's Interpretation section — a new bullet:)
+> -remove the bouncy feel of the bubble
+
+### Interpretation (agent — user may edit this section)
+- Reaction to v72.24 (pushed 13:56 as 82d28d4): the throw's SQUASH (scale .93 impact) + STRETCH (1.05/1.04) + ALONG-EDGE OVERSHOOT rebound read as "bouncy" — the user wants that feel GONE.
+- KEEP: the FLY — the fast throw (release → fly point → edge settle, fast launch, 420ms carry, fresh-momentum rule, grab/resize cancellation). The bubble still flies when flicked.
+- CHANGE: the flight becomes a clean two-segment ease-out — no scale keyframes, no overshoot; it lands exactly on the settle point. `fabFlickGeo` drops the bounce field; gate + smoke updated to match.
+- Version: v72.26.
+
+### Subtasks
+- [x] Log the instruction verbatim (first action)
+- [ ] Simplify fabFlightStart (no transform keyframes, no overshoot) + fabFlickGeo (drop bounce) + gate/smoke
+- [ ] Bump v72.26, commit, push
+
 ## 2026-09-13 13:56 — User edits: owed-category clarifications + photo cleanup task (finances/pics)
 Status: not started (clarifications fold into v72.25; the photo task is new, after v72.25)
 Progress: 0%
@@ -28,8 +47,8 @@ Progress: 0%
 - [ ] Inspect finances/pics; confirm with the user what "remove the details i scratched" means; do it
 
 ## 2026-09-13 04:52 — New: category options on owed entries (ledger categorizes accordingly, default 'Owed')
-Status: not started (queued as v72.25, after the v72.24 flick fix; user clarified 05:0x — see above)
-Progress: 0%
+Status: in progress (v72.25) — coded + gate green, pushing
+Progress: 90%
 
 ### Instruction (verbatim)
 > (user edit inside the 04:46 entry's Interpretation section — a new bullet:)
@@ -40,16 +59,17 @@ Progress: 0%
 - Open questions to verify in code: how the owed BALANCE is computed (from the entry records, not the ledger category — must stay true after this), whether any coach/rule logic keys off category 'Owed' (alert "owed changed" etc.), and whether editing an entry's category rewrites the existing ledger txn in place (like the v72.10 amount edit does). (yes it rewrites the ledger but keep the position from edited entry. the 'Owed' catergory in ledger summary is computed only from entries with 'Owed' category - the entries in Owed tab with no catergory assigned. )
 -in addtion, check finances/pics. theres a photo from the owed tab, i want u to remove the details i scratched.
 - Version: v72.25.
+-remove the bouncy feel of the bubble
 
 ### Subtasks
 - [x] Log the instruction verbatim (first action)
-- [ ] Read the owed entry → ledger txn flow (addOwedEntry / updateOwedEntry / owed balance math / coach 'Owed' keying)
-- [ ] Implement: category picker on the entry form (default 'Owed'), txn category follows, in-place edit updates the txn, owed totals unaffected
+- [x] Read the owed entry → ledger txn flow — balance from entry records (untouched); no coach logic keys off category 'Owed'; add-sheet list = budgets + forced 'Owed'; user confirmed in-place rewrite keeps position and the summary 'Owed' bucket = unassigned entries only
+- [x] Implement: category picker on the entry form (default 'Owed', budget options, stale values selectable, hidden with the account row for tpf); addOwedEntry stores e.cat + files the txn under it; updateOwedEntry rewrites the linked txn's category in place (id + position kept); edit prefill + reset; owedCatOptions exported
 - [ ] Gate + smoke, bump v72.25, commit, push
 
 ## 2026-09-13 04:46 — Flicking the bot does nothing — it should fly and be kinda bouncy
-Status: in progress — v72.24 coded + gate green, pushing
-Progress: 80% — ETA 05:15
+Status: done — pushed 82d28d4 (live 13:56; header time mislabeled, see the 13:56 clock note)
+Progress: 100%
 
 ### Instruction (verbatim)
 > drag trail is now better, but flicking the bubble does nothing. i want it to fly and kinda bouncy
@@ -64,8 +84,8 @@ Progress: 80% — ETA 05:15
 ### Subtasks
 - [x] Log the instruction verbatim (first action)
 - [x] Diagnose: flick projects the settle but settles with the same .28s glide as a slow drop (no launch, no bounce, short carry)
-- [ ] Implement fabFlickGeo + WAAPI flight (fly point → settle → squash → clamped overshoot) + fresh-momentum rule
-- [ ] Gate + smoke, bump v72.24, commit, push
+- [x] Implement fabFlickGeo + WAAPI flight (fly point → settle → squash → clamped overshoot) + fresh-momentum rule
+- [x] Gate + smoke (6 new v72.24 geometry checks) green; bump v72.24 (sw cache + SHELL_RELEASE live 13:56); pushed 82d28d4
 
 ## 2026-09-13 03:51 — New: separate "Backup" section in Settings with a choice of which data to export
 Status: done — pushed f647281 (live 04:38)

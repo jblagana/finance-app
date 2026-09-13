@@ -544,16 +544,26 @@ def main():
           and "return { t: t, removed: removed, txIdx: txIdx, logIdxs: logIdxs, persist: done };" in js
           and "state.txns.splice(ti, 0, r.t);" in js
           and "var r = removeTxnRow(tid, true); // keep the persistent row (see above)" in js)
-    check("owed entries with an account are real ledger txns (v72.10): inflow kinds cash_in / card_payment are the exact inverse of their spend twins (txnAdj), the log row flavor i/p renders before→after correctly and nets month spend, the owed form carries the account dropdown (default Cash, '' = note only, hidden for tpf), subentries edit the linked txn in place (v72.9) and delete/undo cover entry + txn together; 'Owed' joins the add-sheet categories",
+    check("owed entries with an account are real ledger txns (v72.10, category made user-pickable in v72.25): inflow kinds cash_in / card_payment are the exact inverse of their spend twins (txnAdj), the log row flavor i/p renders before→after correctly and nets month spend, the owed form carries the account dropdown (default Cash, '' = note only, hidden for tpf), subentries edit the linked txn in place (v72.9) and delete/undo cover entry + txn together; 'Owed' joins the add-sheet categories; v72.25 the txn is filed under the ENTRY's category (e.cat, default 'Owed') instead of the hardcoded one",
           "if (t.kind === 'card_payment') return { cash: 0, free: -amt, card: -amt, prepay: -amt };" in js
           and "if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };" in js
           and "k: t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x'" in js
           and "function owedTxnKind(dir, acc)" in js
           and '<select class="oent-acc">' in js and "owedAccOptions('CASH::Cash')" in js
-          and "category: 'Owed', amount: e.amt, note: 'Owed \u00b7 ' + p.name" in js
+          and "category: e.cat, amount: e.amt, note: 'Owed \u00b7 ' + p.name" in js
           and "if (editId) updateOwedEntry(pid, editId, payload);" in js
           and "function updateOwedEntry(pid, eid, data)" in js
           and "if (names.indexOf('Owed') < 0) names.push('Owed');" in js)
+    check("owed entries pick their ledger category (v72.25, user: 'add a category options in the owed entries, so that when theyre written in ledger, they categorize accordingly but by default, its Owed'): the entry form carries a category select inside the account row ('Owed' default + Your numbers' budgets; a stale saved category stays selectable; hidden with the row for tpf); addOwedEntry stores e.cat and files the txn under it; updateOwedEntry rewrites the linked txn's category in place (same id + position, undo restores the original); the owed balance still comes from the entry records — the ledger 'Owed' bucket now counts only unassigned entries",
+          "function owedCatOptions(sel)" in js
+          and '<select class="oent-cat">' in js
+          and "e.cat = String(data.cat || 'Owed').trim() || 'Owed'" in js
+          and "category: e.cat, amount: e.amt, note: 'Owed \u00b7 ' + p.name" in js
+          and "cat: String(data.cat || e.cat || 'Owed').trim() || 'Owed'" in js
+          and "category: next.cat, amount: next.amt, note: 'Owed \u00b7 ' + p.name" in js
+          and "c3.innerHTML = owedCatOptions(ee.cat || 'Owed')" in js
+          and "if (c) c.innerHTML = owedCatOptions('Owed');" in js
+          and "owedCatOptions: owedCatOptions" in js)
     check("the floating bot owns the bubble (v72.15): pointer drag (>8px = drag, tap still toggles the coach), on release the bot settles to the NEAREST screen EDGE, sliding along it to the finger's spot, clamped into the SAFE area (status bar above, the 88px tab bar below, 16px sides — the v72.11 corner snaps + bubble-geometry math are gone); the open panel anchors to the bot's face (least-clamping side wins, above breaks ties, scale-in origin aimed at the bot) and the bot stays visible as the bubble's handle; the spot persists as fin.fabPos.v2 {edge,u} with a one-time fin.fabPos.v1 migration and re-derives on resize/orientation",
           "var FAB_POS_KEY = 'fin.fabPos.v2'" in js
           and "var FAB_POS_V1 = 'fin.fabPos.v1'" in js

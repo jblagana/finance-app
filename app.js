@@ -2762,12 +2762,19 @@
       '<label><input type="radio" name="owdir" value="tmb"><span>They paid me back</span></label>' +
       '</div>' +
       // v72.10: the account dropdown — WITH an account the entry is a real
-      // ledger txn (category Owed, flow from the direction); "no account"
-      // stays a balance-only note; "They paid for me" is always a note.
+      // ledger txn (flow from the direction); "no account" stays a balance-only
+      // note; "They paid for me" is always a note.
+      // v72.25: the category dropdown — where the txn lands in the ledger
+      // totals. 'Owed' (default) keeps the owed bucket; a budget category
+      // files it there instead. Both hide with the account row for tpf.
       '<div class="oent-accrow">' +
       '<label>Account — how the money moved</label>' +
       '<select class="oent-acc">' + owedAccOptions('CASH::Cash') + '</select>' +
-      '<p class="note oent-acchint">Filed in the ledger as <b>Owed</b> — it moves your free cash.</p>' +
+      '<div class="oent-catrow">' +
+      '<label>Category — where it lands in the ledger</label>' +
+      '<select class="oent-cat">' + owedCatOptions('Owed') + '</select>' +
+      '</div>' +
+      '<p class="note oent-acchint">Filed in the ledger under its <b>category</b> — it moves your free cash.</p>' +
       '</div>' +
       '<label>Note (optional)</label>' +
       '<input type="text" class="oent-note" maxlength="60" autocomplete="off">' +
@@ -2855,6 +2862,25 @@
     });
     return html;
   }
+  // v72.25: the entry's CATEGORY options — 'Owed' first (the default; what
+  // existing entries mean), then Your numbers' budgets (the same list the
+  // add sheet uses). A saved category that has left Your numbers is appended
+  // so it stays selectable when the entry is re-opened for editing.
+  // The owed BALANCE never depends on this — it always comes from the entry
+  // records; only the ledger txn's filing category changes.
+  function owedCatOptions(sel) {
+    var d = String(sel || 'Owed').trim() || 'Owed';
+    var names = Object.keys((state.base && state.base.budgets) || {})
+      .filter(function (n) { return String(n).trim(); });
+    var list = ['Owed'];
+    names.forEach(function (c) { if (c !== 'Owed' && list.indexOf(c) < 0) list.push(c); });
+    if (list.indexOf(d) < 0) list.push(d); // a stale saved category stays selectable
+    var html = '';
+    list.forEach(function (c) {
+      html += '<option value="' + esc(c) + '"' + (c === d ? ' selected' : '') + '>' + esc(c) + '</option>';
+    });
+    return html;
+  }
   // "They paid for me" is always a note — the account row hides for it.
   function owedAccRowState(form, dir) {
     var row = form && form.querySelector ? form.querySelector('.oent-accrow') : null;
@@ -2874,6 +2900,8 @@
     if (n) n.value = '';
     var s = f.querySelector('.oent-acc');
     if (s) s.value = 'CASH::Cash';
+    var c = f.querySelector('.oent-cat'); // v72.25: back to the 'Owed' default
+    if (c) c.innerHTML = owedCatOptions('Owed');
     var radios = f.querySelectorAll('input[name="owdir"]');
     for (var i = 0; i < radios.length; i++) radios[i].checked = radios[i].value === 'ipf';
     var seg = f.querySelector('.seg');
@@ -2946,6 +2974,7 @@
       note: String(data.note || '').trim(), created: new Date().toISOString()
     };
     if (data.expr) e.expr = data.expr;
+    e.cat = String(data.cat || 'Owed').trim() || 'Owed'; // v72.25: the ledger category ('Owed' default)
     // v72.10: WITH an account (and not tpf) the entry is a real ledger txn
     var acc = data.acc || '';
     if (acc && e.dir !== 'tpf') e.acc = acc;
@@ -2956,7 +2985,7 @@
     if (doTxn) {
       step = addTxn({
         date: e.d, account: owedAccName(e.acc), kind: owedTxnKind(e.dir, e.acc),
-        category: 'Owed', amount: e.amt, note: 'Owed · ' + p.name
+        category: e.cat, amount: e.amt, note: 'Owed · ' + p.name
       }, { quiet: true }).then(function (id) {
         e.txnId = id; // the link persists with the entry (export/import carries it)
         return saveOwed();
@@ -3018,21 +3047,22 @@
     var next = {
       d: data.d || e.d, amt: r2(data.amt),
       dir: OWED_DIRS[data.dir] ? data.dir : e.dir,
-      note: String(data.note || '').trim()
+      note: String(data.note || '').trim(),
+      cat: String(data.cat || e.cat || 'Owed').trim() || 'Owed' // v72.25
     };
     if (acc && next.dir !== 'tpf') next.acc = acc;
     var step = Promise.resolve();
     if (prevTxn && next.acc) {
       step = saveTxnEdit(e.txnId, {
         date: next.d, account: owedAccName(next.acc), kind: owedTxnKind(next.dir, next.acc),
-        category: 'Owed', amount: next.amt, note: 'Owed · ' + p.name
+        category: next.cat, amount: next.amt, note: 'Owed · ' + p.name
       }, { quiet: true });
     } else if (prevTxn && !next.acc) {
       step = removeTxnQuiet(e.txnId);
     } else if (!prevTxn && next.acc) {
       step = addTxn({
         date: next.d, account: owedAccName(next.acc), kind: owedTxnKind(next.dir, next.acc),
-        category: 'Owed', amount: next.amt, note: 'Owed · ' + p.name
+        category: next.cat, amount: next.amt, note: 'Owed · ' + p.name
       }, { quiet: true }).then(function (id) {
         e.txnId = id;
         return saveOwed();
@@ -3040,6 +3070,7 @@
     }
     return step.then(function () {
       e.d = next.d; e.amt = next.amt; e.dir = next.dir; e.note = next.note;
+      e.cat = next.cat; // v72.25
       if (data.expr) e.expr = data.expr; else delete e.expr;
       if (next.acc) e.acc = next.acc; else { delete e.acc; e.txnId = null; }
       p.updated = new Date().toISOString(); // v72.7: recent-sort key
@@ -3181,7 +3212,9 @@
         amt: amt, dir: dirEl ? dirEl.value : 'ipf', expr: expr,
         note: (f.querySelector('.oent-note').value || '').trim(),
         // v72.10: the account pick ('' = note only; hidden for tpf, ignored there)
-        acc: (f.querySelector('.oent-acc') || { value: '' }).value || ''
+        acc: (f.querySelector('.oent-acc') || { value: '' }).value || '',
+        // v72.25: the category pick ('Owed' default; hidden for tpf with the account)
+        cat: (f.querySelector('.oent-cat') || { value: 'Owed' }).value || 'Owed'
       };
       var editId = f.getAttribute('data-ow-edit'); // v72.10: edit mode
       if (editId) updateOwedEntry(pid, editId, payload);
@@ -3226,6 +3259,8 @@
                 }
                 var s3 = f3.querySelector('.oent-acc');
                 if (s3) s3.value = ee.acc || '';
+                var c3 = f3.querySelector('.oent-cat'); // v72.25: rebuild options (a stale saved category stays selectable)
+                if (c3) c3.innerHTML = owedCatOptions(ee.cat || 'Owed');
                 owedAccRowState(f3, ee.dir || 'ipf');
                 var n3 = f3.querySelector('.oent-note');
                 if (n3) n3.value = ee.note || '';
@@ -3564,7 +3599,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.24, live: new Date(2026, 8, 13, 13, 56) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.25, live: new Date(2026, 8, 13, 14, 20) }; // live re-stamped at each push
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -4178,6 +4213,7 @@
     addOwedPerson: addOwedPerson,
     addOwedEntry: addOwedEntry,
     updateOwedEntry: updateOwedEntry,
+    owedCatOptions: owedCatOptions, // v72.25: the entry's category options (smoke drives it)
     delOwedEntry: delOwedEntry,
     delOwedPerson: delOwedPerson,
     effectiveSnap: effectiveSnap,
