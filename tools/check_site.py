@@ -463,11 +463,21 @@ def main():
     snack_rule = ""
     if "#snack{" in html:
         snack_rule = html.split("#snack{", 1)[1].split("}", 1)[0]
-    check("add snack centered bulletproof (v71.3, re-done in v72.20): left:50% with translateX(-50%) carried INSIDE the transform in BOTH the base and .show states (the #swToast pattern — the v71 left:0;right:0 + margin auto variant still floated left on the user's phone, so no state may be able to drop the X offset); the add toast has NO undo (ledger ✕ is the delete path)",
-          "left:50%" in snack_rule and "transform:translate(-50%,10px)" in snack_rule
-          and "#snack.show{opacity:1;transform:translate(-50%,0)" in html
+    check("snack centered bulletproof (v71.3, re-done in v72.20, TOP banner in v72.32): left:50% with the X offset carried INSIDE the transform in BOTH the base (hidden above the screen) and .show states (the #swToast pattern — no state may be able to drop the X offset); v72.32 the banner anchors to the top like the new-version toast and hides with visibility too (the Android-recents ghost-pill rule); the add toast has NO undo (ledger ✕ is the delete path)",
+          "left:50%" in snack_rule and "transform:translate(-50%,-160%)" in snack_rule
+          and "visibility:hidden" in snack_rule
+          and "#snack.show{opacity:1;visibility:visible;transform:translate(-50%,0)" in html
           and "snack('Added ' + money(t.amount) + ' \u00b7 ' + esc(t.category || t.account));" in js
           and "undoAddTxn" not in js)
+    check("v72.32 (user: 'for the toasts, remake them into a banner on the top of screen which stays for 7 seconds but can be swiped up to remove immediately. kinda similar to the new version toast.'): the snack is a TOP banner in the #swToast family (safe-area top, touch-action:none so the page can't steal the swipe) with a 7s default lifetime; the swipe-up follows the finger (pointermove, .dragging kills the transition, 0.85 resistance + fade) and a release past the threshold (-60px or 40% of the banner height) dismisses it immediately, anything less springs back; the Undo button is not a drag handle",
+          "top:calc(10px + env(safe-area-inset-top))" in snack_rule
+          and "touch-action:none" in snack_rule
+          and "#snack.dragging{transition:none}" in html
+          and "snackTimer = setTimeout(hideSnack, ms || 7000)" in js
+          and "function wireSnackSwipe()" in js
+          and "snackDragStart = ev.clientY" in js
+          and "ev.target.id === 'snackUndo'" in js
+          and "wireSnackSwipe();" in js)
     check("ledger entries are editable (v71.4): tap a row -> the Add sheet opens pre-filled (title/button flip to Edit/Save); Save re-logs via saveTxnEdit (same id; Undo restores the ORIGINAL entry)",
           "function openTxnEdit" in js and "function saveTxnEdit" in js
           and "function removeTxnRow" in js and "function restoreTxnRow" in js

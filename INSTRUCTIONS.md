@@ -6,6 +6,26 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 01:0x — v72.32: remake the toasts into a top banner (7s, swipe-up dismisses)
+Status: in progress
+Progress: 80% — ETA a few more minutes (release + push)
+
+### Instruction (verbatim)
+> for the toasts, remake them into a banner on the top of screen which stays for 7 seconds but can be swiped up to remove immediately. kinda similar to the new version toast.
+
+### Interpretation (agent — user may edit this section)
+- v72.32. The snack toasts (the bottom "Added / Deleted / Removed … — Undo" toasts, `#snack`) are remade as a **banner at the TOP of the screen**, styled in the family of the new-version toast (`#swToast`).
+- **Lifetime: 7 seconds** (was 5.2s) — then it auto-hides as before.
+- **Swipe up to remove immediately**: drag the banner upward (touch/pointer) and it follows the finger; releasing past the threshold dismisses it (no auto-restore). A small drag springs back.
+- The API (`snack(msg, undoFn, ms)`) and every existing call site keep working — this is a presentation change; the Undo button must keep working (it's part of the banner, not the drag target).
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Inspect: #snack CSS/HTML + snack()/hideSnack/snackTimer, #swToast structure to mirror, existing touch-drag patterns
+- [x] Implement: top banner (CSS), 7s default, swipe-up gesture (pointer follow + 0.85 resistance, -60px/40% threshold dismiss, spring back, Undo button not a drag handle, touch-action:none)
+- [x] Gate + smoke: v72.32 checks added (centering check updated to the top anchor), check_site + parser + smoke all green
+- [ ] Release v72.32 (release.ps1: stamps + mirror sync + full gates), commit, push
+
 ## 2026-09-14 00:3x — v72.31: X button on the Ledger's Adjustment rows — undo the override in Settings
 Status: **done**
 Progress: 100% — completed 2026-09-14 00:5x; commit `e74c3bd` pushed to origin/main (v72.31, live 00:46, SW cache `finances-pwa-v72.31`)

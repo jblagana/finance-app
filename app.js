@@ -1349,13 +1349,72 @@
     } catch (e) {}
   }
 
-  // ---------- snackbar (with undo) ----------
+  // ---------- snack banner (v72.32: top banner, 7s, swipe up to dismiss) ----------
+  // v72.32 (user: 'for the toasts, remake them into a banner on the top of
+  // screen which stays for 7 seconds but can be swiped up to remove
+  // immediately. kinda similar to the new version toast.'): the snack moved to
+  // the top (the #swToast family, same hidden-state discipline) and lives 7s;
+  // dragging the banner UP follows the finger (a little resistance + fade),
+  // and releasing past the threshold (-60px or 40% of the banner height,
+  // whichever is the larger pull) dismisses it immediately — anything less
+  // springs back. The Undo button is not a drag handle. touch-action:none on
+  // the banner keeps the page from stealing the swipe (no preventDefault, so
+  // the button's click still fires).
   var snackTimer = null;
+  var snackDragStart = null;
+  var snackDragY = 0;
+  function snackDragReset() {
+    snackDragStart = null;
+    snackDragY = 0;
+    var el = byId('snack');
+    if (el) {
+      el.style.transform = '';
+      el.style.opacity = '';
+      el.classList.remove('dragging');
+    }
+  }
   function hideSnack() {
-    var el = byId('snack'); if (el) el.classList.remove('show');
+    var el = byId('snack');
+    if (el) { el.classList.remove('show'); snackDragReset(); }
+  }
+  function wireSnackSwipe() {
+    var el = byId('snack');
+    if (!el || typeof el.addEventListener !== 'function' || el.__snackSwipe) return;
+    el.__snackSwipe = true;
+    el.addEventListener('pointerdown', function (ev) {
+      if (!el.classList.contains('show')) return;
+      if (ev.target && ev.target.id === 'snackUndo') return; // the button is not a drag handle
+      if (ev.button !== undefined && ev.button !== 0) return;
+      snackDragStart = ev.clientY;
+      snackDragY = 0;
+      el.classList.add('dragging'); // no transition while the finger is on it
+      if (el.setPointerCapture && ev.pointerId !== undefined) { try { el.setPointerCapture(ev.pointerId); } catch (e) {} }
+    });
+    el.addEventListener('pointermove', function (ev) {
+      if (snackDragStart === null) return;
+      var dy = ev.clientY - snackDragStart;
+      if (dy > 0) dy = 0; // the banner sits at the top — only up swipes dismiss
+      snackDragY = dy;
+      el.style.transform = 'translate(-50%,' + (dy * 0.85) + 'px)'; // a little resistance
+      el.style.opacity = String(Math.max(0.25, 1 + dy / 220));
+    });
+    function snackDragEnd() {
+      if (snackDragStart === null) return;
+      var released = snackDragY;
+      snackDragStart = null;
+      var thr = -Math.max(60, (el.offsetHeight || 44) * 0.4); // -60px or 40% of the banner
+      el.classList.remove('dragging');
+      el.style.transform = '';
+      el.style.opacity = '';
+      if (released <= thr) { clearTimeout(snackTimer); hideSnack(); }
+      // else: clearing the inline styles springs it back to the shown state
+    }
+    el.addEventListener('pointerup', snackDragEnd);
+    el.addEventListener('pointercancel', snackDragEnd);
   }
   function snack(msg, undoFn, ms) {
     var el = byId('snack'); if (!el) return;
+    snackDragReset(); // v72.32: a fresh show starts un-dragged
     el.innerHTML = '<span class="snack-msg">' + msg + '</span>' +
       (undoFn ? '<button type="button" id="snackUndo">Undo</button>' : '');
     if (undoFn) {
@@ -1364,7 +1423,7 @@
     }
     el.classList.add('show');
     clearTimeout(snackTimer);
-    snackTimer = setTimeout(hideSnack, ms || 5200);
+    snackTimer = setTimeout(hideSnack, ms || 7000); // v72.32: the banner lives 7s
   }
 
   // ---------- v34: confirm dialog (destructive deletes ask first) ----------
@@ -3889,12 +3948,17 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.31, live: new Date(2026, 8, 14, 0, 46) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.32, live: new Date(2026, 8, 14, 1, 12) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.32': [
+      'The little pop-ups are now banners at the top of the screen — like the “new version” one',
+      'They stay for 7 seconds, and swiping one up makes it go away right away',
+      'Undo is still there, on the banner'
+    ],
     '72.31': [
       'Ledger: an Adjustment row has a \u2715 now \u2014 it removes the record and takes the balance override in Your numbers back',
       'Card overrides work the same way \u2014 the card balance goes back, your free cash never moves',
@@ -4713,6 +4777,7 @@
     if (noteEl) noteEl.addEventListener('input', function () { autoCatFromNote(noteEl); });
     var mlf = byId('mlFilter');
     if (mlf) mlf.onchange = function () { mlFilterCat = mlf.value; mlShownCount = 5; renderMoneyLog(); };
+    wireSnackSwipe(); // v72.32: the top banner swipes up to dismiss
 
     window.addEventListener('online', function () { state.online = true; });
     window.addEventListener('offline', function () { state.online = false; });

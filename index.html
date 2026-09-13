@@ -305,18 +305,21 @@ input[type="month"]{min-height:44px}
 
 cursor:pointer;text-align:center}
 
-/* ---- undo snackbar ---- */
-/* v72.20: bulletproof centering + a smaller pill. The v71 left:0;right:0
-   margin:auto variant still floated left on the user's phone, so now
-   left:50% with translateX(-50%) carried INSIDE the transform in BOTH states
-   (the #swToast pattern that centers everywhere) — no state can drop the
-   X offset. And it is smaller: 8px 12px padding, 12.5px type, 380px cap. */
-#snack{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom));transform:translate(-50%,10px);
-width:fit-content;max-width:min(88vw,380px);z-index:30;background:var(--card2);border:1px solid var(--line);
+/* ---- snack banner (v72.32: a TOP banner in the #swToast family) ---- */
+/* v72.20 bulletproof centering kept: left:50% with the X offset carried
+   INSIDE the transform in BOTH states — no state can drop it. v72.32 (user:
+   top banner, 7s, swipe up to remove, "kinda similar to the new version
+   toast"): anchored to the top like #swToast, hidden by opacity+visibility
+   too (the Android-recents ghost-pill rule of #swToast), and
+   touch-action:none so the page never steals the swipe. */
+#snack{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top));transform:translate(-50%,-160%);
+width:fit-content;max-width:min(88vw,380px);z-index:40;background:var(--card2);border:1px solid var(--line);
 color:var(--ink);border-radius:10px;padding:8px 12px;display:flex;align-items:center;justify-content:center;
-gap:10px;font-size:12.5px;box-shadow:0 8px 24px rgba(0,0,0,.45);opacity:0;pointer-events:none;
-transition:opacity .18s ease,transform .18s ease}
-#snack.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+gap:10px;font-size:12.5px;box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:0;visibility:hidden;pointer-events:none;
+touch-action:none;transition:opacity .22s ease,transform .22s ease,visibility 0s linear .22s}
+#snack.show{opacity:1;visibility:visible;transform:translate(-50%,0);pointer-events:auto;
+transition:opacity .22s ease,transform .22s ease}
+#snack.dragging{transition:none}
 #snack .snack-msg{overflow-wrap:anywhere;text-align:center}
 #snack button{cursor:pointer;background:transparent;border:0;color:var(--acc);font-weight:800;font-size:12.5px;
 padding:2px 4px;flex:0 0 auto}
