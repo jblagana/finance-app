@@ -1068,6 +1068,10 @@
   // v53: ledger category filter. '' = all; '__unsorted__' = entries with no
   // category (shown as Unsorted); anything else matches the category exactly.
   var mlFilterCat = '';
+  // v72.29 (user edit): "See more" paging for the money log — the first 5
+  // rows (newest first) show; the button reveals 5 older ones per tap; a
+  // filter change starts the page over. In-memory — resets on reload.
+  var mlShownCount = 5;
   function renderMlFilter() {
     var sel = byId('mlFilter');
     if (!sel) return;
@@ -1114,7 +1118,9 @@
       return;
     }
     if (noteEl) noteEl.style.display = '';
-    body.innerHTML = shown.map(function (e) {
+    // v72.29 (user edit): "See more" — 5 rows at a time, the old ones hidden
+    var limited = shown.slice(0, mlShownCount);
+    body.innerHTML = limited.map(function (e) {
         var add = e.a === 'add';
         // v72.10: inflow rows (i cash in / p card payment) move free the OTHER
         // way — a row's before→after follows its flavor, not its add/del side.
@@ -1141,7 +1147,9 @@
           '<div class="ml-meta">' + mlDate(e.at) + (p.m ? ' · ' + esc(p.m) : '') + '</div></div>' +
           '<div class="ml-r"><b class="' + (down ? 'ml-down' : 'ml-up') + '">' + (down ? '−' : '+') + money(e.n) + '</b>' +
           '<span class="ml-f">free ' + money(before) + ' → ' + money(e.f) + '</span>' + extra + delBtn + '</div></div>';
-      }).join('');
+      }).join('') + (shown.length > limited.length
+      ? '<button type="button" class="addrow" id="mlMore" style="margin-top:10px">See more</button>'
+      : '');
     var dl = body.querySelectorAll('[data-ml-del]');
     for (var di = 0; di < dl.length; di++) dl[di].onclick = function (ev) {
       ev.stopPropagation(); // v71: ✕ deletes — it must not also open the editor
@@ -1149,6 +1157,8 @@
     };
     var ed = body.querySelectorAll('[data-ml-edit]');
     for (var ei = 0; ei < ed.length; ei++) ed[ei].onclick = function () { openTxnEdit(this.getAttribute('data-ml-edit')); };
+    var more = byId('mlMore');
+    if (more) more.onclick = function () { mlShownCount += 5; renderMoneyLog(); };
   }
 
   // ---------- bottom sheets (Add, Settings) ----------
@@ -2713,41 +2723,26 @@
   function saveOwed() { return idbPut(STORE_META, { key: 'owed', value: state.owed }); }
   function emitOwed() { emit('owed'); }
   function owedUid(pref) { return pref + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  // v72.29 (user edit: 'when enrties are more than 5, hide the old ones in a
+  // see more'): each card shows the first 5 rows (newest first); the button
+  // reveals 5 older ones per tap. In-memory UI state — resets on reload,
+  // survives re-renders.
+  var owedShown = {};
   function owedBalHTML(b) {
     if (b > 0.004) return '<span class="ow-bal plus">owes you ' + money(b) + '</span>';
     if (b < -0.004) return '<span class="ow-bal minus">you owe ' + money(-b) + '</span>';
     return '<span class="ow-bal zero">settled up</span>';
   }
-  function owedPersonHTML(p) {
-    var b = owedBal(p);
-    var ents = (p.entries || []).slice().sort(function (a, c) {
-      if (a.d !== c.d) return a.d < c.d ? 1 : -1;
-      return (a.created || '') < (c.created || '') ? 1 : -1;
-    });
-    var rows = '';
-    ents.forEach(function (e) {
-      var dir = OWED_DIRS[e.dir] || OWED_DIRS.ipf;
-      var amt = Number(e.amt) || 0;
-      rows += '<div class="ow-e">' +
-        '<div class="ow-el"><b>' + esc(dir.label) + '</b>' +
-        (e.note ? ' <span class="ow-x">' + esc(e.note) + '</span>' : '') +
-        // v72.10: a ledger-filed entry wears a chip + its own edit button
-        (e.txnId ? ' <span class="ow-led" title="Filed in the ledger — the entry moves your numbers">· ledger</span>' : '') +
-        '<div class="ow-k">' + esc(fmtDate(e.d)) + (e.expr ? ' · ' + esc(e.expr) : '') + '</div></div>' +
-        '<b class="ow-amt ' + (dir.sign > 0 ? 'plus' : 'minus') + '">' + (dir.sign > 0 ? '+' : '\u2212') + money(amt) + '</b>' +
-        (e.txnId ? '<button type="button" class="ow-xbtn wide" data-ow-edit-e="' + esc(e.id) + '" aria-label="Edit entry">edit</button>' : '') +
-        '<button type="button" class="ow-xbtn" data-ow-del-e="' + esc(e.id) + '" aria-label="Remove entry">\u2715</button>' +
-        '</div>';
-    });
-    return '<section class="card ow-p" data-ow-pid="' + esc(p.id) + '">' +
-      '<div class="ow-h"><span class="bdrag" data-ow-drag="1" aria-label="Drag to reorder" title="Drag to reorder">\u287F</span><b>' + esc(p.name) + '</b>' + owedBalHTML(b) +
-      '<button type="button" class="sheet-x" data-ow-del="' + esc(p.id) + '" aria-label="Remove person">\u2715</button></div>' +
-      // v72.19: "+ entry" (and its hidden form) sits at the TOP of the card —
-      // right under the header, above the entry list (user request); an opened
-      // form expands next to its button and pushes the list down
-      '<button type="button" class="addrow" data-ow-toggle="' + esc(p.id) + '">+ entry</button>' +
-      '<form class="oent" data-ow-for="' + esc(p.id) + '" style="display:none" autocomplete="off">' +
-      '<div class="oent-grid">' +
+  // v72.29: the entry form's INNER html — shared by the card-top "+ entry"
+  // form and the in-place edit form (user edit: 'i want the edit to expand in
+  // position'). edit=true swaps the button row to Save changes + Cancel. The
+  // sections follow "What happened" (owedFormSections): ipf = Account + Note;
+  // tpf = Category + Note (the ONLY direction that files a txn); itb / tmb =
+  // Account only — those three never touch the ledger (their account pick is
+  // an informational record). v72.29: Category + Account share one row (the
+  // oent-pair grid).
+  function oentFormHTML(edit) {
+    return '<div class="oent-grid">' +
       '<div><label>Date</label><div class="dfield"><input type="date" class="oent-date">' +
       '<span class="dlabel empty" aria-hidden="true">Pick a date</span></div></div>' +
       '<div><label>Amount (\u20b1)</label>' +
@@ -2761,14 +2756,7 @@
       '<label><input type="radio" name="owdir" value="tpf"><span>They paid for me</span></label>' +
       '<label><input type="radio" name="owdir" value="tmb"><span>They paid me back</span></label>' +
       '</div>' +
-      // v72.25: the category dropdown. v72.27: labels trimmed (user scratched
-      // the sub-texts out of a screenshot).
-      // v72.28 (follow-ups + user edit): the sections follow "What happened"
-      // (owedFormSections): ipf = Account + Note; tpf = Category + Note (the
-      // ONLY direction that files a txn — always a Cash cash_out under the
-      // picked budget, 'Unsorted' fallback); itb / tmb = Account only.
-      // ipf/itb/tmb never touch the ledger; their account pick is stored on
-      // the entry as an informational record.
+      '<div class="oent-pair">' +
       '<div class="oent-accrow">' +
       '<label>Account</label>' +
       '<select class="oent-acc">' + owedAccOptions('CASH::Cash') + '</select>' +
@@ -2777,11 +2765,54 @@
       '<label>Category</label>' +
       '<select class="oent-cat">' + owedCatOptions('') + '</select>' +
       '</div>' +
+      '</div>' +
       '<div class="oent-noterow">' +
       '<label>Note</label>' +
       '<input type="text" class="oent-note" maxlength="60" autocomplete="off">' +
       '</div>' +
-      '<div style="margin-top:14px"><button class="act" type="submit">Add entry</button></div>' +
+      (edit
+        ? '<div class="oent-btns"><button class="act" type="submit">Save changes</button>' +
+          '<button class="act ghost" type="button" data-ow-edit-cancel>Cancel</button></div>'
+        : '<div style="margin-top:14px"><button class="act" type="submit">Add entry</button></div>');
+  }
+  function owedPersonHTML(p) {
+    var b = owedBal(p);
+    var ents = (p.entries || []).slice().sort(function (a, c) {
+      if (a.d !== c.d) return a.d < c.d ? 1 : -1;
+      return (a.created || '') < (c.created || '') ? 1 : -1;
+    });
+    // v72.29 (user edit): the first 5 rows show — the older ones wait behind
+    // "See more" (5 per tap)
+    var limit = owedShown[p.id] || 5;
+    var shownEnts = ents.slice(0, limit);
+    var rows = '';
+    shownEnts.forEach(function (e) {
+      var dir = OWED_DIRS[e.dir] || OWED_DIRS.ipf;
+      var amt = Number(e.amt) || 0;
+      rows += '<div class="ow-e">' +
+        '<div class="ow-el"><b>' + esc(dir.label) + '</b>' +
+        (e.note ? ' <span class="ow-x">' + esc(e.note) + '</span>' : '') +
+        // v72.10: a ledger-filed entry wears the chip (v72.29: the edit
+        // button is on EVERY entry — the legacy ones included)
+        (e.txnId ? ' <span class="ow-led" title="Filed in the ledger — the entry moves your numbers">· ledger</span>' : '') +
+        '<div class="ow-k">' + esc(fmtDate(e.d)) + (e.expr ? ' · ' + esc(e.expr) : '') + '</div></div>' +
+        '<b class="ow-amt ' + (dir.sign > 0 ? 'plus' : 'minus') + '">' + (dir.sign > 0 ? '+' : '\u2212') + money(amt) + '</b>' +
+        '<button type="button" class="ow-xbtn wide" data-ow-edit-e="' + esc(e.id) + '" aria-label="Edit entry">edit</button>' +
+        '<button type="button" class="ow-xbtn" data-ow-del-e="' + esc(e.id) + '" aria-label="Remove entry">\u2715</button>' +
+        '</div>';
+    });
+    if (ents.length > shownEnts.length) {
+      rows += '<button type="button" class="addrow" data-ow-more="' + esc(p.id) + '">See more</button>';
+    }
+    return '<section class="card ow-p" data-ow-pid="' + esc(p.id) + '">' +
+      '<div class="ow-h"><span class="bdrag" data-ow-drag="1" aria-label="Drag to reorder" title="Drag to reorder">\u287F</span><b class="ow-name" data-ow-name="' + esc(p.id) + '" title="Rename">' + esc(p.name) + '</b>' + owedBalHTML(b) +
+      '<button type="button" class="sheet-x" data-ow-del="' + esc(p.id) + '" aria-label="Remove person">\u2715</button></div>' +
+      // v72.19: "+ entry" (and its hidden form) sits at the TOP of the card —
+      // right under the header, above the entry list (user request); an opened
+      // form expands next to its button and pushes the list down
+      '<button type="button" class="addrow" data-ow-toggle="' + esc(p.id) + '">+ entry</button>' +
+      '<form class="oent" data-ow-for="' + esc(p.id) + '" style="display:none" autocomplete="off">' +
+      oentFormHTML() +
       '</form>' +
       (rows || '<p class="note" style="margin:8px 0 0">No entries yet — add the first one above.</p>') +
       '</section>';
@@ -2860,18 +2891,19 @@
     });
     return html;
   }
-  // v72.25→v72.28: the entry's CATEGORY options — Your numbers' budgets
-  // (the same list the add sheet uses); 'Unsorted' only as the fallback when
-  // there are no budgets (v72.28 user edit). A saved category that has left
-  // Your numbers is appended so it stays selectable when the entry is
-  // re-opened for editing. The owed BALANCE never depends on this — it
-  // always comes from the entry records; only the ledger txn's filing
-  // category changes.
+  // v72.25→v72.29: the entry's CATEGORY options — Your numbers' budgets
+  // (the same list the add sheet uses) plus 'Unsorted', which is ALWAYS in
+  // the list (v72.29 user edit: it must not disappear when the budgets
+  // change). A saved category that has left Your numbers is appended so it
+  // stays selectable when the entry is re-opened for editing. The owed
+  // BALANCE never depends on this — it always comes from the entry records;
+  // only the ledger txn's filing category changes.
   function owedCatOptions(sel) {
     var d = String(sel || '').trim();
     var names = Object.keys((state.base && state.base.budgets) || {})
       .filter(function (n) { return String(n).trim() && n !== 'Unsorted'; });
-    var list = names.length ? names.slice() : ['Unsorted'];
+    var list = names.slice();
+    if (list.indexOf('Unsorted') < 0) list.push('Unsorted'); // v72.29: always present
     if (d && list.indexOf(d) < 0) list.push(d); // a stale saved category stays selectable
     if (!d || list.indexOf(d) < 0) d = list[0];
     var html = '';
@@ -3255,21 +3287,38 @@
         var delP = t.getAttribute && t.getAttribute('data-ow-del');
         var delE = t.getAttribute && t.getAttribute('data-ow-del-e');
         var edE = t.getAttribute && t.getAttribute('data-ow-edit-e');
+        var cancelE = t.getAttribute && t.getAttribute('data-ow-edit-cancel');
+        var nmE = t.getAttribute && t.getAttribute('data-ow-name');
+        var moreE = t.getAttribute && t.getAttribute('data-ow-more');
+        if (moreE) {
+          owedShown[moreE] = (owedShown[moreE] || 5) + 5;
+          renderOwed();
+          return;
+        }
         if (edE) {
-          // v72.10: edit the subentry — prefill the form in EDIT mode
+          // v72.29 (user edit: 'i want the edit to expand in position'): the
+          // prefilled form expands at THIS entry's row (Save + Cancel) — the
+          // card-top form is for "+ entry" adds only
+          var row = t;
+          while (row && row !== body && !(row.getAttribute && row.getAttribute('class') && String(row.getAttribute('class')).indexOf('ow-e') >= 0)) row = row.parentNode;
           var card = t;
           while (card && card !== body && !(card.getAttribute && card.getAttribute('data-ow-pid'))) card = card.parentNode;
-          if (card && card.getAttribute) {
+          if (row && card && card.getAttribute) {
             var pid3 = card.getAttribute('data-ow-pid');
-            var f3 = body.querySelector('.oent[data-ow-for="' + pid3 + '"]');
-            if (f3) {
-              var ee = null;
-              (state.owed.people || []).forEach(function (x) {
-                if (x.id === pid3) (x.entries || []).forEach(function (y) { if (y.id === edE) ee = y; });
-              });
-              if (ee) {
-                f3.setAttribute('data-ow-edit', edE);
-                f3.style.display = '';
+            var ee = null;
+            (state.owed.people || []).forEach(function (x) {
+              if (x.id === pid3) (x.entries || []).forEach(function (y) { if (y.id === edE) ee = y; });
+            });
+            if (ee) {
+              var stale = body.querySelectorAll('.oent-inline');
+              for (var si = 0; si < stale.length; si++) {
+                if (stale[si].parentNode) stale[si].parentNode.removeChild(stale[si]);
+              }
+              row.insertAdjacentHTML('afterend',
+                '<form class="oent oent-inline" data-ow-for="' + esc(pid3) + '" data-ow-edit="' + esc(edE) + '" autocomplete="off">' +
+                oentFormHTML(true) + '</form>');
+              var f3 = row.nextElementSibling;
+              if (f3) {
                 var d3 = f3.querySelector('.oent-date');
                 d3.value = ee.d || todayISO(); owedSyncDate(d3);
                 var a3 = f3.querySelector('.oent-amt');
@@ -3291,16 +3340,56 @@
                 owedFormSections(f3, ee.dir || 'ipf');
                 var n3 = f3.querySelector('.oent-note');
                 if (n3) n3.value = ee.note || '';
-                var sb3 = f3.querySelector('[type="submit"]');
-                if (sb3) sb3.textContent = 'Save changes';
               }
             }
+          }
+          return;
+        }
+        if (cancelE) {
+          var cf = t;
+          while (cf && cf !== body && cf.tagName !== 'FORM') cf = cf.parentNode;
+          if (cf && cf.parentNode) cf.parentNode.removeChild(cf);
+          return;
+        }
+        if (nmE) {
+          // v72.29 (user edit: 'name of person owed is also editable'): the
+          // card name becomes an inline input — Enter/blur commits (empty
+          // keeps the old name), Escape cancels
+          var pin = null;
+          (state.owed.people || []).forEach(function (x) { if (x.id === nmE) pin = x; });
+          if (pin && t.parentNode) {
+            var inp = document.createElement('input');
+            inp.className = 'ow-name-in';
+            inp.value = pin.name;
+            inp.maxLength = 40;
+            inp.setAttribute('autocomplete', 'off');
+            var nmDone = false;
+            var nmCommit = function () {
+              if (nmDone) return;
+              nmDone = true;
+              var v = (inp.value || '').trim();
+              if (v && v !== pin.name) { pin.name = v; saveOwed().then(emitOwed); }
+              else renderOwed();
+            };
+            inp.onkeydown = function (ev) {
+              if (ev.key === 'Enter') { ev.preventDefault(); nmCommit(); }
+              else if (ev.key === 'Escape') { nmDone = true; renderOwed(); }
+            };
+            inp.onblur = nmCommit;
+            t.parentNode.replaceChild(inp, t);
+            inp.focus();
+            if (inp.select) inp.select();
           }
           return;
         }
         if (tog) {
           var f = body.querySelector('.oent[data-ow-for="' + tog + '"]');
           if (f) {
+            // v72.29: an open in-place edit form closes when the add form opens
+            var staleT = body.querySelectorAll('.oent-inline');
+            for (var si2 = 0; si2 < staleT.length; si2++) {
+              if (staleT[si2].parentNode) staleT[si2].parentNode.removeChild(staleT[si2]);
+            }
             // v72.10: "+ entry" is always a fresh add — clear any edit mode
             f.removeAttribute('data-ow-edit');
             var sb = f.querySelector('[type="submit"]');
@@ -3628,7 +3717,59 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.28, live: new Date(2026, 8, 13, 22, 15) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.29, live: new Date(2026, 8, 13, 23, 8) }; // live re-stamped at each push
+  // v72.29 (user edit: 'add a section in settings on What's new with
+  // <version> containing plain word changes'): the plain-wording changes per
+  // shell version, shown in Settings for the RUNNING version (the closest
+  // older known version as fallback). Add a note for every shell release.
+  var SHELL_NOTES = {
+    '72.29': [
+      'Every Owed entry has an Edit button now — including entries added in older versions',
+      'Editing an entry opens the form right at that entry, with Save and Cancel',
+      'Tap a person\u2019s name on their card to rename them',
+      'On the entry form, Category and Account share one row',
+      'The category options always include Unsorted, and old categories are kept when your budgets change',
+      'Owed and Ledger now show the newest 5 entries first \u2014 \u201CSee more\u201D reveals 5 older ones at a time',
+      'New here: this What\u2019s new section in Settings'
+    ],
+    '72.28': [
+      'Owed entries now follow \u201CWhat happened\u201D: only \u201CThey paid for me\u201D adds a ledger entry, under the category you picked',
+      '\u201CI paid for them\u201D, \u201CI paid them back\u201D and \u201CThey paid me back\u201D no longer add ledger entries \u2014 the ledger records what was spent, not who owes what',
+      'The account you pick on those three is kept on the entry as a note'
+    ],
+    '72.27': [
+      'The Owed entry form shows the short labels only'
+    ],
+    '72.26': [
+      'The coach bot no longer feels bouncy when thrown \u2014 it lands clean'
+    ],
+    '72.25': [
+      'Owed entries can pick which ledger category they land in'
+    ],
+    '72.24': [
+      'The coach bot now really throws \u2014 a fast flick sends it flying to the nearest edge'
+    ]
+  };
+  function shellNotesFor(v) {
+    var cur = String(v);
+    if (SHELL_NOTES[cur]) return { v: cur, notes: SHELL_NOTES[cur] };
+    var best = null;
+    Object.keys(SHELL_NOTES).forEach(function (k) {
+      if (parseFloat(k) <= parseFloat(cur) && (best === null || parseFloat(k) > parseFloat(best))) best = k;
+    });
+    return best ? { v: best, notes: SHELL_NOTES[best] } : null;
+  }
+  function renderWhatNew() {
+    var sec = byId('wnSec');
+    if (!sec) return;
+    var info = shellNotesFor(SHELL_RELEASE.v);
+    if (!info) { sec.style.display = 'none'; return; }
+    sec.style.display = '';
+    var t = byId('wnTitle');
+    if (t) t.textContent = 'What\u2019s new in v' + info.v;
+    var ul = byId('wnList');
+    if (ul) ul.innerHTML = info.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('');
+  }
   function shellStamp() {
     var d = SHELL_RELEASE.live;
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -4234,6 +4375,9 @@
     addOwedEntry: addOwedEntry,
     updateOwedEntry: updateOwedEntry,
     owedCatOptions: owedCatOptions, // v72.25: the entry's category options (smoke drives it)
+    owedPersonHTML: owedPersonHTML, // v72.29: the person card render (smoke drives it — the edit button on every row)
+    oentFormHTML: oentFormHTML, // v72.29: the entry form's inner html (smoke drives it — the in-place edit form)
+    shellNotesFor: shellNotesFor, // v72.29: the What's-new notes for a version (smoke drives it)
     delOwedEntry: delOwedEntry,
     delOwedPerson: delOwedPerson,
     effectiveSnap: effectiveSnap,
@@ -4379,7 +4523,7 @@
     var noteEl = byId('f_note'); // v68 item 1: learned merchant→category prefill
     if (noteEl) noteEl.addEventListener('input', function () { autoCatFromNote(noteEl); });
     var mlf = byId('mlFilter');
-    if (mlf) mlf.onchange = function () { mlFilterCat = mlf.value; renderMoneyLog(); };
+    if (mlf) mlf.onchange = function () { mlFilterCat = mlf.value; mlShownCount = 5; renderMoneyLog(); };
 
     window.addEventListener('online', function () { state.online = true; });
     window.addEventListener('offline', function () { state.online = false; });
@@ -4424,6 +4568,7 @@
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
+    renderWhatNew(); // v72.29: the Settings "What's new in <version>" section
     var ej = byId('expJson');
     if (ej) ej.onclick = function () { exportData('json'); };
     // v72.23: the Backup section's "what to include" — persist on change

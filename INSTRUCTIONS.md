@@ -6,6 +6,78 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-13 23:0x — User edit on v72.29: "see more" paging for Owed + Ledger entries (5 at a time)
+Status: in progress (v72.29) — implemented; gates all green (release.ps1 v72.29); releasing with the rest of v72.29
+Progress: 95% — ETA ~23:30
+
+### Instruction (verbatim)
+> (user edit on the 22:4x entry's Interpretation section, 2026-09-13 — a line inserted, quoted exactly as edited, typos included:)
+> add this: -in owed and ledger, when enrties are more than 5, hide the old ones in a 'see more' which when clicked shows the next 5 old entries and another 'see more'
+
+### Interpretation (agent — user may edit this section)
+- Folds into v72.29 (nothing pushed yet):
+  - **Owed**: each person card's entry list (already newest-first) shows the first 5; when the person has more, a "See more" button under the list reveals the next 5 OLDER entries and stays while more remain (re-render; the expanded count is in-memory UI state — resets on reload, survives tab re-renders).
+  - **Ledger** (money log): the txn list (newest-first) shows the first 5; the same "See more" pagination, 5 older entries per tap.
+- No data migration; the v72.28 filing rules untouched.
+
+### Subtasks
+- [x] Log the user edit verbatim (first action)
+- [x] Inspect the ledger render path — renderMoneyLog builds `shown = log.slice().reverse().filter(...)` (newest first) into #mlBody
+- [x] Implement owed "See more" (5 at a time, per person card) — in-memory `owedShown` map; `owedPersonHTML` slices the first 5 + a `data-ow-more` addrow button; the click handler bumps by 5 and re-renders
+- [x] Implement ledger "See more" (5 at a time) — in-memory `mlShownCount`; `limited = shown.slice(0, mlShownCount)` + an `#mlMore` addrow button (+5 on tap); a filter change resets to 5
+- [x] Gate + smoke updates (local mirror + tools/) — 4th v72.29 gate check; 2 new smoke checks (7-entry card → 5 rows + button; 4-entry card → none); the 72.29 What's-new note got the See-more line — GATES: all green (release.ps1 v72.29, 11 v72.29 smoke checks)
+- [ ] Re-run release v72.29, gates green, commit, push (with the earlier v72.29 scope)
+
+## 2026-09-13 22:4x — User edit on v72.29: scope additions (settings "What's new", in-place edit, editable person name, cat+acc row, 'Unsorted' always)
+Status: in progress (v72.29) — all implemented; gates all green (release.ps1 v72.29); committing + pushing
+Progress: 95% — ETA ~23:30
+
+### Instruction (verbatim)
+> (user edit on the 22:5x entry's Interpretation section, 2026-09-13 — two bullets appended, quoted exactly as edited, typos included:)
+> -add a section in settings on 'What's new with <version>' containing plain word changes or updates of that version.
+> -when i edit an owed entry, i want the edit to expand in position. name of person owed is also editable. category and account share the same row. category options  has 'Unsorted' category, and it isnt lost when new catergories are added in settings.
+
+### Interpretation (agent — user may edit this section)
+- Adds five things to v72.29 (the edit-button-on-every-entry fix stays as item 1):
+add this: -in owed and ledger, when enrties are more than 5, hide the old ones in a 'see more' which when clicked shows the next 5 old entries and another 'see more'
+  1. **Settings**: a "What's new in <version>" section — plain-wording changes/updates for the RUNNING version (SHELL_RELEASE.v) from a per-version notes map in app.js (seeded 72.24–72.29); if the current version has no note, fall back to the closest older known version; hide the section when nothing matches.
+  2. **In-place edit**: tapping an entry's edit button expands the (prefilled) form at THAT entry's row position (below the row) with Save + Cancel — instead of the shared card-top form, which stays for "+ entry" adds.
+  3. **Editable person name**: the name in the person card header becomes tappable → inline input; Enter/blur commits (empty keeps the old name), Escape cancels.
+  4. **Category + Account share one row** on the entry form (a two-column pair container; per-direction visibility rules unchanged).
+  5. **owedCatOptions**: 'Unsorted' is ALWAYS an option (not only the no-budgets fallback) and is never lost; stale saved categories still get appended when they fall out of Your numbers.
+- The v72.28 filing rules are untouched: only tpf files a txn; ipf/itb/tmb stay ledger-silent with the informational account pick.
+
+### Subtasks
+- [x] Log the user edit verbatim (first action)
+- [x] Inspect the settings sheet + the owed form template structure (index.html + app.js)
+- [x] Implement in-place edit form (row-position, Save + Cancel) — `oentFormHTML(edit)` extracted; the edit button inserts a prefilled `oent-inline` form below the row; the add-form toggle closes open inline forms
+- [x] Implement editable person name — `data-ow-name` on the card header; inline input, Enter/blur commits (empty keeps old name), Escape cancels
+- [x] Implement Category + Account shared row — `oent-pair` two-column grid wrapping the existing accrow/catrow (per-direction visibility unchanged)
+- [x] Implement owedCatOptions 'Unsorted' always + stale-category preservation — budgets lead, 'Unsorted' always appended, stale saved category still appended
+- [x] Implement settings "What's new in <version>" section — SHELL_NOTES (72.24–72.29, plain wording) + `shellNotesFor` (running version, closest-older fallback) + `renderWhatNew` into the new `wnSec` Settings card
+- [x] Gate + smoke updates (local mirror + tools/) — 3 v72.29 gate checks; smoke: v72.28 options assertion flipped (Unsorted listed) + 6 new v72.29 checks — GATES: all green (release.ps1 v72.29)
+- [ ] Release v72.29 (stamps set), commit, push
+
+## 2026-09-13 22:5x — Edit button on every owed entry (including legacy ones)
+Status: in progress (v72.29) — implemented: edit button unconditional in owedPersonHTML + export for smoke; gate + smoke updated; releasing
+Progress: 85% — ETA ~23:00
+
+### Instruction (verbatim)
+> can u add edit button for all owed entries, including the old ones from old versions
+
+### Interpretation (agent — user may edit this section)
+- Preliminary (before code inspection): every owed entry row — including entries created by older versions (pre-72.10: no dir/acc; pre-72.25: no cat) — should expose the same edit button. The edit form must tolerate missing legacy fields with sensible defaults; the v72.28 filing rules (only tpf files a txn) apply on save, so a legacy entry adopts the current rules on edit (consistent with the v72.28 "adopt on edit" decision).
+- To be refined after inspecting the owed rendering + edit flow.
+-add a section in settings on 'What's new with <version>' containing plain word changes or updates of that version.
+-when i edit an owed entry, i want the edit to expand in position. name of person owed is also editable. category and account share the same row. category options  has 'Unsorted' category, and it isnt lost when new catergories are added in settings.
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Inspect owed entry rendering + edit flow in app.js — root cause: the v72.10 row template only rendered the edit button when `e.txnId` existed, so every non-filed entry (all ipf/itb/tmb under v72.28, plus all pre-v72.10 legacy entries) had no edit affordance; the edit-open + updateOwedEntry paths were already legacy-tolerant (ee.dir || 'ipf', ee.acc || '', owedCatOptions(ee.cat || ''), todayISO fallback)
+- [x] Implement the fix — button unconditional in owedPersonHTML (chip stays filed-only); owedPersonHTML exported for the smoke; index.html CSS comment refresh pending
+- [x] Gate + smoke adjustments (local mirror + tools/) — new v72.29 gate check; v7229Section drives the real renderer with 4 legacy shapes
+- [ ] Bump v72.29 (sw cache + SHELL_RELEASE live at push), gates green, commit, push
+
 ## 2026-09-13 21:2x — User edit on the v72.28 interpretation: keep the Account section (ipf/itb/tmb), tpf fallback = 'Unsorted'
 Status: **done**
 Progress: 100% — completed 2026-09-13 ~22:35; commit `bdbe616` pushed to origin/main (live 22:15)

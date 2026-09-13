@@ -265,11 +265,20 @@ border-top:1px solid var(--line);background:var(--card)}
 .ow-xbtn{flex:0 0 auto;background:transparent;border:1px solid var(--line);color:var(--mut);width:26px;height:26px;
  border-radius:8px;font-size:11px;cursor:pointer;line-height:1;padding:0}
 .ow-xbtn:active{border-color:var(--bad);color:var(--bad)}
-/* v72.10: entries filed in the ledger wear a chip + an edit button (wider than the ✕) */
+/* v72.10: filed entries wear the chip · v72.29: the edit button (wider than the ✕) is on every entry */
 .ow-led{color:var(--acc);font-size:11.5px;font-weight:700;white-space:nowrap}
 .ow-xbtn.wide{width:auto;padding:0 9px;font-weight:600}
 .oent-acc{margin-top:4px}
 .oent-accrow .note{margin:6px 0 0}
+/* v72.29: the tappable person name (rename) + the in-place edit form */
+.ow-name{cursor:pointer}
+.ow-name:active{color:var(--acc)}
+.ow-name-in{font:inherit;font-weight:700;width:130px;max-width:45vw;padding:2px 6px;border-radius:6px;border:1px solid var(--acc);background:var(--card);color:var(--ink)}
+/* v72.29: Category + Account share one row (the pair grid); the in-place edit form's button row */
+.oent-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.oent-btns{display:flex;gap:8px;margin-top:14px}
+.oent-btns .act{flex:1;width:auto}
+.oent-inline{margin:8px 0 0;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--card2)}
 .oent{margin-top:10px}
 .oent-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .oent-eq{margin:6px 0 0;font-size:12.5px;font-weight:600;color:var(--acc);min-height:16px}
@@ -762,6 +771,10 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
         <button class="act ghost" id="impBtn" type="button">Import JSON…</button>
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
+    </section>
+    <section class="card" style="margin-top:16px" id="wnSec">
+      <h2 style="margin-top:0" id="wnTitle">What's new</h2>
+      <ul id="wnList" style="margin:6px 0 0;padding-left:18px;font-size:13.5px;line-height:1.5"></ul>
     </section>
     <p class="note" style="margin:14px 0 0" id="setFoot"></p>
   </div>

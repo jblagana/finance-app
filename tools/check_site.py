@@ -574,6 +574,39 @@ def main():
           and "owedCatOptions: owedCatOptions" in js
           and '<select class="oent-cat">' in js
           and 'owedAccRowState' not in js)
+    check("every owed entry row carries the edit button (v72.29, user: 'add edit button for all owed entries, including the old ones from old versions'): the v72.10 e.txnId condition is gone — legacy entries (no dir/cat/acc/txnId) edit through the same form, which falls back to ipf + today + empty acc/cat and files per the v72.28 rules on save (adopt on edit, no migration); the '· ledger' chip stays the filed-entries marker",
+          "'<button type=\"button\" class=\"ow-xbtn wide\" data-ow-edit-e=\"' + esc(e.id) + '\" aria-label=\"Edit entry\">edit</button>'" in js
+          and "(e.txnId ? '<button" not in js
+          and "(e.txnId ? ' <span class=\"ow-led\"" in js
+          and "owedPersonHTML: owedPersonHTML" in js)
+    check("the owed edit expands in place (v72.29, user edit: 'when i edit an owed entry, i want the edit to expand in position'): the edit button inserts a prefilled oent-inline form right below that entry's row (Save changes + Cancel); the card-top form stays for '+ entry' adds; the person's name is tappable (data-ow-name → inline input; Enter/blur commits, empty keeps the old name, Escape cancels); Category + Account share one two-column row (oent-pair); the category options always carry 'Unsorted' (never lost when the budgets change) and a stale saved category is still appended",
+          "function oentFormHTML(edit)" in js
+          and "'<div class=\"oent-pair\">'" in js
+          and "data-ow-edit-cancel" in js
+          and "Save changes</button>" in js
+          and "row.insertAdjacentHTML('afterend'" in js
+          and "class=\"oent oent-inline\"" in js
+          and "data-ow-name" in js
+          and "'ow-name-in'" in js
+          and "var list = names.slice();" in js
+          and "if (list.indexOf('Unsorted') < 0) list.push('Unsorted');" in js
+          and "if (d && list.indexOf(d) < 0) list.push(d);" in js)
+    check("settings has the 'What's new in <version>' section (v72.29, user edit: 'add a section in settings on What's new with <version> containing plain word changes or updates of that version'): SHELL_NOTES holds the plain-wording changes per shell version; Settings shows the notes for the RUNNING version (SHELL_RELEASE.v), falling back to the closest older known version and hiding when nothing matches",
+          "var SHELL_NOTES = {" in js
+          and "function shellNotesFor(v)" in js
+          and "function renderWhatNew()" in js
+          and "renderWhatNew();" in js
+          and 'id="wnSec"' in html and 'id="wnTitle"' in html and 'id="wnList"' in html)
+    check("Owed + Ledger hide the old entries behind 'See more' (v72.29, user edit: 'in owed and ledger, when enrties are more than 5, hide the old ones in a see more which when clicked shows the next 5 old entries and another see more'): each person card renders only the first 5 rows (newest first) and a data-ow-more button reveals 5 older per tap (in-memory owedShown, resets on reload); the money log does the same (mlShownCount, resets on a filter change)",
+          "var owedShown = {};" in js
+          and "var limit = owedShown[p.id] || 5;" in js
+          and "data-ow-more" in js
+          and "owedShown[moreE] = (owedShown[moreE] || 5) + 5;" in js
+          and "var mlShownCount = 5;" in js
+          and "var limited = shown.slice(0, mlShownCount);" in js
+          and 'id="mlMore"' in js
+          and "mlShownCount += 5; renderMoneyLog();" in js
+          and "mlFilterCat = mlf.value; mlShownCount = 5; renderMoneyLog();" in js)
     check("the owed entry form shows only the trimmed labels (v72.27, user scratched the sub-texts out of a screenshot — 'remove the details i scratched'): 'Amount (₱)' without the 'number or quick sum' tail, 'Category' without 'where it lands in the ledger', no 'Filed in the ledger…' hint line, 'Note' without '(optional)'; the quick-sum input itself is unchanged (oent-amt + evalExpr); the v72.28 user edit kept the Account section (ipf/itb/tmb only)",
           '<label>Amount (\\u20b1)</label>' in js
           and '<label>Category</label>' in js
