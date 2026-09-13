@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-13 21:2x — User edit on the v72.28 interpretation: keep the Account section (ipf/itb/tmb), tpf fallback = 'Unsorted'
-Status: in progress (v72.28) — smoke fixed (e30 edit now resends the prefilled acc); gate string fixed ('oent-accrow' → '<div class="oent-accrow">', matching the template); re-running the release gate
-Progress: 95% — ETA ~22:30
+Status: **done**
+Progress: 100% — completed 2026-09-13 ~22:35; commit `bdbe616` pushed to origin/main (live 22:15)
 
 ### Instruction (verbatim)
 > (user edit on the v72.28 entry's Interpretation section, 2026-09-13 — the five changed lines, quoted exactly as edited):
@@ -29,11 +29,11 @@ Progress: 95% — ETA ~22:30
 - [x] app.js: restore the Account section (form row + owedAccOptions + index.html CSS + payload + edit-prefill + reset) on ipf/itb/tmb (hidden for tpf); store e.acc informationally on ipf/itb/tmb (never tpf); tpf fallback 'Owed' → 'Unsorted' (owedCatOptions + addOwedEntry/updateOwedEntry)
 - [x] Gate: re-adjust the v72.10 / v72.28 / v72.27 checks to the FINAL design (account row back — positive assertions; 'Unsorted' fallback; doTxn = tpf only) — local mirror + tools/ synced
 - [x] Smoke: adjust the v7210/v7228 assertions (category fallback 'Owed' → 'Unsorted'; ipf/tmb still ledger-silent; ipf stores acc informationally)
-- [ ] Gates green, release v72.28 (live stamp at push), commit, push
+- [x] Gates green, release v72.28 (live stamp at push), commit, push — `bdbe616` (two red-gate slips fixed on the way: smoke e30 edit now resends the prefilled acc; gate string 'oent-accrow' → '<div class="oent-accrow">')
 
 ## 2026-09-13 15:0x — Owed form rework: sections + ledger filing per "What happened" (v72.28)
-Status: in progress (v72.28) — follow-ups + user edit logged; final rework (account section kept, 'Unsorted' fallback)
-Progress: 60% — ETA ~22:15
+Status: **done** — shipped as v72.28 (final rework per the 21:2x user edit, entry above)
+Progress: 100% — commit `bdbe616` pushed to origin/main (live 22:15)
 
 ### Instruction (verbatim)
 > Change the owed tab to the following
@@ -77,10 +77,10 @@ Progress: 60% — ETA ~22:15
 - [x] app.js: per-direction form sections + filing rules (add/edit/undo, owedCatOptions, tooltip) — owedFormSections (accrow: ipf/tmb; catrow: tpf only; noterow: ipf/tpf), per-dir doTxn in addOwedEntry/updateOwedEntry, toggle/edit-open/radio wired, catrow un-nested + initially hidden
 - [x] Log follow-ups 2+3 verbatim (this update) + interpret the final rules
 - [x] app.js refinements (follow-up 2): ipf/itb/tmb never file a txn (doTxn = tpf only in addOwedEntry/updateOwedEntry); tpf txn = Cash cash_out under the picked category; edit path removes old ipf/tmb txns (no migration)
-- [ ] app.js (user edit 21:2x): Account section stays on ipf/itb/tmb (hidden for tpf) — restore the account row + owedAccOptions + CSS + payload + prefill + reset; store e.acc informationally; tpf no-budgets fallback 'Unsorted'
-- [ ] Gate: rewrite the checks for the FINAL design (follow-ups + user edit) — local mirror + tools/
-- [ ] Smoke: rewrite the v72.25 block for the FINAL rules (v72.10 block must stay green)
-- [ ] Bump v72.28 (sw cache + SHELL_RELEASE live at push), gates green, commit, push
+- [x] app.js (user edit 21:2x): Account section stays on ipf/itb/tmb (hidden for tpf) — restore the account row + owedAccOptions + CSS + payload + prefill + reset; store e.acc informationally; tpf no-budgets fallback 'Unsorted'
+- [x] Gate: rewrite the checks for the FINAL design (follow-ups + user edit) — local mirror + tools/
+- [x] Smoke: rewrite the v72.25 block for the FINAL rules (v72.10 block must stay green)
+- [x] Bump v72.28 (sw cache + SHELL_RELEASE live at push), gates green, commit, push — `bdbe616`
 
 ## 2026-09-13 14:4x — Photo task clarified: remove the SCRATCHED details from the owed form (screenshot attached)
 
