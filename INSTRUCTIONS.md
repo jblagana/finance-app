@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-14 12:4x — x-axis end-of-month ticks + prepay questions (3 instructions)
-Status: in progress
-Progress: 80% — ETA 2026-09-14 20:10
+Status: **done**
+Progress: 100% — completed 2026-09-14 19:4x; commits `e8355dc` + `910487c` pushed to origin/main (v72.41, live 19:34, SW cache `finances-pwa-v72.41`, live app.js verified: 72.41 stamp + tick fix + '72.41' note + addSheetKind export + per-card CTA + pay-card guard; live sw.js verified); (2) answered in chat (the model was already correct — the logging path is the new Pay-card mode); phone-side confirmation pending with the user (one refresh delivers this)
 
 ### Instruction (verbatim)
 > -write the x axis ticks as end of month, e.g. 30 Sep, 31 Oct, etc
@@ -28,9 +28,9 @@ Progress: 80% — ETA 2026-09-14 20:10
 - [x] (1) code: x-axis month ticks = end-of-month day+month dates (all 7 ticks dates; smoke asserts the exact tick list — renders "14 Sep, 30 Sep, 31 Oct, 30 Nov, 31 Dec, 31 Jan, 28 Feb"); What's-new note written (key '72.41')
 - [x] (3) code: Spend / Pay-card direction in the Add sheet (addSheetKind + setAddMode + CARD guard) + per-card coach CTA (data-prepaycard buttons); gate check added; smoke section added (kind rules, per-card buttons + amounts, per-card payoff isolation)
 - [x] release.ps1 v72.41 → all gates green 19:33 (check_site repo + root mirror, test_chat_parser, node --check ×4, smoke_v68, smoke_app_v68 — 72.40 dot renamed to 72.41, see bullet above); commit e8355dc
-- [ ] (2) Answer the prepay-logging question (grounded in the code) — chat reply, model is correct so no code needed for the question itself
-- [ ] Re-stamp live at the last moment + push
-- [ ] Verify live + close entry
+- [x] (2) Answered in chat (model is correct; the logging path is the new Pay-card mode — see the reply)
+- [x] Re-stamp live at the last moment (19:34) + push (910487c)
+- [x] Verify live (app.js 72.41 markers ×6 PASS + sw.js cache v72.41) + close entry
 
 ## 2026-09-14 12:1x — "see img" — screenshot: home-card graph shows only the start label
 Status: **done**
