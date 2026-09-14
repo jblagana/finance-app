@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-14 11:2x — v72.37: add middle and end dates on the x axis of the home card graph
-Status: not started
-Progress: 0% — ETA TBD
+Status: **done**
+Progress: 100% — completed 2026-09-14 11:3x; commit `8acbbb2` pushed to origin/main (v72.37, live 11:39, SW cache `finances-pwa-v72.37`)
 
 ### Instruction (verbatim)
 > add middle and end dates on the x axis of the home card graph
