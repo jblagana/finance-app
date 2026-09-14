@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-14 12:1x — "see img" — screenshot: home-card graph shows only the start label
-Status: in progress
-Progress: 70% — ETA 2026-09-14 12:40 (commit + re-stamp + push + live check left)
+Status: **done**
+Progress: 100% — completed 2026-09-14 12:3x; commits `6ed59dd` + `aa52b51` pushed to origin/main (v72.39, live 12:28, SW cache `finances-pwa-v72.39`, live file verified: v: 72.39 stamp, matrix fix, '72.39' note, shellVersion export); phone-side confirmation pending with the user (one refresh — the phone is NOT stale, v72.34's auto-update delivers this)
 
 ### Instruction (verbatim)
 > see img
@@ -27,9 +27,9 @@ Progress: 70% — ETA 2026-09-14 12:40 (commit + re-stamp + push + live check le
 - [x] Decide: runtime bug (NOT a stale phone) — fix + release v72.39
 - [x] Add smoke assertion on the rendered SVG labels (5 new checks, green)
 - [x] release.ps1 v72.39 → all gates green (first pass; re-stamp live at push time)
-- [ ] Commit + re-stamp live at the last moment + push
-- [ ] Verify live (app.js v72.39, sw.js cache v72.39, '72.39' note present)
-- [ ] Verify the phone actually shows the dates; close entry
+- [x] Commit + re-stamp live at the last moment + push (6ed59dd, aa52b51)
+- [x] Verify live (app.js v72.39 stamp + matrix fix + '72.39' note + shellVersion export; sw.js cache v72.39)
+- [ ] User refreshes the phone and confirms the dates (user-side; nothing destructive needed)
 
 ## 2026-09-14 11:5x — v72.38: "nothing changed, not even written in whats new"
 Status: **done**
