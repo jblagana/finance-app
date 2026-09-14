@@ -6,6 +6,25 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 22:2x — Prepaid cards under the old model: fix the persisted numbers (v72.43 migration)
+Status: **done**
+Progress: 100% — completed 2026-09-14 22:4x; commits `51d2e76` + `771b97d` pushed to origin/main (v72.43, live 22:42, SW cache `finances-pwa-v72.43`, live app.js + sw.js verified via live_check.js: 6/6 markers PASS); on his next app open the one-shot migration re-counts his old prepays — free cash and liquid cash each drop by the prepay total, card owed stays put
+### Instruction (verbatim)
+> ive already prepaid the cards prior to this version, as such, card balance and free cash and liquid cash all changed, fix that
+> -go with negative pesos, if im right, that charges to liquid charge right
+### Interpretation (agent — user may edit this section)
+- **What actually happened to his data.** He prepaid his real cards under ≤v72.41. The prepay lives in the persisted overlay (`state.adj`, saved to IDB) — and the boot path uses the persisted adj as-is (app.js:5155; `computeAdjFromTxns` only runs when adj was never stored). So after the v72.42 update, each old prepay still carries its OLD-model contribution: free cash is INFLATED by the prepay total (old `free: -a` → displayed free +a) and liquid cash is NOT reduced (old `cash: 0`). Card owed is unaffected (identical in both models — the card side was always counted right).
+- **The fix (v72.43): a one-shot migration of the persisted overlay.** Stamp the model version on adj (`mv`); on boot + import, if the stored adj predates the stamp: add the model delta `{cash: +a, free: +a}` back per card_payment — EXCEPT when a balance-override (money-log 'a') row exists AFTER that prepay: such an override rebased (zeroed) the overlay, so the prepay's effect is in the sheet's numbers, not the overlay, and there is nothing to fix. Zeroed/fresh adj carries the stamp (rebase + computeAdjFromTxns + initializer), so the migration fires exactly once. After: free − prepay total (the true negative he expects), liquid − prepay total (money left the bank), card owed unchanged.
+- **Answer to his question (chat):** yes — free cash going negative is correct, that's the committed spend. But NO on the mechanism: a card CHARGE hits free cash (money committed, still in the bank) — not liquid. Liquid drops on the PAYOFF (money leaves the bank). Charge: free −a, owed +a, liquid 0. Payoff: liquid −a, owed −a, free 0. Full cycle: free −a, liquid −a, owed 0.
+- **Blast radius.** app.js (migration block before the overlay section + `mv` stamps: state initializer, computeAdjFromTxns, resetAdj, both inline rebases, sanitizeAdj; boot call after the adj load; import call after the sections replace; SHELL_NOTES '72.43' + exports for smoke), tools/check_site.py (+ root mirror) new v72.43 gate check, smoke_app_v68.js (root copy) new v72.43 section, release.ps1 v72.43.
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Implement the v72.43 migration + mv stamps (app.js: ADJ_MODEL_V + payoffModelDelta + migratePayoffModel before the overlay section; stamps on the initializer, computeAdjFromTxns, resetAdj, both rebases, sanitizeAdj; boot call after the adj load; import call gated on hasSec('txns'); smoke exports; SHELL_NOTES '72.43')
+- [x] Gate check + smoke section (v72.43 gate check in tools/check_site.py — `python tools/check_site.py` = "all checks passed"; smoke v7243Section — re-derive PASS after fixing a sign slip in the TEST SETUP (old-model adj.free is −a per prepay, so the simulated old adj is current−total, not current+total), one-shot PASS, 'a'-row guard PASS; the one remaining smoke FAIL is the transitional What's-new fallback check that flips green when SHELL_RELEASE is stamped 72.43)
+- [x] release.ps1 v72.43 → gates green (both stamp + pre-push re-stamp runs) → commit + push (re-stamp live at push 22:42) → live verify (live_check.js 6/6 PASS against jblagana.github.io)
+- [x] Answer the model question in chat (charge→free, payoff→liquid; negative free is correct)
+- [x] Close entry
+
 ## 2026-09-14 20:0x — Fix the card payoff's free-cash bug (keep both numbers; scope narrowed — no tile tucking)
 Status: **done**
 Progress: 100% — completed 2026-09-14 22:0x; commits `e0d7f5f` + `5bc579c` pushed to origin/main (v72.42, live 22:01, SW cache `finances-pwa-v72.42`, live app.js + sw.js verified via live_check.js: 6/6 markers PASS — SHELL_RELEASE 72.42, payoff tuple `{ cash: amt, free: 0, ... }`, freeEffect → 0, money-log 'p' before = f, '72.42' note, sw cache); a card payment now drops raw liquid + card owed and leaves free untouched, the floor keeps running on raw bank cash, the Liquid cash tile stays as-is (no UI change)
