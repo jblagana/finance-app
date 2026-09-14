@@ -4045,12 +4045,18 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.37, live: new Date(2026, 8, 14, 11, 39) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.38, live: new Date(2026, 8, 14, 12, 1) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.38': [
+      'This What\u2019s new section was missing the last release\u2019s note \u2014 the v72.37 line is here now, and a release check will catch it if a version ever ships without its note'
+    ],
+    '72.37': [
+      'The graph on the home card shows the start, middle and end dates on its bottom line now \u2014 before, only the first one was a date'
+    ],
     '72.36': [
       'Every banner that changes something now has an Undo button — including the "Added" one',
       'Importing a backup: Undo on its banner brings back exactly what you had before the import'
@@ -4736,6 +4742,7 @@
     owedPersonHTML: owedPersonHTML, // v72.29: the person card render (smoke drives it — the edit button on every row)
     oentFormHTML: oentFormHTML, // v72.29: the entry form's inner html (smoke drives it — the in-place edit form)
     shellNotesFor: shellNotesFor, // v72.29: the What's-new notes for a version (smoke drives it)
+    shellVersion: SHELL_RELEASE.v, // v72.38: the running shell dot (smoke drives the What's-new fallback check)
     owedShown: owedShown, // v72.30: the per-person See more/less page (smoke drives the paging render)
     getBase: function () { return state.base; }, // v72.30: the current base (smoke reads account values for the override test)
     askDeleteAdjustment: askDeleteAdjustment, // v72.31: the ✕ on an Adjustment row (smoke drives it; the stub has no confirm dialog → auto-yes)

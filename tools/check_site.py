@@ -662,6 +662,13 @@ def main():
           and "function renderWhatNew()" in js
           and "renderWhatNew();" in js
           and 'id="wnSec"' in html and 'id="wnTitle"' in html and 'id="wnList"' in html)
+    # v72.38: a release must ship its "What's new" note — v72.37 slipped and
+    # Settings silently showed the previous version's notes. The running dot is
+    # read from app.js itself, so the check self-updates (nothing to stamp).
+    _rel = re.search(r"var SHELL_RELEASE = \{ v: (\d+\.\d+)", js)
+    _run_v = _rel.group(1) if _rel else None
+    check("SHELL_NOTES has a note for the RUNNING version (v72.38 gate: every release must ship its What's-new note — the running dot is read from app.js, so no stamp can drift)",
+          _run_v is not None and ("'" + _run_v + "':") in js)
     check("Owed + Ledger hide the old entries behind 'See more' (v72.29, user edit: 'in owed and ledger, when enrties are more than 5, hide the old ones in a see more which when clicked shows the next 5 old entries and another see more'): each person card renders only the first 5 rows (newest first) and a data-ow-more button reveals 5 older per tap (in-memory owedShown, resets on reload); the money log does the same (mlShownCount, resets on a filter change)",
           "var owedShown = {};" in js
           and "var limit = owedShown[p.id] || 5;" in js

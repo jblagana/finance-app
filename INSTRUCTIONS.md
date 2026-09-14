@@ -6,6 +6,28 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 11:5x — v72.38: "nothing changed, not even written in whats new"
+Status: not started
+Progress: 0% — ETA TBD
+
+### Instruction (verbatim)
+> nothing changed, not even written in whats new
+
+### Interpretation (agent — user may edit this section)
+- After the v72.37 refresh the app looked unchanged, and Settings → "What's new" did not mention the new version. Root cause (agent's): v72.37 shipped without a `SHELL_NOTES['72.37']` entry — the code comment says "Add a note for every shell release" and I broke that discipline. `shellNotesFor()` then falls back to the closest OLDER known version, so the section showed "What's new in v72.36".
+- Fix, shipped as v72.38: (a) add the missing `'72.37'` note (the graph date labels), (b) add a `'72.38'` note for this fix, (c) add a check_site.py gate that fails the release when the running version has no SHELL_NOTES entry (release.ps1 stamps the exact dot version into that check, like it does for the sw cache / footer assertions), so this class of slip can't ship again.
+- "Nothing changed" on the graph: if the footer shows v72.38 and the axis still shows no middle/end dates, that's a separate stale-worker issue — but the notes fix is the confirmed slip.
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Add SHELL_NOTES['72.37'] + ['72.38'] in app.js
+- [x] check_site.py gate: running version must have a SHELL_NOTES entry (release.ps1 stamps the dot, re-stampable across dots)
+- [ ] release.ps1 v72.38 (stamps + full gate suite)
+- [ ] Commit, push (live stamp at the last moment)
+- [ ] Verify live (footer + live app.js carries both notes)
+- [ ] Close entry with commit hash
+
+
 ## 2026-09-14 11:2x — v72.37: add middle and end dates on the x axis of the home card graph
 Status: **done**
 Progress: 100% — completed 2026-09-14 11:3x; commit `8acbbb2` pushed to origin/main (v72.37, live 11:39, SW cache `finances-pwa-v72.37`)
