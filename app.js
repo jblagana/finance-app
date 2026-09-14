@@ -3967,12 +3967,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.33, live: new Date(2026, 8, 14, 1, 48) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.34, live: new Date(2026, 8, 14, 2, 8) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.34': [
+      'New versions land faster: the app reloads itself the moment an update is ready \u2014 one refresh is all it takes'
+    ],
     '72.33': [
       'Ask the coach about one card\u2019s prepay and it answers that card\u2019s number \u2014 not the total across all cards'
     ],
@@ -4911,21 +4914,39 @@
     var cnr = byId('coachNoteRefresh'); // v55: re-ask the coach for a fresh note
     if (cnr) cnr.onclick = function () { try { localStorage.removeItem(NOTE_KEY); } catch (e) {} renderCoachNote(); };
 
+    // v72.34: an update must LAND on one refresh. The worker registers at
+    // script time (was: after 'load') so a byte-diff is found as early as
+    // possible, the banner shows the moment updatefound fires, and the page
+    // reloads ITSELF the instant the new worker takes control (sw.js does
+    // skipWaiting + claim). Guard: only when there WAS a previous controller
+    // and it actually changed — a fresh install never auto-reloads.
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('./sw.js').then(function (reg) {
-          swReg = reg;
-          if (reg.waiting) showSwToast();
-          reg.addEventListener('updatefound', function () {
-            var nw = reg.installing;
-            if (!nw) return;
-            nw.addEventListener('statechange', function () {
-              // installed while this page is already controlled = a new version is ready
-              if (nw.state === 'installed' && navigator.serviceWorker.controller) showSwToast();
-            });
-          });
-        }).catch(function (err) { console.warn('SW register failed', err); });
+      var swInitialController = navigator.serviceWorker.controller;
+      var swAutoReloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (swAutoReloaded) return;
+        if (swInitialController && navigator.serviceWorker.controller &&
+            navigator.serviceWorker.controller !== swInitialController) {
+          swAutoReloaded = true;
+          var stc = byId('swToast'); if (stc) stc.classList.remove('show');
+          location.reload();
+        }
       });
+      navigator.serviceWorker.register('./sw.js').then(function (reg) {
+        swReg = reg;
+        if (reg.waiting) showSwToast();
+        reg.addEventListener('updatefound', function () {
+          var nw = reg.installing;
+          if (!nw) return;
+          showSwToast(); // v72.34: as early as possible (the precache still runs)
+          nw.addEventListener('statechange', function () {
+            // installed while this page is already controlled = a new version is ready
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) showSwToast();
+            // the update died (e.g. offline mid-precache) → the banner is stale
+            if (nw.state === 'redundant') { var str = byId('swToast'); if (str) str.classList.remove('show'); }
+          });
+        });
+      }).catch(function (err) { console.warn('SW register failed', err); });
     }
 
     Promise.all([idbAll(STORE_TX), idbAll(STORE_META), idbAll(STORE_PLANS)]).then(function (res) {
