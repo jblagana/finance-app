@@ -30,7 +30,6 @@ Progress: 70% — ETA 2026-09-14 12:40 (commit + re-stamp + push + live check le
 - [ ] Commit + re-stamp live at the last moment + push
 - [ ] Verify live (app.js v72.39, sw.js cache v72.39, '72.39' note present)
 - [ ] Verify the phone actually shows the dates; close entry
-- [ ] Verify the phone actually shows the dates; close entry
 
 ## 2026-09-14 11:5x — v72.38: "nothing changed, not even written in whats new"
 Status: **done**
