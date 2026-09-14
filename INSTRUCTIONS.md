@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-14 08:2x — v72.35: toast STILL at the bottom after the unstick — top-snack CSS never actually applied
-Status: in progress
-Progress: 70% — ETA ~09:0x (diagnosis + fix + browser-verify done; release gates + push remain)
+Status: **done**
+Progress: 100% — completed 2026-09-14 08:5x; commit `5e27a41` pushed to origin/main (v72.35, live 08:52, SW cache `finances-pwa-v72.35`)
 
 ### Instruction (verbatim)
 > look at the image, ive done what u said, fyi, since the version i told u to center that toast, it never happened in in newer versions
@@ -24,9 +24,9 @@ Progress: 70% — ETA ~09:0x (diagnosis + fix + browser-verify done; release gat
 - [x] Log the instruction (first action)
 - [x] Inspect snack/toast markup + CSS — root cause found: stray top-level `}` (v21 leftover, since Phase 1) swallows the `#snack` base rule in the browser's CSS parser (proved via CSSOM + computed styles in real Chromium on the LIVE CSS)
 - [x] Implement fix + bump v72.35 (index.html fragment removed; check_site.py brace-balance gate + mirror via release.ps1; app.js SHELL_NOTES 72.35; sw.js cache + SHELL_RELEASE stamped by release.ps1; smoke assertion → 72.35)
-- [ ] release.ps1 v72.35 (stamps + full gate suite: check_site repo+mirror, parser, node --check, smokes)
-- [ ] Commit, push (live stamp set by release.ps1 at the last moment)
-- [ ] Close entry with commit hash
+- [x] release.ps1 v72.35 (stamps + full gate suite: check_site repo+mirror, parser, node --check, smokes) — first run red (my own explanatory comment contained the fragment text and tripped the naive assert); fixed the gate to assert against the comment-stripped CSS (what the parser actually sees); re-run: GATES all green
+- [x] Commit, push (live stamp set by release.ps1 at the last moment) — code commit `5e27a41`
+- [x] Close entry with commit hash
 
 
 ## 2026-09-14 02:1x — v72.34: user edit on the v72.34 entry — "i verified again, in both phone and browser, its still the old toast. already hard refresh and clear cache the browser and it still the old toast."
