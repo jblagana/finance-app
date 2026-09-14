@@ -669,6 +669,16 @@ def main():
     _run_v = _rel.group(1) if _rel else None
     check("SHELL_NOTES has a note for the RUNNING version (v72.38 gate: every release must ship its What's-new note — the running dot is read from app.js, so no stamp can drift)",
           _run_v is not None and ("'" + _run_v + "':") in js)
+    check("v72.41 (user: 'write the x axis ticks as end of month, e.g. 30 Sep, 31 Oct, etc' + 'i wanna prepay maya cc and maribank cc separately'): (1) EVERY x-axis tick is a date — the month points sit on the last day of their month (the plotted value is that month-end projection), so the axis reads '6 Sep · 30 Sep · 31 Oct · … · 28 Feb'; the v72.37 start/middle/end special-case is gone (the compact month name stays only as the no-date fallback); (2) the Add sheet gains a direction — Spend (the old rules) vs Pay card (kind card_payment, the exact inverse of the card_charge spends that created the owed balance; a payoff must land on a CARD account, the first card is preselected, the title/button follow the mode, the deficit hint is off in payoff mode); (3) the coach's prepay action is ONE BUTTON PER card owed above its target (that card's live amount + account prefilled, Pay-card mode) — the combined button survives only as the no-per-card-breakdown fallback",
+          "var lab = p.date ? dayMonth(p.date) : p.label;" in js
+          and "function addSheetKind(mode, type, editingKind)" in js
+          and "if (mode === 'prepay') return 'card_payment';" in js
+          and "if (addMode === 'prepay' && type !== 'CARD')" in js
+          and 'id="addModeSpend"' in html and 'id="addModePrepay"' in html and 'class="amrow"' in html
+          and "data-prepaycard=\"" in js
+          and "prefillAdd(cc.prepay, d.prepayDate" in js
+          and "'CARD::' + cc.name, 'prepay');" in js
+          and "addSheetKind: addSheetKind" in js)
     check("Owed + Ledger hide the old entries behind 'See more' (v72.29, user edit: 'in owed and ledger, when enrties are more than 5, hide the old ones in a see more which when clicked shows the next 5 old entries and another see more'): each person card renders only the first 5 rows (newest first) and a data-ow-more button reveals 5 older per tap (in-memory owedShown, resets on reload); the money log does the same (mlShownCount, resets on a filter change)",
           "var owedShown = {};" in js
           and "var limit = owedShown[p.id] || 5;" in js

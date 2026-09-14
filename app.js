@@ -1135,7 +1135,7 @@
     var dtEl = byId('f_date');
     if (dtEl) { dtEl.value = t.date || todayISO(); syncDateLabel(dtEl); }
     addAmtEq(amtEl); // refresh the quick-sum hint for the prefilled value
-    updateChargeHint();
+    setAddMode('spend'); // v72.41: editing an entry re-opens the sheet in Spend mode (the kind follows the entry)
     var ttl = byId('addSheetTitle');
     if (ttl) ttl.textContent = 'Edit entry';
     var sub = byId('addSubmit');
@@ -2201,11 +2201,47 @@
     };
   }
   // ---------- Phase 5: unified coach card (narrative + attention rows + one-tap actions) ----------
-  function prefillAdd(amt, dateISO, note) {
-    var a = byId('f_amount'), dt = byId('f_date'), n = byId('f_note');
+  // v72.41 (user: 'i wanna prepay maya cc and maribank cc separately'): the Add
+  // sheet gains a direction — Spend (the old rules) and Pay card (the payoff).
+  // A card payment is the exact inverse of the card_charge spends that created
+  // the owed balance: it lands on the card's OWN account, so each card can be
+  // prepaid separately. The kind decision is a pure exported fn (addSheetKind)
+  // so the smoke can drive it — the submit handler itself is DOM-bound in init.
+  var addMode = 'spend';
+  function addSheetKind(mode, type, editingKind) {
+    if (mode === 'prepay') return 'card_payment';
+    return type === 'CARD'
+      ? (editingKind === 'card_payment' ? 'card_payment' : 'card_charge')
+      : (editingKind === 'cash_in' ? 'cash_in' : 'cash_out');
+  }
+  function setAddMode(m) {
+    addMode = m === 'prepay' ? 'prepay' : 'spend';
+    var sb = byId('addModeSpend'), pb = byId('addModePrepay');
+    if (sb) sb.className = 'amb' + (addMode === 'spend' ? ' on' : '');
+    if (pb) pb.className = 'amb' + (addMode === 'prepay' ? ' on' : '');
+    var ttl = byId('addSheetTitle'), sub = byId('addSubmit');
+    if (ttl) ttl.textContent = addMode === 'prepay' ? 'Card prepay' : 'Add expense';
+    if (sub) sub.textContent = addMode === 'prepay' ? 'Add payment' : 'Add expense';
+    var as = byId('f_account');
+    if (addMode === 'prepay' && as) {
+      // the payoff has to land on a CARD account — preselect the first one
+      for (var i = 0; i < as.options.length; i++) {
+        if (as.options[i].value.indexOf('CARD::') === 0) { as.value = as.options[i].value; break; }
+      }
+    }
+    updateChargeHint();
+  }
+  function prefillAdd(amt, dateISO, note, accValue, mode) {
+    setAddMode(mode || 'spend');
+    var a = byId('f_amount'), dt = byId('f_date'), n = byId('f_note'), as = byId('f_account');
     if (a) a.value = amt != null ? String(amt) : '';
     if (dt && dateISO) dt.value = dateISO;
     if (n && note) n.value = note;
+    if (as && accValue) {
+      for (var j = 0; j < as.options.length; j++) {
+        if (as.options[j].value === accValue) { as.value = accValue; break; }
+      }
+    }
     openSheet('addSheet');
   }
   function renderCoach() {
@@ -2325,15 +2361,42 @@
       }
     }
     // ---- one-tap actions ----
+    // v72.41 (user: 'i wanna prepay maya cc and maribank cc separately'): one
+    // Log-prepay button PER card that is owed above its target — each opens the
+    // sheet prefilled with THAT card's amount / date / note / account, in
+    // Pay-card mode (kind card_payment, the payoff). The combined button stays
+    // only as the no-per-card-breakdown fallback (an old sheet).
     var acts = byId('coachActs');
     if (acts) {
       var ah = '';
-      if (prepayActive) ah += '<button type="button" class="cbtn" id="actPrepay">Log prepay ' + money(d.prepayAmt) + '</button>';
+      if (prepayActive) {
+        var pcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.prepay) || 0) > 0; });
+        pcards.sort(function (a, b) { return (Number(b.prepay) || 0) - (Number(a.prepay) || 0); });
+        if (pcards.length) {
+          pcards.slice(0, 4).forEach(function (c) {
+            ah += '<button type="button" class="cbtn" data-prepaycard="' + esc(c.name) + '">Log prepay · ' + esc(c.name) + ' · ' + money(c.prepay) + '</button>';
+          });
+        } else {
+          ah += '<button type="button" class="cbtn" id="actPrepay">Log prepay ' + money(d.prepayAmt) + '</button>';
+        }
+      }
       var hasPlanRow = rows.some(function (rw) { return rw.tag === 'Plan due'; });
       if (hasPlanRow) ah += '<button type="button" class="cbtn ghost" id="actPlans">See this week\'s plans</button>';
       acts.innerHTML = ah;
+      var pbtns = acts.querySelectorAll ? acts.querySelectorAll('[data-prepaycard]') : [];
+      for (var pi = 0; pi < pbtns.length; pi++) {
+        pbtns[pi].onclick = (function (b) {
+          return function () {
+            var nm = b.getAttribute('data-prepaycard');
+            var cc = null;
+            ((d.s && d.s.cards) || []).forEach(function (c) { if (c.name === nm) cc = c; });
+            if (!cc) return;
+            prefillAdd(cc.prepay, d.prepayDate, 'Card prepay (the ' + ordinal(d.prepayDay) + ') — ' + cc.name, 'CARD::' + cc.name, 'prepay');
+          };
+        })(pbtns[pi]);
+      }
       var ap = byId('actPrepay');
-      if (ap) ap.onclick = function () { prefillAdd(d.prepayAmt, d.prepayDate, 'Card prepay (the ' + ordinal(d.prepayDay) + ')'); };
+      if (ap) ap.onclick = function () { prefillAdd(d.prepayAmt, d.prepayDate, 'Card prepay (the ' + ordinal(d.prepayDay) + ')', null, 'prepay'); };
       var aa = byId('actPlans');
       if (aa) aa.onclick = function () { setTab('money'); };
     }
@@ -2619,12 +2682,14 @@
         '<text x="' + (W - PR - 2) + '" y="' + (fy - 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="#ffc45c">floor ' + fmtNum(floor) + '</text>';
     }
     svg += '<circle cx="' + X(0).toFixed(1) + '" cy="' + Y(pts[0].v).toFixed(1) + '" r="3.2" fill="#37d39b" stroke="#0f1420" stroke-width="1.5"/>';
-    // v72.37: the start / middle / end ticks are real dates (day + month);
-    // the ticks in between keep the compact month names.
-    var mid = Math.round((pts.length - 1) / 2);
+    // v72.41 (user: 'write the x axis ticks as end of month, e.g. 30 Sep, 31 Oct, etc'):
+    // EVERY tick is a date — the month points sit on the last day of their month
+    // (the plotted value is that month-end projection), so the axis reads
+    // "6 Sep · 30 Sep · 31 Oct · 30 Nov · 31 Dec · 31 Jan · 28 Feb"; p.label
+    // (the compact month name) is only the no-date fallback now.
     pts.forEach(function (p, i) {
       var anch = i === 0 ? 'start' : (i === pts.length - 1 ? 'end' : 'middle');
-      var lab = (i === 0 || i === mid || i === pts.length - 1) && p.date ? dayMonth(p.date) : p.label;
+      var lab = p.date ? dayMonth(p.date) : p.label;
       svg += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 4) + '" text-anchor="' + anch + '" font-size="8" fill="#93a1bd">' + esc(lab) + '</text>';
     });
     box.innerHTML = svg + '</svg>';
@@ -2943,6 +3008,9 @@
   }
   function updateChargeHint() {
     var el = byId('chargeHint'); if (!el) return;
+    // v72.41: the deficit hint is for spends — in Pay-card mode the prepay was
+    // already priced into the projection (free − amt would double-count it)
+    if (addMode === 'prepay') { el.style.display = 'none'; return; }
     var amtEl = byId('f_amount');
     var amt = amtEl ? evalExpr(amtEl.value) : null;
     if (amt === null) amt = NaN;
@@ -4050,12 +4118,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.39, live: new Date(2026, 8, 14, 12, 28) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.41, live: new Date(2026, 8, 14, 19, 32) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.41': [
+      'The home card graph\u2019s bottom line is dates all the way now \u2014 the month ticks land on the last day of the month (30 Sep, 31 Oct, \u2026) instead of month names',
+      'The Add sheet has a direction: Spend (as before) or Pay card. Pay card logs a card payment \u2014 the payoff that unwinds the card charges \u2014 and the coach\u2019s prepay action is now one button per card, so Maya cc and Maribank cc can each be prepaid separately with that card\u2019s own amount'
+    ],
     '72.39': [
       'The home card graph\u2019s bottom line shows its dates now \u2014 start, middle and end as day + month, the months in between by name. The previous releases built this line from a field that was empty, so every label after the first one came out blank and the fix from before never actually appeared',
       'A new test renders the graph itself, so a blank axis can never ship silently again'
@@ -4751,6 +4823,7 @@
     owedPersonHTML: owedPersonHTML, // v72.29: the person card render (smoke drives it — the edit button on every row)
     oentFormHTML: oentFormHTML, // v72.29: the entry form's inner html (smoke drives it — the in-place edit form)
     shellNotesFor: shellNotesFor, // v72.29: the What's-new notes for a version (smoke drives it)
+    addSheetKind: addSheetKind, // v72.41: the Add-sheet kind decision (smoke drives it — the submit is DOM-bound)
     shellVersion: SHELL_RELEASE.v, // v72.38: the running shell dot (smoke drives the What's-new fallback check)
     owedShown: owedShown, // v72.30: the per-person See more/less page (smoke drives the paging render)
     getBase: function () { return state.base; }, // v72.30: the current base (smoke reads account values for the override test)
@@ -4837,13 +4910,16 @@
       var amount = evalExpr(amtRaw);
       if (amount === null || !(amount > 0)) { alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.'); return; }
       var category = (byId('f_category').value || '').trim();
-      // v72.10: editing an INFLOW entry keeps its flow direction — the sheet
-      // has no kind control, so the instrument follows the picked account but
-      // cash_in stays cash_in (and card_payment stays card_payment); a fresh
-      // add is always a spend.
-      var kind = type === 'CARD'
-        ? (editingTxn && editingTxn.kind === 'card_payment' ? 'card_payment' : 'card_charge')
-        : (editingTxn && editingTxn.kind === 'cash_in' ? 'cash_in' : 'cash_out');
+      // v72.10: editing an INFLOW entry keeps its flow direction (cash_in stays
+      // cash_in, card_payment stays card_payment); a fresh add is a spend —
+      // v72.41: unless the sheet is in Pay-card mode, which logs the payoff
+      // (card_payment, the exact inverse of the card_charge spends) — it must
+      // land on a CARD account: the card the money was paid to.
+      if (addMode === 'prepay' && type !== 'CARD') {
+        alert('Pick the card you paid — Pay card logs a payment to a credit card.');
+        return;
+      }
+      var kind = addSheetKind(addMode, type, editingTxn ? editingTxn.kind : null);
       var payload = {
         date: byId('f_date').value || todayISO(),
         account: name,
@@ -4909,7 +4985,11 @@
     window.addEventListener('offline', function () { state.online = false; });
 
     var ab = byId('addBtn');
-    if (ab) ab.onclick = function () { openSheet('addSheet'); };
+    if (ab) ab.onclick = function () { setAddMode('spend'); openSheet('addSheet'); }; // v72.41: a fresh Add opens in Spend mode
+    // v72.41: the Add sheet's direction toggle (Spend / Pay card)
+    var amS = byId('addModeSpend'), amP = byId('addModePrepay');
+    if (amS) amS.onclick = function () { setAddMode('spend'); };
+    if (amP) amP.onclick = function () { setAddMode('prepay'); };
     var cfab = byId('coachFab');
     if (cfab) {
       fabInitDrag(); // v72.15: draggable bot — settles to the nearest edge, the bubble anchors to it

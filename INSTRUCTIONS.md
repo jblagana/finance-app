@@ -6,6 +6,32 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 12:4x — x-axis end-of-month ticks + prepay questions (3 instructions)
+Status: in progress
+Progress: 80% — ETA 2026-09-14 20:10
+
+### Instruction (verbatim)
+> -write the x axis ticks as end of month, e.g. 30 Sep, 31 Oct, etc
+> -how should the prepay be logged since some entries in ledger are already charged to cc
+> -i wanna prepay maya cc and maribank cc separately
+
+### Interpretation (agent — user may edit this section)
+- **(1) x-axis = end-of-month dates.** The six month ticks should each show the last day of that month as day+month ("30 Sep", "31 Oct", "30 Nov", "31 Dec", "31 Jan", "28 Feb") instead of the compact month names. The START tick stays the as-of date (e.g. "6 Sep"). Concretely: every point that carries a date renders `dayMonth(p.date)` (the month points already carry the month-end date), so all 7 ticks become dates. Drop the middle-only special-case. Release v72.41 (the 72.40 dot was renamed — see below); update the v72.39 smoke assertions (all 7 ticks now match the date pattern, none the month-name pattern); add a What's-new note.
+- **(2) "how should the prepay be logged since some ledger entries are already charged to cc"** — a how-to / semantics question, not necessarily code. Need to read the card/prepay model first: charges to a card are `card_charge` entries (they create the owed balance); a prepay is the payoff = a `card_payment` that reduces that card's owed. The ledger entries that are "already charged to cc" are the debt; the prepay is a separate payoff entry, not a re-log of those charges. Will confirm against the code (baseCardPrepays / prepayBy / cardEffect) before answering.
+- **(3) "prepay maya cc and maribank cc separately"** — feature request: pay down individual cards separately rather than one aggregate prepay. Need to check whether per-card prepay already exists (`prepayBy`, per-card `prepay`/`target_balance`) and what the coach "Log prepay" CTA writes today; if it only supports an aggregate, scope the change to let a prepay target a specific card.
+- **(3) design (agent):** the MODEL already supports the per-card payoff — a `card_payment` on the card's own account is the exact inverse of the `card_charge` spends (`txnAdj` acc, `adj.prepayBy`, `effectiveSnap` per-card `prepay`) — the gap is 100% UI: (a) the Add sheet has NO way to create a fresh `card_payment` (a fresh add on a CARD account is always a `card_charge`, so the old "Log prepay" CTA would have logged a CHARGE if used as-is — that is the answer's crux for (2): prepay = one separate payoff entry per card paid, never a re-log of the charges); (b) the coach CTA is a single combined-total button. Fix (v72.41): the Add sheet gains a Spend / Pay-card direction (Pay-card → kind `card_payment`, must land on a CARD account, first card preselected, title/button follow the mode, deficit hint off in payoff mode; kind decision extracted as a pure exported `addSheetKind` so the smoke drives it); the coach CTA becomes ONE "Log prepay · <card> · <amount>" button per card owed above target (prefills that card's amount/date/note/account in Pay-card mode; the combined button stays only as the no-breakdown fallback); partial payoffs are fine (per-card owed/prepay recompute live, the other card untouched, ledger shows a 'p' row per card).
+- **(agent) version dot: 72.40 → 72.41.** A `72.40` dot is unshippable as-is: versions are JS NUMBERS end-to-end (`SHELL_RELEASE.v`, footer string, `shellNotesFor` key lookup), and `String(72.40) === '72.4'` — the What's-new note key `'72.40'` would never resolve (the v72.38 smoke gate catches exactly this: "the future fallback MUST be the running version itself") and the footer would read "shell v72.4". Renamed every 72.40 reference to 72.41 (app.js ×11, check_site.py ×1, smoke ×13) — the release dot is 72.41.
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Investigate card/prepay model (baseCardPrepays, prepayBy, cardEffect, "Log prepay" CTA, per-card prepay/target_balance) — model is correct; gap is UI (fresh card_payment impossible, combined-only CTA)
+- [x] (1) code: x-axis month ticks = end-of-month day+month dates (all 7 ticks dates; smoke asserts the exact tick list — renders "14 Sep, 30 Sep, 31 Oct, 30 Nov, 31 Dec, 31 Jan, 28 Feb"); What's-new note written (key '72.41')
+- [x] (3) code: Spend / Pay-card direction in the Add sheet (addSheetKind + setAddMode + CARD guard) + per-card coach CTA (data-prepaycard buttons); gate check added; smoke section added (kind rules, per-card buttons + amounts, per-card payoff isolation)
+- [ ] release.ps1 v72.41 → all gates green (72.40 dot renamed to 72.41 — see bullet above)
+- [ ] (2) Answer the prepay-logging question (grounded in the code) — chat reply, model is correct so no code needed for the question itself
+- [ ] Commit + re-stamp live at the last moment + push
+- [ ] Verify live + close entry
+
 ## 2026-09-14 12:1x — "see img" — screenshot: home-card graph shows only the start label
 Status: **done**
 Progress: 100% — completed 2026-09-14 12:3x; commits `6ed59dd` + `aa52b51` pushed to origin/main (v72.39, live 12:28, SW cache `finances-pwa-v72.39`, live file verified: v: 72.39 stamp, matrix fix, '72.39' note, shellVersion export); phone-side confirmation pending with the user (one refresh — the phone is NOT stale, v72.34's auto-update delivers this)

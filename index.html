@@ -33,6 +33,10 @@ border:1px solid var(--line);color:var(--mut);padding:10px 4px;border-radius:10p
 font-weight:700;line-height:1.2;white-space:nowrap}
 .tab.active{background:rgba(55,211,155,.16);border-color:var(--acc);color:#fff}
 .tab:active{filter:brightness(1.15)}
+/* v72.40: the Add sheet's direction toggle (Spend / Pay card) */
+.amrow{display:flex;gap:6px;margin:2px 0 4px}
+.amb{flex:1;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--mut);padding:9px 4px;border-radius:10px;font-size:12.5px;font-weight:700;font-family:inherit;line-height:1.2}
+.amb.on{background:rgba(55,211,155,.16);border-color:var(--acc);color:#fff}
 h1{margin:0;font-size:20px;letter-spacing:.2px}
 h1 span{color:var(--acc)}
 .hwrap{display:flex;align-items:center;gap:10px}
@@ -662,6 +666,11 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
   </div>
   <div class="sheet-b">
     <form id="addForm" autocomplete="off">
+      <!-- v72.40: the sheet's direction — Spend (a card charge / a cash out) vs Pay card (the payoff: card_payment on the card's own account, so each card can be prepaid separately) -->
+      <div class="amrow">
+        <button type="button" id="addModeSpend" class="amb on">Spend</button>
+        <button type="button" id="addModePrepay" class="amb">Pay card</button>
+      </div>
       <label for="f_amount" style="margin-top:6px">Amount (₱)</label>
       <input id="f_amount" type="text" placeholder="0.00, or a quick sum like 300-125+10">
       <p id="amtEq" class="amtEq" style="display:none"></p>
