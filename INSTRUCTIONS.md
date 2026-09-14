@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-14 23:5x — Interpretation edit: the prepay ledger row shows only the card balance change
-Status: in progress
-Progress: 95% — ETA ~5 min (re-stamp live, commit, push, live verify)
+Status: **done**
+Progress: 100% — completed 2026-09-15 00:4x; commits `fd56654` + `6e4f7c0` pushed to origin/main (v72.44, live 00:40, SW cache `finances-pwa-v72.44`, live app.js + chat.js + sw.js verified via live_check.js: 8/8 markers PASS)
 ### Instruction (verbatim — user's edit to the 22:4x entry's Interpretation)
 > (im ok with this reco, but remove the change(or unchange) of free cash record on the right side, only show the change in card balance)
 ### Interpretation (agent — user may edit this section)
@@ -18,11 +18,11 @@ Progress: 95% — ETA ~5 min (re-stamp live, commit, push, live verify)
 - [x] Log the edit (first action)
 - [x] Code: suppress the free line on 'p' rows (app.js renderMoneyLog)
 - [x] Gates + smoke + release v72.44 stamped (folds into the 22:4x release)
-- [ ] Push + live verify
+- [x] Push + live verify (8/8 markers PASS)
 
 ## 2026-09-14 22:4x — Home "hey Jan" card empty after logging prepays; prepays in ledger summary (reco + fix)
-Status: in progress
-Progress: 95% — ETA ~5 min (release v72.44 stamped, all gates green; re-stamp live, commit, push, live verify outstanding)
+Status: **done**
+Progress: 100% — completed 2026-09-15 00:4x; commits `fd56654` + `6e4f7c0` pushed to origin/main (v72.44, live 00:40, SW cache `finances-pwa-v72.44`, live app.js + chat.js + sw.js verified via live_check.js: 8/8 markers PASS); one-tap PWA reload brings back the home card and the clean summaries
 ### Instruction (verbatim)
 > see img, the hey jan card disappered after i logged the prepay. also should we include the prepay in the ledger summary, i dont think its logical. do u have reco?
 ### Interpretation (agent — user may edit this section)
@@ -39,7 +39,7 @@ Progress: 95% — ETA ~5 min (release v72.44 stamped, all gates green; re-stamp 
 - [x] Fix the empty-card bug (typo fixed; probe re-run clean: no render errors, the card renders)
 - [x] Reco + exclude prepays from ledger summary aggregates (spendOf at 5 sites + chat.js; probe: donut "Unsorted 13,470" slice gone, pace 14,749.87 = exact)
 - [x] Gate + smoke (new v72.44 gate check + v7244Section 5/5 PASS; release.ps1 v72.44 "GATES: all green")
-- [ ] Push + live verify
+- [x] Push + live verify (8/8 markers PASS)
 
 ## 2026-09-14 22:2x — Prepaid cards under the old model: fix the persisted numbers (v72.43 migration)
 Status: **done**
