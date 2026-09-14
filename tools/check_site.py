@@ -691,6 +691,19 @@ def main():
           and "if (hasSec('txns')) migratePayoffModel();" in js
           and "prepayBy: {}, mv: ADJ_MODEL_V" in js
           and "prepayBy: {}, mv: 2 }, // mv = the txnAdj model version (v72.43)" in js)
+    check("v72.44 (user: 'the hey jan card disappered after i logged the prepay. also should we include the prepay in the ledger summary'): (1) the paid-prepay 'Handled' row of the home coach card read an undefined variable (prepaid instead of prepayPaid) — the ReferenceError was swallowed by emit's per-render try/catch AFTER the card was made visible, so the card rendered BLANK after a prepay was logged; (2) the spend aggregates (donut, pace, spent-today, pace anomalies, the coach-note snapshot) now use ONE rule — the same one the money-log 's' line has used since v72.10: card_payment is not spend (the charge already counted), cash_in nets spend down",
+          "prepaid.amount" not in js
+          and "money(Number(prepayPaid.amount) || 0) + ' logged on ' + planWhen(String(prepayPaid.date))" in js
+          and "function spendOf(t) {" in js
+          and "if (t.kind === 'card_payment') return 0;" in js
+          and "if (t.kind === 'cash_in') return -a;" in js
+          and "todaySpend += spendOf(t)" in js
+          and "spentM += spendOf(t)" in js
+          and js.count("var a = spendOf(t);") >= 2
+          and "spent += spendOf(t)" in js
+          and "spendOf: spendOf" in js
+          and "F.spendOf(tn)" in chatjs
+          and "if (e.k === 'p') freeTxt = ''" in js)  # (3) user edit: the prepay row shows only the card change, not the unchanged free line
     check("Owed + Ledger hide the old entries behind 'See more' (v72.29, user edit: 'in owed and ledger, when enrties are more than 5, hide the old ones in a see more which when clicked shows the next 5 old entries and another see more'): each person card renders only the first 5 rows (newest first) and a data-ow-more button reveals 5 older per tap (in-memory owedShown, resets on reload); the money log does the same (mlShownCount, resets on a filter change)",
           "var owedShown = {};" in js
           and "var limit = owedShown[p.id] || 5;" in js

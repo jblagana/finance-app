@@ -1630,8 +1630,12 @@
       var tn = ctx.txns[x];
       if (e.month && String(tn.date || '').slice(0, 7) !== e.month) continue;
       var c = tn.category || 'Unsorted';
-      spend[c] = (spend[c] || 0) + (Number(tn.amount) || 0);
-      total += Number(tn.amount) || 0;
+      // v72.44: the same spend rule as the money-log 's' line (v72.10) — a card
+      // payment is not spend (the charge already counted), a cash inflow nets
+      // it back down; the note used to quote the raw sum (prepays as spend)
+      var amt = (F && typeof F.spendOf === 'function') ? F.spendOf(tn) : (Number(tn.amount) || 0);
+      spend[c] = (spend[c] || 0) + amt;
+      total += amt;
     }
     var top = [];
     Object.keys(spend).forEach(function (c2) { top.push([c2, spend[c2]]); });

@@ -6,6 +6,41 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 23:5x — Interpretation edit: the prepay ledger row shows only the card balance change
+Status: in progress
+Progress: 95% — ETA ~5 min (re-stamp live, commit, push, live verify)
+### Instruction (verbatim — user's edit to the 22:4x entry's Interpretation)
+> (im ok with this reco, but remove the change(or unchange) of free cash record on the right side, only show the change in card balance)
+### Interpretation (agent — user may edit this section)
+- Approves the 22:4x reco (prepays out of the spend aggregates — donut / pace / spent-today / coach note).
+- New requirement: on the prepay ledger rows (right side), the no-change "free PHP 14,004.76 → PHP 14,004.76" line goes away; the amount + the "card X → Y" line stay. Implemented in v72.44: `if (e.k === 'p') freeTxt = ''` in renderMoneyLog — same principle the Adjustment card rows already use (they hide the free line too).
+### Subtasks
+- [x] Log the edit (first action)
+- [x] Code: suppress the free line on 'p' rows (app.js renderMoneyLog)
+- [x] Gates + smoke + release v72.44 stamped (folds into the 22:4x release)
+- [ ] Push + live verify
+
+## 2026-09-14 22:4x — Home "hey Jan" card empty after logging prepays; prepays in ledger summary (reco + fix)
+Status: in progress
+Progress: 95% — ETA ~5 min (release v72.44 stamped, all gates green; re-stamp live, commit, push, live verify outstanding)
+### Instruction (verbatim)
+> see img, the hey jan card disappered after i logged the prepay. also should we include the prepay in the ledger summary, i dont think its logical. do u have reco?
+### Interpretation (agent — user may edit this section)
+- Phone screenshots at 22:46/22:47 (post-v72.43 refresh). Home: Free 535.12 · Liquid 3,192.77 · Cards owed 9,857.65 · Prepay due today 2,657.65; between Coach's note and INSIGHTS there is an EMPTY rounded card where a card used to be. Ledger: the two Sep 14 prepays (Maya 2,000 @ 7:57 PM, MariBank 11,469.64 @ 8:00 PM) appear in YOUR EXPENSES as "Unsorted" +amounts, and they pollute THIS MONTH · BY CATEGORY (Unsorted 13,570 = 72%), SPEND PACE (Sep spend 18,731.10), "Spent in this app today 13,469.64", and the coach note's unsorted total (13,569.64).
+- Bug: identify which home card is the "hey Jan" card and why it now renders empty after logging the prepays; fix the render.
+- Reco (agent, pending user edit): prepays are liability reduction, not spending → exclude `card_payment` entries from all spend aggregates (by-category donut, spend pace, spent-today, coach unsorted total); keep them visible in the entry list, clearly labelled as prepays rather than "Unsorted" spend. (im ok with this reco, but remove the change(or unchange) of free cash record on the right side, only show the change in card balance)
+- Plan: fix the empty card + apply the exclusion, gates + smoke, release (next dot version), push, live verify.
+- Root cause (agent, reproduced in Node before fixing): the "hey Jan" card = the `#coach` attention card. Its paid-prepay "Handled" row (app.js:2771) read an undefined variable — `prepaid` instead of `prepayPaid` — so once a prepay was PAID, `coachRows` threw `ReferenceError: prepaid is not defined` on EVERY render; `emit()`'s per-render try/catch (app.js:51) swallowed it, and the card was already set visible (line 2297) before the head write (line 2376) → visible but blank. Reproduced with a full-boot probe on his real data (Sep-13 restored export + the two prepays; matched his screenshot exactly: free 535.35 / owed 10,657.65 / prepay due 2,657.65) — `finances/probe_v7244.js`.
+- Reco implemented (agent): a single `spendOf()` in app.js — card_payment → 0, cash_in → −a, else +a — the SAME rule the money-log 's' line has used since v72.10 ("a card payment isn't spend; the charge already counted"). Applied to: todaySpend, spentM, catPace, donut, pace (app.js) + the coach-note snapshot (chat.js); exported for chat.js + smoke. Ledger ENTRY LIST keeps the prepays (they are the record) — the summary aggregates just stop counting them as spend.
+- The user's interpretation edit (23:5x entry) adds the ledger-row free-line suppression — folded into this same release (v72.44).
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Identify the missing home card in app.js (ReferenceError `prepaid` in the paid-prepay "Handled" row, swallowed by emit's try/catch)
+- [x] Fix the empty-card bug (typo fixed; probe re-run clean: no render errors, the card renders)
+- [x] Reco + exclude prepays from ledger summary aggregates (spendOf at 5 sites + chat.js; probe: donut "Unsorted 13,470" slice gone, pace 14,749.87 = exact)
+- [x] Gate + smoke (new v72.44 gate check + v7244Section 5/5 PASS; release.ps1 v72.44 "GATES: all green")
+- [ ] Push + live verify
+
 ## 2026-09-14 22:2x — Prepaid cards under the old model: fix the persisted numbers (v72.43 migration)
 Status: **done**
 Progress: 100% — completed 2026-09-14 22:4x; commits `51d2e76` + `771b97d` pushed to origin/main (v72.43, live 22:42, SW cache `finances-pwa-v72.43`, live app.js + sw.js verified via live_check.js: 6/6 markers PASS); on his next app open the one-shot migration re-counts his old prepays — free cash and liquid cash each drop by the prepay total, card owed stays put

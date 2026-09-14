@@ -1355,6 +1355,7 @@
           amtTxt = (e.n > 0 ? '+' : '−') + money(Math.abs(e.n));
           if (cardRow) freeTxt = ''; // a card override never moves free
         }
+        if (e.k === 'p') freeTxt = ''; // v72.44 (user edit): a payoff never moves free — show only the card balance change
         return '<div class="ml-row' + (add ? '' : ' del') + '"' + editAttr + '>' +
           '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
           (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
@@ -2074,6 +2075,18 @@
     if (d < 0) return 'was ' + (-d) + ' days ago';
     return fmtDate(ds);
   }
+  // v72.44 (user: 'should we include the prepay in the ledger summary'): ONE
+  // spend rule for every aggregate — the same rule the money-log 's' line has
+  // used since v72.10: a card payment is NOT spend (the charge that created
+  // the debt already counted; the payoff only settles it — v72.42), a cash
+  // inflow nets spend back down. The donut / pace / spent-today / coach note
+  // each summed raw amounts, so a prepay showed up as "Unsorted" spend.
+  function spendOf(t) {
+    var a = Number(t.amount) || 0;
+    if (t.kind === 'card_payment') return 0;
+    if (t.kind === 'cash_in') return -a;
+    return a;
+  }
   function insightsData() {
     var s = effectiveSnap();
     if (!s) return null;
@@ -2085,7 +2098,7 @@
     var meal = mealBudget();
     var free = s.cash ? s.cash.free : 0;
     var todaySpend = 0;
-    state.txns.forEach(function (t) { if (t.date === today) todaySpend += Number(t.amount) || 0; });
+    state.txns.forEach(function (t) { if (t.date === today) todaySpend += spendOf(t); }); // v72.44: prepays are not spend
     var items = [];
     var laterCount = 0, laterAmt = 0;
     state.plans.forEach(function (p) {
@@ -2115,7 +2128,7 @@
       }
     });
     var spentM = 0;
-    state.txns.forEach(function (t) { if (String(t.date).slice(0, 7) === monthPrefix) spentM += Number(t.amount) || 0; });
+    state.txns.forEach(function (t) { if (String(t.date).slice(0, 7) === monthPrefix) spentM += spendOf(t); }); // v72.44
     var pace = now.getDate() > 0 ? r2(spentM / now.getDate()) : 0;
     // v68 item 4: per-category pace — this month's daily run-rate vs the
     // trailing-3-month daily average; flag >25% above (₱500 noise floor).
@@ -2131,7 +2144,7 @@
       var byNow = {}, byTr = {};
       state.txns.forEach(function (t) {
         var mk = String(t.date).slice(0, 7);
-        var a = Number(t.amount) || 0;
+        var a = spendOf(t); // v72.44: the same spend rule as every other aggregate
         var c = String(t.category || '').trim() || 'Unsorted';
         if (mk === monthPrefix) byNow[c] = (byNow[c] || 0) + a;
         else if (mKeys.indexOf(mk) >= 0) byTr[c] = (byTr[c] || 0) + a;
@@ -2768,7 +2781,7 @@
     if (prepayActive) {
       var pw = d.prepayIn === 0 ? 'today' : (d.prepayIn === 1 ? 'tomorrow' : 'in ' + d.prepayIn + ' days');
       if (prepayPaid) rows.push({ cls: 'done', tag: 'Card prepay',
-        text: 'Handled — ' + money(Number(prepaid.amount) || 0) + ' logged on ' + planWhen(String(prepaid.date)) + '. Nice.',
+        text: 'Handled — ' + money(Number(prepayPaid.amount) || 0) + ' logged on ' + planWhen(String(prepayPaid.date)) + '. Nice.',
         r: 'done' });
       else {
         rows.push({ cls: d.prepayIn <= 2 ? 'bad' : 'warn', tag: 'Card prepay',
@@ -2892,7 +2905,7 @@
     var totals = {}, grand = 0;
     state.txns.forEach(function (t) {
       if (String(t.date).slice(0, 7) !== mp) return;
-      var a = Number(t.amount) || 0;
+      var a = spendOf(t); // v72.44: prepays are not spend (see the helper)
       var c = t.category || 'Unsorted';
       totals[c] = (totals[c] || 0) + a;
       grand += a;
@@ -2933,7 +2946,7 @@
     var dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     var elapsed = now.getDate();
     var spent = 0;
-    state.txns.forEach(function (t) { if (String(t.date).slice(0, 7) === mp) spent += Number(t.amount) || 0; });
+    state.txns.forEach(function (t) { if (String(t.date).slice(0, 7) === mp) spent += spendOf(t); }); // v72.44
     if (!spent && !state.txns.length) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
     var daily = elapsed > 0 ? r2(spent / elapsed) : 0;
@@ -4166,12 +4179,17 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.43, live: new Date(2026, 8, 14, 22, 42) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.44, live: new Date(2026, 8, 15, 0, 30) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.44': [
+      'The home card no longer goes blank after you log a card prepay — a typo in the “prepay handled” line stopped the card from drawing its text',
+      'A card prepay no longer counts as spending in the summaries (this month by category, spend pace, spent today, the coach note) — it settles the debt, it is not a purchase. A cash-in still nets the spend back down, exactly like the ledger detail already did',
+      'The prepay rows in your ledger no longer repeat your free cash (it never moves) — they show the amount and the card balance change only'
+    ],
     '72.43': [
       'Your card prepay now counts the same as a new one \u2014 the prepay you logged before the payoff fix comes off your free cash and your liquid cash (the old version had counted it as extra free cash). Your card owed is unchanged'
     ],
@@ -4909,6 +4927,7 @@
     mlDate: mlDate,           // v71: ledger row date+time (AM/PM)
     applyBaseChanges: applyBaseChanges,
     undoBaseStory: undoBaseStory,
+    spendOf: spendOf, // v72.44: the one spend rule for aggregates (chat.js coach snapshot + smoke)
     merchantCatFor: merchantCatFor, // v68 item 1: learned merchant→category lookup for the coach
     effectiveMerchantMap: effectiveMerchantMap,
     coachAlerts: coachAlerts, // v68 item 9: alert-driven chat chips
