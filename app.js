@@ -274,18 +274,23 @@
 
   // ---- live overlay: app entries adjust the sheet snapshot until the sheet catches up ----
   // v72.10: the ledger learns INFLOWS — cash_in (money came to a cash pocket)
-  // and card_payment (a payment landed on a card). Both are the exact inverse
-  // of their spend twin, so an owed entry and its "paid me back" net to zero:
-  // card_charge {0, +a, +a, +a}  <-> card_payment {0, -a, -a, -a}
-  // cash_out    {+a, +a, 0,  0}  <-> cash_in      {-a, -a, 0,  0}
-  // (overlay: effective free = snap.free − adj.free, owed = snap + adj.card.)
+  // and card_payment (a payment landed on a card). cash_in is the exact inverse
+  // of cash_out on the cash side: cash_out {+a, +a, 0, 0} <-> cash_in {-a, -a, 0, 0}.
+  // v72.42: card_payment is NOT the inverse of card_charge — the charge already
+  // spent the free cash (the credit limit isn't money), so the payoff only
+  // settles the debt: raw liquid drops (cash +a → the money leaves the bank),
+  // owed/prepay drop, and free stays UNTOUCHED (free: 0):
+  // card_charge  {0, +a, +a, +a}  charge: free committed, raw still in the bank
+  // card_payment {+a, 0,  -a, -a} payoff: free unchanged, raw leaves the bank
+  // (overlay: effective free = snap.free − adj.free, raw = snap.total − adj.cash,
+  // owed = snap + adj.card; the liquidity floor runs on the raw number.)
   function txnAdj(t) {
     var amt = Number(t.amount) || 0;
     // v72.33: the card rows carry the card name (acc) so the overlay tracks the
     // prepay delta PER CARD — a prepay question about one card answers with
     // that card's prepay, not the total
     if (t.kind === 'card_charge') return { cash: 0, free: amt, card: amt, prepay: amt, acc: t.account };
-    if (t.kind === 'card_payment') return { cash: 0, free: -amt, card: -amt, prepay: -amt, acc: t.account };
+    if (t.kind === 'card_payment') return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };
     if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };
     return { cash: amt, free: amt, card: 0, prepay: 0 }; // cash_out (default, legacy rows)
   }
@@ -1004,10 +1009,11 @@
   // alone — totals come from txns via monthSpendSum, so only the row's line
   // goes). Undo is the exact inverse: un-rebase the tail, then swap the
   // ORIGINAL row (values + timestamp) back where the edited row sits.
-  // v72.10: per-kind effects — spend pulls free down, inflows push it back up;
-  // card owed moves only for the two card kinds; month spend counts spend,
-  // nets inflows, ignores card payments.
-  function freeEffect(kind, amt) { return (kind === 'cash_in' || kind === 'card_payment') ? amt : -amt; }
+  // v72.10: per-kind effects — spend pulls free down, cash inflows push it back
+  // up; v72.42: a card payment moves free by ZERO (the charge already spent it
+  // — the payoff only settles the debt); card owed moves only for the two card
+  // kinds; month spend counts spend, nets inflows, ignores card payments.
+  function freeEffect(kind, amt) { if (kind === 'card_payment') return 0; return (kind === 'cash_in') ? amt : -amt; }
   function cardEffect(kind, amt) { return kind === 'card_charge' ? amt : kind === 'card_payment' ? -amt : 0; }
   function monthEffect(kind, amt) { return kind === 'card_payment' ? 0 : kind === 'cash_in' ? -amt : amt; }
   function saveTxnEdit(tid, data, opts) {
@@ -1267,15 +1273,19 @@
     var limited = shown.slice(0, mlShownCount);
     body.innerHTML = limited.map(function (e) {
         var add = e.a === 'add';
-        // v72.10: inflow rows (i cash in / p card payment) move free the OTHER
-        // way — a row's before→after follows its flavor, not its add/del side.
+        // v72.10: inflow rows (i cash in) move free the OTHER way — a row's
+        // before→after follows its flavor, not its add/del side.
         // v72.30: 'a' = a balance override — n is SIGNED and there is no txn
         // behind the row; a debit row's free moved by exactly the diff
         // (before = f − n), a card row (o set) never moves free — only the
         // card balance does (before = o − n).
+        // v72.42: 'p' (card payment) moves free by ZERO — the charge already
+        // spent it; the payoff only settles the debt (raw cash + owed drop),
+        // so free before == after (the card sub-line still shows owed drop).
         var isAdj = e.k === 'a';
         var inflow = e.k === 'i' || e.k === 'p';
-        var before = r2(e.f + (add ? (inflow ? -e.n : e.n) : (inflow ? e.n : -e.n)));
+        var before = (e.k === 'p') ? r2(e.f)
+          : r2(e.f + (add ? (inflow ? -e.n : e.n) : (inflow ? e.n : -e.n)));
         if (isAdj) before = r2(e.f - e.n);
         var extra = '';
         if (e.k === 'c' || e.k === 'p') {
@@ -2203,10 +2213,11 @@
   // ---------- Phase 5: unified coach card (narrative + attention rows + one-tap actions) ----------
   // v72.41 (user: 'i wanna prepay maya cc and maribank cc separately'): the Add
   // sheet gains a direction — Spend (the old rules) and Pay card (the payoff).
-  // A card payment is the exact inverse of the card_charge spends that created
-  // the owed balance: it lands on the card's OWN account, so each card can be
-  // prepaid separately. The kind decision is a pure exported fn (addSheetKind)
-  // so the smoke can drive it — the submit handler itself is DOM-bound in init.
+  // v72.42: a card payment settles the debt — it drops the raw liquid cash and
+  // the card owed but leaves free UNTOUCHED (the charge already spent it). It
+  // lands on the card's OWN account, so each card can be prepaid separately.
+  // The kind decision is a pure exported fn (addSheetKind) so the smoke can
+  // drive it — the submit handler itself is DOM-bound in init.
   var addMode = 'spend';
   function addSheetKind(mode, type, editingKind) {
     if (mode === 'prepay') return 'card_payment';
@@ -4118,12 +4129,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.41, live: new Date(2026, 8, 14, 19, 34) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.42, live: new Date(2026, 8, 14, 22, 0) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.42': [
+      'Paying a card no longer adds back to your free cash \u2014 the spend already counted when the card was charged. A card payment now only drops your liquid (bank) cash and your card owed; your free / spendable cash stays exactly where it was',
+      'Both numbers stay as before \u2014 the liquidity floor still watches your raw bank cash under the hood'
+    ],
     '72.41': [
       'The home card graph\u2019s bottom line is dates all the way now \u2014 the month ticks land on the last day of the month (30 Sep, 31 Oct, \u2026) instead of month names',
       'The Add sheet has a direction: Spend (as before) or Pay card. Pay card logs a card payment \u2014 the payoff that unwinds the card charges \u2014 and the coach\u2019s prepay action is now one button per card, so Maya cc and Maribank cc can each be prepaid separately with that card\u2019s own amount'
