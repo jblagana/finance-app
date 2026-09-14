@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-14 11:5x — v72.38: "nothing changed, not even written in whats new"
-Status: not started
-Progress: 0% — ETA TBD
+Status: **done**
+Progress: 100% — completed 2026-09-14 12:0x; commit `7105517` pushed to origin/main (v72.38, live 12:01, SW cache `finances-pwa-v72.38`)
 
 ### Instruction (verbatim)
 > nothing changed, not even written in whats new
@@ -21,11 +21,11 @@ Progress: 0% — ETA TBD
 ### Subtasks
 - [x] Log the instruction (first action)
 - [x] Add SHELL_NOTES['72.37'] + ['72.38'] in app.js
-- [x] check_site.py gate: running version must have a SHELL_NOTES entry (release.ps1 stamps the dot, re-stampable across dots)
-- [ ] release.ps1 v72.38 (stamps + full gate suite)
-- [ ] Commit, push (live stamp at the last moment)
-- [ ] Verify live (footer + live app.js carries both notes)
-- [ ] Close entry with commit hash
+- [x] check_site.py gate: running version must have a SHELL_NOTES entry (final design: self-updating — the running dot is read from app.js, no stamping; the stamped-dot release.ps1 approach was dropped after its PS quoting + re-stamp pitfalls)
+- [x] release.ps1 v72.38 (stamps + full gate suite) — first run RED on the smoke's pinned `99.9 → 72.36` fallback assertion; fixed by making it dynamic (FinApp.shellVersion export + latest-notes = running version), green on re-run
+- [x] Commit, push (live stamp at the last moment)
+- [x] Verify live (footer + live app.js carries both notes)
+- [x] Close entry with commit hash
 
 
 ## 2026-09-14 11:2x — v72.37: add middle and end dates on the x axis of the home card graph
