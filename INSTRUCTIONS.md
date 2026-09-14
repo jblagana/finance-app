@@ -6,6 +6,32 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 12:1x — "see img" — screenshot: home-card graph shows only the start label
+Status: in progress
+Progress: 70% — ETA 2026-09-14 12:40 (commit + re-stamp + push + live check left)
+
+### Instruction (verbatim)
+> see img
+> [screenshot of the home card: "FREE / UNALLOCATED PHP 11,198.87", sub-line "Liquid PHP 24,898.51 · Cards owed PHP 17,279.64 · Prepay due today PHP 11,679.64", sparkline rising to the right, and exactly ONE x-axis tick visible: "6 Sep" bottom-left — the month labels between start and end are absent]
+
+### Interpretation (agent — user may edit this section)
+- Sent right after the v72.38 "refresh and check" ask — read as: the phone's graph still shows no middle/end dates (only the start tick "6 Sep").
+- **Root cause found (hypothesis b confirmed): a runtime render bug in the current build.** `baseMatrix()` builds each row as `{ comp, running }` — no `month` field — while `sparkData()` reads `row.month` for the labels → `monthShort(undefined)` → `''`. ALL builds since Phase 3 (c6184c0, 2026-09-08) rendered 7 tick elements of which 6 were EMPTY strings. So the v72.37 "dates" fix read the same missing field and changed nothing visible — the user's "nothing changed" was literally true, on top of the missing note.
+- Why it shipped twice: every gate is static (code strings) and the smoke's DOM stub returned null for #sparkBox → renderSpark early-returned → the SVG was never actually rendered in any test. The same `row.month` bug also blanked the month in the coach's lowest-cash lines (insightsData + coachAlerts floor rows) — same fix covers them.
+- Fix (v72.39): (a) `baseMatrix` now carries `month: m` on each row (source fix — boot rebuilds the snapshot from base every launch, so existing phone data heals on first open of the new version); (b) smoke_app_v68.js now stubs #hero + #sparkBox as real elements and asserts on the RENDERED SVG: 7 ticks, none empty, start/middle/end = "d Mon", in-between = "Mon 'YY" (entities decoded); (c) SHELL_NOTES['72.39'] note.
+- The phone is NOT stale (the screenshot matches the current build's broken render exactly, "6 Sep" = the user's as_of) — so v72.34's one-refresh auto-update will deliver v72.39 normally; no data at risk (nothing destructive needed).
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Probe: render the real sparkline SVG in Node → reproduced the bug exactly (7 ticks, 6 empty) before the fix; all 7 correct labels after
+- [x] Decide: runtime bug (NOT a stale phone) — fix + release v72.39
+- [x] Add smoke assertion on the rendered SVG labels (5 new checks, green)
+- [x] release.ps1 v72.39 → all gates green (first pass; re-stamp live at push time)
+- [ ] Commit + re-stamp live at the last moment + push
+- [ ] Verify live (app.js v72.39, sw.js cache v72.39, '72.39' note present)
+- [ ] Verify the phone actually shows the dates; close entry
+- [ ] Verify the phone actually shows the dates; close entry
+
 ## 2026-09-14 11:5x — v72.38: "nothing changed, not even written in whats new"
 Status: **done**
 Progress: 100% — completed 2026-09-14 12:0x; commit `7105517` pushed to origin/main (v72.38, live 12:01, SW cache `finances-pwa-v72.38`)

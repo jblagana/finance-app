@@ -510,7 +510,12 @@
     months.forEach(function (m) {
       var bi = baseMonthComponents(m, months, b, true);
       bc = r2(bc + bi.net);
-      base.push({ comp: bi, running: bc });
+      // v72.39: carry the month on the row itself — the sparkline ticks and
+      // the coach's lowest-month lines read row.month, and without it every
+      // month label on the x axis (and the dip line's month) rendered blank
+      // since Phase 3 (the month only lived in row.comp.month, which nothing
+      // on the axis side read).
+      base.push({ month: m, comp: bi, running: bc });
     });
     return { start_cash: start, base: base };
   }
@@ -4045,12 +4050,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.38, live: new Date(2026, 8, 14, 12, 1) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.39, live: new Date(2026, 8, 14, 12, 26) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.39': [
+      'The home card graph\u2019s bottom line shows its dates now \u2014 start, middle and end as day + month, the months in between by name. The previous releases built this line from a field that was empty, so every label after the first one came out blank and the fix from before never actually appeared',
+      'A new test renders the graph itself, so a blank axis can never ship silently again'
+    ],
     '72.38': [
       'This What\u2019s new section was missing the last release\u2019s note \u2014 the v72.37 line is here now, and a release check will catch it if a version ever ships without its note'
     ],
