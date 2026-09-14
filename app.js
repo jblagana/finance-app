@@ -23,7 +23,7 @@
     plans: [],
     base: null,
     snapshot: null,
-    adj: { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {} },
+    adj: { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: 2 }, // mv = the txnAdj model version (v72.43)
     adjSig: '',
     adjLoaded: false,
     coachMem: null,
@@ -272,6 +272,41 @@
     return n;
   }
 
+  // ---- v72.43: one-shot re-derivation of the persisted overlay (payoff model) ----
+  // The overlay (state.adj) is PERSISTED — boot uses the stored adj as-is and
+  // only re-derives it when it was never stored (computeAdjFromTxns). A
+  // card_payment logged before v72.42 therefore still carries its OLD-model
+  // contribution after the update: { cash: 0, free: -a } instead of
+  // { cash: +a, free: 0 } — free cash inflated by the prepay total, liquid
+  // cash not reduced (card/prepay were identical in both models). One-shot
+  // fix, gated on the model stamp (adj.mv) so it runs exactly once:
+  //   - a balance-override (money-log 'a') row AFTER a prepay rebased
+  //     (zeroed) the overlay — that prepay's effect is in the sheet's
+  //     numbers, not the overlay, so its delta is NOT re-added;
+  //   - zeroed / fresh adj (the boot initializer, a rebase,
+  //     computeAdjFromTxns, the import sanitizer) carries the stamp.
+  var ADJ_MODEL_V = 2; // bump when the txnAdj model changes again
+  function payoffModelDelta(txns, lastOverrideAt) {
+    var dc = 0;
+    (txns || []).forEach(function (t) {
+      if (t.kind !== 'card_payment') return;
+      var created = Date.parse(t.created) || 0;
+      if (created && lastOverrideAt && created < lastOverrideAt) return; // absorbed into the sheet by a later rebasing override
+      dc += Number(t.amount) || 0;
+    });
+    return { cash: dc, free: dc }; // the old→new delta on both sides (card/prepay were identical)
+  }
+  function migratePayoffModel() {
+    var a = state.adj;
+    if (!a || a.mv === ADJ_MODEL_V) return;
+    var lastO = 0;
+    (state.moneyLog || []).forEach(function (e) { if (e.k === 'a' && e.at && e.at > lastO) lastO = e.at; });
+    var d = payoffModelDelta(state.txns, lastO);
+    if (d.cash) { a.cash = r2(a.cash + d.cash); a.free = r2(a.free + d.free); }
+    a.mv = ADJ_MODEL_V;
+    saveAdj().then(function () { emit('adj'); });
+  }
+
   // ---- live overlay: app entries adjust the sheet snapshot until the sheet catches up ----
   // v72.10: the ledger learns INFLOWS — cash_in (money came to a cash pocket)
   // and card_payment (a payment landed on a card). cash_in is the exact inverse
@@ -306,7 +341,7 @@
     }
   }
   function computeAdjFromTxns() {
-    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {} };
+    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
     state.txns.forEach(function (t) { addAdj(txnAdj(t), 1); });
   }
   function saveAdj() {
@@ -326,11 +361,11 @@
     state.snapshot = snap;
     var sig = snapSig(snap);
     // Sheet numbers moved (Balances/Config edited in the sheet) -> rebase: the sheet is source of truth again.
-    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {} };
+    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
     state.adjSig = sig;
   }
   function resetAdj() {
-    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {} };
+    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
     state.adjSig = snapSig(state.snapshot);
     saveAdj().then(function () { emit('adj'); });
   }
@@ -624,7 +659,7 @@
     state.snapshot = state.base && !baseIsEmpty(state.base) ? baseToSnapshot(state.base) : null;
     var sig = snapSig(state.snapshot);
     // The base numbers moved (edited in Settings) -> rebase: the base is source of truth again.
-    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {} };
+    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
     state.adjSig = sig;
   }
   function persistSnapshot() {
@@ -3861,7 +3896,8 @@
   function sanitizeAdj(a) {
     return {
       cash: Number(a && a.cash) || 0, free: Number(a && a.free) || 0,
-      card: Number(a && a.card) || 0, prepay: Number(a && a.prepay) || 0
+      card: Number(a && a.card) || 0, prepay: Number(a && a.prepay) || 0,
+      mv: Number(a && a.mv) || 0 // v72.43: the model stamp rides the import (0 = pre-migration, migrate on boot)
     };
   }
   function owedImportSort(v) {
@@ -4086,6 +4122,7 @@
             state.adjSig = typeof data.adjSig === 'string' ? data.adjSig : snapSig(state.snapshot);
             state.adjLoaded = true;
             if (!data.adj) computeAdjFromTxns(); // v72.8: a pre-72.8 backup has no adj — recompute from the imported txns
+            if (hasSec('txns')) migratePayoffModel(); // v72.43: a pre-v72.42 backup's adj still carries the old payoff model (adj + txns come from the same file)
           }
           // v47: persist the base too. The old code re-derived the snapshot from
           // the imported base in memory (and saved the snapshot) but never wrote
@@ -4129,12 +4166,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.42, live: new Date(2026, 8, 14, 22, 1) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.43, live: new Date(2026, 8, 14, 22, 41) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.43': [
+      'Your card prepay now counts the same as a new one \u2014 the prepay you logged before the payoff fix comes off your free cash and your liquid cash (the old version had counted it as extra free cash). Your card owed is unchanged'
+    ],
     '72.42': [
       'Paying a card no longer adds back to your free cash \u2014 the spend already counted when the card was charged. A card payment now only drops your liquid (bank) cash and your card owed; your free / spendable cash stays exactly where it was',
       'Both numbers stay as before \u2014 the liquidity floor still watches your raw bank cash under the hood'
@@ -4848,6 +4888,11 @@
     delOwedEntry: delOwedEntry,
     delOwedPerson: delOwedPerson,
     effectiveSnap: effectiveSnap,
+    payoffModelDelta: payoffModelDelta, // v72.43: the pure old→new overlay delta (smoke drives it)
+    migratePayoffModel: migratePayoffModel, // v72.43: the one-shot persisted-overlay migration (smoke drives it)
+    getAdj: function () { return state.adj; }, // v72.43: the live overlay (smoke simulates a pre-v72.42 phone)
+    setAdj: function (a) { state.adj = a; }, // v72.43: test hook (smoke)
+    getTxns: function () { return state.txns; }, // v72.43: the ledger txns (smoke sums the old prepays)
     // v72.15: the FAB edge-settle + bubble-anchor geometry (smoke drives the pure math)
     fabSafe: fabSafe,
     fabEdgePos: fabEdgePos,
@@ -5168,6 +5213,7 @@
       }
       refreshLocalSnapshot();
       if (!hasAdj && !state.adjSig) computeAdjFromTxns();
+      migratePayoffModel(); // v72.43: one-shot re-derivation of a pre-v72.42 persisted overlay
       if (!state.adjSig) state.adjSig = snapSig(state.snapshot);
       state.adjLoaded = true;
       persistSnapshot();

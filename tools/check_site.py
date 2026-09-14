@@ -683,6 +683,14 @@ def main():
           "if (t.kind === 'card_payment') return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js
           and "function freeEffect(kind, amt) { if (kind === 'card_payment') return 0; return (kind === 'cash_in') ? amt : -amt; }" in js
           and "var before = (e.k === 'p') ? r2(e.f)" in js)
+    check("v72.43 (prepaid cards under the old model, user: 'ive already prepaid the cards prior to this version, as such, card balance and free cash and liquid cash all changed, fix that'): the persisted overlay is NOT re-derived from txns on boot, so a pre-v72.42 phone's stored adj still carries each old prepay's old-model contribution (free inflated by the prepay total, liquid not reduced); the one-shot migration (the adj.mv model stamp) adds the {cash: +a, free: +a} delta per card_payment on boot + import — but NOT for a prepay after which a balance-override (money-log 'a') row rebased the overlay (that prepay's effect is in the sheet's numbers, not the overlay); every zeroed/fresh adj (boot initializer, both rebases, computeAdjFromTxns, the import sanitizer) carries the stamp so it fires exactly once; card owed is untouched (identical in both models)",
+          "var ADJ_MODEL_V = 2" in js
+          and "function payoffModelDelta(txns, lastOverrideAt)" in js
+          and "function migratePayoffModel()" in js
+          and "migratePayoffModel(); // v72.43: one-shot re-derivation of a pre-v72.42 persisted overlay" in js
+          and "if (hasSec('txns')) migratePayoffModel();" in js
+          and "prepayBy: {}, mv: ADJ_MODEL_V" in js
+          and "prepayBy: {}, mv: 2 }, // mv = the txnAdj model version (v72.43)" in js)
     check("Owed + Ledger hide the old entries behind 'See more' (v72.29, user edit: 'in owed and ledger, when enrties are more than 5, hide the old ones in a see more which when clicked shows the next 5 old entries and another see more'): each person card renders only the first 5 rows (newest first) and a data-ow-more button reveals 5 older per tap (in-memory owedShown, resets on reload); the money log does the same (mlShownCount, resets on a filter change)",
           "var owedShown = {};" in js
           and "var limit = owedShown[p.id] || 5;" in js
