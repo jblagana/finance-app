@@ -6,6 +6,35 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 20:0x — Fix the card payoff's free-cash bug (keep both numbers; scope narrowed — no tile tucking)
+Status: **done**
+Progress: 100% — completed 2026-09-14 22:0x; commits `e0d7f5f` + `5bc579c` pushed to origin/main (v72.42, live 22:01, SW cache `finances-pwa-v72.42`, live app.js + sw.js verified via live_check.js: 6/6 markers PASS — SHELL_RELEASE 72.42, payoff tuple `{ cash: amt, free: 0, ... }`, freeEffect → 0, money-log 'p' before = f, '72.42' note, sw cache); a card payment now drops raw liquid + card owed and leaves free untouched, the floor keeps running on raw bank cash, the Liquid cash tile stays as-is (no UI change)
+### Instruction (verbatim)
+> Fix the payoff bug and keep both numbers — floor stays on raw bank cash (my recommendation): Fix the payoff bug AND tuck the 'Liquid cash' tile out of the UI — floor still runs on it under the hood
+>
+> **follow-up (user — narrows scope, this is the operative instruction):** implement just this:
+> Fix the payoff bug and keep both numbers — floor stays on raw bank cash (my recommendation), no tucking away of liquid cash
+
+### Interpretation (agent — user may edit this section)
+- **The payoff bug (the core fix).** `card_payment` is currently the "exact inverse" of `card_charge` (`txnAdj` app.js:288: `{ cash: 0, free: -amt, card: -amt, prepay: -amt }`), which makes displayed free cash go UP by `amt` when you pay a card (`effectiveSnap`: `free = sheet.free − adj.free`). Wrong: the charge is a real expense (free already dropped when the card was used), so the payoff must NOT add free back. Correct (user's model): **charge** → free ↓ (money committed), raw liquid unchanged (still in the bank), card balance ↑; **payoff** → free **unchanged** (spend already counted), raw liquid ↓ (money leaves the bank), card balance ↓.
+- **The fix.** `txnAdj` card_payment → `{ cash: amt, free: 0, card: -amt, prepay: -amt }` (raw liquid drops via `adj.cash`, free untouched via `free: 0`); `freeEffect` card_payment → `0` (was `amt`). Net over a charge+payoff cycle becomes **free −amt, liquid −amt, owed 0** (genuinely down `amt` spendable, debt settled) instead of the current **free 0, liquid 0, owed 0** (which erases the expense).
+- **Keep BOTH numbers (no merge).** They answer different questions and the liquidity floor lives on the raw one: `cash.free` = raw − ALL this month's committed outflows (budgets+debts+sinking+one-offs+card prepay, app.js:609) = "how much can I still spend"; `cash.total` = raw bank cash = what the `liquidity_floor` (5000) is compared against (app.js:2001, chat.js:577/603) = "is my bank above my buffer." Merging would make the floor compare against the (much smaller) free number and fire constantly. So: no merge.
+- **Tuck the 'Liquid cash' tile out of the UI.** The summary's "Liquid cash" tile (app.js:2003, raw number + floor sub-label) is removed from view ("i only wanna see whats the spendable money, not the actual money"). Floor logic KEEPS RUNNING on `cash.total` under the hood; a floor-warning indicator is preserved (keep a compact floor status so the user still gets the "below your floor" alert without the raw number).
+- **Blast radius.** `txnAdj` (app.js:288) + `freeEffect` (app.js:1010); v72.10 "exact inverse" comments (app.js:276-281 + INSTRUCTIONS v72.10 note); moneyLog before/after math (verify it derives from txnAdj/freeEffect — no hardcoded card_payment free); summary tile (app.js:2003); smoke (smoke_app_v68.js v72.33 "pay A 500 back → exact inverse" + free-after-payoff assertions); gate (check_site.py:588 pins the exact tuple); What's-new note + version bump (next dot after v72.41).
+- **Scope narrowed (user follow-up — the operative instruction):** implement ONLY the payoff bug fix (`txnAdj` card_payment + `freeEffect`) and keep both numbers. The "Tuck the 'Liquid cash' tile" bullet above is now OUT of scope — the Liquid cash tile and its floor display stay exactly as they are (no UI change). Blast radius shrinks to: txnAdj, freeEffect, the v72.10 "exact inverse" comments, the money-log 'p' render (if it assumed the payoff moved free), the What's-new note + version, and the test/gate updates.
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Scope narrowed by user (no tile tucking) — follow-up logged verbatim above
+- [x] Read + confirm the exact code to change (txnAdj, freeEffect, money-log 'p' render, smoke, gate) — render confirmed: the 'p' row's free before/after hardcoded the old "inflow" math (fixed to before = f); card sub-line + prepay math were already correct
+- [x] Fix txnAdj card_payment + freeEffect (applied: `{ cash: amt, free: 0, card: -amt, prepay: -amt }` + freeEffect → 0; money-log 'p' render before = f)
+- [x] Update the v72.10 "exact inverse" comments (app.js overlay block, freeEffect, add-sheet, gate descriptions)
+- [x] What's-new note (SHELL_NOTES '72.42', plain wording) + version bump (release.ps1 v72.42: SHELL_RELEASE, sw cache, README, gate version assertions, root-mirror sync)
+- [x] Update smoke tests + gate assertions (new v7242Section — all 3 assertions PASS on the real app.js; new v72.42 gate check + updated tuple pin — `python tools/check_site.py` = "all checks passed"; the one transitional smoke FAIL is the v72.29→v72.38 fallback check (`shellNotesFor('99.9').v === runV`) which flips green the moment SHELL_RELEASE is stamped 72.42, as designed)
+- [x] Run gates + smoke (release.ps1) — "GATES: all green" on both the stamp run and the pre-push re-stamp run (incl. both smokes + the previously-transitional What's-new fallback check, green once 72.42 was running)
+- [x] Commit + push (re-stamp live at push) + verify live — `e0d7f5f` (release) + `5bc579c` (live re-stamp 22:01) pushed to origin/main; live_check.js 6/6 PASS against jblagana.github.io
+- [x] Close entry
+
 ## 2026-09-14 12:4x — x-axis end-of-month ticks + prepay questions (3 instructions)
 Status: **done**
 Progress: 100% — completed 2026-09-14 19:4x; commits `e8355dc` + `910487c` pushed to origin/main (v72.41, live 19:34, SW cache `finances-pwa-v72.41`, live app.js verified: 72.41 stamp + tick fix + '72.41' note + addSheetKind export + per-card CTA + pay-card guard; live sw.js verified); (2) answered in chat (the model was already correct — the logging path is the new Pay-card mode); phone-side confirmation pending with the user (one refresh delivers this)
