@@ -27,9 +27,9 @@ Progress: 80% — ETA 2026-09-14 20:10
 - [x] Investigate card/prepay model (baseCardPrepays, prepayBy, cardEffect, "Log prepay" CTA, per-card prepay/target_balance) — model is correct; gap is UI (fresh card_payment impossible, combined-only CTA)
 - [x] (1) code: x-axis month ticks = end-of-month day+month dates (all 7 ticks dates; smoke asserts the exact tick list — renders "14 Sep, 30 Sep, 31 Oct, 30 Nov, 31 Dec, 31 Jan, 28 Feb"); What's-new note written (key '72.41')
 - [x] (3) code: Spend / Pay-card direction in the Add sheet (addSheetKind + setAddMode + CARD guard) + per-card coach CTA (data-prepaycard buttons); gate check added; smoke section added (kind rules, per-card buttons + amounts, per-card payoff isolation)
-- [ ] release.ps1 v72.41 → all gates green (72.40 dot renamed to 72.41 — see bullet above)
+- [x] release.ps1 v72.41 → all gates green 19:33 (check_site repo + root mirror, test_chat_parser, node --check ×4, smoke_v68, smoke_app_v68 — 72.40 dot renamed to 72.41, see bullet above); commit e8355dc
 - [ ] (2) Answer the prepay-logging question (grounded in the code) — chat reply, model is correct so no code needed for the question itself
-- [ ] Commit + re-stamp live at the last moment + push
+- [ ] Re-stamp live at the last moment + push
 - [ ] Verify live + close entry
 
 ## 2026-09-14 12:1x — "see img" — screenshot: home-card graph shows only the start label
