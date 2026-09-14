@@ -493,11 +493,11 @@ def main():
     snack_rule = ""
     if "#snack{" in html:
         snack_rule = html.split("#snack{", 1)[1].split("}", 1)[0]
-    check("snack centered bulletproof (v71.3, re-done in v72.20, TOP banner in v72.32): left:50% with the X offset carried INSIDE the transform in BOTH the base (hidden above the screen) and .show states (the #swToast pattern — no state may be able to drop the X offset); v72.32 the banner anchors to the top like the new-version toast and hides with visibility too (the Android-recents ghost-pill rule); the add toast has NO undo (ledger ✕ is the delete path)",
+    check("snack centered bulletproof (v71.3, re-done in v72.20, TOP banner in v72.32): left:50% with the X offset carried INSIDE the transform in BOTH the base (hidden above the screen) and .show states (the #swToast pattern — no state may be able to drop the X offset); v72.32 the banner anchors to the top like the new-version toast and hides with visibility too (the Android-recents ghost-pill rule); the add toast's v71 'no undo' was REVERSED in v72.36 (undo on every action toast — see the v72.36 check)",
           "left:50%" in snack_rule and "transform:translate(-50%,-160%)" in snack_rule
           and "visibility:hidden" in snack_rule
           and "#snack.show{opacity:1;visibility:visible;transform:translate(-50%,0)" in html
-          and "snack('Added ' + money(t.amount) + ' \u00b7 ' + esc(t.category || t.account));" in js
+          and "snack('Added ' + money(t.amount) + ' \u00b7 ' + esc(t.category || t.account), function () {" in js
           and "undoAddTxn" not in js)
     check("v72.32 (user: 'for the toasts, remake them into a banner on the top of screen which stays for 7 seconds but can be swiped up to remove immediately. kinda similar to the new version toast.'): the snack is a TOP banner in the #swToast family (safe-area top, touch-action:none so the page can't steal the swipe) with a 7s default lifetime; the swipe-up follows the finger (pointermove, .dragging kills the transition, 0.85 resistance + fade) and a release past the threshold (-60px or 40% of the banner height) dismisses it immediately, anything less springs back; the Undo button is not a drag handle",
           "top:calc(10px + env(safe-area-inset-top))" in snack_rule
@@ -612,6 +612,13 @@ def main():
     check("v72.35 (user: 'look at the image, ive done what u said, fyi, since the version i told u to center that toast, it never happened in in newer versions'): the <style> block is BRACE-BALANCED (no stray top-level '}' / unclosed '{') — a dangling 'cursor:pointer;text-align:center}' tail left by the v21 sync-strip removal made the CSS parser swallow the NEXT rule (the #snack base rule) as an invalid qualified rule, so the snack never had its position/left/top/pill and rendered as plain flow text above the footer in EVERY version since Phase 1, no matter what the top-banner CSS said in the source (verified in a real Chromium CSSOM: the base #snack rule was absent while #snack.show survived)",
           "cursor:pointer;text-align:center}" not in css_no_comments(html)
           and css_brace_ok(html))
+    check("v72.36 (user: 'return the undo button for all toasts'): every ACTION toast offers Undo — the add toast got its v71-removed Undo back (a QUIET remove: the entry, its money-log row and the account adjustment go together, no second toast) and the Imported toast snapshots everything the file could touch (base / txns / plans / owed / money-log / overlay / chat) BEFORE the first write, its Undo re-files that snapshot (imported rows out, snapshot rows in, state restored, snapshot re-derived from the base, persisted — the load path's own steps); the informational toasts ('Already in the book', 'Exported', 'Import failed') change nothing and carry no button",
+          "esc(t.category || t.account), function () {" in js
+          and "removeTxnQuiet(t.id);" in js
+          and "var impPrev = {" in js
+          and "impPrev.chat = cloneObj(chatRows || []);" in js
+          and "function restoreImportSnapshot(prev) {" in js
+          and "parts.length ? function () { restoreImportSnapshot(impPrev); } : null);" in js)
     check("the owed form's sections + ledger filing follow 'What happened' (v72.28 + follow-ups, user: the 4 directions, then 'maybe we should remove the ledger entries for i paid for them and they paid me back' — the settle-by-purchase offset double-counted — an interpretation edit — 'dont drop it anymore' the Account section + the tpf 'Unsorted' fallback): the ledger records CONSUMPTION, not loans — ONLY tpf files a ledger txn (Cash implicitly, the picked category from Your numbers' budgets with 'Unsorted' fallback, negative cash_out); ipf = Account + Note, itb and tmb = Account only, all three NEVER touch the ledger (a pure loan cycle nets to zero in cash; an offset lands in the tpf entry's true category; their account pick is stored on the entry informationally); existing entries adopt the rule ONLY on edit — the linked txn is rewritten in place (id + position kept), removed, or created fresh, and undo reverses it; NO migration of old entries; the owed balance still comes from the entry records",
           "function owedFormSections(form, dir)" in js
           and '<div class="oent-accrow">' in js and '<label>Account</label>' in js

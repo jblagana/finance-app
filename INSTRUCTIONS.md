@@ -6,6 +6,26 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 09:0x — v72.36: return the undo button for all toasts
+Status: in progress
+Progress: 80% — ETA ~10:0x (implementation + gates + push remain)
+
+### Instruction (verbatim)
+> why werent u able to figure it out earlier? also, return the undo button for all toasts
+
+### Interpretation (agent — user may edit this section)
+- Part 1 is a pure chat question (why the CSS root cause was missed until v72.35) — answered in the reply, no code change.
+- Part 2: every action toast (snack) should show an Undo button. Currently only some snack() calls pass an undo callback. Find all snack() call sites, add undo wherever the action is reversible (snapshot + restore of the changed state), ship as v72.36. Informational toasts that change nothing (e.g. the #swToast "new version" banner) have nothing to undo.
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Find all snack() call sites; identify which toasts lack undo and whether each action is reversible — 17 call sites: 11 already had undo (delete/add-edit/plan/person/owed flows); the state-changing ones WITHOUT were the 'Added' toast (the v71 removal — now reversed) and the 'Imported' toast (whole-book replace — now gets a pre-import snapshot undo); the remaining four ('Already in the book', 'Exported', 'Import failed' x2) change nothing and keep no button
+- [x] Implement undo on the toasts (snapshot/restore pattern) — app.js: add toast Undo = removeTxnQuiet(t.id) (quiet: no second toast, entry + money-log row + adj delta together); import: impPrev snapshot (base/txns/plans/owed/moneyLog/adj/chat, chat captured where the rows are read, before the deletes) + restoreImportSnapshot() mirroring the load path (rows out/in, state restored, refreshLocalSnapshot re-derives the snapshot from the base, persist base/snapshot/adj/owed/moneyLog, re-render); SHELL_NOTES '72.36'; gate: old v71.3 check updated + new v72.36 structural check; smoke: What's-new assert → 72.36 + v7236Section (add-undo + import-undo, real snack Undo clicks)
+- [x] release.ps1 v72.36 (stamps + full gate suite) — first run: GATES green but the smoke's v7236 section died silently after its first check (an unhandled rejection the harness counts as a render warning; the process still exited 0 — caught it by reading the unfiltered tail: "n0 is not defined", a var scoped inside the first .then callback); fixed the scope + re-ordered the import test (export BEFORE the change so the import actually replaces state); re-run: all 8 v72.36 smoke checks PASS + "all smoke_app_v68 checks passed"
+- [ ] Commit, push (live stamp set at the last moment)
+- [ ] Close entry with commit hash
+
+
 ## 2026-09-14 08:2x — v72.35: toast STILL at the bottom after the unstick — top-snack CSS never actually applied
 Status: **done**
 Progress: 100% — completed 2026-09-14 08:5x; commit `5e27a41` pushed to origin/main (v72.35, live 08:52, SW cache `finances-pwa-v72.35`)

@@ -882,9 +882,14 @@
     return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () {
       emit('txn');
       if (!(opts && opts.quiet)) {
-        // v71: no Undo on the add toast (user's call — the ledger's ✕ is the
-        // deletion path); the snack just confirms.
-        snack('Added ' + money(t.amount) + ' · ' + esc(t.category || t.account));
+        // v72.36 (user: 'return the undo button for all toasts'): v71's
+        // "no Undo on the add toast" call is REVERSED — Undo quietly removes
+        // the just-added entry (removeTxnQuiet: no second toast, and the
+        // money-log row + account adjustment go with it — the exact inverse
+        // of add).
+        snack('Added ' + money(t.amount) + ' · ' + esc(t.category || t.account), function () {
+          removeTxnQuiet(t.id);
+        });
       }
       return Promise.resolve();
     }).then(function () { return id; });
@@ -3865,12 +3870,66 @@
     });
     return out;
   }
+  // v72.36 (user: 'return the undo button for all toasts'): the Imported
+  // toast's Undo — re-file the pre-import snapshot. Mirrors the load path:
+  // the imported rows out, the snapshot's rows in, state restored, the
+  // snapshot RE-DERIVED from the restored base (refreshLocalSnapshot — the
+  // same deterministic step load runs), then everything persisted.
+  function restoreImportSnapshot(prev) {
+    var dels = [];
+    state.txns.forEach(function (t) { dels.push(idbDel(STORE_TX, t.id)); });
+    state.plans.forEach(function (p) { dels.push(idbDel(STORE_PLANS, p.id)); });
+    idbAll(STORE_CHAT).then(function (chatRows) {
+      (chatRows || []).forEach(function (r) { if (r && r.id) dels.push(idbDel(STORE_CHAT, r.id)); });
+      return Promise.all(dels);
+    }).then(function () {
+      var puts = [];
+      (prev.txns || []).forEach(function (t) { puts.push(idbPut(STORE_TX, t)); });
+      (prev.plans || []).forEach(function (p) { puts.push(idbPut(STORE_PLANS, p)); });
+      (prev.chat || []).forEach(function (r) { if (r && r.id) puts.push(idbPut(STORE_CHAT, r)); });
+      return Promise.all(puts);
+    }).then(function () {
+      state.txns = prev.txns;
+      state.plans = prev.plans;
+      state.owed = prev.owed;
+      state.moneyLog = prev.moneyLog;
+      state.adj = prev.adj;
+      state.base = prev.base;
+      baseDirty = false; // the form re-renders from the restored base
+      refreshLocalSnapshot();
+      return Promise.all([
+        persistSnapshot(),
+        idbPut(STORE_META, { key: 'base', value: state.base }).catch(function () {}),
+        saveAdj(),
+        saveOwed(),
+        idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog })
+      ]);
+    }).then(function () {
+      renderBaseEditor();
+      renderBaseStatus();
+      render();
+    });
+  }
   function importData(file) {
     var fr = new FileReader();
     fr.onload = function () {
       try {
         var data = JSON.parse(String(fr.result || ''));
         if (!data || data.app !== 'finances-pwa') throw new Error('not a Fin.AI PWA backup');
+        // v72.36 (user: 'return the undo button for all toasts'): import is
+        // the one big hammer — it can replace whole books — so its toast gets
+        // the strongest Undo: a snapshot of everything this file could touch,
+        // taken BEFORE the first write (the baseDirty fold below included).
+        // Undo re-files the snapshot.
+        var impPrev = {
+          base: cloneObj(state.base || defaultBase()),
+          txns: cloneObj(state.txns || []),
+          plans: cloneObj(state.plans || []),
+          owed: cloneObj(state.owed || { people: [], sort: 'recent' }),
+          moneyLog: cloneObj(state.moneyLog || []),
+          adj: cloneObj(state.adj),
+          chat: null // captured where the chat rows are read (before the deletes)
+        };
         // v72.23: a PARTIAL backup — `sections` lists what the file holds;
         // restore only those, leave the rest untouched. No `sections`
         // (a pre-72.23 file) = the full v72.8 restore, exactly as before.
@@ -3894,6 +3953,7 @@
         if (hasSec('txns')) state.txns.forEach(function (t) { saves.push(idbDel(STORE_TX, t.id)); });
         if (hasSec('plans')) state.plans.forEach(function (p) { saves.push(idbDel(STORE_PLANS, p.id)); });
         idbAll(STORE_CHAT).then(function (chatRows) {
+          impPrev.chat = cloneObj(chatRows || []); // v72.36: the pre-import thread
           if (hasSec('chat')) (chatRows || []).forEach(function (r) { if (r && r.id) saves.push(idbDel(STORE_CHAT, r.id)); });
           return Promise.all(saves);
         }).then(function () {
@@ -3947,13 +4007,16 @@
             renderBaseEditor();
             renderBaseStatus();
             render();
-            // v72.23: the snack names only what this file restored
+            // v72.23: the snack names only what this file restored; v72.36:
+            // and its Undo re-files the pre-import snapshot (only when the
+            // file actually restored something)
             var parts = [];
             if (hasSec('txns')) parts.push((data.txns || []).length + ' entries');
             if (hasSec('plans')) parts.push((data.plans || []).length + ' plans');
             if (hasSec('owed')) parts.push(owedPeople.length + ' owed people');
             if (hasSec('base') && (state.base.migrated_from_snapshot || (data.base && data.base.accounts))) parts.push('numbers restored');
-            snack('Imported ' + (parts.length ? parts.join(' \u00b7 ') : 'nothing \u2014 this backup had no sections selected'));
+            snack('Imported ' + (parts.length ? parts.join(' \u00b7 ') : 'nothing \u2014 this backup had no sections selected'),
+              parts.length ? function () { restoreImportSnapshot(impPrev); } : null);
           });
         });
       } catch (err) {
@@ -3967,12 +4030,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.35, live: new Date(2026, 8, 14, 8, 52) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.36, live: new Date(2026, 8, 14, 11, 13) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.36': [
+      'Every banner that changes something now has an Undo button — including the "Added" one',
+      'Importing a backup: Undo on its banner brings back exactly what you had before the import'
+    ],
     '72.35': [
       'The little banners are finally where they belong — centered at the top of the screen (an old style fragment had been hiding their positioning in every previous build)'
     ],
