@@ -8,6 +8,7 @@ the local brain is left behind. Run:  python tools/check_site.py
 canonical for every session, see AGENTS.md).
 """
 import os
+import re
 import sys
 from html.parser import HTMLParser
 
@@ -49,6 +50,35 @@ class Balance(HTMLParser):
         if open_tag != tag:
             self.errors.append("mismatch: <%s> from %s closed by </%s> at %s"
                                % (open_tag, pos, tag, self.getpos()))
+
+
+def css_no_comments(html_doc):
+    """v72.35: the <style> block without comments/quoted strings — what the
+    CSS parser actually sees (a stray '}' inside a comment is harmless; the
+    same characters at top level swallow the next rule)."""
+    try:
+        css = html_doc.split('<style>', 1)[1].split('</style>', 1)[0]
+    except IndexError:
+        return ''
+    css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+    return re.sub(r'"(?:[^"\\\n]|\\.)*"|\'(?:[^\'\\\n]|\\.)*\'', '', css)
+
+
+def css_brace_ok(html_doc):
+    """v72.35: <style> brace balance. A stray top-level '}' (or an unclosed
+    '{') makes Chromium swallow the NEXT rule as an invalid qualified rule
+    (the Phase-1 snack bug: the #snack base rule was silently dropped, so the
+    toast rendered as plain flow text above the footer in every version).
+    Depth must never go negative and must end at 0."""
+    depth = 0
+    for ch in css_no_comments(html_doc):
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0
 
 
 def main():
@@ -579,6 +609,9 @@ def main():
           and "showSwToast(); // v72.34: as early as possible (the precache still runs)" in js
           and "nw.state === 'redundant'" in js
           and "window.addEventListener('load'" not in js)
+    check("v72.35 (user: 'look at the image, ive done what u said, fyi, since the version i told u to center that toast, it never happened in in newer versions'): the <style> block is BRACE-BALANCED (no stray top-level '}' / unclosed '{') — a dangling 'cursor:pointer;text-align:center}' tail left by the v21 sync-strip removal made the CSS parser swallow the NEXT rule (the #snack base rule) as an invalid qualified rule, so the snack never had its position/left/top/pill and rendered as plain flow text above the footer in EVERY version since Phase 1, no matter what the top-banner CSS said in the source (verified in a real Chromium CSSOM: the base #snack rule was absent while #snack.show survived)",
+          "cursor:pointer;text-align:center}" not in css_no_comments(html)
+          and css_brace_ok(html))
     check("the owed form's sections + ledger filing follow 'What happened' (v72.28 + follow-ups, user: the 4 directions, then 'maybe we should remove the ledger entries for i paid for them and they paid me back' — the settle-by-purchase offset double-counted — an interpretation edit — 'dont drop it anymore' the Account section + the tpf 'Unsorted' fallback): the ledger records CONSUMPTION, not loans — ONLY tpf files a ledger txn (Cash implicitly, the picked category from Your numbers' budgets with 'Unsorted' fallback, negative cash_out); ipf = Account + Note, itb and tmb = Account only, all three NEVER touch the ledger (a pure loan cycle nets to zero in cash; an offset lands in the tpf entry's true category; their account pick is stored on the entry informationally); existing entries adopt the rule ONLY on edit — the linked txn is rewritten in place (id + position kept), removed, or created fresh, and undo reverses it; NO migration of old entries; the owed balance still comes from the entry records",
           "function owedFormSections(form, dir)" in js
           and '<div class="oent-accrow">' in js and '<label>Account</label>' in js

@@ -6,6 +6,29 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 08:2x — v72.35: toast STILL at the bottom after the unstick — top-snack CSS never actually applied
+Status: in progress
+Progress: 70% — ETA ~09:0x (diagnosis + fix + browser-verify done; release gates + push remain)
+
+### Instruction (verbatim)
+> look at the image, ive done what u said, fyi, since the version i told u to center that toast, it never happened in in newer versions
+
+### Interpretation (agent — user may edit this section)
+- Screenshot: footer shows `shell v72.34 (Sep 14, 2026 | 2:08 AM)` — the SW unstick worked, the NEW shell is running. But the "Added PHP 1.00 · Cash" snack still renders at the BOTTOM (plain left-aligned text above the bottom nav).
+- User says: since the version where they asked to CENTER the toast, it never happened in any newer version → the v72.32 "top-snack" CSS apparently never matched/applied to the real snack element (or is overridden). This is a real CSS/DOM bug in the shipped shell, not just the stuck-SW story.
+- Fix: find the actual snack element + its CSS in the current shell (index.html / app.js), make the snack land at the TOP, horizontally centered, as originally requested; ship as v72.35.
+- **ROOT CAUSE (decisive, verified in a real Chromium):** the shipped CSS itself was broken — a dangling `cursor:pointer;text-align:center}` fragment (a leftover tail of a rule removed in v21's "sync error strip", present since Phase 1 commit 59d3f43) sits in the `<style>` block right before the snack rule. That stray top-level `}` makes the CSS parser swallow the NEXT rule — the `#snack` BASE rule (position:fixed / left:50% / top anchor / pill) — as an invalid qualified rule. Chromium's CSSOM dump of the LIVE site: rule list jumps from `input[type="month"]` straight to `#snack.show` (the base rule is ABSENT), and the computed style of `#snack.show` is `position:static; left:auto; top:auto` (only the surviving `.show` props apply) → the snack renders as plain flow text at its DOM spot (just above the footer) = every screenshot the user ever sent, in EVERY version, all devices. `#snack.show`, `#snack.dragging`, `.snack-msg`, `#snack button` (all AFTER the swallowed rule) parse fine; `#swToast` (also after) always worked — hence "kinda similar to the new version toast" looked correct. The stuck-SW diagnosis was a parallel real problem (v72.34 fixed the update flow) but NOT the toast bug.
+- **FIX (v72.35):** removed the fragment (index.html, documented in a comment) + new structural gate in check_site.py (`css_brace_ok`: `<style>` brace balance — comments/strings stripped, depth never negative, ends at 0) + targeted assert that the fragment is gone + SHELL_NOTES 72.35 + smoke notes assertion → 72.35. Verified in real Chromium after the fix: base `#snack` rule present in the CSSOM, computed `position:fixed; top:10px; left:50%; transform:translate(-50%,0); display:flex` + card2 background, screenshot shows the banner as a TOP-CENTERED pill.
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Inspect snack/toast markup + CSS — root cause found: stray top-level `}` (v21 leftover, since Phase 1) swallows the `#snack` base rule in the browser's CSS parser (proved via CSSOM + computed styles in real Chromium on the LIVE CSS)
+- [x] Implement fix + bump v72.35 (index.html fragment removed; check_site.py brace-balance gate + mirror via release.ps1; app.js SHELL_NOTES 72.35; sw.js cache + SHELL_RELEASE stamped by release.ps1; smoke assertion → 72.35)
+- [ ] release.ps1 v72.35 (stamps + full gate suite: check_site repo+mirror, parser, node --check, smokes)
+- [ ] Commit, push (live stamp set by release.ps1 at the last moment)
+- [ ] Close entry with commit hash
+
+
 ## 2026-09-14 02:1x — v72.34: user edit on the v72.34 entry — "i verified again, in both phone and browser, its still the old toast. already hard refresh and clear cache the browser and it still the old toast."
 Status: **done**
 Progress: 100% — completed 2026-09-14 02:1x; commit `01c5c9c` pushed to origin/main (v72.34, live 02:08, SW cache `finances-pwa-v72.34`)

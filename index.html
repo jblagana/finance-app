@@ -303,7 +303,14 @@ input[type="month"]{min-height:44px}
 /* (v21: sync error strip removed — the app is fully local) */
 
 
-cursor:pointer;text-align:center}
+/* (v72.35: the v21 sync-strip removal used to leave a dangling
+   "cursor:pointer;text-align:center}" tail here — that stray top-level "}"
+   made the CSS parser swallow the NEXT rule (the #snack base rule) as an
+   invalid qualified rule, so the snack never had its fixed/centered/top
+   positioning and rendered as plain flow text above the footer in EVERY
+   version since Phase 1 (59d3f43), no matter what the top-banner CSS said
+   in the source. Fragment removed; the <style> brace balance is now gated
+   in tools/check_site.py so it can never ship again.) */
 
 /* ---- snack banner (v72.32: a TOP banner in the #swToast family) ---- */
 /* v72.20 bulletproof centering kept: left:50% with the X offset carried

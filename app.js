@@ -3967,12 +3967,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.34, live: new Date(2026, 8, 14, 2, 8) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.35, live: new Date(2026, 8, 14, 8, 52) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.35': [
+      'The little banners are finally where they belong — centered at the top of the screen (an old style fragment had been hiding their positioning in every previous build)'
+    ],
     '72.34': [
       'New versions land faster: the app reloads itself the moment an update is ready \u2014 one refresh is all it takes'
     ],
