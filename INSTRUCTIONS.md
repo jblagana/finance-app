@@ -6,6 +6,29 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 11:2x — v72.37: add middle and end dates on the x axis of the home card graph
+Status: not started
+Progress: 0% — ETA TBD
+
+### Instruction (verbatim)
+> add middle and end dates on the x axis of the home card graph
+
+### Interpretation (agent — user may edit this section)
+- "Home card graph" = the hero card's cash sparkline on Home (`#sparkBox`, the only graph with an x axis; the category donut has none). It plots start cash + 6 projected months = 7 points.
+- The x axis today labels every point, but only the START tick is a date: `14 Sep`; the rest are month names: `Sep '26 … Feb '27`. So "add middle and end dates" = make the MIDDLE tick and the END tick dates (day+month) too, keeping the other month-name labels (additive, nothing removed).
+- Dates are the dates the plotted values actually correspond to: middle tick = last day of the 3rd projected month (30 Nov 2026), end tick = last day of the 6th month (28 Feb 2027). Start tick stays `dayMonth(as_of)`.
+- Implementation: `sparkData()` adds a `date` (ISO) per point; `renderSpark()` label loop uses `dayMonth(p.date)` for the first, middle, and last index, monthShort for the rest.
+- Ship as v72.37 (shell change → sw.js cache + SHELL_RELEASE + footer stamps).
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Inspect the home card graph render code (x axis labels today) — hero sparkline, 7 points, labels: start date + month names only
+- [x] Implement start/middle/end date labels (sparkData date per point + renderSpark tick loop)
+- [ ] release.ps1 v72.37 (stamps + full gate suite)
+- [ ] Commit, push (live stamp set at the last moment)
+- [ ] Close entry with commit hash
+
+
 ## 2026-09-14 09:0x — v72.36: return the undo button for all toasts
 Status: **done**
 Progress: 100% — completed 2026-09-14 11:1x; commit `9479a66` pushed to origin/main (v72.36, live 11:13, SW cache `finances-pwa-v72.36`)

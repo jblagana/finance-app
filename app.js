@@ -2572,9 +2572,20 @@
   function sparkData() {
     var s = state.snapshot;
     if (!s || !s.matrix || !s.matrix.base || !s.matrix.base.length) return null;
-    var pts = [{ label: dayMonth((state.base && state.base.as_of) || todayISO()), v: Number(s.matrix.start_cash) || 0 }];
+    // v72.37: each point carries the real date its value corresponds to
+    // (start = as-of date, month points = last day of that month), so the
+    // x axis can show real dates at the start / middle / end ticks.
+    var monthEnd = function (m) {
+      var p = String(m || '').split('-');
+      if (p.length === 2 && /^\d{4}$/.test(p[0]) && /^\d{2}$/.test(p[1])) {
+        return localISO(new Date(Number(p[0]), Number(p[1]), 0)); // day 0 = last day of the month
+      }
+      return null;
+    };
+    var asOf = (state.base && state.base.as_of) || todayISO();
+    var pts = [{ label: dayMonth(asOf), v: Number(s.matrix.start_cash) || 0, date: asOf }];
     s.matrix.base.forEach(function (row) {
-      pts.push({ label: monthShort(row.month), v: Number(row.running) || 0 });
+      pts.push({ label: monthShort(row.month), v: Number(row.running) || 0, date: monthEnd(row.month) });
     });
     var floorLine = Number(s.floor) || 0;
     return { pts: pts, floor: floorLine };
@@ -2603,9 +2614,13 @@
         '<text x="' + (W - PR - 2) + '" y="' + (fy - 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="#ffc45c">floor ' + fmtNum(floor) + '</text>';
     }
     svg += '<circle cx="' + X(0).toFixed(1) + '" cy="' + Y(pts[0].v).toFixed(1) + '" r="3.2" fill="#37d39b" stroke="#0f1420" stroke-width="1.5"/>';
+    // v72.37: the start / middle / end ticks are real dates (day + month);
+    // the ticks in between keep the compact month names.
+    var mid = Math.round((pts.length - 1) / 2);
     pts.forEach(function (p, i) {
       var anch = i === 0 ? 'start' : (i === pts.length - 1 ? 'end' : 'middle');
-      svg += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 4) + '" text-anchor="' + anch + '" font-size="8" fill="#93a1bd">' + esc(p.label) + '</text>';
+      var lab = (i === 0 || i === mid || i === pts.length - 1) && p.date ? dayMonth(p.date) : p.label;
+      svg += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 4) + '" text-anchor="' + anch + '" font-size="8" fill="#93a1bd">' + esc(lab) + '</text>';
     });
     box.innerHTML = svg + '</svg>';
   }
@@ -4030,7 +4045,7 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.36, live: new Date(2026, 8, 14, 11, 13) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.37, live: new Date(2026, 8, 14, 11, 39) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
