@@ -6,6 +6,47 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-14 02:1x — v72.34: user edit on the v72.34 entry — "i verified again, in both phone and browser, its still the old toast. already hard refresh and clear cache the browser and it still the old toast."
+Status: **done**
+Progress: 100% — completed 2026-09-14 02:1x; commit `01c5c9c` pushed to origin/main (v72.34, live 02:08, SW cache `finances-pwa-v72.34`)
+
+### Instruction (verbatim)
+> (i verified again, in both phone and browser, its still the old toast. already hard refresh and clear cache the browser and it still the old toast.)
+
+### Interpretation (agent — user may edit this section)
+- User edit on the v72.34 interpretation (appended to my "fix direction" bullet) — it IS the new instruction.
+- New facts: (a) verified in BOTH the phone AND a browser, (b) hard refresh + browser cache clear done, (c) still the old bottom toast.
+- **DIAGNOSIS (decisive): the live site is CORRECT — it is a stuck-device problem.** Fetched the served files: live `sw.js` = `const CACHE = 'finances-pwa-v72.33'` and live `app.js` contains the v72.33 `prepayBy` code → GitHub Pages IS serving the v72.33 shell (Pages deploy is atomic per push, so the served index.html = the banner CSS one). The phone/browser keeps running a PRE-v72.32 cached shell because the OLD service worker still controls the client: a hard refresh does NOT bypass the SW (it intercepts the navigation cache-first) and a plain "clear cache" does NOT unregister the worker — so the old shell keeps serving itself.
+- **UNSTICK (tell the user — ONE-TIME, non-destructive):** do NOT use "Clear & reset site data" / "Clear storage" — that wipes the app's IndexedDB ledger (local-first data). Instead, on the phone's Chrome: open `chrome://serviceworker-internals` → find `https://jblagana.github.io` → **Unregister** the worker → reload the site (fresh registration picks up the new SW + shell). Data stays (only the worker is removed). Alternative: uninstall the PWA icon, open the site in Chrome, re-add to Home screen.
+- v72.34 (shipping now) removes the friction for all FUTURE updates: register at script time, banner at updatefound (hides on redundant), guarded controllerchange → auto-reload — one refresh lands the new shell.
+- The v72.34 update-flow fix below is still valid and ships regardless: it removes the two-refresh friction for everyone.
+
+### Subtasks
+- [x] Log the edit (first action)
+- [x] v72.34 update-flow fix implemented (script-time register + updatefound toast + redundant-hide + guarded controllerchange auto-reload + SHELL_NOTES + gate + smoke)
+- [x] Fetch the LIVE site (index.html, sw.js, app.js) and diff against main — live = v72.33 (deploy FINE); device is stuck behind the old SW
+- [x] Diagnose: deploy problem vs stuck SW — stuck SW confirmed; unstick = chrome://serviceworker-internals → Unregister (NOT "clear site data" — that would wipe the ledger)
+- [x] Gate + smoke + release v72.34 + push (all gates green via release.ps1; code commit `01c5c9c`; done-log commit follows)
+
+## 2026-09-14 02:0x — v72.34: phone still shows the OLD bottom toast — the new shell isn't landing on refresh
+Status: **done**
+Progress: 100% — completed 2026-09-14 02:1x; commit `01c5c9c` pushed to origin/main (v72.34, live 02:08, SW cache `finances-pwa-v72.34`)
+
+### Instruction (verbatim)
+> v72.32 has no banners, still the old toast, with delayed appearance
+
+### Interpretation (agent — user may edit this section)
+- The live phone is still running a PRE-v72.32 cached shell: the snack is the old bottom pill, and the appearance feels delayed (the "new version" update toast lands late, after the SW byte-compare/fetch).
+- First verify the code on main is correct (v72.32 CSS + swipe in the shipped commits) — the gates passed, so the likely culprit is the PWA UPDATE FLOW: a pull-to-refresh while the old SW still controls the client serves the old shell; the new SW sits waiting; the user has to see + tap the "new version" banner (or refresh twice) before the new shell lands.
+- Fix direction: make a refresh land the latest shell — skipWaiting + clients.claim in sw.js, auto-reload on controllerchange (guarded), keep the update banner as the visible fallback. Also make the update toast appear as early as possible. (i verified again, in both phone and browser, its still the old toast. already hard refresh and clear cache the browser and it still the old toast.)
+
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Verify main actually ships the v72.32 banner (git show 4b6547d: top-anchored #snack present, no duplicate rule) + read sw.js / app.js SW update flow / #swToast — main correct; no controllerchange auto-reload; registration deferred to 'load'
+- [x] Implement: bulletproof SW update (script-time register + updatefound toast + redundant-hide + guarded controllerchange auto-reload; sw.js already had skipWaiting + claim)
+- [x] Gate + smoke (all green: check_site, parser, smoke_v68, smoke_app_v68, node --check)
+- [x] Release v72.34, gates green, commit `01c5c9c`, pushed (done-log commit follows)
+
 ## 2026-09-14 01:3x — v72.33: the coach quotes the prepay amount of the card asked, not the total
 Status: **done**
 Progress: 100% — completed 2026-09-14 01:5x; commit `759d2b4` pushed to origin/main (v72.33, live 01:48, SW cache `finances-pwa-v72.33`)
