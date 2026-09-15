@@ -385,10 +385,21 @@
     // stored card_util_target.
     var byCard = state.adj.prepayBy || {};
     var utilT = state.base ? (Number(state.base.card_util_target) || 0) : 0;
-    e.cards = (s.cards || []).map(function (c) {
+    // v72.46: map over e.cards (the clone) — the v72.33 original mapped over
+    // s.cards (the LIVE state) and only got away with it because prepay was
+    // idempotent; the balance write-back must never touch state.
+    e.cards = (e.cards || []).map(function (c) {
       var bal = (Number(c.balance) || 0) + (Number(byCard[c.name]) || 0);
       var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * utilT);
       c.prepay = r2(Math.max(0, bal - tb));
+      // v72.46: the effective card is LIVE end-to-end — balance + utilization
+      // included. The as-of row used to carry only prepay live, so after a
+      // prepay the stored balance/util_pct (sheet as-of) kept feeding stale
+      // numbers to the snapshot and the rule engine ("old util rate").
+      // Same formula as baseCardPrepays, applied to the effective balance.
+      c.balance = r2(bal);
+      var lim = Number(c.limit) || 0;
+      c.util_pct = lim ? r2(bal / lim * 100) : null;
       return c;
     });
     return e;
@@ -4409,12 +4420,17 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.45, live: new Date(2026, 8, 15, 16, 49) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.46, live: new Date(2026, 8, 15, 22, 6) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.46': [
+      'Your card-utilization question now gets the number in front of the coach — a prepay moves your card balance the moment you log it, so the utilization you are told is the current one, not the old one',
+      '"util rate" and "utilization" now hit the built-in rules directly — the answer is instant and works with no signal',
+      'When your numbers move, the coach follows the new numbers: the numbers list is current as of now and takes precedence over anything it said earlier in the chat'
+    ],
     '72.45': [
       'The coach now reads your real numbers — every card shows its current balance, its credit limit, and how full it is',
       'A partial card prepay keeps its log button on the home card — it shows what is still left to pay',

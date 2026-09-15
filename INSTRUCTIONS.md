@@ -6,6 +6,33 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-15 17:0x — Stale CC utilization in the Coach Fin chat reply after a prepay (offload to the rule engine?)
+Status: **in progress**
+Progress: 85% — code + smoke 171/171 + both repo gates green + version artifacts staged; release.ps1 v72.46 → commit → push → live_check next — ETA this session
+### Instruction (verbatim)
+> after i prepay, i ask coach fin again for the cc util rate and it gave the old util rate, it did not update. how stupid can coach be? should i just offload that task to the rule engine
+### Interpretation (agent — user may edit this section)
+- Diagnosis (all verified in code, plan mode): (1) "cc util rate" misses the rule engine's util trigger `/\butiliz/` (chat.js:561) → the question fell through to the LLM; (2) the chat prompt = fresh v72.45 snapshot (live balance + limit + util% — the data WAS current) + "Recent conversation" carrying Coach's own earlier pre-prepay util answer + "the Question: below is the user's immediate reply to the last Coach: line" → the model parroted its own stale number (no precedence rule in the system prompt); (3) latent: even "utilization" (rule path) would be stale — `loadCtx()` (chat.js:248-253) recomputes live per-card balance/prepay but never `util_pct`, which is computed from the SHEET AS-OF balance (app.js:498) and only refreshes on base/import changes.
+- Decision (user-approved plan): YES, offload util to the rule engine — it already has a util intent, just half-wired. v72.46: (A) `loadCtx` recomputes `c.util_pct` from the effective balance (same formula as app.js:498 + the v72.45 snapshot line) → one live source for every chat consumer; (B) widen the trigger to `/\butiliz|\butil\b/` so "util rate" / "utilization" / "what's my util" hit the deterministic path (per-card via mentionOf, offline-capable, no API call); (C) one precedence line in `AI_REMOTE_SYSTEM`: the numbers list is current and supersedes anything said in earlier turns → guards every LLM-routed question, not just util.
+- Assumptions (user — edit to override): (1) trigger stays on util-words only; "how full is my card"-style phrasings stay LLM-routed this release (they now get the precedence rule + live numbers, so they degrade gracefully); (2) rule answer shape stays the existing Status block ("Maya CC utilization 14% of PHP 70,000" + freshness stamp), no new card.
+- (agent, during implementation — root cause went one level deeper): v72.45's "live" snapshot card line was STILL the sheet as-of in the real app — BOTH `app.js effectiveSnap()` (388-393) and `chat.js loadCtx()` (248-253) computed the live per-card `bal` locally but wrote back only `prepay`, never `balance`/`util_pct`. Every chat message (send→loadCtx→handle) and the Home note (chat.ctx()=loadCtx) therefore saw as-of balance → as-of util, forever, until a re-import. (The v72.45 probe/smoke fixtures used base-change data where as-of == live, so they never exposed the overlay case.) v72.46 item A therefore covers BOTH functions: `c.balance = r2(bal)` + `c.util_pct = lim ? r2(bal/lim*100) : null` write-back (same formula as baseCardPrepays) — consumer audit done: findAccounts, the charge-check "utilization after", the snapshot line, and the util intent all want live; nothing reads as-of off the effective snap. The v72.45 limit+util snapshot line now actually shows the live number on both surfaces.
+- (agent, during implementation — latent v72.33 bug found while adding the write-back): `effectiveSnap()` did `e.cards = (s.cards || []).map(...)` — mapping over the ORIGINAL `state.snapshot` cards, not the deep clone `e.cards` — and mutating each card's `prepay`. It only ever got away with it because prepay is idempotent (same value every call). The new non-idempotent `c.balance = r2(bal)` write-back then COMPOUNDED: every effectiveSnap() call added the overlay delta into the live state again (smoke showed the card balance climbing +2,000 per render: 5,000→7,000→9,000→…). `loadCtx()` had the identical shape (mapped over `snap.cards` from the store). FIX: both now map over the clone (`e.cards` / `eff.cards`). This is why the first smoke run after the write-back showed inflated prepay numbers — a real latent state-mutation, not a test flake.
+- Validation: smoke `v7246Section` (card near limit → snapshot util; log `card_payment` → snapshot util changes; `handle("what's my cc util rate")` takes path `rule:intentStatus` with the NEW util, different from pre-prepay; per-card "…utilization" variant) + `test_chat_parser.py` mirror of the util_pct recompute + `check_site.py` v72.46 gate section (tools/ + root mirrors) + SHELL_RELEASE 72.46 + SW `finances-pwa-v72.46` + live_check.js markers. Smoke result so far: 171/171 (165 baseline + 6 new, repeatable), chat.js now loaded in the smoke harness so the REAL rule engine runs.
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Root cause pinned (plan mode): trigger regex miss → LLM; LLM history-echo (no precedence rule); loadCtx util_pct never recomputed
+- [x] A: loadCtx recomputes util_pct live (chat.js) — + app.js effectiveSnap write-back (see deeper-root-cause bullet)
+- [x] B: widen the util trigger regex (chat.js)
+- [x] C: precedence line in AI_REMOTE_SYSTEM (chat.js)
+- [x] Smoke v7246Section (root) — 171/171 green, repeatable (incl. the clone-mutation fix)
+- [x] test_chat_parser.py mirror (tools/ + root) + check_site.py v72.46 (tools/ + root) — both repo gates green (all checks passed / all parser checks passed)
+- [x] SHELL_RELEASE 72.46 + sw.js cache + live_check.js markers (final live stamp lands via release.ps1 at push)
+- [ ] release.ps1 v72.46 → gates green → live stamp at push → push → live_check
+- [ ] Close this log entry with the commit hash
+
+---
+
+
 ## 2026-09-15 13:4x — Coach knows actuals + CC limits; partial-prepay chip keeps showing remaining; salary on the 15th (check-in + projection + cycle insights)
 Status: **done**
 Progress: 100% — completed 2026-09-15 16:4x; commit `93ae156` pushed to origin/main (v72.45, live 16:49, SW cache `finances-pwa-v72.45`, gates all green via tools/release.ps1 v72.45, full smoke 165/165, live app.js + chat.js + sw.js verified via live_check.js: 17/17 markers PASS)

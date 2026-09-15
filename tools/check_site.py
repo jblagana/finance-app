@@ -732,6 +732,17 @@ def main():
           and "if (pLast) out = { amount: r2(pSum), date: pLast.date };" in js
           and "if (receivedId && t.id && t.id === receivedId) return;" in js
           and "cycleData: cycleData" in js)
+    check("v72.46 (user: 'after i prepay, i ask coach fin again for the cc util rate and it gave the old util rate, it did not update. how stupid can coach be? should i just offload that task to the rule engine'): the util question is answered by the DETERMINISTIC rule engine with LIVE numbers — (1) 'util rate' (not just 'utilization') hits the status intent, per-card, no API call; (2) the effective card is live end-to-end: balance + utilization are recomputed from the overlay-inclusive balance in BOTH app.js effectiveSnap() and chat.js loadCtx(), and the map runs over the CLONE — the v72.33 original mapped over the live state and only got away with it because prepay was idempotent (a non-idempotent write-back would have compounded the overlay into state on every render); (3) the LLM system prompt carries the precedence rule — the numbers list is current as of now and supersedes anything said in earlier turns; (4) the v72.46 stamps (SHELL_RELEASE, SHELL_NOTES, SW cache)",
+          r"util: /\butiliz|\butil\b/.test(t)" in chatjs
+          and "c.balance = r2(bal);" in js
+          and "c.util_pct = lim ? r2(bal / lim * 100) : null;" in js
+          and "e.cards = (e.cards || []).map(function (c) {" in js
+          and "eff.cards = (eff.cards || []).map(function (c) {" in chatjs
+          and "c.util_pct = lim ? r2(bal / lim * 100) : null;" in chatjs
+          and "it supersedes anything said in earlier turns" in chatjs
+          and "var SHELL_RELEASE = { v: 72.46, live:" in js
+          and "'72.46': [" in js
+          and "const CACHE = 'finances-pwa-v72.46';" in sw)
     check("Owed + Ledger hide the old entries behind 'See more' (v72.29, user edit: 'in owed and ledger, when enrties are more than 5, hide the old ones in a see more which when clicked shows the next 5 old entries and another see more'): each person card renders only the first 5 rows (newest first) and a data-ow-more button reveals 5 older per tap (in-memory owedShown, resets on reload); the money log does the same (mlShownCount, resets on a filter change)",
           "var owedShown = {};" in js
           and "var limit = owedShown[p.id] || 5;" in js

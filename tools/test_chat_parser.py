@@ -1788,6 +1788,47 @@ def main():
     # v57: the rule engine no longer hardcodes '<card> limit is N' offline
     # (user: let the online coach do it on its own) — nothing to mirror here.
 
+    # v72.46: the util question is answered by the rule engine with LIVE
+    # numbers. Mirror of the effective-card write-back (app.js effectiveSnap
+    # + chat.js loadCtx): the stored card row is the sheet AS-OF; the overlay
+    # (prepayBy) moves the balance, and balance + utilization are recomputed
+    # from the effective balance (same formula as baseCardPrepays).
+    def r2(x):
+        # JS Math.round((Number(x) || 0) * 100) / 100 — halves round up
+        return math.floor((x or 0) * 100 + 0.5) / 100.0
+
+    def eff_card(card, overlay_delta, util_target=0.099):
+        bal = (card.get("balance") or 0) + (overlay_delta or 0)
+        lim = card.get("limit") or 0
+        tb = card.get("target_balance")
+        if tb is None:
+            tb = r2(lim * util_target)
+        return {
+            "balance": r2(bal),
+            "prepay": r2(max(0, bal - tb)),
+            "util_pct": r2(bal / lim * 100) if lim else None,
+        }
+
+    # the widened trigger (JS: /\butiliz|\butil\b/) — "utility" must NOT hit
+    trig = re.compile(r"\butiliz|\butil\b")
+    check("v72.46 trigger: 'cc util rate' (the user's exact phrasing) hits the rule",
+          bool(trig.search("what's my cc util rate")), True)
+    check("v72.46 trigger: 'utilization' still hits",
+          bool(trig.search("what is my utilization")), True)
+    check("v72.46 trigger: 'utility bill' does NOT hit",
+          bool(trig.search("when is my utility bill due")), False)
+
+    c_before = eff_card({"name": "UtilCard", "balance": 9000, "limit": 10000}, 0)
+    check("v72.46 recompute: as-of 9,000 of a 10,000 limit is 90%",
+          (c_before["util_pct"], c_before["balance"]), (90, 9000))
+    c_after = eff_card({"name": "UtilCard", "balance": 9000, "limit": 10000}, -3500)
+    check("v72.46 recompute: after a 3,500 prepay the util is 55% — the NEW number, not the as-of 90%",
+          (c_after["util_pct"], c_after["balance"]), (55, 5500))
+    check("v72.46 recompute: the prepay itself keys on the effective balance too",
+          c_after["prepay"], r2(5500 - r2(10000 * 0.099)))
+    check("v72.46 recompute: no limit → utilization null (no crash, no 0%)",
+          eff_card({"name": "NoLim", "balance": 100, "limit": 0}, 0)["util_pct"], None)
+
     print()
     if FAILS:
         print("RESULT: %d FAILURES: %s" % (len(FAILS), FAILS))

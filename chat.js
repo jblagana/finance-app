@@ -245,10 +245,19 @@
         // prepay question about ONE card answers with that card's number
         var byCard = a.prepayBy || {};
         var utilT = base ? (Number(base.card_util_target) || 0) : 0;
-        eff.cards = (snap.cards || []).map(function (c) {
+        // v72.46: map over eff.cards (the clone) — the v72.33 original mapped
+        // over snap.cards and only got away with it because prepay was
+        // idempotent; the balance write-back must never touch the store read.
+        eff.cards = (eff.cards || []).map(function (c) {
           var bal = (Number(c.balance) || 0) + (Number(byCard[c.name]) || 0);
           var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * utilT);
           c.prepay = r2(Math.max(0, bal - tb));
+          // v72.46: live balance + utilization — the stored util_pct/balance
+          // are the sheet as-of; a prepay must move them here too, or the
+          // chat's own snapshot + rule answers stay stale.
+          c.balance = r2(bal);
+          var lim = Number(c.limit) || 0;
+          c.util_pct = lim ? r2(bal / lim * 100) : null;
           return c;
         });
       }
@@ -558,7 +567,7 @@
       cash: /\b(?:liquid )?cash\b|\bbalances?\b|\bhow much (?:money|cash)(?: do i | i )?have\b/.test(t),
       card: /\bcards?\b/.test(t) && /\b(owe|owed|balance|total|due)\b/.test(t),
       prepay: /\bpre-?pay\b|\b14th\b|\bcard (?:payment|due|reset)\b/.test(t),
-      util: /\butiliz/.test(t),
+      util: /\butiliz|\butil\b/.test(t), // v72.46: "util rate" / "what's my util" hit the rule too, not just "utilization"
       all: /\b(status|summary|overview|big picture|how am i doing|where do i stand|recap)\b/.test(t)
     };
     // v70: "hm" is the shorthand for "how much". A bare "hm" (any trailing
@@ -1718,6 +1727,7 @@
   // the draft card. A missing detail is asked for in text; the next short
   // message completes that same request.
   var AI_REMOTE_SYSTEM = 'You are Coach Fin, the personal money coach of the Fin.AI app. Answer only from the numbers given, in 1-3 short plain sentences (under 60 words), no lists, no markdown, at most one emoji and only where it genuinely fits (a JSON draft reply carries none). Never invent numbers. ' +
+    'The numbers list is current as of now: it supersedes anything said in earlier turns of this conversation — never repeat a number the numbers list has already updated (a card balance, a utilization, anything). ' +
     'Personality (v72.3): light and funny - dry wit, at most one short quip per reply, like a friendly coach who gently teases about the pizza budget. The humor never overrides accuracy: the numbers, the ask-for-missing-detail flow, and the draft JSON below always win, and a JSON draft reply carries no quip at all. ' +
     'When the user tells you a change to their money (a new or updated number, or a story of several changes): if every detail you need is present (amount, month, which account), reply with ONLY the JSON draft of that change - it becomes a draft card with a Confirm button that the user presses, so do not ask "shall I record that?" and never wait for a yes. changes holds ONLY that change (a story means its lines, a single update means one line): never pad it with current balances, limits, or details of other accounts from the numbers list, they are already on the phone, and a card credit-limit update is a single field change (entity card, key credit_limit) on that card, not an account change. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes; the user\'s next short message (an amount, an account name, a corrected number) completes that same request - never drop it or start a different topic unless the user explicitly names one. ' +
     'If an UNCONFIRMED draft of changes is provided as context, the user\'s message is a reply to that draft: if they correct it, reply with the corrected JSON draft; if they confirm it (yes / record it), reply with the same JSON draft; if they switch topics, answer the new topic. ' +
