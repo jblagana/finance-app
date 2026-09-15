@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-15 17:0x — Stale CC utilization in the Coach Fin chat reply after a prepay (offload to the rule engine?)
-Status: **in progress**
-Progress: 85% — code + smoke 171/171 + both repo gates green + version artifacts staged; release.ps1 v72.46 → commit → push → live_check next — ETA this session
+Status: **done**
+Progress: 100% — completed 2026-09-15 22:1x; commit `d84523e` pushed to origin/main (v72.46, live 22:06, SW cache `finances-pwa-v72.46`, gates all green via tools/release.ps1 v72.46, full smoke 171/171, live app.js + chat.js + sw.js verified via live_check.js: 10/10 markers PASS)
 ### Instruction (verbatim)
 > after i prepay, i ask coach fin again for the cc util rate and it gave the old util rate, it did not update. how stupid can coach be? should i just offload that task to the rule engine
 ### Interpretation (agent — user may edit this section)
@@ -27,8 +27,8 @@ Progress: 85% — code + smoke 171/171 + both repo gates green + version artifac
 - [x] Smoke v7246Section (root) — 171/171 green, repeatable (incl. the clone-mutation fix)
 - [x] test_chat_parser.py mirror (tools/ + root) + check_site.py v72.46 (tools/ + root) — both repo gates green (all checks passed / all parser checks passed)
 - [x] SHELL_RELEASE 72.46 + sw.js cache + live_check.js markers (final live stamp lands via release.ps1 at push)
-- [ ] release.ps1 v72.46 → gates green → live stamp at push → push → live_check
-- [ ] Close this log entry with the commit hash
+- [x] release.ps1 v72.46 → gates green (all gate suite green) → live stamp 22:06 → commit `d84523e` → push → live_check 10/10 PASS
+- [x] Close this log entry with the commit hash
 
 ---
 
