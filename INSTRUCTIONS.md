@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-15 13:4x — Coach knows actuals + CC limits; partial-prepay chip keeps showing remaining; salary on the 15th (check-in + projection + cycle insights)
-Status: **in progress**
-Progress: 85% — code + gates + full smoke green (165/165, release v72.45 stamped); ETA: push right after `release.ps1` re-run green + live_check markers
+Status: **done**
+Progress: 100% — completed 2026-09-15 16:4x; commit `93ae156` pushed to origin/main (v72.45, live 16:49, SW cache `finances-pwa-v72.45`, gates all green via tools/release.ps1 v72.45, full smoke 165/165, live app.js + chat.js + sw.js verified via live_check.js: 17/17 markers PASS)
 ### Instruction (verbatim)
 > the bot dont know my cc limits
 > i feel like coach fin cant read my current actual numbers
@@ -35,8 +35,8 @@ Progress: 85% — code + gates + full smoke green (165/165, release v72.45 stamp
 - [x] C: salary_day (base + Your-numbers input), "Salary in" chip → prefilled cash_in (new add mode), hero line, projection 15th point
 - [x] D: cycleData() + "This cycle" INSIGHTS block + coachRows cycle finding
 - [x] Gates: new check_site.py v72.45 section (tools/ + root mirror) + smoke v7245Section (full smoke green: 165 PASS / 0 FAIL, 0 render warnings)
-- [ ] release.ps1 v72.45 → gates green → commit + push (live re-stamp) → live_check.js markers
-- [ ] Close this log entry with commit hashes
+- [x] release.ps1 v72.45 → gates green → commit + push (live re-stamp 16:49) → live_check.js markers (17/17 PASS)
+- [x] Close this log entry with commit hashes (93ae156)
 
 ---
 
