@@ -1829,6 +1829,48 @@ def main():
     check("v72.46 recompute: no limit → utilization null (no crash, no 0%)",
           eff_card({"name": "NoLim", "balance": 100, "limit": 0}, 0)["util_pct"], None)
 
+    # v72.47: the prepay rows read "CC Payment" in the ledger (the v72.44
+    # reco's label half — the aggregates were excluded, the label never
+    # shipped). Mirror of mlParts: k 'p' (card payment) → "CC Payment" — a
+    # logged prepay AND a future-dated one (the chip prefills the 14th); the
+    # spend breakdown skips zero-contribution entries (no phantom
+    # "Unsorted 0.00" line from a prepay).
+    def ml_lab(c, k):
+        if k == "p":
+            return "CC Payment"
+        return c or "Unsorted"
+
+    check("v72.47 label: a card-payment row (k 'p') reads CC Payment — no category stored",
+          ml_lab("", "p"), "CC Payment")
+    check("v72.47 label: a FUTURE-dated prepay is the same flavor → the same label",
+          ml_lab("", "p"), "CC Payment")
+    check("v72.47 label: a regular no-category row still reads Unsorted",
+          ml_lab("", "x"), "Unsorted")
+    check("v72.47 label: a catted row keeps its category",
+          ml_lab("Food", "x"), "Food")
+
+    def breakdown(txns):
+        # mirror of the coach-note spend loop (chat.js): spendOf + the
+        # v72.47 zero-skip
+        spend, total = {}, 0
+        for t in txns:
+            amt = 0 if t["kind"] == "card_payment" else (-t["amount"] if t["kind"] == "cash_in" else t["amount"])
+            if not amt:
+                continue  # v72.47: a prepay contributes zero
+            c = t.get("category") or "Unsorted"
+            spend[c] = spend.get(c, 0) + amt
+            total += amt
+        return spend, total
+
+    bd, bd_total = breakdown([
+        {"kind": "card_payment", "amount": 3500, "category": ""},
+        {"kind": "cash_out", "amount": 500, "category": "Food"},
+    ])
+    check("v72.47 breakdown: a prepay leaves NO 'Unsorted' bucket (the phantom is gone)",
+          set(bd), {"Food"})
+    check("v72.47 breakdown: the total still nets exactly (500, the prepay adds zero)",
+          bd_total, 500)
+
     print()
     if FAILS:
         print("RESULT: %d FAILURES: %s" % (len(FAILS), FAILS))

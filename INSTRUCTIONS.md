@@ -6,6 +6,28 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-15 22:3x — Close the 09-14 "hey Jan empty + prepays in ledger" entry; rename prepays + future cc payments from 'Unsorted' to 'CC Payment'
+Status: **in progress**
+Progress: 80% — code + smoke 4/4 v72.47 + gates all green (release.ps1 v72.47, live 22:38) + version stamped; commit → push → live_check next — ETA this session
+### Instruction (verbatim)
+> u did not update this log as completed
+> -rename the prepays and future cc payments from 'Unsorted' to 'CC Payment'
+### Interpretation (agent — user may edit this section)
+- Referenced entry: `## 2026-09-14 22:4x — Home "hey Jan" card empty after logging prepays; prepays in ledger summary (reco + fix)` — the user says its work shipped but the log was never marked done → (a) verify its subtasks are actually satisfied in the current code, then close it with the closing commit; (b) NEW WORK: in the ledger, logged prepays (card_payment entries) and future cc payments (the scheduled prepay rows) currently show under the **Unsorted** category — display them under a dedicated **CC Payment** label instead (rows + the ledger summary grouping). Display-level rename in app.js; no rewrite of stored user data (entries keep their stored category; only the render labels change).
+- (agent, on reading the referenced entry): the 2026-09-14 22:4x entry IS already marked done in the log (v72.44, `fd56654` + `6e4f7c0`) — but its reco promised prepays would be "clearly labelled as prepays rather than 'Unsorted' spend", and only the AGGREGATE exclusion shipped (spendOf at 5 sites) — the label half never did. The user's "did not update this log as completed" = the work the entry describes is visibly unfinished on the phone. This release ships the missing label; no re-opening of the old entry needed (its subtasks were all as-listed done).
+- Implementation note: "future cc payments" = prepays logged EARLY for the 14th — the per-card Log-prepay chip prefills `d.prepayDate` (the scheduled 14th), so an early log lands future-dated; it is the same money-log flavor (`k 'p'`) as a same-day prepay → one label covers both. Bonus fix found in the audit: a prepay contributes zero spend (v72.44 `spendOf`), but the donut / coach-note breakdown still created its bucket → a phantom "Unsorted ₱0" slice; zero-contribution entries are now skipped (donut + coach-note).
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Verify + close the 2026-09-14 22:4x entry (already marked done — v72.44; its reco's label half is what THIS entry closes, see bullet above)
+- [x] Locate the 'Unsorted' render paths (ledger rows + summary; where the future cc payment rows get their label)
+- [x] Implement the 'CC Payment' label (app.js + chat.js: row label, filter option + predicate, edit toast, chat 'Logged …' line, phantom-slice skip ×2)
+- [x] Smoke: a logged prepay row + a future cc payment row show 'CC Payment'; filter option present; no phantom donut slice — v7247Section 4/4 PASS, full smoke green
+- [ ] Gate (check_site.py v72.47 block + test_chat_parser.py mirror — green) + release.ps1 v72.47 (GATES all green, live 22:38) → commit → push → live_check
+- [ ] Close this log entry with the commit hash
+
+---
+
+
 ## 2026-09-15 17:0x — Stale CC utilization in the Coach Fin chat reply after a prepay (offload to the rule engine?)
 Status: **done**
 Progress: 100% — completed 2026-09-15 22:1x; commit `d84523e` pushed to origin/main (v72.46, live 22:06, SW cache `finances-pwa-v72.46`, gates all green via tools/release.ps1 v72.46, full smoke 171/171, live app.js + chat.js + sw.js verified via live_check.js: 10/10 markers PASS)

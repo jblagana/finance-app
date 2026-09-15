@@ -1120,7 +1120,7 @@
       // v72.10: opts.quiet — the owed flow wraps the edit in its own
       // entry+txn undo toast (two snacks would collide).
       if (!(opts && opts.quiet))
-      snack('Updated ' + money(t.amount) + ' · ' + esc(t.category || 'Unsorted'), function () {
+      snack('Updated ' + money(t.amount) + ' · ' + esc(t.kind === 'card_payment' ? 'CC Payment' : (t.category || 'Unsorted')), function () {
         // undo: the exact inverse — un-rebase everything after the edited row
         // (a row logged AFTER the edit already reflects the NEW values; it is
         // left as-is — undoing an edit after interleaved new entries is a
@@ -1251,7 +1251,12 @@
   function mlParts(e) {
     var lab, note = '';
     if (e.c != null) {
-      lab = e.c || 'Unsorted';
+      // v72.47: a card prepay (k 'p') is filed under its own label — the
+      // v72.44 reco's "clearly labelled as prepays rather than 'Unsorted'
+      // spend" (the aggregates were excluded, the label never shipped). A
+      // prepay logged early for the 14th is future-dated but the same flavor
+      // → the same label.
+      lab = e.k === 'p' ? 'CC Payment' : (e.c || 'Unsorted');
       note = e.nt || '';
     } else {
       // legacy entry (pre-v17): only the merged "Category · note" label was stored
@@ -1275,14 +1280,16 @@
     if (!sel) return;
     var log = state.moneyLog || [];
     var cats = [];
-    var hasUnsorted = false;
+    var hasUnsorted = false, hasCcpay = false;
     log.forEach(function (e) {
       if (!e) return;
+      if (e.k === 'p') { hasCcpay = true; return; } // v72.47: a prepay is "CC Payment", never Unsorted
       if (e.c) { if (cats.indexOf(e.c) < 0) cats.push(e.c); }
       else hasUnsorted = true;
     });
     cats.sort();
     var html = '<option value="">All</option>';
+    if (hasCcpay) html += '<option value="__ccpay__">CC Payment</option>'; // v72.47
     if (hasUnsorted) html += '<option value="__unsorted__">Unsorted</option>';
     cats.forEach(function (c) { html += '<option value="' + esc(c) + '">' + esc(c) + '</option>'; });
     sel.innerHTML = html;
@@ -1305,13 +1312,14 @@
     }
     var shown = log.slice().reverse().filter(function (e) {
       if (!mlFilterCat) return true;
-      if (mlFilterCat === '__unsorted__') return !e.c;
+      if (mlFilterCat === '__ccpay__') return e.k === 'p'; // v72.47: the CC Payment filter
+      if (mlFilterCat === '__unsorted__') return e.k !== 'p' && !e.c;
       return e.c === mlFilterCat;
     });
     if (!shown.length) {
       if (noteEl) noteEl.style.display = 'none';
       body.innerHTML = '<p class="note" style="margin:2px 0">No ' +
-        (mlFilterCat === '__unsorted__' ? 'unsorted' : esc(mlFilterCat)) +
+        (mlFilterCat === '__unsorted__' ? 'unsorted' : mlFilterCat === '__ccpay__' ? 'cc payment' : esc(mlFilterCat)) +
         ' entries — clear the filter to see the rest.</p>';
       return;
     }
@@ -3147,6 +3155,7 @@
     state.txns.forEach(function (t) {
       if (String(t.date).slice(0, 7) !== mp) return;
       var a = spendOf(t); // v72.44: prepays are not spend (see the helper)
+      if (!a) return; // v72.47: a prepay contributes zero — no phantom "Unsorted ₱0" slice
       var c = t.category || 'Unsorted';
       totals[c] = (totals[c] || 0) + a;
       grand += a;
@@ -4420,12 +4429,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.46, live: new Date(2026, 8, 15, 22, 6) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.47, live: new Date(2026, 8, 15, 22, 38) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.47': [
+      'Card prepays in the ledger now read "CC Payment" instead of "Unsorted" — including the ones you log early for the 14th — and the category filter has its own CC Payment option',
+      'The empty "Unsorted" slice is gone from this-month-by-category — a prepay settles the debt, it does not add a spend slice'
+    ],
     '72.46': [
       'Your card-utilization question now gets the number in front of the coach — a prepay moves your card balance the moment you log it, so the utilization you are told is the current one, not the old one',
       '"util rate" and "utilization" now hit the built-in rules directly — the answer is instant and works with no signal',

@@ -739,10 +739,19 @@ def main():
           and "e.cards = (e.cards || []).map(function (c) {" in js
           and "eff.cards = (eff.cards || []).map(function (c) {" in chatjs
           and "c.util_pct = lim ? r2(bal / lim * 100) : null;" in chatjs
-          and "it supersedes anything said in earlier turns" in chatjs
-          and "var SHELL_RELEASE = { v: 72.46, live:" in js
-          and "'72.46': [" in js
-          and "const CACHE = 'finances-pwa-v72.46';" in sw)
+          and "it supersedes anything said in earlier turns" in chatjs)
+    check("v72.47 (user: 'u did not update this log as completed — rename the prepays and future cc payments from Unsorted to CC Payment'): the v72.44 reco's label half finally ships — (1) every card-payment money-log row (k 'p') reads 'CC Payment' in the ledger: a logged prepay AND a future-dated one (the chip prefills the 14th, so an early log lands in the future) — row label + the edit toast + the chat 'Logged …' confirmation; (2) the category filter gets its own CC Payment option and the Unsorted filter no longer swallows prepays; (3) a prepay contributes zero spend, so it can no longer leave a phantom 'Unsorted 0' slice in the by-category donut or a 'Unsorted 0.00' line in the coach-note breakdown; (4) the v72.47 stamps (SHELL_RELEASE, SHELL_NOTES, SW cache)",
+          "lab = e.k === 'p' ? 'CC Payment' : (e.c || 'Unsorted');" in js
+          and "if (mlFilterCat === '__ccpay__') return e.k === 'p';" in js
+          and "if (mlFilterCat === '__unsorted__') return e.k !== 'p' && !e.c;" in js
+          and 'value="__ccpay__">CC Payment' in js
+          and "t.kind === 'card_payment' ? 'CC Payment'" in js
+          and "pl.kind === 'card_payment' ? 'CC Payment'" in chatjs
+          and "if (!a) return; // v72.47" in js
+          and "if (!amt) continue; // v72.47" in chatjs
+          and "var SHELL_RELEASE = { v: 72.47, live:" in js
+          and "'72.47': [" in js
+          and "const CACHE = 'finances-pwa-v72.47';" in sw)
     check("Owed + Ledger hide the old entries behind 'See more' (v72.29, user edit: 'in owed and ledger, when enrties are more than 5, hide the old ones in a see more which when clicked shows the next 5 old entries and another see more'): each person card renders only the first 5 rows (newest first) and a data-ow-more button reveals 5 older per tap (in-memory owedShown, resets on reload); the money log does the same (mlShownCount, resets on a filter change)",
           "var owedShown = {};" in js
           and "var limit = owedShown[p.id] || 5;" in js

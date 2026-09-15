@@ -1672,6 +1672,7 @@
       // payment is not spend (the charge already counted), a cash inflow nets
       // it back down; the note used to quote the raw sum (prepays as spend)
       var amt = (F && typeof F.spendOf === 'function') ? F.spendOf(tn) : (Number(tn.amount) || 0);
+      if (!amt) continue; // v72.47: a prepay contributes zero — no phantom "Unsorted 0.00" line
       spend[c] = (spend[c] || 0) + amt;
       total += amt;
     }
@@ -2202,7 +2203,7 @@
         note: pl.note || ''
       }).then(function () {
         markDone(m);
-        pushBot('Logged <b>' + esc(money(pl.amount)) + '</b> · ' + esc(pl.category || 'Unsorted') + ' · ' + esc(pl.account || 'cash') +
+        pushBot('Logged <b>' + esc(money(pl.amount)) + '</b> · ' + esc(pl.kind === 'card_payment' ? 'CC Payment' : (pl.category || 'Unsorted')) + ' · ' + esc(pl.account || 'cash') +
           '. It’s in the Ledger on this phone.');
       });
       return;
