@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-15 22:3x — Close the 09-14 "hey Jan empty + prepays in ledger" entry; rename prepays + future cc payments from 'Unsorted' to 'CC Payment'
-Status: **in progress**
-Progress: 80% — code + smoke 4/4 v72.47 + gates all green (release.ps1 v72.47, live 22:38) + version stamped; commit → push → live_check next — ETA this session
+Status: **done**
+Progress: 100% — completed 2026-09-15 22:5x; commit `6dc95d8` pushed to origin/main (v72.47, live 22:38, SW cache `finances-pwa-v72.47`, GATES all green via tools/release.ps1 v72.47 — both check_site copies + test_chat_parser + node syntax + smoke_v68 + smoke_app_v68 (v7247Section 4/4), live app.js + chat.js + sw.js verified via live_check.js: 10/10 markers PASS)
 ### Instruction (verbatim)
 > u did not update this log as completed
 > -rename the prepays and future cc payments from 'Unsorted' to 'CC Payment'
@@ -22,8 +22,8 @@ Progress: 80% — code + smoke 4/4 v72.47 + gates all green (release.ps1 v72.47,
 - [x] Locate the 'Unsorted' render paths (ledger rows + summary; where the future cc payment rows get their label)
 - [x] Implement the 'CC Payment' label (app.js + chat.js: row label, filter option + predicate, edit toast, chat 'Logged …' line, phantom-slice skip ×2)
 - [x] Smoke: a logged prepay row + a future cc payment row show 'CC Payment'; filter option present; no phantom donut slice — v7247Section 4/4 PASS, full smoke green
-- [ ] Gate (check_site.py v72.47 block + test_chat_parser.py mirror — green) + release.ps1 v72.47 (GATES all green, live 22:38) → commit → push → live_check
-- [ ] Close this log entry with the commit hash
+- [x] Gate (check_site.py v72.47 block + test_chat_parser.py 6 new mirror checks — green) + release.ps1 v72.47 (GATES all green, live 22:38) → commit `6dc95d8` → push → live_check 10/10 PASS
+- [x] Close this log entry with the commit hash
 
 ---
 
