@@ -704,6 +704,34 @@ def main():
           and "spendOf: spendOf" in js
           and "F.spendOf(tn)" in chatjs
           and "if (e.k === 'p') freeTxt = ''" in js)  # (3) user edit: the prepay row shows only the card change, not the unchanged free line
+    check("v72.45 (user: 'the bot dont know my cc limits / i feel like coach fin cant read my current actual numbers / i prepay in maya cc partial only but the chip is still not showing for that in the hey jan card. i want it to still show the remaining / salary is expected every 15th and used in the projection / insights on my finances based on every salary cycle (15th) / i can confirm somewhere if the salary has already entered prior to 15'): (1) the coach snapshot's CARD rows carry the LIVE per-card balance (the effective overlay, not the sheet as-of) + the stored credit limit + utilization; (2) a PARTIAL prepay keeps its per-card chips + a 'Partly handled — … still owed' row + the live 'prepay' alert — keyed on the remaining, only the full settlement takes them down; (3) the salary lands on the salary_day (the 15th, a new Your-numbers field, cutoff-day fallback): the cycle is 15th -> 14th (pure cycleDataFor), the expected amount is the cycle month's override when > 0 else the base salary (the sheet's pre-payday zero is 'not in yet', not 'no salary'), the 'Salary in' chip is a real cash_in (a third Add-sheet direction, CASH-only) the cycle reads back — even an early 13th one, which is excluded from the cycle spend so it cannot sink the previous cycle; (4) the projection gains the explicit payday point (actual receipt date once logged), the hero carries due / in, Home gets a 'This cycle' block, and the cycle rides the shared snapshot as a deterministic finding",
+          "function cardEff(name) {" in chatjs
+          and "var bal = c ? (Number(c.balance) || 0) : (Number(a.value) || 0);" in chatjs
+          and "' [limit ' + money(lim)" in chatjs
+          and "if (F && typeof F.cycleData === 'function') {" in chatjs
+          and "'- salary ' + money(cyc.expected)" in chatjs
+          and "IN on ' + cyc.received.date" in chatjs
+          and "function salaryDayOf(b) {" in js
+          and "function expectedSalaryFor(month, b) {" in js
+          and "function cycleDataFor(month, b) {" in js
+          and "function cycleData() {" in js
+          and "if (mode === 'salary') return 'cash_in';" in js
+          and "if (addMode === 'salary' && type === 'CARD')" in js
+          and 'id="b_sday"' in js
+          and "b.salary_day = sd > 0 ? sd : (b.cutoff_day || 15);" in js
+          and "cycle: cycleData()," in js
+          and "Salary (the ' + ordinal(cy0.sday)" in js
+          and 'id="actSalary"' in js
+          and "insBlock('This cycle'" in js
+          and "var salDelta = 0, salDate = null;" in js
+          and "pts.splice(1, 0, { label: dayMonth(salDate), v: vAtSal, date: salDate });" in js
+          and "var prepayActive = info.prepayActive;" in js
+          and "Partly handled — ' + money(Number(prepayPaid.amount) || 0) + ' logged on '" in js
+          and "still owed." in js
+          and "alerts.push('prepay'); // v72.45" in js
+          and "if (pLast) out = { amount: r2(pSum), date: pLast.date };" in js
+          and "if (receivedId && t.id && t.id === receivedId) return;" in js
+          and "cycleData: cycleData" in js)
     check("Owed + Ledger hide the old entries behind 'See more' (v72.29, user edit: 'in owed and ledger, when enrties are more than 5, hide the old ones in a see more which when clicked shows the next 5 old entries and another see more'): each person card renders only the first 5 rows (newest first) and a data-ow-more button reveals 5 older per tap (in-memory owedShown, resets on reload); the money log does the same (mlShownCount, resets on a filter change)",
           "var owedShown = {};" in js
           and "var limit = owedShown[p.id] || 5;" in js

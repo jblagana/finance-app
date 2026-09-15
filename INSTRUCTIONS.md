@@ -6,6 +6,41 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-15 13:4x — Coach knows actuals + CC limits; partial-prepay chip keeps showing remaining; salary on the 15th (check-in + projection + cycle insights)
+Status: **in progress**
+Progress: 85% — code + gates + full smoke green (165/165, release v72.45 stamped); ETA: push right after `release.ps1` re-run green + live_check markers
+### Instruction (verbatim)
+> the bot dont know my cc limits
+> i feel like coach fin cant read my current actual numbers
+> i prepay in maya cc partial only but the chip is still not showing for that in the "hey jan" card. i want it to still show the remaining
+> salary is expected every 15th and used in the projection.
+> insights on my finances based on every salary cycle (15th) should be generated.
+>
+> i can confirm somewhere if the salary has already entered prior to 15
+### Interpretation (agent — user may edit this section)
+- Four workstreams, one release (v72.45), all rooted in verified code + his real data (Sep-13 restored export on this machine: salary 46,615, overrides {2026-09: 0, 2026-10: 93,230}, cutoff_day 15 / prepay_day 14, cards Maya CC limit 10,000 + MariBank CC limit 70,000 stored on the accounts, `details` empty):
+- **A — Coach reads actuals + CC limits.** Root cause found: `coachSnapshot()` (chat.js:1588) builds the accounts line from `ctx.base.accounts` (sheet as-of, stale) and appends only `[details]`; the stored `limit` field is never emitted and his details map is empty → the bot never sees limits or current card balances. Fix: card rows in the shared snapshot come from the effective per-card data (`e.cards`): `MariBank CC (card) 9,857.65 [limit 70,000 · util 14%]`. Cash/debt rows stay base (effective liquid/free already lead). Same snapshot feeds the Home coach note → both surfaces fixed at once. 1,300-char cap respected.
+- **B — Partial prepay keeps its chip.** Root cause found: app.js:2315 `prepayActive = info.prepayActive && !info.prepayPaid` + `findPaidTxn` (≥ 50% of remaining) → any logged payment suppresses the per-card "Log prepay" chips (2431) though the remainder is still owed. Fix: chips + headline key off the REMAINING (`d.prepayAmt > 0`); the done row becomes "Partly handled — 2,000 logged on Sep 14 — 2,657.65 left."; the `prepay` alert stays live until the remainder is truly 0 (memory "handled" note only then).
+- **C — Salary on the 15th.** No pending-salary concept exists; Sep's override is 0 because the sheet as-of (Sep 11) predates payday, so the current-month projection includes no salary at all. Fix: new `base.salary_day` (defaults to cutoff_day = 15) + "salary day" input in Your numbers; cycle = 15th → 14th; expected amount = that cycle-month's override if > 0, else base salary. "Salary in" chip in the coach card's action row (same home as the prepay chips) when the cycle salary is pending near/after the 15th → opens the Add sheet prefilled (amount = expected, date editable → backdate if it landed prior to the 15th, cash account preselected, note "Salary (the 15th)"); logging it is a real `cash_in` entry (free cash rises, money-log row, cycle auto-marks "in" — detected from the entry, deleting reverts). Hero gets "Salary (the 15th) 46,615 — in 1 day" / "Salary in · Sep 13 ✓". Projection: the current month gains an explicit point on the 15th (actual date if logged); other months untouched.
+- **D — Per-salary-cycle insights.** New pure `cycleData()` (exported for smoke): window, days left, salary expected/in + date, spend this cycle vs salary (%), projected cycle-end net at pace, last-cycle comparison (spent/kept). New "This cycle" block in Home INSIGHTS + one deterministic coachRows finding ("Cycle burn: …") riding the shared snapshot → Coach Fin phrases it in the note and chat.
+- **Assumptions (user — edit to override):** (1) expected salary when the sheet override is 0 → base salary (46,615); an explicit override > 0 wins (Oct 93,230). (2) "Salary in" = a real cash_in ledger row — that IS the confirmation and moves free cash. (3) Cycle starts on the 15th; the salary landing on the 15th belongs to that cycle. (4) The sparkline gets an explicit 15th point (intra-month dip assumes even spend, same as the sheet's month-end aggregation). (5) Salary day is UI-only (Your numbers) — chat teaching ("my salary is on the 18th") is a follow-up, not this release.
+- Order: probe on his real data → code (app.js + chat.js + index.html if needed) → new `tools/check_site.py` gate section (+ root mirror) + smoke `v7245Section` (root copy) → `release.ps1 v72.45` (live stamp at push) → push → live_check markers.
+- PROBE FINDINGS (agent, `finances/probe_v7245.js` on his real export + his two prepays, host date 2026-09-15): (B) reproduced — after the partial Maya prepay `coachActs` is EMPTY and the only row is "Handled — 11,469.64 logged" (the MariBank one) while Maya still owes 3,847.65; `coachAlerts.alerts` = [] (the prepay alert dropped with 2,657.65 still owed). (A) reproduced — the bot snapshot's accounts line is the STALE sheet as-of ("Maya CC (card) 4,085.95; MariBank CC (card) 17,279.64") with NO limits, vs live 23,327.29 / 9,857.65. (C) edge found: a salary logged on the 13th (prior to the 15th) must be attributed to the cycle that STARTS on the 15th → the "received" detection window is [1st of cycle-month, payday+2]; also on the 15th itself the prepay window rolls to the NEXT 14th (prepayIn 0 → 29), so "overdue" prepay copy must come from the partly-handled row, not the due-in wording. Snapshot len 620–664 vs the 1,300 cap → room for the new salary/cycle lines. `cash_in` 46,615 on the 13th correctly lifts free 535.35 → 47,150.35.
+- (agent, smoke debug before release): (1) the release dot is stamped `SHELL_RELEASE v: 72.45` + SW cache `finances-pwa-v72.45` (the What's-new fallback gate requires the running dot to carry its own note — the v72.45 note exists, the dot was still 72.44); (2) the v72.44 paid-row assertion is amount-agnostic now — v72.45's row shows the TOTAL logged this month (every prepay-like entry; the v72.41 card-A 500 joins the v72.44 card-D 4,000 → "PHP 4,500.00 logged"); (3) the v72.45 "alert clears" check settles EVERY card owed above its target, not just card D — the `prepay` alert is global (any owed card keeps it live), which is the intended behavior.
+### Subtasks
+- [x] Log the instruction (first action)
+- [x] Probe on his real data: snapshot text (limits visible? effective balances?), chip state after partial prepay, cycle math — all three reproduced, findings logged in the Interpretation
+- [x] A: coachSnapshot card rows from effective data (limit + util) + salary/cycle lines (chat.js)
+- [x] B: partial-prepay chip keyed on remaining + "Partly handled" row + alert stays live (app.js)
+- [x] C: salary_day (base + Your-numbers input), "Salary in" chip → prefilled cash_in (new add mode), hero line, projection 15th point
+- [x] D: cycleData() + "This cycle" INSIGHTS block + coachRows cycle finding
+- [x] Gates: new check_site.py v72.45 section (tools/ + root mirror) + smoke v7245Section (full smoke green: 165 PASS / 0 FAIL, 0 render warnings)
+- [ ] release.ps1 v72.45 → gates green → commit + push (live re-stamp) → live_check.js markers
+- [ ] Close this log entry with commit hashes
+
+---
+
+
 ## 2026-09-14 23:5x — Interpretation edit: the prepay ledger row shows only the card balance change
 Status: **done**
 Progress: 100% — completed 2026-09-15 00:4x; commits `fd56654` + `6e4f7c0` pushed to origin/main (v72.44, live 00:40, SW cache `finances-pwa-v72.44`, live app.js + chat.js + sw.js verified via live_check.js: 8/8 markers PASS)

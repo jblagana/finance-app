@@ -399,6 +399,7 @@
     return {
       v: 1, name: '', as_of: todayISO(),
       salary: 0, salary_overrides: {},
+      salary_day: 15, // v72.45: the day the salary lands — the salary cycle starts on it
       prepay_day: 14, cutoff_day: 15, card_util_target: 0.099,
       liquidity_floor: 0,
       accounts: [], budgets: {}, budget_overrides: {},
@@ -1675,6 +1676,7 @@
     h += brow('<span class="bnote">liquidity floor</span><input class="grow" id="b_floor" type="text" value="' + (b.liquidity_floor || '') + '">');
     h += brow('<span class="bnote">cc prepay day</span><input class="grow" id="b_pday" type="text" value="' + (b.prepay_day || 14) + '">' +
       '<span class="bnote">cutoff</span><input class="grow" id="b_cday" type="text" value="' + (b.cutoff_day || 15) + '">');
+    h += brow('<span class="bnote">salary day</span><input class="grow" id="b_sday" type="text" value="' + (b.salary_day || b.cutoff_day || 15) + '" title="the day of the month your salary lands — the salary cycle starts on it">');
     h += brow('<span class="bnote">card target util</span><input class="grow" id="b_util" type="text" value="' + (b.card_util_target || '') + '" title="0.099 = just under 10%">');
     var salRows = '';
     Object.keys(b.salary_overrides || {}).forEach(function (m) { salRows += payRow(m, b.salary_overrides[m], true); });
@@ -1774,8 +1776,10 @@
     b.liquidity_floor = numVal(byId('b_floor'), true);
     var pd = Math.round(numVal(byId('b_pday'), true)); // v71: quick sums here too (10+4 -> 14)
     var cd = Math.round(numVal(byId('b_cday'), true));
+    var sd = Math.round(numVal(byId('b_sday'), true)); // v72.45: the salary day (the cycle anchor)
     b.prepay_day = pd > 0 ? pd : 14;
     b.cutoff_day = cd > 0 ? cd : 15;
+    b.salary_day = sd > 0 ? sd : (b.cutoff_day || 15);
     var ut = numVal(byId('b_util'), true);
     b.card_util_target = ut > 0 ? ut : 0.099;
     bb.querySelectorAll('#rowsSal .brow').forEach(function (row) {
@@ -2087,6 +2091,112 @@
     if (t.kind === 'cash_in') return -a;
     return a;
   }
+  // ---------- v72.45: the salary cycle (the 15th) ----------
+  // The salary lands on the salary_day (the 15th by default; older bases
+  // without the field fall back to the cutoff day); the cycle runs from that
+  // day to the day before the next one. Expected amount = the cycle month's
+  // override when it is set above zero (a double-salary month), else the base
+  // salary — the sheet's pre-payday zero (its as-of predates the 15th) is NOT
+  // "no salary", it is "not received yet as of as-of".
+  function salaryDayOf(b) {
+    b = b || state.base || {};
+    var sd = Math.round(Number(b.salary_day) || 0);
+    if (sd >= 1 && sd <= 28) return sd;
+    var cd = Math.round(Number(b.cutoff_day) || 0);
+    if (cd >= 1 && cd <= 28) return cd;
+    return 15;
+  }
+  function expectedSalaryFor(month, b) {
+    b = b || state.base || {};
+    var ov = (b.salary_overrides || {})[month];
+    if (ov !== undefined && Number(ov) > 0) return r2(Number(ov));
+    return r2(Number(b.salary) || 0);
+  }
+  function cycleWindow(month, sday) {
+    var p = String(month).split('-');
+    var start = new Date(Number(p[0]), Number(p[1]) - 1, sday);
+    var end = new Date(Number(p[0]), Number(p[1]), sday - 1); // next month, sday-1 (sday 1 = the calendar month)
+    return {
+      month: month,
+      start: localISO(start),
+      end: localISO(end),
+      days: Math.round((end - start) / 86400000) + 1
+    };
+  }
+  function currentCycleMonth(b, todayStr) {
+    b = b || state.base || {};
+    var sd = salaryDayOf(b);
+    var p = parseISO(todayStr || todayISO());
+    var startD = new Date(p.getFullYear(), p.getMonth(), sd);
+    if (startD > p) startD = new Date(p.getFullYear(), p.getMonth() - 1, sd); // sd <= 28, so no day overflow
+    return startD.getFullYear() + '-' + (startD.getMonth() < 9 ? '0' : '') + (startD.getMonth() + 1);
+  }
+  function cycleDataFor(month, b) {
+    b = b || state.base || {};
+    var today = todayISO();
+    var sd = salaryDayOf(b);
+    var w = cycleWindow(month, sd);
+    var expected = expectedSalaryFor(month, b);
+    // The cycle's salary = a cash_in of at least 90% of the expected amount,
+    // dated from the 1st of the cycle month to 2 days past payday: an early
+    // payday (landing on the 13th, prior to the 15th) still belongs to the
+    // cycle that STARTS on the 15th — and deleting the entry reverts it.
+    var lo = month + '-01';
+    var mp = String(month).split('-');
+    var mDim = new Date(Number(mp[0]), Number(mp[1]), 0).getDate();
+    var hiDay = Math.min(sd + 2, mDim);
+    var hi = month + '-' + (hiDay < 10 ? '0' : '') + hiDay;
+    var received = null;
+    state.txns.forEach(function (t) {
+      if (t.kind !== 'cash_in') return;
+      var amt = Number(t.amount) || 0;
+      if (amt <= 0) return;
+      if (expected > 0 && amt < 0.9 * expected) return;
+      var d = String(t.date || '');
+      if (d < lo || d > hi) return;
+      if (!received || d < received.date) received = { date: d, amount: r2(amt), id: t.id || null };
+    });
+    var receivedId = received ? received.id : null;
+    // spend this cycle (the one spend rule, v72.44 — prepays are not spend).
+    // The cycle's own salary cash_in is excluded from the spend: it is income
+    // shown on the Salary line, not negative spend — an early payday (the
+    // 13th) sits in the PREVIOUS cycle's window and would sink its spend.
+    var spent = 0;
+    state.txns.forEach(function (t) {
+      if (receivedId && t.id && t.id === receivedId) return;
+      var d = String(t.date || '');
+      if (d < w.start || d > today) return;
+      spent += spendOf(t);
+    });
+    var startP = parseISO(w.start);
+    var todayP = parseISO(today);
+    var elapsed = Math.max(1, Math.round((todayP - startP) / 86400000) + 1);
+    if (elapsed > w.days) elapsed = w.days;
+    var pace = r2(spent / elapsed);
+    var projectedNet = r2(expected - pace * w.days);
+    // the previous cycle, for the comparison line
+    var prevStartD = new Date(startP.getFullYear(), startP.getMonth() - 1, sd);
+    var prevM = prevStartD.getFullYear() + '-' + (prevStartD.getMonth() < 9 ? '0' : '') + (prevStartD.getMonth() + 1);
+    var prevW = cycleWindow(prevM, sd);
+    var prevSpent = 0;
+    state.txns.forEach(function (t) {
+      if (receivedId && t.id && t.id === receivedId) return; // the salary belongs to THIS cycle
+      var d = String(t.date || '');
+      if (d < prevW.start || d > prevW.end) return;
+      prevSpent += spendOf(t);
+    });
+    var prevExpected = expectedSalaryFor(prevM, b);
+    return {
+      month: month, sday: sd, start: w.start, end: w.end, days: w.days,
+      expected: expected, received: received,
+      spent: r2(spent), elapsed: elapsed, pace: pace, projectedNet: projectedNet,
+      prev: { month: prevM, start: prevW.start, end: prevW.end, expected: prevExpected, spent: r2(prevSpent), net: r2(prevExpected - prevSpent) }
+    };
+  }
+  function cycleData() {
+    if (!state.base) return null;
+    return cycleDataFor(currentCycleMonth(state.base, todayISO()), state.base);
+  }
   function insightsData() {
     var s = effectiveSnap();
     if (!s) return null;
@@ -2255,6 +2365,7 @@
       spentM: spentM, pace: pace,
       catPace: catPace.slice(0, 5), recurringGuess: recurringGuess.slice(0, 2), // v68 items 4–5
       goals: goals, lowestDip: lowestDip, // v68 items 6–7
+      cycle: cycleData(), // v72.45: the salary cycle (the 15th) — hero + insights + coach + snapshot
       freeAfterPace: r2(free - r2(pace * Math.max(0, daysLeft - 1)))
     };
   }
@@ -2269,23 +2380,29 @@
   var addMode = 'spend';
   function addSheetKind(mode, type, editingKind) {
     if (mode === 'prepay') return 'card_payment';
+    if (mode === 'salary') return 'cash_in'; // v72.45: the "Salary in" check-in is a real cash inflow
     return type === 'CARD'
       ? (editingKind === 'card_payment' ? 'card_payment' : 'card_charge')
       : (editingKind === 'cash_in' ? 'cash_in' : 'cash_out');
   }
   function setAddMode(m) {
-    addMode = m === 'prepay' ? 'prepay' : 'spend';
+    addMode = m === 'prepay' ? 'prepay' : (m === 'salary' ? 'salary' : 'spend'); // v72.45: the third direction
     var sb = byId('addModeSpend'), pb = byId('addModePrepay');
     if (sb) sb.className = 'amb' + (addMode === 'spend' ? ' on' : '');
     if (pb) pb.className = 'amb' + (addMode === 'prepay' ? ' on' : '');
     var ttl = byId('addSheetTitle'), sub = byId('addSubmit');
-    if (ttl) ttl.textContent = addMode === 'prepay' ? 'Card prepay' : 'Add expense';
-    if (sub) sub.textContent = addMode === 'prepay' ? 'Add payment' : 'Add expense';
+    if (ttl) ttl.textContent = addMode === 'prepay' ? 'Card prepay' : (addMode === 'salary' ? 'Salary in' : 'Add expense');
+    if (sub) sub.textContent = addMode === 'prepay' ? 'Add payment' : (addMode === 'salary' ? 'Log salary' : 'Add expense');
     var as = byId('f_account');
     if (addMode === 'prepay' && as) {
       // the payoff has to land on a CARD account — preselect the first one
       for (var i = 0; i < as.options.length; i++) {
         if (as.options[i].value.indexOf('CARD::') === 0) { as.value = as.options[i].value; break; }
+      }
+    } else if (addMode === 'salary' && as) {
+      // v72.45: the salary lands in a CASH account — preselect the first one
+      for (var j2 = 0; j2 < as.options.length; j2++) {
+        if (as.options[j2].value.indexOf('CASH::') === 0) { as.value = as.options[j2].value; break; }
       }
     }
     updateChargeHint();
@@ -2312,7 +2429,10 @@
     var hi = name ? 'Hey ' + name + ' — ' : 'Heads up — ';
     var info = coachRows(d);
     var rows = info.rows;
-    var prepayActive = info.prepayActive && !info.prepayPaid;
+    // v72.45: the chips key off the REMAINING (info.prepayActive =
+    // d.prepayAmt > 0), not "no payment yet" — a partial prepay keeps its
+    // per-card buttons, each showing the live amount still owed on that card.
+    var prepayActive = info.prepayActive;
     var cls, head, sub;
     var shortfall = r2(d.weekCost - d.free);
     var afterWeek = r2(d.free - d.weekCost);
@@ -2439,6 +2559,20 @@
           ah += '<button type="button" class="cbtn" id="actPrepay">Log prepay ' + money(d.prepayAmt) + '</button>';
         }
       }
+      // v72.45: the "Salary in" check-in — the cycle's salary is expected on
+      // the salary_day (the 15th); from two days before payday, and while it
+      // is still missing, one tap opens the Add sheet prefilled (amount = the
+      // expected salary, date = today and editable — backdate it if the money
+      // landed early, a CASH account preselected). Logging it is the
+      // confirmation: a real cash_in entry the cycle reads back.
+      var cy = d.cycle;
+      if (cy && cy.expected > 0 && !cy.received) {
+        var sdayISO = cy.month + '-' + (cy.sday < 10 ? '0' : '') + cy.sday;
+        var sIn = Math.round((parseISO(sdayISO) - parseISO(d.today)) / 86400000);
+        if (sIn <= 2) {
+          ah += '<button type="button" class="cbtn" id="actSalary">Salary in · ' + money(cy.expected) + '</button>';
+        }
+      }
       var hasPlanRow = rows.some(function (rw) { return rw.tag === 'Plan due'; });
       if (hasPlanRow) ah += '<button type="button" class="cbtn ghost" id="actPlans">See this week\'s plans</button>';
       acts.innerHTML = ah;
@@ -2456,6 +2590,14 @@
       }
       var ap = byId('actPrepay');
       if (ap) ap.onclick = function () { prefillAdd(d.prepayAmt, d.prepayDate, 'Card prepay (the ' + ordinal(d.prepayDay) + ')', null, 'prepay'); };
+      var asb = byId('actSalary'); // v72.45: the "Salary in" check-in
+      if (asb) asb.onclick = function () {
+        var cashAcc = 'CASH::Cash';
+        ((state.base && state.base.accounts) || []).forEach(function (a) {
+          if (a.kind === 'debit' && a.name && cashAcc === 'CASH::Cash') cashAcc = 'CASH::' + a.name;
+        });
+        prefillAdd(cy.expected, d.today, 'Salary (the ' + ordinal(cy.sday) + ')', cashAcc, 'salary');
+      };
       var aa = byId('actPlans');
       if (aa) aa.onclick = function () { setTab('money'); };
     }
@@ -2507,6 +2649,25 @@
     else if (weekTotal <= free) { wCls = 'good'; wTxt = 'Covered: ' + money(r2(free - weekTotal)) + ' left after the next 7 days.'; }
     else { wCls = 'bad'; wTxt = 'Over free cash by ' + money(r2(weekTotal - free)) + ' — trim a plan, or know this dips into the floor.'; }
     blocks += insBlock('Next 7 days', wLines, wCls, wTxt);
+    // ---- This salary cycle (the 15th) — v72.45 ----
+    var cyc = d.cycle;
+    if (cyc && cyc.expected > 0) {
+      var cLines = [];
+      cLines.push('Cycle: <b>' + dayMonth(cyc.start) + ' – ' + dayMonth(cyc.end) + '</b> — ' + cyc.elapsed + ' of ' + cyc.days + ' days.');
+      cLines.push(cyc.received
+        ? 'Salary <b>' + money(cyc.received.amount) + '</b> — in on ' + dayMonth(cyc.received.date) + '.'
+        : 'Salary <b>' + money(cyc.expected) + '</b> — due on the ' + ordinal(cyc.sday) + '.');
+      cLines.push('Spent this cycle: <b>' + money(cyc.spent) + '</b> (' + Math.round((cyc.spent / cyc.expected) * 100) + '% of the salary).');
+      if (cyc.elapsed >= 7) cLines.push('At this pace the cycle ends with <b>' + money(cyc.projectedNet) + '</b> of the salary.');
+      if (cyc.prev && (cyc.prev.spent > 0 || cyc.prev.expected > 0)) {
+        cLines.push('Last cycle (' + dayMonth(cyc.prev.start) + ' – ' + dayMonth(cyc.prev.end) + '): spent <b>' + money(cyc.prev.spent) + '</b>, kept ' + money(cyc.prev.net) + '.');
+      }
+      var cCls, cTxt;
+      if (cyc.elapsed >= 7 && cyc.projectedNet < 0) { cCls = 'bad'; cTxt = 'This pace burns the salary before the cycle ends — slow down or cut a plan.'; }
+      else if (cyc.spent > 0.6 * cyc.expected && cyc.elapsed < 0.6 * cyc.days) { cCls = 'warn'; cTxt = 'You are past 60% of the salary with 60% of the cycle still to go — keep the rest lean.'; }
+      else { cCls = 'good'; cTxt = 'On pace — the salary covers this cycle at the current spend.'; }
+      blocks += insBlock('This cycle', cLines, cCls, cTxt);
+    }
 
     body.innerHTML = blocks;
   }
@@ -2692,6 +2853,18 @@
       var pw = d.prepayIn <= 0 ? 'Prepay due today' : 'Prepay in ' + d.prepayIn + ' day' + (d.prepayIn === 1 ? '' : 's');
       sub.push(pw + ' <b>' + money(d.prepayAmt) + '</b>');
     }
+    // v72.45: the salary (the 15th) — due / in, on the same line as the rest
+    if (d && d.cycle && d.cycle.expected > 0) {
+      var cy0 = d.cycle;
+      if (cy0.received) {
+        sub.push('Salary in · ' + dayMonth(cy0.received.date) + ' <b>' + money(cy0.received.amount) + '</b>');
+      } else {
+        var payday0 = cy0.month + '-' + (cy0.sday < 10 ? '0' : '') + cy0.sday;
+        var dt0 = Math.round((parseISO(payday0) - parseISO(d.today)) / 86400000);
+        sub.push('Salary (the ' + ordinal(cy0.sday) + ') <b>' + money(cy0.expected) + '</b> · ' +
+          (dt0 === 0 ? 'due today' : dt0 > 0 ? 'in ' + dt0 + ' day' + (dt0 === 1 ? '' : 's') : Math.abs(dt0) + ' day' + (Math.abs(dt0) === 1 ? '' : 's') + ' late'));
+      }
+    }
     var hs = byId('heroSub');
     if (hs) hs.innerHTML = sub.join(' · ');
     renderSpark();
@@ -2710,10 +2883,43 @@
       return null;
     };
     var asOf = (state.base && state.base.as_of) || todayISO();
+    // v72.45: the current month's EXPECTED salary (the salary_day, the 15th by
+    // default) belongs in the projection even when the sheet's model hasn't
+    // booked it yet — the as-of predates payday, so the month's salary sits at
+    // the pre-payday zero. The month-end / later running values carry the
+    // delta (computed locally — the stored matrix is never mutated) and the
+    // graph gains one explicit point on the payday, or the actual receipt
+    // date once the "Salary in" entry is logged. Other months untouched.
+    var bBase = state.base;
+    var nowMk = todayISO().slice(0, 7);
+    var row0 = s.matrix.base[0];
+    var comp0 = (row0 && row0.comp) ? row0.comp : {};
+    var salDelta = 0, salDate = null;
+    if (bBase && row0 && row0.month === nowMk) {
+      salDelta = r2(expectedSalaryFor(nowMk, bBase) - (Number(comp0.salary) || 0));
+      if (salDelta > 0.004) {
+        var sday0 = salaryDayOf(bBase);
+        var paydayISO = nowMk + '-' + (sday0 < 10 ? '0' : '') + sday0;
+        var cdat0 = cycleDataFor(nowMk, bBase);
+        salDate = (cdat0 && cdat0.received && String(cdat0.received.date).slice(0, 7) === nowMk) ? cdat0.received.date : paydayISO;
+        if (salDate < asOf) salDate = null; // the start point already stands after it
+      }
+    }
     var pts = [{ label: dayMonth(asOf), v: Number(s.matrix.start_cash) || 0, date: asOf }];
     s.matrix.base.forEach(function (row) {
-      pts.push({ label: monthShort(row.month), v: Number(row.running) || 0, date: monthEnd(row.month) });
+      var rv = Number(row.running) || 0;
+      if (salDelta > 0.004 && String(row.month) >= nowMk) rv = r2(rv + salDelta);
+      pts.push({ label: monthShort(row.month), v: rv, date: monthEnd(row.month) });
     });
+    if (salDate) {
+      var mpp = nowMk.split('-');
+      var dim0 = new Date(Number(mpp[0]), Number(mpp[1]), 0).getDate();
+      var dayNum = Number(salDate.slice(8, 10));
+      // even-spend proration (the same assumption as the sheet's month-end
+      // roll): the month's outflows so far, then the salary lands
+      var vAtSal = r2((Number(s.matrix.start_cash) || 0) - r2(((Number(comp0.outflows) || 0) * (dayNum - 1)) / dim0) + salDelta);
+      pts.splice(1, 0, { label: dayMonth(salDate), v: vAtSal, date: salDate });
+    }
     var floorLine = Number(s.floor) || 0;
     return { pts: pts, floor: floorLine };
   }
@@ -2755,13 +2961,15 @@
   }
   // ---------- Phase 5: attention rows for the unified coach card ----------
   function findPaidTxn(d, kind) {
-    var out = null;
+    var out = null, pSum = 0, pLast = null;
     state.txns.forEach(function (t) {
       var amt = Number(t.amount) || 0;
       var hay = ((t.category || '') + ' ' + (t.note || '')).toLowerCase();
       if (kind === 'prepay') {
         if (String(t.date).slice(0, 7) !== d.monthPrefix) return;
         if (!/prepay|card|amex|visa|master|credit/.test(hay)) return;
+        if (amt <= 0) return;
+        pSum += amt; pLast = t; // v72.45: PARTIAL prepays count toward "handled so far"
         if (amt >= 0.5 * d.prepayAmt) out = t;
       } else {
         var dd = diffDays(String(t.date), kind.date);
@@ -2772,6 +2980,7 @@
         if (amt >= 0.5 * pa && amt <= 2.5 * pa) out = t;
       }
     });
+    if (pLast) out = { amount: r2(pSum), date: pLast.date }; // v72.45: the TOTAL logged this month — a partial payment is still a payment
     return out;
   }
   function coachRows(d) {
@@ -2780,14 +2989,35 @@
     var prepayPaid = prepayActive ? findPaidTxn(d, 'prepay') : null;
     if (prepayActive) {
       var pw = d.prepayIn === 0 ? 'today' : (d.prepayIn === 1 ? 'tomorrow' : 'in ' + d.prepayIn + ' days');
-      if (prepayPaid) rows.push({ cls: 'done', tag: 'Card prepay',
-        text: 'Handled — ' + money(Number(prepayPaid.amount) || 0) + ' logged on ' + planWhen(String(prepayPaid.date)) + '. Nice.',
-        r: 'done' });
-      else {
+      if (prepayPaid) {
+        // v72.45: a PARTIAL prepay is not "handled" — the per-card chips
+        // below stay up with the live remainder, and the 'prepay' alert stays
+        // live until the remainder is truly settled (zero).
+        rows.push({ cls: 'done', tag: 'Card prepay',
+          text: 'Partly handled — ' + money(Number(prepayPaid.amount) || 0) + ' logged on ' + planWhen(String(prepayPaid.date)) + ' — ' + money(d.prepayAmt) + ' still owed.',
+          r: money(d.prepayAmt) + ' left' });
+      } else {
         rows.push({ cls: d.prepayIn <= 2 ? 'bad' : 'warn', tag: 'Card prepay',
           text: 'Set aside ' + money(d.prepayAmt) + ' for the ' + ordinal(d.prepayDay) + ' prepay — due ' + pw + '.',
           r: money(d.prepayAmt) });
-        alerts.push('prepay');
+      }
+      alerts.push('prepay'); // v72.45: the remainder is still owed, whatever was logged
+    }
+    // v72.45: the salary-cycle burn — one deterministic finding that rides the
+    // shared snapshot (coachFindings -> the coach phrases it). The pace call
+    // starts once the cycle has a few days of data (day one is never a pace).
+    var cyd = d.cycle;
+    if (cyd && cyd.expected > 0 && cyd.spent > 0 && cyd.elapsed >= 7) {
+      var cPct = Math.round((cyd.spent / cyd.expected) * 100);
+      if (cyd.projectedNet < 0) {
+        rows.push({ cls: 'bad', tag: 'Salary cycle',
+          text: 'Cycle burn: ' + cPct + '% of the ' + money(cyd.expected) + ' salary after ' + cyd.elapsed + ' of ' + cyd.days + ' days — at this pace the cycle ends ' + money(-cyd.projectedNet) + ' short.',
+          r: money(-cyd.projectedNet) + ' short' });
+        alerts.push('cycle');
+      } else if ((cPct / 100) > (cyd.elapsed / cyd.days) * 1.2) {
+        rows.push({ cls: 'warn', tag: 'Salary cycle',
+          text: 'Cycle burn: ' + cPct + '% of the salary after ' + cyd.elapsed + ' of ' + cyd.days + ' days — ahead of the pace that keeps the cycle whole.',
+          r: cPct + '%' });
       }
     }
     var floor = Number(s.floor) || 0;
@@ -4179,12 +4409,18 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.44, live: new Date(2026, 8, 15, 0, 40) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.45, live: new Date(2026, 8, 15, 16, 49) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.45': [
+      'The coach now reads your real numbers — every card shows its current balance, its credit limit, and how full it is',
+      'A partial card prepay keeps its log button on the home card — it shows what is still left to pay',
+      'Your salary (on the 15th) is in the projection: the graph shows it landing on payday, the top card says when it is due, and a "Salary in" button logs it the moment it lands — even early',
+      'A new "This cycle" block reads your money per salary cycle (the 15th to the 14th): the salary, what went out, what the pace leaves — and the last cycle for comparison'
+    ],
     '72.44': [
       'The home card no longer goes blank after you log a card prepay — a typo in the “prepay handled” line stopped the card from drawing its text',
       'A card prepay no longer counts as spending in the summaries (this month by category, spend pace, spent today, the coach note) — it settles the debt, it is not a purchase. A cash-in still nets the spend back down, exactly like the ledger detail already did',
@@ -4928,6 +5164,10 @@
     applyBaseChanges: applyBaseChanges,
     undoBaseStory: undoBaseStory,
     spendOf: spendOf, // v72.44: the one spend rule for aggregates (chat.js coach snapshot + smoke)
+    salaryDayOf: salaryDayOf, // v72.45: the payday (the 15th) with the cutoff fallback
+    expectedSalaryFor: expectedSalaryFor, // v72.45: the cycle's expected salary (override or base)
+    cycleDataFor: cycleDataFor, // v72.45: the cycle math for a given cycle month (smoke drives it)
+    cycleData: cycleData, // v72.45: the current cycle (chat.js snapshot + smoke)
     merchantCatFor: merchantCatFor, // v68 item 1: learned merchant→category lookup for the coach
     effectiveMerchantMap: effectiveMerchantMap,
     coachAlerts: coachAlerts, // v68 item 9: alert-driven chat chips
@@ -4996,6 +5236,10 @@
       // land on a CARD account: the card the money was paid to.
       if (addMode === 'prepay' && type !== 'CARD') {
         alert('Pick the card you paid — Pay card logs a payment to a credit card.');
+        return;
+      }
+      if (addMode === 'salary' && type === 'CARD') {
+        alert('The salary lands in a cash account — pick the account it entered.'); // v72.45
         return;
       }
       var kind = addSheetKind(addMode, type, editingTxn ? editingTxn.kind : null);

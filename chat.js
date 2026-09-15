@@ -1601,6 +1601,9 @@
     var sn = storyNames(ctx);
     // v56: balances + custom details on the rows, so the coach can compute
     // things like card utilization from stored data ("17,279 of a 70,000 limit").
+    // v72.45: the CARD rows carry the LIVE per-card balance (the effective
+    // overlay, not the sheet as-of) + the stored credit limit + utilization —
+    // the bot must read the actual position, not the export date's.
     var detAll = (ctx.base && ctx.base.details) || {};
     function detTxt(k) {
       var d = detAll[k];
@@ -1609,10 +1612,36 @@
       if (!ks.length) return '';
       return ' [' + ks.map(function (x) { return x + ' ' + (typeof d[x] === 'number' ? money(d[x]) : String(d[x])); }).join(', ') + ']';
     }
+    function cardEff(name) {
+      var c = null;
+      (e.cards || []).forEach(function (x) { if (x.name === name) c = x; });
+      return c;
+    }
     var accs = ((ctx.base && ctx.base.accounts) || []).map(function (a) {
+      if (a.kind === 'card') {
+        var c = cardEff(a.name);
+        var bal = c ? (Number(c.balance) || 0) : (Number(a.value) || 0);
+        var lim = (c && c.limit) ? Number(c.limit) : (Number(a.limit) || 0);
+        var util = lim > 0 ? Math.round((bal / lim) * 100) + '%' : '';
+        return a.name + ' (card) ' + money(bal) + (lim > 0 ? ' [limit ' + money(lim) + (util ? ' · ' + util : '') + ']' : '');
+      }
       return a.name + ' (' + a.kind + ') ' + money(a.value || 0) + detTxt(a.kind + ':' + a.name);
     });
     if (accs.length) L.push('- accounts: ' + accs.slice(0, 8).join('; '));
+    // v72.45: the salary cycle (the 15th) — expected / already in + the cycle
+    // spend, so the bot can answer "did my salary come in?" and "how's this
+    // cycle?" from the same numbers the Home card shows.
+    if (F && typeof F.cycleData === 'function') {
+      try {
+        var cyc = F.cycleData();
+        if (cyc && cyc.expected > 0) {
+          L.push('- salary ' + money(cyc.expected) + ' on the ' + ordinal(cyc.sday) + ': ' +
+            (cyc.received ? 'IN on ' + cyc.received.date + ' (' + money(cyc.received.amount) + ')' : 'not in yet') +
+            ' — cycle ' + cyc.start + ' to ' + cyc.end + ': spent ' + money(cyc.spent) + ' (' + Math.round((cyc.spent / cyc.expected) * 100) + '% of the salary) in ' + cyc.elapsed + ' of ' + cyc.days + ' days' +
+            ((cyc.prev && cyc.prev.spent > 0) ? '; last cycle spent ' + money(cyc.prev.spent) + ', kept ' + money(cyc.prev.net) : ''));
+        }
+      } catch (cyErr) {}
+    }
     if (sn.budgets.length) L.push('- budgets: ' + sn.budgets.slice(0, 6).map(function (n) {
       return n + ' ' + money(((ctx.base && ctx.base.budgets) || {})[n] || 0) + detTxt('budget:' + n);
     }).join('; '));
