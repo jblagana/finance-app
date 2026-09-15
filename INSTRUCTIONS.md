@@ -6,6 +6,23 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-15 23:0x — "u arent logging in the instructions.md anymore, thats a hard rule!" — the 09-14 22:4x entry must be closed properly
+Status: **in progress**
+Progress: 10% — logged; closing the 09-14 22:4x entry now — ETA minutes
+### Instruction (verbatim)
+> u arent logging in the instructions.md anymore, thats a hard rule! and u did not close the log on ## 2026-09-14 22:4x
+### Interpretation (agent — user may edit this section)
+- The 2026-09-14 22:4x entry was marked done in v72.44, but its closing line cites ONLY `fd56654` + `6e4f7c0` — and the label half of its reco (prepays "clearly labelled … rather than 'Unsorted' spend") only shipped in v72.47 (`6dc95d8`). The entry therefore reads as not fully closed: its full scope (reco + fix, including the label) completed in v72.47, and the entry itself was never updated to say so. Fix (log hygiene, no code): update the 09-14 22:4x entry IN PLACE — an appended agent bullet recording the slip + the v72.47 completion, and the Progress closing line revised to cite v72.47 (`6dc95d8`, live 22:38) as the full-scope close.
+### Subtasks
+- [x] Log the instruction (first action)
+- [ ] Re-read the 09-14 22:4x entry (diff test vs last read, rule 2)
+- [ ] Update + fully close the 09-14 22:4x entry (agent bullet + Progress line citing v72.47)
+- [ ] Update this entry's subtasks as they land
+- [ ] Commit + push (log-only)
+
+---
+
+
 ## 2026-09-15 22:3x — Close the 09-14 "hey Jan empty + prepays in ledger" entry; rename prepays + future cc payments from 'Unsorted' to 'CC Payment'
 Status: **done**
 Progress: 100% — completed 2026-09-15 22:5x; commit `6dc95d8` pushed to origin/main (v72.47, live 22:38, SW cache `finances-pwa-v72.47`, GATES all green via tools/release.ps1 v72.47 — both check_site copies + test_chat_parser + node syntax + smoke_v68 + smoke_app_v68 (v7247Section 4/4), live app.js + chat.js + sw.js verified via live_check.js: 10/10 markers PASS)
@@ -105,8 +122,8 @@ Progress: 100% — completed 2026-09-15 00:4x; commits `fd56654` + `6e4f7c0` pus
 - [x] Push + live verify (8/8 markers PASS)
 
 ## 2026-09-14 22:4x — Home "hey Jan" card empty after logging prepays; prepays in ledger summary (reco + fix)
-Status: **done**
-Progress: 100% — completed 2026-09-15 00:4x; commits `fd56654` + `6e4f7c0` pushed to origin/main (v72.44, live 00:40, SW cache `finances-pwa-v72.44`, live app.js + chat.js + sw.js verified via live_check.js: 8/8 markers PASS); one-tap PWA reload brings back the home card and the clean summaries
+Status: **done** — fully closed 2026-09-15 23:0x (the reco's label half shipped in v72.47; see the closing bullet)
+Progress: 100% — (a) the empty "hey Jan" card + the prepays-out-of-summaries exclusion: completed 2026-09-15 00:4x; commits `fd56654` + `6e4f7c0` pushed to origin/main (v72.44, live 00:40, SW cache `finances-pwa-v72.44`, live app.js + chat.js + sw.js verified via live_check.js: 8/8 markers PASS); (b) the reco's label half — prepays "clearly labelled … rather than 'Unsorted' spend" — was MISSING from that close (only the aggregate exclusion shipped) and landed in v72.47: commit `6dc95d8` pushed to origin/main (live 22:38, SW cache `finances-pwa-v72.47`, live_check 10/10) — the entry's full scope (reco + fix) closes there
 ### Instruction (verbatim)
 > see img, the hey jan card disappered after i logged the prepay. also should we include the prepay in the ledger summary, i dont think its logical. do u have reco?
 ### Interpretation (agent — user may edit this section)
@@ -117,6 +134,7 @@ Progress: 100% — completed 2026-09-15 00:4x; commits `fd56654` + `6e4f7c0` pus
 - Root cause (agent, reproduced in Node before fixing): the "hey Jan" card = the `#coach` attention card. Its paid-prepay "Handled" row (app.js:2771) read an undefined variable — `prepaid` instead of `prepayPaid` — so once a prepay was PAID, `coachRows` threw `ReferenceError: prepaid is not defined` on EVERY render; `emit()`'s per-render try/catch (app.js:51) swallowed it, and the card was already set visible (line 2297) before the head write (line 2376) → visible but blank. Reproduced with a full-boot probe on his real data (Sep-13 restored export + the two prepays; matched his screenshot exactly: free 535.35 / owed 10,657.65 / prepay due 2,657.65) — `finances/probe_v7244.js`.
 - Reco implemented (agent): a single `spendOf()` in app.js — card_payment → 0, cash_in → −a, else +a — the SAME rule the money-log 's' line has used since v72.10 ("a card payment isn't spend; the charge already counted"). Applied to: todaySpend, spentM, catPace, donut, pace (app.js) + the coach-note snapshot (chat.js); exported for chat.js + smoke. Ledger ENTRY LIST keeps the prepays (they are the record) — the summary aggregates just stop counting them as spend.
 - The user's interpretation edit (23:5x entry) adds the ledger-row free-line suppression — folded into this same release (v72.44).
+- (agent, 2026-09-15 23:0x — closing this entry fully): the v72.44 close marked this done with only the card fix + the spendOf exclusion, but the reco's LABEL half ("clearly labelled as prepays rather than 'Unsorted' spend") never shipped — the user called it out ("u did not update this log as completed", 2026-09-15 22:3x entry → v72.47). v72.47 (`6dc95d8`, live 22:38) shipped it: every card-prepay ledger row — logged AND future-dated (the chips prefill the 14th) — reads "CC Payment" with its own filter option, the Unsorted filter no longer swallows prepays, and the phantom "Unsorted ₱0" slice is gone from the donut + the coach breakdown. Full scope now closed.
 ### Subtasks
 - [x] Log the instruction (first action)
 - [x] Identify the missing home card in app.js (ReferenceError `prepaid` in the paid-prepay "Handled" row, swallowed by emit's try/catch)
@@ -124,6 +142,7 @@ Progress: 100% — completed 2026-09-15 00:4x; commits `fd56654` + `6e4f7c0` pus
 - [x] Reco + exclude prepays from ledger summary aggregates (spendOf at 5 sites + chat.js; probe: donut "Unsorted 13,470" slice gone, pace 14,749.87 = exact)
 - [x] Gate + smoke (new v72.44 gate check + v7244Section 5/5 PASS; release.ps1 v72.44 "GATES: all green")
 - [x] Push + live verify (8/8 markers PASS)
+- [x] Reco's label half: prepays read "CC Payment" in the ledger (shipped v72.47, `6dc95d8`, live 22:38 — called out by the user, see the 2026-09-15 22:3x + 23:0x entries)
 
 ## 2026-09-14 22:2x — Prepaid cards under the old model: fix the persisted numbers (v72.43 migration)
 Status: **done**
