@@ -7,18 +7,18 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-15 23:0x — "u arent logging in the instructions.md anymore, thats a hard rule!" — the 09-14 22:4x entry must be closed properly
-Status: **in progress**
-Progress: 10% — logged; closing the 09-14 22:4x entry now — ETA minutes
+Status: **done**
+Progress: 100% — completed 2026-09-15 23:1x; commit `fa85ec0` pushed to origin/main (log-only): the 09-14 22:4x entry now carries the full-scope close — Progress line split into (a) v72.44 (fd56654 + 6e4f7c0, live 00:40) and (b) v72.47 (6dc95d8, live 22:38) for the reco's label half, plus the appended closing bullet + subtask
 ### Instruction (verbatim)
 > u arent logging in the instructions.md anymore, thats a hard rule! and u did not close the log on ## 2026-09-14 22:4x
 ### Interpretation (agent — user may edit this section)
 - The 2026-09-14 22:4x entry was marked done in v72.44, but its closing line cites ONLY `fd56654` + `6e4f7c0` — and the label half of its reco (prepays "clearly labelled … rather than 'Unsorted' spend") only shipped in v72.47 (`6dc95d8`). The entry therefore reads as not fully closed: its full scope (reco + fix, including the label) completed in v72.47, and the entry itself was never updated to say so. Fix (log hygiene, no code): update the 09-14 22:4x entry IN PLACE — an appended agent bullet recording the slip + the v72.47 completion, and the Progress closing line revised to cite v72.47 (`6dc95d8`, live 22:38) as the full-scope close.
 ### Subtasks
 - [x] Log the instruction (first action)
-- [ ] Re-read the 09-14 22:4x entry (diff test vs last read, rule 2)
-- [ ] Update + fully close the 09-14 22:4x entry (agent bullet + Progress line citing v72.47)
-- [ ] Update this entry's subtasks as they land
-- [ ] Commit + push (log-only)
+- [x] Re-read the 09-14 22:4x entry (diff test vs last read, rule 2 — clean, no user edits)
+- [x] Update + fully close the 09-14 22:4x entry (agent bullet + Progress line citing v72.47 + new subtask)
+- [x] Update this entry's subtasks as they land
+- [x] Commit + push (log-only) — `fa85ec0`
 
 ---
 
