@@ -3382,9 +3382,20 @@
     return '<div class="oent-grid">' +
       '<div><label>Date</label><div class="dfield"><input type="date" class="oent-date">' +
       '<span class="dlabel empty" aria-hidden="true">Pick a date</span></div></div>' +
+      // v72.49: on ipf/tpf this label reads Total (the total for both —
+      // owedFormSections swaps it at runtime); itb/tmb keep the single Amount
       '<div><label>Amount (\u20b1)</label>' +
       '<input type="text" class="oent-amt" maxlength="40" autocomplete="off">' +
       '<p class="oent-eq" aria-live="polite"></p></div>' +
+      '</div>' +
+      // v72.49: the mine/theirs split (ipf + tpf only — itb/tmb are single
+      // amounts and the row hides). Total is the total for BOTH; a part alone
+      // (theirs for ipf, yours for tpf) is the no-split entry — as before.
+      '<div class="oent-grid oent-split" style="display:none">' +
+      '<div><label>Mine (\u20b1)</label>' +
+      '<input type="text" class="oent-mine" maxlength="40" autocomplete="off"></div>' +
+      '<div><label>Theirs (\u20b1)</label>' +
+      '<input type="text" class="oent-theirs" maxlength="40" autocomplete="off"></div>' +
       '</div>' +
       '<label>What happened</label>' +
       '<div class="seg">' +
@@ -3429,13 +3440,19 @@
     shownEnts.forEach(function (e) {
       var dir = OWED_DIRS[e.dir] || OWED_DIRS.ipf;
       var amt = Number(e.amt) || 0;
+      // v72.49: the split hint — the filed part (ipf) / theirs (tpf) + the
+      // total for both, when the entry was split
+      var hint = '';
+      if (e.dir === 'ipf' && e.mine) hint = ' · ' + money(e.mine) + ' mine';
+      if (e.dir === 'tpf' && e.theirs) hint = ' · ' + money(e.theirs) + ' theirs';
+      if (e.total) hint += ' · ' + money(e.total) + ' total';
       rows += '<div class="ow-e">' +
         '<div class="ow-el"><b>' + esc(dir.label) + '</b>' +
         (e.note ? ' <span class="ow-x">' + esc(e.note) + '</span>' : '') +
         // v72.10: a ledger-filed entry wears the chip (v72.29: the edit
         // button is on EVERY entry — the legacy ones included)
         (e.txnId ? ' <span class="ow-led" title="Filed in the ledger — the entry moves your numbers">· ledger</span>' : '') +
-        '<div class="ow-k">' + esc(fmtDate(e.d)) + (e.expr ? ' · ' + esc(e.expr) : '') + '</div></div>' +
+        '<div class="ow-k">' + esc(fmtDate(e.d)) + (e.expr ? ' · ' + esc(e.expr) : '') + hint + '</div></div>' +
         '<b class="ow-amt ' + (dir.sign > 0 ? 'plus' : 'minus') + '">' + (dir.sign > 0 ? '+' : '\u2212') + money(amt) + '</b>' +
         '<button type="button" class="ow-xbtn wide" data-ow-edit-e="' + esc(e.id) + '" aria-label="Edit entry">edit</button>' +
         '<button type="button" class="ow-xbtn" data-ow-del-e="' + esc(e.id) + '" aria-label="Remove entry">\u2715</button>' +
@@ -3520,20 +3537,26 @@
     var html = '';
     people.forEach(function (p) { html += owedPersonHTML(p); });
     body.innerHTML = html;
+    // v72.49: the card-top forms start on the default direction (ipf) — the
+    // Total label, the split row and the Category section follow the pick
+    var oentFs = body.querySelectorAll('.oent');
+    for (var ofi = 0; ofi < oentFs.length; ofi++) owedFormSections(oentFs[ofi], 'ipf');
   }
-  // ---------- v72.10→v72.28: the owed ledger rule ----------
-  // The ledger records CONSUMPTION, not loans: only tpf files a ledger txn
-  // (always a Cash cash_out under the entry's picked category). ipf / itb /
-  // tmb never touch the ledger — a pure loan cycle nets to zero in cash, and
-  // a settle-by-purchase offset lands in the tpf entry (the real spend)
-  // instead of double-counting through an 'Owed' bucket. The Account section
-  // (user edit 21:2x: "dont drop it anymore") stays on ipf/itb/tmb as an
-  // informational record — stored on the entry, never used for a txn.
+  // ---------- v72.10→v72.28→v72.49: the owed ledger rule ----------
+  // The ledger records CONSUMPTION, not loans. v72.28: only tpf filed (the
+  // whole entry: Cash, the picked category). v72.49 (the split): YOURS is
+  // what files — ipf on the picked account (Cash by default; a card files
+  // as card_charge, the Add-sheet rule), tpf on Cash as before — while the
+  // owed entry records the debt side (ipf = theirs, tpf = yours). The
+  // Account section (user edit 21:2x: "dont drop it anymore") stays on
+  // ipf/itb/tmb; for ipf it is now the account the filed part leaves. The
+  // owed BALANCE always comes from the entry records.
   function owedAccOptions(sel) {
     var accounts = ((state.base && state.base.accounts) || [])
       .filter(function (a) { return a.kind === 'card' || a.kind === 'debit'; });
-    var html = '<option value="">\u2014 no account (note only) \u2014</option>';
-    html += '<option value="CASH::Cash"' + (sel === 'CASH::Cash' ? ' selected' : '') + '>Cash</option>';
+    // v72.49: the "no account" option is GONE — Cash is always the default,
+    // so the ipf "mine" part always has an account to file on.
+    var html = '<option value="CASH::Cash"' + (sel === 'CASH::Cash' ? ' selected' : '') + '>Cash</option>';
     accounts.forEach(function (a) {
       if (a.kind === 'debit' && a.name === 'Cash') return; // the default option is already it
       var v = (a.kind === 'card' ? 'CARD' : 'CASH') + '::' + a.name;
@@ -3564,15 +3587,28 @@
   }
   // v72.28 (follow-ups + user edit): which form sections "What happened"
   // shows: ipf = Account + Note; tpf = Category + Note (Cash-implicit);
-  // itb / tmb = Account only.
+  // itb / tmb = Account only. v72.49: the split row (Mine + Theirs) shows
+  // for ipf/tpf, the amount label reads Total (the total for both) there,
+  // and Category shows for ipf too (the filed "mine" part lands in it).
   function owedFormSections(form, dir) {
     if (!form || !form.querySelector) return;
     var a = form.querySelector('.oent-accrow');
     if (a) a.style.display = dir === 'tpf' ? 'none' : '';
     var c = form.querySelector('.oent-catrow');
-    if (c) c.style.display = dir === 'tpf' ? '' : 'none';
+    if (c) c.style.display = (dir === 'tpf' || dir === 'ipf') ? '' : 'none';
     var n = form.querySelector('.oent-noterow');
     if (n) n.style.display = (dir === 'ipf' || dir === 'tpf') ? '' : 'none';
+    var s = form.querySelector('.oent-split'); // v72.49: the mine/theirs split row
+    if (s) {
+      s.style.display = (dir === 'ipf' || dir === 'tpf') ? '' : 'none';
+      if (s.style.display === 'none') { // itb/tmb: no split — stale parts would be silent
+        var sm = form.querySelector('.oent-mine'); if (sm) sm.value = '';
+        var st = form.querySelector('.oent-theirs'); if (st) st.value = '';
+      }
+    }
+    var amtEl = form.querySelector('.oent-amt'); // v72.49: Total (both) vs Amount
+    amtEl = amtEl && amtEl.parentElement ? amtEl.parentElement.querySelector('label') : null;
+    if (amtEl) amtEl.textContent = (dir === 'ipf' || dir === 'tpf') ? 'Total (\u20b1)' : 'Amount (\u20b1)';
   }
   // v72.10: back to a fresh, hidden add form (after a submit or edit save).
   function resetOentForm(f) {
@@ -3582,6 +3618,10 @@
     if (d) { d.value = ''; owedSyncDate(d); }
     var a = f.querySelector('.oent-amt');
     if (a) a.value = '';
+    var m2 = f.querySelector('.oent-mine'); // v72.49: the split parts go too
+    if (m2) m2.value = '';
+    var th2 = f.querySelector('.oent-theirs');
+    if (th2) th2.value = '';
     var eq = f.querySelector('.oent-eq');
     if (eq) { eq.textContent = ''; eq.className = 'oent-eq'; }
     var n = f.querySelector('.oent-note');
@@ -3651,44 +3691,99 @@
       });
     });
   }
+  // ---------- v72.49: the mine / theirs / total split (ipf + tpf) ----------
+  // T (total) = the total for BOTH = yours + theirs — an input aid that
+  // fills in a missing share; on its own it is NOT an entry (a no-split
+  // entry is the single share: ipf = theirs, tpf = yours — the old
+  // behavior). Yours ALWAYS lands in the ledger (your consumption); the
+  // owed entry records the debt side: ipf = theirs (they owe you), tpf =
+  // yours (you owe them) — theirs in tpf is reference only, never recorded
+  // (user-confirmed: the debt is your share). Pure, so the smoke drives
+  // the whole table.
+  function owedSplit(dir, T, M, Th) {
+    T = r2(T); M = r2(M); Th = r2(Th);
+    var hasT = T > 0, hasM = M > 0, hasTh = Th > 0;
+    function bad(msg) { return { owed: 0, ledger: 0, err: msg }; }
+    if (!hasT && !hasM && !hasTh) return bad('Fill in yours, theirs, or the total for both.');
+    if (hasT && hasM && hasTh && Math.abs(T - (M + Th)) > 0.005) {
+      return bad('Total must equal yours + theirs (' + money(M + Th) + ').');
+    }
+    if (dir === 'tpf') {
+      if (hasT && !hasM && !hasTh) return bad('The total alone is for both of you — fill in yours (what you owe them), or theirs + the total.');
+      if (hasTh && !hasM && !hasT) return bad('Fill in yours (what you owe them) — theirs alone does not say that.');
+      if (hasM && hasT && M > T + 0.005) return bad('A part cannot be bigger than the total.');
+      var owedY = hasM ? M : r2(T - Th);
+      if (owedY < 0) return bad('A part cannot be bigger than the total.');
+      return { owed: owedY, ledger: owedY, err: '' };
+    }
+    // ipf
+    if (hasT && !hasM && !hasTh) return bad('The total alone is for both of you — fill in theirs (what they owe you), or yours + the total.');
+    var owedT = hasTh ? Th : (hasT ? r2(T - M) : 0);
+    var ledg = hasM ? M : (hasT ? r2(T - Th) : 0);
+    if (owedT < 0 || ledg < 0) return bad('A part cannot be bigger than the total.');
+    return { owed: owedT, ledger: ledg, err: '' };
+  }
   function addOwedEntry(pid, data) {
     var p = null;
     (state.owed.people || []).forEach(function (x) { if (x.id === pid) p = x; });
     if (!p) return;
     if (!p.entries) p.entries = [];
+    var dir = OWED_DIRS[data.dir] ? data.dir : 'ipf';
     var e = {
-      id: owedUid('oe'), d: data.d || todayISO(), amt: r2(data.amt),
-      dir: OWED_DIRS[data.dir] ? data.dir : 'ipf',
+      id: owedUid('oe'), d: data.d || todayISO(),
+      dir: dir,
       note: String(data.note || '').trim(), created: new Date().toISOString()
     };
     if (data.expr) e.expr = data.expr;
-    // v72.28 (follow-ups + user edit): the ledger records CONSUMPTION, not
-    // loans — ONLY tpf files a ledger txn (Cash implicitly, the picked
-    // category, negative cash_out, 'Unsorted' fallback); ipf / itb / tmb
-    // never touch the ledger (a pure loan cycle nets to zero in cash; an
-    // offset settles through the tpf entry, which IS the real spend). Their
-    // account pick is stored on the entry as an informational record only.
+    // v72.49 (the split): the form hands over total / mine / theirs (the
+    // submit handler already ran them through owedSplit — errors alert
+    // there). The owed entry records the debt side (ipf = theirs, tpf =
+    // yours); YOURS always files to the ledger — ipf on the picked account
+    // (Cash by default; a card files as card_charge, the Add-sheet rule),
+    // tpf on Cash as before, both under the picked category. A no-split
+    // entry is the old behavior exactly (legacy payloads: amt only).
+    var owed = r2(data.amt);
+    var mine = r2(data.mine), theirs = r2(data.theirs), total = r2(data.total);
+    var hasSplitFields = (data.total !== undefined || data.mine !== undefined || data.theirs !== undefined);
     var acc = String(data.acc || '').trim();
+    if (hasSplitFields && !acc) acc = 'CASH::Cash'; // v72.49: Cash is always the default (the new form path); legacy payloads (amt only) keep the old storage
     var cat = String(data.cat || '').trim();
     if (!cat) cat = 'Unsorted'; // the no-budgets fallback
     e.cat = cat;
-    var doTxn = e.dir === 'tpf';
-    if (!doTxn && acc) e.acc = acc; // ipf/itb/tmb: informational record only
-    p.entries.push(e);
+    e.amt = owed;
+    var isSplitDir = (dir === 'ipf' || dir === 'tpf');
+    var ledger = isSplitDir ? ((dir === 'tpf') ? owed : mine) : 0;
+    if (isSplitDir) { // v72.49: store only the parts that are not e.amt itself
+      if (dir === 'ipf' && mine > 0) e.mine = mine; // tpf: yours = e.amt
+      if (dir === 'tpf' && theirs > 0) e.theirs = theirs; // ipf: theirs = e.amt
+      if (total > 0) e.total = total;
+    }
+    if (dir !== 'tpf' && acc) e.acc = acc; // ipf/itb/tmb: the pick rides on the entry (tpf files on Cash)
     p.updated = new Date().toISOString(); // v72.7: recent-sort key
     var step = Promise.resolve();
-    if (doTxn) {
-      step = addTxn({
+    if (ledger > 0) {
+      var tData = {
         date: e.d, account: 'Cash', kind: 'cash_out',
-        category: e.cat, amount: e.amt, note: 'Owed · ' + p.name
-      }, { quiet: true }).then(function (id) {
+        category: e.cat, amount: ledger, note: 'Owed · ' + p.name
+      };
+      if (dir === 'ipf') { // the filed part leaves the picked account
+        var isCard = acc.indexOf('CARD::') === 0;
+        tData.account = acc.split('::').pop() || 'Cash';
+        tData.kind = isCard ? 'card_charge' : 'cash_out';
+      }
+      step = addTxn(tData, { quiet: true }).then(function (id) {
         e.txnId = id; // the link persists with the entry (export/import carries it)
         return saveOwed();
       });
     }
+    if (owed > 0) p.entries.push(e); // v72.49: an ipf add with ONLY yours = a ledger txn, no owed entry
     saveOwed().then(function () { return step; }).then(function () {
       emitOwed();
-      snack(OWED_DIRS[e.dir].label + ' ' + money(e.amt) + ' · ' + esc(p.name) + (doTxn ? ' (in the ledger)' : ''), function () {
+      var msg;
+      if (ledger > 0 && owed > 0) msg = OWED_DIRS[e.dir].label + ' ' + money(owed) + ' · ' + money(ledger) + ' in the ledger · ' + esc(p.name);
+      else if (ledger > 0) msg = 'Added ' + money(ledger) + ' to the ledger · ' + esc(p.name);
+      else msg = OWED_DIRS[e.dir].label + ' ' + money(owed) + ' · ' + esc(p.name);
+      snack(msg, function () {
         p.entries = p.entries.filter(function (x) { return x.id !== e.id; });
         var u = e.txnId ? removeTxnQuiet(e.txnId) : Promise.resolve();
         e.txnId = null;
@@ -3912,7 +4007,7 @@
   }
   // v72.10: editable subentries. The linked ledger txn follows the entry:
   // linked+linked → v72.9's in-place edit (position + original timestamp stay);
-  // linked→note → the txn is removed; note→linked (or a dangling link) → a
+  // linked→none → the txn is removed; none→linked (or a dangling link) → a
   // fresh txn is filed. ONE toast covers entry + txn; Undo reverses both.
   function updateOwedEntry(pid, eid, data) {
     var p = null, e = null;
@@ -3928,36 +4023,56 @@
     if (e.txnId) {
       for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === e.txnId) prevTxn = Object.assign({}, state.txns[i]);
     }
-    // v72.28 (follow-ups + user edit): the same filing rule as addOwedEntry —
-    // only tpf files (Cash implicitly, cash_out, 'Unsorted' fallback).
-    // Editing is where OLD entries adopt it: an old ipf/tmb entry's ledger
-    // txn is REMOVED (no migration: leave them as-is until edited). The
-    // account pick is stored informationally on ipf/itb/tmb, never on tpf.
-    var acc = String(data.acc || '').trim();
-    var cat = String(data.cat || '').trim();
+    // v72.49 (the split): the same rule as addOwedEntry — yours files (ipf
+    // on the picked account, tpf on Cash), the owed entry carries the debt
+    // side. Editing is where OLD entries adopt it: the linked ledger txn is
+    // rewritten in place (id + position kept), removed, or created fresh.
     var nextDir = OWED_DIRS[data.dir] ? data.dir : e.dir;
-    if (nextDir === 'tpf' && !cat) cat = e.cat || 'Unsorted';
-    else if (!cat) cat = 'Unsorted';
+    var hasSplitFields = (data.total !== undefined || data.mine !== undefined || data.theirs !== undefined);
+    var acc = String(data.acc || '').trim();
+    if (hasSplitFields && !acc) acc = 'CASH::Cash'; // v72.49: Cash is always the default (the new form path); legacy payloads keep the old storage
+    var cat = String(data.cat || '').trim();
+    if (!cat) cat = e.cat || 'Unsorted';
+    var isSplitDir = (nextDir === 'ipf' || nextDir === 'tpf');
+    var split;
+    if (!isSplitDir) {
+      split = { owed: r2(data.total != null ? data.total : data.amt), ledger: 0, err: '' };
+    } else if (!hasSplitFields) {
+      // legacy payload (pre-v72.49 callers, amt only): the single amount is
+      // the no-split reading of that direction (ipf: theirs, tpf: yours)
+      split = { owed: r2(data.amt), ledger: (nextDir === 'tpf') ? r2(data.amt) : 0, err: '' };
+    } else {
+      split = owedSplit(nextDir, r2(data.total), r2(data.mine), r2(data.theirs));
+    }
+    if (split.err) { alert(split.err); return Promise.resolve(); }
+    if (isSplitDir && split.owed <= 0) {
+      alert('That would leave no owed part — keep the part that is owed, or remove the entry.');
+      return Promise.resolve();
+    }
     var next = {
-      d: data.d || e.d, amt: r2(data.amt),
+      d: data.d || e.d, amt: split.owed,
       dir: nextDir,
       note: String(data.note || '').trim(),
       cat: cat
     };
-    var doTxn = next.dir === 'tpf';
+    var ledger = isSplitDir ? ((nextDir === 'tpf') ? split.owed : r2(data.mine)) : 0;
+    var files = ledger > 0;
+    var tData = {
+      date: next.d, account: 'Cash', kind: 'cash_out',
+      category: next.cat, amount: ledger, note: 'Owed · ' + p.name
+    };
+    if (nextDir === 'ipf') { // the filed part leaves the picked account
+      var isCard = acc.indexOf('CARD::') === 0;
+      tData.account = acc.split('::').pop() || 'Cash';
+      tData.kind = isCard ? 'card_charge' : 'cash_out';
+    }
     var step = Promise.resolve();
-    if (prevTxn && doTxn) {
-      step = saveTxnEdit(e.txnId, {
-        date: next.d, account: 'Cash', kind: 'cash_out',
-        category: next.cat, amount: next.amt, note: 'Owed · ' + p.name
-      }, { quiet: true });
-    } else if (prevTxn && !doTxn) {
+    if (prevTxn && files) {
+      step = saveTxnEdit(e.txnId, tData, { quiet: true });
+    } else if (prevTxn && !files) {
       step = removeTxnQuiet(e.txnId);
-    } else if (!prevTxn && doTxn) {
-      step = addTxn({
-        date: next.d, account: 'Cash', kind: 'cash_out',
-        category: next.cat, amount: next.amt, note: 'Owed · ' + p.name
-      }, { quiet: true }).then(function (id) {
+    } else if (!prevTxn && files) {
+      step = addTxn(tData, { quiet: true }).then(function (id) {
         e.txnId = id;
         return saveOwed();
       });
@@ -3966,28 +4081,39 @@
       e.d = next.d; e.amt = next.amt; e.dir = next.dir; e.note = next.note;
       e.cat = next.cat; // v72.25→v72.28
       if (data.expr) e.expr = data.expr; else delete e.expr;
-      // tpf files to Cash implicitly (no acc stored); ipf/itb/tmb keep the
-      // informational account pick ('' = no account)
-      if (!doTxn && acc) e.acc = acc; else delete e.acc;
-      if (!doTxn) e.txnId = null;
+      // v72.49: the split parts — only the ones that are there (ipf: mine +
+      // total; tpf: theirs + total; e.amt IS the debt side)
+      delete e.mine; delete e.theirs; delete e.total;
+      if (isSplitDir) {
+        if (nextDir === 'ipf' && r2(data.mine) > 0) e.mine = r2(data.mine);
+        if (nextDir === 'tpf' && r2(data.theirs) > 0) e.theirs = r2(data.theirs);
+        if (r2(data.total) > 0) e.total = r2(data.total);
+      }
+      // v72.49: the pick rides on the entry (never on tpf, which files on
+      // Cash implicitly); a legacy empty pick still means "no account"
+      if (nextDir === 'tpf' || !acc) delete e.acc; else e.acc = acc;
+      if (!files) e.txnId = null;
       p.updated = new Date().toISOString(); // v72.7: recent-sort key
       return saveOwed();
     }).then(function () {
       emitOwed();
-      var undoNewId = !prevTxn && doTxn ? e.txnId : null; // the just-created link
+      var undoNewId = !prevTxn && files ? e.txnId : null; // the just-created link
       snack('Updated ' + money(e.amt) + ' · ' + esc(p.name), function () {
         Object.keys(prev).forEach(function (k) { e[k] = prev[k]; });
         if (prev.acc) e.acc = prev.acc; else delete e.acc;
         if (prev.txnId) e.txnId = prev.txnId; else delete e.txnId;
+        if (prev.mine) e.mine = prev.mine; else delete e.mine; // v72.49: the split parts
+        if (prev.theirs) e.theirs = prev.theirs; else delete e.theirs;
+        if (prev.total) e.total = prev.total; else delete e.total;
         var u = Promise.resolve();
-        if (prevTxn && doTxn) {
+        if (prevTxn && files) {
           // re-run the in-place edit with the ORIGINAL values — the exact
           // inverse rebase; position + timestamp stay put
           u = saveTxnEdit(prevTxn.id, {
             date: prevTxn.date, account: prevTxn.account, kind: prevTxn.kind,
             category: prevTxn.category || 'Unsorted', amount: prevTxn.amount, note: prevTxn.note || ''
           }, { quiet: true });
-        } else if (prevTxn && !doTxn) {
+        } else if (prevTxn && !files) {
           u = restoreTxnQuiet(prevTxn);
         } else if (undoNewId) {
           u = removeTxnQuiet(undoNewId);
@@ -4096,26 +4222,51 @@
       if (!f || typeof f.className !== 'string' || f.className.indexOf('oent') < 0) return;
       ev.preventDefault();
       var pid = f.getAttribute('data-ow-for');
+      var dirEl = f.querySelector('input[name="owdir"]:checked');
+      var dir = dirEl ? dirEl.value : 'ipf';
       var amtEl = f.querySelector('.oent-amt');
       var raw = String(amtEl.value || '').trim();
-      var amt = evalExpr(raw);
-      if (amt === null || !(amt > 0)) {
-        alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.');
+      // v72.49: ipf/tpf read the split — Total (the total for both) + the
+      // Mine / Theirs parts; owedSplit decides the owed/ledger sides (the
+      // alerts live in there). itb/tmb keep the single amount.
+      var T = evalExpr(raw);
+      if (T === null) T = 0;
+      var mineEl = f.querySelector('.oent-mine');
+      var theirsEl = f.querySelector('.oent-theirs');
+      var M = evalExpr(mineEl ? String(mineEl.value || '').trim() : '');
+      if (M === null) M = 0;
+      var Th = evalExpr(theirsEl ? String(theirsEl.value || '').trim() : '');
+      if (Th === null) Th = 0;
+      var owed;
+      if (dir === 'ipf' || dir === 'tpf') {
+        var split = owedSplit(dir, T, M, Th);
+        if (split.err) { alert(split.err); return; }
+        owed = split.owed;
+      } else {
+        if (!(T > 0)) {
+          alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.');
+          return;
+        }
+        owed = T;
+      }
+      var editId = f.getAttribute('data-ow-edit'); // v72.10: edit mode
+      if (editId && owed <= 0) { // v72.49: an edit cannot zero the owed part
+        alert('That would leave no owed part — keep the part that is owed, or remove the entry.');
         return;
       }
-      var dirEl = f.querySelector('input[name="owdir"]:checked');
-      var expr = (raw !== String(r2(amt))) ? raw : null;
+      var expr = (raw !== String(r2(T))) ? raw : null;
       var payload = {
         d: f.querySelector('.oent-date').value || todayISO(),
-        amt: amt, dir: dirEl ? dirEl.value : 'ipf', expr: expr,
+        amt: owed, dir: dir, expr: expr,
+        total: r2(T), mine: r2(M), theirs: r2(Th), // v72.49: the split parts
         note: (f.querySelector('.oent-note').value || '').trim(),
-        // v72.28 (user edit): the account pick — informational on ipf/itb/tmb
-        // (never a txn), ignored for tpf (Cash implicit)
-        acc: (f.querySelector('.oent-acc') || { value: '' }).value || '',
-        // v72.25→v72.28: the category pick (shown for tpf only; 'Unsorted' fallback)
+        // v72.28→v72.49: the account pick — on ipf it is the account the
+        // filed "mine" part leaves (Cash is always an option), itb/tmb
+        // informational, tpf ignored (Cash implicit)
+        acc: (f.querySelector('.oent-acc') || { value: 'CASH::Cash' }).value || 'CASH::Cash',
+        // v72.25→v72.49: the category pick (shown for ipf + tpf; 'Unsorted' fallback)
         cat: (f.querySelector('.oent-cat') || { value: 'Unsorted' }).value || 'Unsorted'
       };
-      var editId = f.getAttribute('data-ow-edit'); // v72.10: edit mode
       if (editId) updateOwedEntry(pid, editId, payload);
       else addOwedEntry(pid, payload);
       resetOentForm(f);
@@ -4172,8 +4323,19 @@
               if (f3) {
                 var d3 = f3.querySelector('.oent-date');
                 d3.value = ee.d || todayISO(); owedSyncDate(d3);
+                // v72.49: the amount field reads TOTAL for ipf/tpf — the
+                // parts prefill from the stored split. Legacy entries read as
+                // the no-split shape: ipf amount = theirs, tpf amount = yours.
+                var preDir = ee.dir || 'ipf';
+                var preT = (preDir === 'ipf' || preDir === 'tpf') ? (ee.total ? String(ee.total) : '') : String(ee.amt);
+                var preM = (preDir === 'tpf') ? String(ee.amt) : (preDir === 'ipf' && ee.mine ? String(ee.mine) : '');
+                var preTh = (preDir === 'ipf') ? String(ee.amt) : (preDir === 'tpf' && ee.theirs ? String(ee.theirs) : '');
                 var a3 = f3.querySelector('.oent-amt');
-                a3.value = String(ee.amt); owedExprHint(a3);
+                a3.value = preT; owedExprHint(a3);
+                var m3 = f3.querySelector('.oent-mine');
+                if (m3) m3.value = preM;
+                var th3 = f3.querySelector('.oent-theirs');
+                if (th3) th3.value = preTh;
                 var radios3 = f3.querySelectorAll('input[name="owdir"]');
                 for (var r3 = 0; r3 < radios3.length; r3++) radios3[r3].checked = radios3[r3].value === (ee.dir || 'ipf');
                 var seg3 = f3.querySelector('.seg');
@@ -4185,7 +4347,14 @@
                   }
                 }
                 var s3 = f3.querySelector('.oent-acc');
-                if (s3) s3.value = ee.acc || '';
+                if (s3) {
+                  // v72.49: no "no account" option anymore — a legacy empty
+                  // pick (or a gone account) lands back on Cash
+                  var av3 = ee.acc || 'CASH::Cash';
+                  var okA3 = false;
+                  for (var oi3 = 0; oi3 < s3.options.length; oi3++) if (s3.options[oi3].value === av3) okA3 = true;
+                  s3.value = okA3 ? av3 : 'CASH::Cash';
+                }
                 var c3 = f3.querySelector('.oent-cat'); // v72.28: rebuild options (a stale saved category stays selectable)
                 if (c3) c3.innerHTML = owedCatOptions(ee.cat || '');
                 owedFormSections(f3, ee.dir || 'ipf');
@@ -4628,12 +4797,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.48, live: new Date(2026, 8, 20, 19, 32) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.49, live: new Date(2026, 8, 21, 1, 55) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.49': [
+      'Owed entries can now be split — "I paid for them" and "They paid for me" take Total (the total for both), Mine and Theirs: yours always lands in the ledger as your spend (on the account you pick), and the owed entry keeps the part that is owed (theirs when you paid, yours when they did). Fill in just one part and it is the entry, as before',
+      'The "no account" option is gone from the owed form — Cash is the default, so a split "mine" part always lands in the ledger'
+    ],
     '72.48': [
       'Each person in the Owed book now has a statement of account — tap "SOA (PDF)" on their card and the full account is saved as a PDF file: every entry in date order with the running balance, and at the end who owes what (or that you are settled)'
     ],
@@ -5365,6 +5538,7 @@
     soaRows: soaRows, // v72.48: the SOA running-balance table (smoke drives the math)
     soaPdf: soaPdf, // v72.48: the rendered statement PDF text (smoke verifies structure: xref, pages, amounts)
     exportOwedSoa: exportOwedSoa, // v72.48: the per-person SOA download (smoke drives it)
+    owedSplit: owedSplit, // v72.49: the mine/theirs/total split (smoke drives the table)
     shellNotesFor: shellNotesFor, // v72.29: the What's-new notes for a version (smoke drives it)
     addSheetKind: addSheetKind, // v72.41: the Add-sheet kind decision (smoke drives it — the submit is DOM-bound)
     shellVersion: SHELL_RELEASE.v, // v72.38: the running shell dot (smoke drives the What's-new fallback check)

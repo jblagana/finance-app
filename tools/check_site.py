@@ -325,6 +325,20 @@ def main():
           and "function exportOwedSoa" in js and "data-ow-soa=" in js
           and "application/pdf" in js and "%PDF-1.4" in js and "%%EOF" in js
           and "jspdf" not in (js + chatjs + html + aijs))
+    check("v72.49 (user: 'in owed tab in \"i paid for them\" and \"they paid for me\", add field for \"mine\", \"theirs\", \"total\" ... follow the same logic for \"they paid for me\"' + '-remove \"no account\" default is cash always' + 'T = the total for both of us; with no split, theirs or mine is filled, not total alone'): the SPLIT — Total = the total for BOTH (an aid that fills a missing share; TOTAL ALONE is not an entry → alert in both directions); a no-split entry = the single share (ipf: theirs, tpf: yours — the old behavior, no migration). YOURS always files to the ledger (ipf on the picked account — Cash cash_out / card card_charge, the Add-sheet rule — under the picked Category, now shown for ipf; tpf on Cash as before); the owed entry carries the debt side: ipf = THEIRS, tpf = YOURS (user-confirmed: the debt is your share; theirs in tpf is reference-only, never recorded); all three require Total = yours + theirs (±0.01); tpf theirs-only → alert; the 'no account' option is GONE (Cash is always the default, so the ipf mine part always files); an edit that would zero the owed part is blocked; legacy payloads (amt only) keep the old reading",
+          "function owedSplit(dir, T, M, Th)" in js
+          and 'class="oent-mine"' in js and 'class="oent-theirs"' in js
+          and "Mine (\\u20b1)" in js and "Theirs (\\u20b1)" in js and "Total (\\u20b1)" in js
+          and "Fill in yours, theirs, or the total for both." in js
+          and "The total alone is for both of you" in js
+          and "Total must equal yours + theirs" in js
+          and "A part cannot be bigger than the total." in js
+          and "no account (note only)" not in js
+          and "var ledger = isSplitDir ? ((dir === 'tpf') ? owed : mine) : 0;" in js
+          and "tData.account = acc.split('::').pop() || 'Cash';" in js
+          and "tData.kind = isCard ? 'card_charge' : 'cash_out';" in js
+          and "ledger: (nextDir === 'tpf') ? r2(data.amt) : 0, err: ''" in js
+          and "owedSplit: owedSplit" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",
@@ -595,7 +609,7 @@ def main():
           and "k: t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x'" in js
           and '<select class="oent-acc">' in js and "owedAccOptions('CASH::Cash')" in js
           and "function owedTxnKind" not in js
-          and "category: e.cat, amount: e.amt, note: 'Owed \u00b7 ' + p.name" in js
+          and "category: e.cat, amount: ledger, note: 'Owed \u00b7 ' + p.name" in js
           and "if (editId) updateOwedEntry(pid, editId, payload);" in js
           and "function updateOwedEntry(pid, eid, data)" in js
           and "if (names.indexOf('Owed') < 0) names.push('Owed');" not in js)
@@ -624,20 +638,20 @@ def main():
           and "impPrev.chat = cloneObj(chatRows || []);" in js
           and "function restoreImportSnapshot(prev) {" in js
           and "parts.length ? function () { restoreImportSnapshot(impPrev); } : null);" in js)
-    check("the owed form's sections + ledger filing follow 'What happened' (v72.28 + follow-ups, user: the 4 directions, then 'maybe we should remove the ledger entries for i paid for them and they paid me back' — the settle-by-purchase offset double-counted — an interpretation edit — 'dont drop it anymore' the Account section + the tpf 'Unsorted' fallback): the ledger records CONSUMPTION, not loans — ONLY tpf files a ledger txn (Cash implicitly, the picked category from Your numbers' budgets with 'Unsorted' fallback, negative cash_out); ipf = Account + Note, itb and tmb = Account only, all three NEVER touch the ledger (a pure loan cycle nets to zero in cash; an offset lands in the tpf entry's true category; their account pick is stored on the entry informationally); existing entries adopt the rule ONLY on edit — the linked txn is rewritten in place (id + position kept), removed, or created fresh, and undo reverses it; NO migration of old entries; the owed balance still comes from the entry records",
+    check("the owed form's sections + ledger filing follow 'What happened' (v72.28 + follow-ups, user: the 4 directions, then 'maybe we should remove the ledger entries for i paid for them and they paid me back' — the settle-by-purchase offset double-counted — an interpretation edit — 'dont drop it anymore' the Account section + the tpf 'Unsorted' fallback): the ledger records CONSUMPTION, not loans — ONLY tpf files a ledger txn (Cash implicitly, the picked category from Your numbers' budgets with 'Unsorted' fallback, negative cash_out); ipf = Account + Note, itb and tmb = Account only, all three NEVER touch the ledger (a pure loan cycle nets to zero in cash; an offset lands in the tpf entry's true category; their account pick is stored on the entry informationally); existing entries adopt the rule ONLY on edit — the linked txn is rewritten in place (id + position kept), removed, or created fresh, and undo reverses it; NO migration of old entries; the owed balance still comes from the entry records. v72.49 superseded the filing amount: YOURS files (the split part, ipf on the picked account, Category now shown for ipf too) — the v72.49 check pins the new rule; this check keeps the section mechanics + the current filing shape",
           "function owedFormSections(form, dir)" in js
           and '<div class="oent-accrow">' in js and '<label>Account</label>' in js
           and "a.style.display = dir === 'tpf' ? 'none' : ''" in js
-          and "c.style.display = dir === 'tpf' ? '' : 'none'" in js
+          and "c.style.display = (dir === 'tpf' || dir === 'ipf') ? '' : 'none'" in js
           and "n.style.display = (dir === 'ipf' || dir === 'tpf') ? '' : 'none'" in js
-          and "var doTxn = e.dir === 'tpf';" in js
-          and "var doTxn = next.dir === 'tpf';" in js
+          and "var ledger = isSplitDir ? ((dir === 'tpf') ? owed : mine) : 0;" in js
+          and "var files = ledger > 0;" in js
           and "if (!cat) cat = 'Unsorted';" in js
           and "cat = e.cat || 'Unsorted';" in js
           and "date: e.d, account: 'Cash', kind: 'cash_out'," in js
           and "date: next.d, account: 'Cash', kind: 'cash_out'," in js
-          and "category: e.cat, amount: e.amt, note: 'Owed \u00b7 ' + p.name" in js
-          and "category: next.cat, amount: next.amt, note: 'Owed \u00b7 ' + p.name" in js
+          and "category: e.cat, amount: ledger, note: 'Owed \u00b7 ' + p.name" in js
+          and "category: next.cat, amount: ledger, note: 'Owed \u00b7 ' + p.name" in js
           and "owedFormSections(f, 'ipf')" in js
           and "owedFormSections(formEl, t.value)" in js
           and "owedFormSections(f3, ee.dir || 'ipf')" in js

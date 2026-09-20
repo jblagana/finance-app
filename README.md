@@ -28,9 +28,14 @@ with one-tap undo — the rule engine stays the only writer.
   Entries overlay the base numbers live; deletes confirm first, and the last
   add/delete is undoable from the toast.
 - **Owed** — people and entries with a live = total; amounts take plain
-  numbers or quick sums. Each person's card exports a **statement of
-  account (PDF)** — one SOA per person: every entry in date order with the
-  running balance, and the closing direction (who owes what).
+  numbers or quick sums. "I paid for them" and "They paid for me" take the
+  split — **Total** (the total for both), **Mine** and **Theirs**: yours
+  lands in the ledger as your spend (on the picked account, Cash the
+  default), the owed entry keeps the part that is owed (theirs when you
+  paid, yours when they did); one part alone is the entry, as before.
+  Each person's card exports a **statement of account (PDF)** — one SOA per
+  person: every entry in date order with the running balance, and the
+  closing direction (who owes what).
 
 ## Coach (floating bot)
 Plain language: status, debts, one-offs, sinking funds, cash in any month,
@@ -102,7 +107,7 @@ it: `npx wrangler deploy`.)
 - **Backup** (Settings → Backup): Export JSON (everything) / Export CSV (ledger
   only) / Import JSON to restore.
 - Both footers show the shell version + when this build went live. Releases
-  bump the SW cache (`finances-pwa-v72.48`) and the `SHELL_RELEASE` stamp in
+  bump the SW cache (`finances-pwa-v72.49`) and the `SHELL_RELEASE` stamp in
   `app.js` together — the "New version ready" toast offers a one-tap reload.
   If the app ever looks stale: open the Pages URL once in Safari, then
   relaunch the home-screen icon.

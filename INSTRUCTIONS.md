@@ -6,6 +6,41 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-20 23:1x — "in owed tab in 'i paid for them' and 'they paid for me', add field for 'mine', 'theirs', 'total' …"
+Status: **in progress**
+Progress: 0% — logged
+### Instruction (verbatim)
+> in owed tab in 'i paid for them' and 'they paid for me', add field for 'mine', 'theirs', 'total'. in 'i paid for them', if i fill 'theirs' only, just the normal owed entry; if i put in 'mine' and 'theirs', record 'mine' in ledger and 'theirs' in owed entry; if i put in 'mine' and 'total', put 'mine' in ledger and the difference in owed entry; if i put 'theirs' and 'total', add 'theirs' in owed entry and the difference in my ledger. follow the same logic for 'they paid for me'
+> -remove 'no account' default is cash always
+> -clarify the T only entries in ipd and tpf
+> lets define T as the total for both of us, if theres no split, then 'theirs' or 'mine' should be filled, not 'total' alone
+### Interpretation (agent — user may edit this section)
+- **Routing (clarification asked, user's answer):** MINE always lands in the **ledger** (your consumption). The **owed entry** carries the debt side: ipf "I paid for them" = **theirs** (they owe you theirs); tpf "They paid for me" = **yours** (you owe them your share — user-confirmed: "Debt = your share: owed entry = yours, ledger = yours; 'theirs' is just reference, not recorded").
+- **T (Total) = the total for BOTH** = yours + theirs — an input aid that fills in the missing share. **Total alone is NOT an entry** (alert in both directions); a no-split entry = the single share (ipf: theirs, tpf: yours) = exactly today's behavior → no migration (legacy ipf → Theirs = stored amount; legacy tpf → Mine = stored amount + full file).
+- **Derivation table** (owed = the person's entry; ledger = the linked txn):
+  - ipf: Th only → (Th, —) · M only → (no entry, M) · M+Th → (Th, M) · M+T → (T−M, M) · Th+T → (Th, T−Th) · all three → (T−M, M), requires T = M+Th (±0.01) else alert · T only → alert
+  - tpf: M only → (M, M) · M+Th → (M, M) · M+T → (M, M) · Th+T → (T−Th, T−Th) · all three → (T−Th, M), consistency alert · Th only → alert · T only → alert
+- **User edit 1:** the **"— no account (note only) —" option is REMOVED** from the owed form — Cash is always the default. Consequence: the ipf "mine" part **always files** — on the picked account (Cash → cash_out; a card → card_charge, the Add-sheet rule) under the picked **Category** (now shown for ipf too).
+- **User edit 2 (clarified):** T-only is invalid in BOTH directions (see the table).
+- itb/tmb untouched (single amount, no ledger, split row hidden). An **edit** that would zero the owed part is blocked with an alert; an ipf **add** with only mine = ledger txn only, no owed entry (undo reverts it). Entry rows show a compact split hint (· ₱300 mine · ₱1,000 total); the SOA stays entry-based (unchanged).
+- Implementation: pure `owedSplit(dir, T, M, Th) → {owed, ledger, err}` (bridged on FinApp, smoke drives the whole table); stored parts `e.mine` (ipf only) / `e.theirs` (tpf only) / `e.total` (given); addOwedEntry/updateOwedEntry file the mine part via the existing v72.10 txn machinery (edit-in-place / remove / create, one toast, combined Undo); legacy payloads (amt only, pre-v72.49 smoke callers) keep the old reading.
+- Release: v72.49 via tools/release.ps1 (one instruction = one dot release = one push); the v72.28 check's superseded filing pins update to the v72.49 shapes (as the v72.47 stamp pins moved to the generic gate); new v72.49 structural check; README Owed line; smoke section.
+### Subtasks
+- [x] Log the instruction (first action)
+- [ ] app.js: owedSplit + form (Mine/Theirs row, Total label, no-account option gone, Category for ipf) + submit parsing
+- [ ] app.js: addOwedEntry / updateOwedEntry filing + storage + edit prefill + reset + row split hint + initial-render sections
+- [ ] app.js: SHELL_NOTES['72.49'] + FinApp bridge (owedSplit)
+- [ ] check_site.py: v72.28 superseded-pin updates + new v72.49 check
+- [ ] README Owed line
+- [ ] smoke_app_v68.js: v72.49 section (full derivation table both directions, alerts, filing paths, edit re-file, legacy payloads)
+- [ ] node --check + full gates green via tools/release.ps1 v72.49 "HH:MM" → commit + push
+- [ ] Verify live
+- [ ] Close this log entry (log-only commit)
+
+---
+
+## 2026-09-20 18:4x — "in the finance-app repo, allow to export a statemtn of account in pdf for each of the owed person entry, one soa per person"
+Status: **done**
 ## 2026-09-20 18:4x — "in the finance-app repo, allow to export a statemtn of account in pdf for each of the owed person entry, one soa per person"
 Status: **done**
 Progress: 100% — completed 2026-09-20 19:4x; commit `6dfec61` pushed to origin/main (v72.48, live 19:32, SW cache `finances-pwa-v72.48`, GATES all green via tools/release.ps1 v72.48 — both check_site copies + test_chat_parser + node syntax + both smokes, all 10 v72.48 smoke checks PASS (incl. xref-offset verification of the generated PDF); live app.js + sw.js verified via live_check_v7248.js: 9/9 PASS)
