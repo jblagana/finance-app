@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-20 18:4x — "in the finance-app repo, allow to export a statemtn of account in pdf for each of the owed person entry, one soa per person"
-Status: **in progress**
-Progress: 0% — (updated as subtasks land)
+Status: **done**
+Progress: 100% — completed 2026-09-20 19:4x; commit `6dfec61` pushed to origin/main (v72.48, live 19:32, SW cache `finances-pwa-v72.48`, GATES all green via tools/release.ps1 v72.48 — both check_site copies + test_chat_parser + node syntax + both smokes, all 10 v72.48 smoke checks PASS (incl. xref-offset verification of the generated PDF); live app.js + sw.js verified via live_check_v7248.js: 9/9 PASS)
 ### Instruction (verbatim)
 > in the finance-app repo, allow to export a statemtn of account in pdf for each of the owed person entry, one soa per person
 ### Interpretation (agent — user may edit this section)
@@ -16,15 +16,17 @@ Progress: 0% — (updated as subtasks land)
 - SOA content: title + account (the person) + as-of (export date) + the person's entries in CHRONOLOGICAL order (date · description = direction + note · signed amount · running balance from 0.00) + a closing block with the direction spelled out ("X owes you …" / "You owe X …" / "Settled").
 - Implementation: a **hand-rolled, dependency-free PDF 1.4 writer** in app.js (base-14 Helvetica — no font embedding, NO external library: the app is local-first and the SW precaches only local files, so a CDN lib is out). Pure `soaRows(p)` / `soaPdf(p)` so the Node smoke verifies the generated file structurally (header/trailer, xref offsets pointing at every object, page count, ASCII, amounts); `exportOwedSoa(pid)` downloads it (`application/pdf` blob, `soa-<name>-<date>.pdf`).
 - Release: v72.48 via tools/release.ps1 (SHELL_RELEASE + SW cache + README ref + gate assertions), `SHELL_NOTES['72.48']`, check_site.py structural check, README Owed line, smoke section. One instruction = one dot release = one push.
+- (agent, closing): the first release run went RED on the **v72.47 check** — that check pinned its own release stamps (`SHELL_RELEASE` `v: 72.47` + sw cache `finances-pwa-v72.47`), which expire the moment the next dot lands. Fixed by moving the pins to where they already live — the generic gate (sw cache + footer + running-version SHELL_NOTES, re-stamped by release.ps1 on every release); the v72.47 check keeps only its permanent artifact (the `'72.47': [` SHELL_NOTES entry). Second slip caught by the gate: an app.js comment said "no font **embedding**" — the local-brain leftover check bans that substring in app.js, so the comment was reworded.
 ### Subtasks
 - [x] Log the instruction (first action)
-- [ ] app.js: soaRows / soaPdf (hand-rolled PDF) / exportOwedSoa + the SOA (PDF) button on the person card + click wiring
-- [ ] SHELL_NOTES['72.48'] + FinApp bridge (soaRows, soaPdf, exportOwedSoa)
-- [ ] check_site.py structural check (one SOA PDF per person, hand-rolled, no external lib) + README Owed line
-- [ ] smoke_app_v68.js: v72.48 section (running-balance math + PDF structure — xref offsets, pages, ASCII, amounts, download name)
-- [ ] node --check + local gates green
-- [ ] tools/release.ps1 v72.48 "HH:MM" → commit + push
-- [ ] Close this log entry (log-only commit)
+- [x] app.js: soaRows / soaPdf (hand-rolled PDF) / exportOwedSoa + the SOA (PDF) button on the person card + click wiring
+- [x] SHELL_NOTES['72.48'] + FinApp bridge (soaRows, soaPdf, exportOwedSoa)
+- [x] check_site.py structural check (one SOA PDF per person, hand-rolled, no external lib) + README Owed line
+- [x] smoke_app_v68.js: v72.48 section (running-balance math + PDF structure — xref offsets, pages, ASCII, amounts, download name)
+- [x] node --check + local gates green
+- [x] tools/release.ps1 v72.48 "19:32" → commit + push (`6dfec61`)
+- [x] Verify live (live_check_v7248.js: 9/9 PASS)
+- [x] Close this log entry (log-only commit)
 
 ---
 
