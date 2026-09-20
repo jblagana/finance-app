@@ -3452,6 +3452,10 @@
     }
     return '<section class="card ow-p" data-ow-pid="' + esc(p.id) + '">' +
       '<div class="ow-h"><span class="bdrag" data-ow-drag="1" aria-label="Drag to reorder" title="Drag to reorder">\u287F</span><b class="ow-name" data-ow-name="' + esc(p.id) + '" title="Rename">' + esc(p.name) + '</b>' + owedBalHTML(b) +
+      // v72.48: one statement of account per person — the SOA (PDF) button
+      // exports this person's full account (every entry, running balance,
+      // closing direction) as a PDF file
+      '<button type="button" class="ow-xbtn wide" data-ow-soa="' + esc(p.id) + '" title="Statement of account (PDF)">SOA (PDF)</button>' +
       '<button type="button" class="sheet-x" data-ow-del="' + esc(p.id) + '" aria-label="Remove person">\u2715</button></div>' +
       // v72.19: "+ entry" (and its hidden form) sits at the TOP of the card —
       // right under the header, above the entry list (user request); an opened
@@ -3716,6 +3720,196 @@
       });
     });
   }
+  // ---------- v72.48: statement-of-account PDF export (Owed, one per person) ----------
+  // Hand-rolled PDF 1.4 writer — base-14 Helvetica (built into every PDF
+  // reader, no font files, no external library: the app is local-first and
+  // the SW precaches only local files, so no CDN; it works fully offline).
+  // Everything is pure and
+  // smoke-testable: soaRows(p) is the running-balance table, soaPdf(p)
+  // renders the whole PDF as ASCII text (a pure-ASCII Blob encodes UTF-8
+  // byte-exact), and exportOwedSoa(pid) downloads it on the same one-tap
+  // path as the Settings exports.
+  function soaRows(p) {
+    var ents = ((p && p.entries) || []).slice().sort(function (a, c) {
+      if (a.d !== c.d) return a.d < c.d ? -1 : 1; // the SOA runs chronological (the card shows newest first)
+      return (a.created || '') < (c.created || '') ? -1 : 1;
+    });
+    var bal = 0;
+    var rows = [];
+    ents.forEach(function (e) {
+      var dir = OWED_DIRS[e.dir] || OWED_DIRS.ipf;
+      var amt = r2((Number(e.amt) || 0) * dir.sign); // + = they owe you more, - = they owe you less
+      bal = r2(bal + amt);
+      rows.push({ d: e.d || '', label: dir.label, note: String(e.note || ''), amt: amt, bal: bal });
+    });
+    return { name: String((p && p.name) || ''), rows: rows, bal: bal };
+  }
+  // PDF text stays ASCII only (base-14 fonts + an ASCII content stream):
+  // tidy the common Unicode the app writes, then turn the rest into '?'.
+  function soaAscii(s) {
+    return String(s == null ? '' : s)
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/[\u2013\u2014\u2212]/g, '-')
+      .replace(/\u00B7/g, '-')
+      .replace(/[^\x20-\x7E]/g, '?');
+  }
+  function soaPdfStr(s) { // a PDF literal string: escape \ ( )
+    return '(' + soaAscii(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)') + ')';
+  }
+  // Helvetica glyph widths (units per 1000) — right-alignment + truncation
+  var SOA_FONT_W = {
+    ' ': 278, '!': 278, '"': 355, '#': 556, '$': 556, '%': 889, '&': 667, "'": 191, '(': 333, ')': 333,
+    '*': 389, '+': 584, ',': 278, '-': 333, '.': 278, '/': 278,
+    '0': 556, '1': 556, '2': 556, '3': 556, '4': 556, '5': 556, '6': 556, '7': 556, '8': 556, '9': 556,
+    ':': 278, ';': 278, '<': 584, '=': 584, '>': 584, '?': 556, '@': 1015,
+    'A': 667, 'B': 667, 'C': 722, 'D': 722, 'E': 667, 'F': 611, 'G': 778, 'H': 722, 'I': 278, 'J': 500,
+    'K': 667, 'L': 556, 'M': 833, 'N': 722, 'O': 778, 'P': 667, 'Q': 778, 'R': 722, 'S': 667, 'T': 611,
+    'U': 722, 'V': 667, 'W': 944, 'X': 667, 'Y': 667, 'Z': 611,
+    '[': 278, '\\': 278, ']': 278, '^': 469, '_': 556, '`': 333,
+    'a': 556, 'b': 556, 'c': 500, 'd': 556, 'e': 556, 'f': 278, 'g': 556, 'h': 556, 'i': 222, 'j': 222,
+    'k': 500, 'l': 222, 'm': 833, 'n': 556, 'o': 556, 'p': 556, 'q': 556, 'r': 333, 's': 500, 't': 278,
+    'u': 556, 'v': 500, 'w': 722, 'x': 500, 'y': 500, 'z': 500,
+    '{': 334, '|': 260, '}': 334, '~': 584
+  };
+  function soaWidth(s, size) {
+    var w = 0;
+    for (var i = 0; i < s.length; i++) w += SOA_FONT_W[s.charAt(i)] || 556;
+    return w / 1000 * size;
+  }
+  function soaMoney2(v) {
+    return (Math.abs(Number(v) || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function soaPdf(p, asOf) {
+    var data = soaRows(p);
+    var name = soaAscii(data.name || 'Person');
+    var asOfD = soaAscii(fmtDate(asOf || todayISO()));
+    var ML = 56, MR = 539.28; // A4 595.28 x 841.89, 56pt margins
+    var COL_DESC = 120, COL_AMT = 462; // description starts; Amount right-edge (Balance right-edge = MR)
+    var INK = '0.13 0.16 0.24 rg', MUT = '0.55 0.59 0.66 rg', LGRAY = '0.80 0.83 0.88 RG';
+    function txt(pg, x, y, size, font, text, mut) {
+      pg.push((mut ? MUT : INK) + ' BT /' + font + ' ' + size + ' Tf 1 0 0 1 ' +
+        (Math.round(x * 100) / 100) + ' ' + (Math.round(y * 100) / 100) + ' Tm ' + soaPdfStr(text) + ' Tj ET');
+    }
+    function rtxt(pg, right, y, size, text, font, mut) {
+      txt(pg, right - soaWidth(text, size), y, size, font || 'F1', text, mut);
+    }
+    function hline(pg, y, w, mut) {
+      var yy = Math.round(y * 100) / 100;
+      pg.push((mut ? LGRAY : '0.55 0.59 0.66 RG') + ' ' + w + ' w ' + ML + ' ' + yy + ' m ' + MR + ' ' + yy + ' l S');
+    }
+    function tableHead(pg, y) {
+      hline(pg, y + 12, 1);
+      txt(pg, ML, y, 9, 'F2', 'Date', true);
+      txt(pg, COL_DESC, y, 9, 'F2', 'Description', true);
+      rtxt(pg, COL_AMT, y, 9, 'Amount', 'F2', true);
+      rtxt(pg, MR, y, 9, 'Balance', 'F2', true);
+      hline(pg, y - 8, 1);
+    }
+    var pages = [];
+    var first = []; // page 1: the full title block
+    txt(first, ML, 786, 16, 'F2', 'Statement of Account');
+    txt(first, ML, 762, 11, 'F1', 'Account: ' + name);
+    txt(first, ML, 746, 9, 'F1', 'As of ' + asOfD + ' - Currency: PHP - Positive balance = owed to you', true);
+    tableHead(first, 714);
+    pages.push({ pg: first, y0: 688 });
+    var rows = data.rows;
+    // 34 / 35 rows per page — the closing block's room is kept on EVERY page,
+    // so it can never run into the footer
+    var chunks = [];
+    if (!rows.length) chunks.push([]);
+    else {
+      var i0 = 0;
+      while (i0 < rows.length) {
+        var cap = chunks.length === 0 ? 34 : 35;
+        chunks.push(rows.slice(i0, i0 + cap));
+        i0 += cap;
+      }
+    }
+    for (var pgI = 1; pgI < chunks.length; pgI++) { // continuation pages
+      var cont = [];
+      txt(cont, ML, 786, 12, 'F2', 'Statement of Account - ' + name);
+      txt(cont, ML, 768, 9, 'F1', 'As of ' + asOfD + ' - continued', true);
+      tableHead(cont, 744);
+      pages.push({ pg: cont, y0: 716 });
+    }
+    chunks.forEach(function (chunk, idx) {
+      var pg = pages[idx].pg;
+      var y = pages[idx].y0;
+      if (!chunk.length) {
+        txt(pg, ML, y, 9, 'F1', 'No entries yet - the account is empty.', true);
+      } else {
+        chunk.forEach(function (r) {
+          txt(pg, ML, y, 9, 'F1', soaAscii(fmtDate(r.d) || r.d || '-'));
+          var desc = soaAscii(r.label + (r.note ? ' \u00B7 ' + r.note : ''));
+          var maxW = COL_AMT - 12 - COL_DESC;
+          var cut = false;
+          while (desc.length > 6 && soaWidth(desc, 9) > maxW) { desc = desc.slice(0, -1); cut = true; }
+          if (cut) desc = desc.slice(0, Math.max(1, desc.length - 4)) + '...';
+          txt(pg, COL_DESC, y, 9, 'F1', desc);
+          rtxt(pg, COL_AMT, y, 9, (r.amt >= 0 ? '+' : '-') + soaMoney2(r.amt));
+          rtxt(pg, MR, y, 9, soaMoney2(r.bal));
+          y -= 16;
+        });
+      }
+      // the closing block (always on the LAST page, with the direction)
+      if (idx === chunks.length - 1) {
+        var lastY = pages[idx].y0 - 16 * Math.max(0, chunk.length - 1);
+        hline(pg, lastY - 24, 1);
+        txt(pg, ML, lastY - 44, 11, 'F2', 'Closing balance: PHP ' + soaMoney2(data.bal));
+        var line;
+        if (data.bal > 0.004) line = name + ' owes you PHP ' + soaMoney2(data.bal);
+        else if (data.bal < -0.004) line = 'You owe ' + name + ' PHP ' + soaMoney2(data.bal);
+        else line = 'Settled - the balance is zero';
+        txt(pg, ML, lastY - 62, 10, 'F1', line);
+      }
+    });
+    // footers (need the total page count first)
+    pages.forEach(function (pgObj, i) {
+      hline(pgObj.pg, 52, 0.75, true);
+      txt(pgObj.pg, ML, 38, 8, 'F1', 'Fin.AI - ' + asOfD, true);
+      rtxt(pgObj.pg, MR, 38, 8, 'Page ' + (i + 1) + ' of ' + pages.length, 'F1', true);
+    });
+    // ---------- assemble the PDF objects (1 catalog, 2 pages-tree, 3-4 fonts) ----------
+    var n = 4 + 2 * pages.length;
+    var objs = [];
+    objs[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+    var kids = [];
+    for (var k = 0; k < pages.length; k++) kids.push((5 + 2 * k) + ' 0 R');
+    objs[2] = '<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + pages.length + ' >>';
+    objs[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+    objs[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+    pages.forEach(function (pgObj, i) {
+      objs[5 + 2 * i] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ' + (6 + 2 * i) + ' 0 R >>';
+      var stream = pgObj.pg.join('\n');
+      objs[6 + 2 * i] = '<< /Length ' + stream.length + ' >>\nstream\n' + stream + '\nendstream';
+    });
+    var out = '%PDF-1.4\n';
+    var offsets = [0];
+    for (var id = 1; id <= n; id++) { // ASCII-only => string index == byte offset
+      offsets[id] = out.length;
+      out += id + ' 0 obj\n' + objs[id] + '\nendobj\n';
+    }
+    var xrefAt = out.length;
+    out += 'xref\n0 ' + (n + 1) + '\n0000000000 65535 f \n';
+    for (var j = 1; j <= n; j++) out += ('0000000000' + offsets[j]).slice(-10) + ' 00000 n \n';
+    out += 'trailer\n<< /Size ' + (n + 1) + ' /Root 1 0 R >>\nstartxref\n' + xrefAt + '\n%%EOF\n';
+    return out;
+  }
+  function exportOwedSoa(pid) {
+    var p = null;
+    (state.owed.people || []).forEach(function (x) { if (x.id === pid) p = x; });
+    if (!p) return;
+    var pdf = soaPdf(p);
+    var safe = soaAscii(p.name).replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40) || 'person';
+    var fname = 'soa-' + safe + '-' + todayISO() + '.pdf';
+    var url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
+    var a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 600);
+    snack('Statement saved: ' + esc(fname));
+  }
   // v72.10: editable subentries. The linked ledger txn follows the entry:
   // linked+linked → v72.9's in-place edit (position + original timestamp stay);
   // linked→note → the txn is removed; note→linked (or a dangling link) → a
@@ -3937,6 +4131,7 @@
         var nmE = t.getAttribute && t.getAttribute('data-ow-name');
         var moreE = t.getAttribute && t.getAttribute('data-ow-more');
         var lessE = t.getAttribute && t.getAttribute('data-ow-less'); // v72.30: re-hide 5
+        var soaE = t.getAttribute && t.getAttribute('data-ow-soa'); // v72.48: SOA (PDF)
         if (moreE) {
           owedShown[moreE] = (owedShown[moreE] || 5) + 5;
           renderOwed();
@@ -3945,6 +4140,10 @@
         if (lessE) {
           owedShown[lessE] = Math.max(5, (owedShown[lessE] || 5) - 5);
           renderOwed();
+          return;
+        }
+        if (soaE) {
+          exportOwedSoa(soaE); // v72.48: the per-person statement of account
           return;
         }
         if (edE) {
@@ -4429,12 +4628,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.47, live: new Date(2026, 8, 15, 22, 38) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.48, live: new Date(2026, 8, 20, 19, 32) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.48': [
+      'Each person in the Owed book now has a statement of account — tap "SOA (PDF)" on their card and the full account is saved as a PDF file: every entry in date order with the running balance, and at the end who owes what (or that you are settled)'
+    ],
     '72.47': [
       'Card prepays in the ledger now read "CC Payment" instead of "Unsorted" — including the ones you log early for the 14th — and the category filter has its own CC Payment option',
       'The empty "Unsorted" slice is gone from this-month-by-category — a prepay settles the debt, it does not add a spend slice'
@@ -5160,6 +5362,9 @@
     owedCatOptions: owedCatOptions, // v72.25: the entry's category options (smoke drives it)
     owedPersonHTML: owedPersonHTML, // v72.29: the person card render (smoke drives it — the edit button on every row)
     oentFormHTML: oentFormHTML, // v72.29: the entry form's inner html (smoke drives it — the in-place edit form)
+    soaRows: soaRows, // v72.48: the SOA running-balance table (smoke drives the math)
+    soaPdf: soaPdf, // v72.48: the rendered statement PDF text (smoke verifies structure: xref, pages, amounts)
+    exportOwedSoa: exportOwedSoa, // v72.48: the per-person SOA download (smoke drives it)
     shellNotesFor: shellNotesFor, // v72.29: the What's-new notes for a version (smoke drives it)
     addSheetKind: addSheetKind, // v72.41: the Add-sheet kind decision (smoke drives it — the submit is DOM-bound)
     shellVersion: SHELL_RELEASE.v, // v72.38: the running shell dot (smoke drives the What's-new fallback check)

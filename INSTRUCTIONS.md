@@ -6,6 +6,28 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-20 18:4x — "in the finance-app repo, allow to export a statemtn of account in pdf for each of the owed person entry, one soa per person"
+Status: **in progress**
+Progress: 0% — (updated as subtasks land)
+### Instruction (verbatim)
+> in the finance-app repo, allow to export a statemtn of account in pdf for each of the owed person entry, one soa per person
+### Interpretation (agent — user may edit this section)
+- One export per PERSON card in the Owed tab (an "owed person entry" = a person in the book; each person owns their entries): a new **SOA (PDF)** button on each person's card header exports that person's **statement of account** as a PDF file — **one SOA per person**, saved from the phone on the same one-tap download path as the Settings exports.
+- SOA content: title + account (the person) + as-of (export date) + the person's entries in CHRONOLOGICAL order (date · description = direction + note · signed amount · running balance from 0.00) + a closing block with the direction spelled out ("X owes you …" / "You owe X …" / "Settled").
+- Implementation: a **hand-rolled, dependency-free PDF 1.4 writer** in app.js (base-14 Helvetica — no font embedding, NO external library: the app is local-first and the SW precaches only local files, so a CDN lib is out). Pure `soaRows(p)` / `soaPdf(p)` so the Node smoke verifies the generated file structurally (header/trailer, xref offsets pointing at every object, page count, ASCII, amounts); `exportOwedSoa(pid)` downloads it (`application/pdf` blob, `soa-<name>-<date>.pdf`).
+- Release: v72.48 via tools/release.ps1 (SHELL_RELEASE + SW cache + README ref + gate assertions), `SHELL_NOTES['72.48']`, check_site.py structural check, README Owed line, smoke section. One instruction = one dot release = one push.
+### Subtasks
+- [x] Log the instruction (first action)
+- [ ] app.js: soaRows / soaPdf (hand-rolled PDF) / exportOwedSoa + the SOA (PDF) button on the person card + click wiring
+- [ ] SHELL_NOTES['72.48'] + FinApp bridge (soaRows, soaPdf, exportOwedSoa)
+- [ ] check_site.py structural check (one SOA PDF per person, hand-rolled, no external lib) + README Owed line
+- [ ] smoke_app_v68.js: v72.48 section (running-balance math + PDF structure — xref offsets, pages, ASCII, amounts, download name)
+- [ ] node --check + local gates green
+- [ ] tools/release.ps1 v72.48 "HH:MM" → commit + push
+- [ ] Close this log entry (log-only commit)
+
+---
+
 ## 2026-09-15 23:0x — "u arent logging in the instructions.md anymore, thats a hard rule!" — the 09-14 22:4x entry must be closed properly
 Status: **done**
 Progress: 100% — completed 2026-09-15 23:1x; commit `fa85ec0` pushed to origin/main (log-only): the 09-14 22:4x entry now carries the full-scope close — Progress line split into (a) v72.44 (fd56654 + 6e4f7c0, live 00:40) and (b) v72.47 (6dc95d8, live 22:38) for the reco's label half, plus the appended closing bullet + subtask
