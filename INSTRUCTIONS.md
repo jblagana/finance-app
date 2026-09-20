@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-20 23:1x — "in owed tab in 'i paid for them' and 'they paid for me', add field for 'mine', 'theirs', 'total' …"
-Status: **in progress**
-Progress: 0% — logged
+Status: **done**
+Progress: 100% — completed 2026-09-21 01:5x; commit `5587ba5` pushed to origin/main (v72.49, live 01:55, SW cache `finances-pwa-v72.49`, GATES all green via tools/release.ps1 v72.49 — both check_site copies + test_chat_parser + node syntax + both smokes, all 38 v72.49 smoke checks PASS (full derivation table both directions, all alert cases, legacy payloads, edit re-file remove/create/in-place, undo, card filing); live app.js + sw.js verified via live_check_v7249.js: 11/11 PASS)
 ### Instruction (verbatim)
 > in owed tab in 'i paid for them' and 'they paid for me', add field for 'mine', 'theirs', 'total'. in 'i paid for them', if i fill 'theirs' only, just the normal owed entry; if i put in 'mine' and 'theirs', record 'mine' in ledger and 'theirs' in owed entry; if i put in 'mine' and 'total', put 'mine' in ledger and the difference in owed entry; if i put 'theirs' and 'total', add 'theirs' in owed entry and the difference in my ledger. follow the same logic for 'they paid for me'
 > -remove 'no account' default is cash always
@@ -27,15 +27,18 @@ Progress: 0% — logged
 - Release: v72.49 via tools/release.ps1 (one instruction = one dot release = one push); the v72.28 check's superseded filing pins update to the v72.49 shapes (as the v72.47 stamp pins moved to the generic gate); new v72.49 structural check; README Owed line; smoke section.
 ### Subtasks
 - [x] Log the instruction (first action)
-- [ ] app.js: owedSplit + form (Mine/Theirs row, Total label, no-account option gone, Category for ipf) + submit parsing
-- [ ] app.js: addOwedEntry / updateOwedEntry filing + storage + edit prefill + reset + row split hint + initial-render sections
-- [ ] app.js: SHELL_NOTES['72.49'] + FinApp bridge (owedSplit)
-- [ ] check_site.py: v72.28 superseded-pin updates + new v72.49 check
-- [ ] README Owed line
-- [ ] smoke_app_v68.js: v72.49 section (full derivation table both directions, alerts, filing paths, edit re-file, legacy payloads)
-- [ ] node --check + full gates green via tools/release.ps1 v72.49 "HH:MM" → commit + push
-- [ ] Verify live
-- [ ] Close this log entry (log-only commit)
+- [x] app.js: owedSplit + form (Mine/Theirs row, Total label, no-account option gone, Category for ipf) + submit parsing
+- [x] app.js: addOwedEntry / updateOwedEntry filing + storage + edit prefill + reset + row split hint + initial-render sections
+- [x] app.js: SHELL_NOTES['72.49'] + FinApp bridge (owedSplit)
+- [x] check_site.py: v72.28 superseded-pin updates + new v72.49 check
+- [x] README Owed line
+- [x] smoke_app_v68.js: v72.49 section (full derivation table both directions, alerts, filing paths, edit re-file, legacy payloads)
+- [x] node --check + full gates green via tools/release.ps1 v72.49 "01:55" → commit + push
+- [x] Verify live (live_check_v7249.js: 11/11 PASS)
+- [x] Close this log entry (log-only commit)
+### (agent, closing)
+- The legacy-payload contract mattered: the pre-v72.49 smoke sections drive `addOwedEntry`/`updateOwedEntry` with `{ amt, ... }` only — those keep the old reading exactly (ipf: entry = amt, ledger-silent, no acc stored; tpf: full-amount file), while the new form path (total/mine/theirs present) defaults the account to Cash. The v72.10 `!eOld2.acc` assertion is what caught the first draft's blanket Cash default.
+- Two slips caught pre-release by the smoke itself: (1) the section-chain line lost one `});` when v7249Section was spliced in (node --check EOF error), (2) the guard-test asserted the first alert count AFTER firing the second guard call — re-ordered so each alert is asserted at its own tick.
 
 ---
 
