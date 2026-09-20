@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-21 02:0x — "fix this bug: when ipf, 'total' of 1000 and 'theirs' is 200, my part is not wirtten in ledger"
-Status: **in progress**
-Progress: 0% — logged
+Status: **done**
+Progress: 100% — completed 2026-09-21 02:4x; fix released as v72.51, commit `039af70` pushed to origin/main (live 02:48, SW cache `finances-pwa-v72.51`, GATES all green via tools/release.ps1 v72.51 — both check_site copies + test_chat_parser + node syntax + both smokes, all 13 v72.51 smoke checks PASS incl. the user's exact case; live app.js + sw.js verified via live_check_v7251.js: 9/9 PASS)
 ### Interpretation (agent)
 The v72.49 T+Th case (Total + Theirs filled, Mine left blank) was broken: `owedSplit` derived mine = total − theirs (800) correctly, but the submit handler passes the **raw** parts (`mine: 0`) and `addOwedEntry`/`updateOwedEntry` recomputed the ledger as the **typed** `data.mine` — so an ipf Total+Theirs add (and the edit equivalent) silently filed NO ledger txn (no row, no money-log line, no account move). tpf was safe (its ledger = owed = the derived yours). The v72.49 smoke drove only pure `owedSplit` + all-parts payloads, so the form-shaped raw-parts path was never exercised. Fix = the derivation lives in the writers:
 - `addOwedEntry`: ipf with mine blank + total + theirs present → `mine = r2(total − theirs)` before the ledger math (fixes the filed txn + the stored `e.mine` + the row hint)
@@ -19,13 +19,17 @@ The v72.49 T+Th case (Total + Theirs filled, Mine left blank) was broken: `owedS
 - `72.50` is unshippable: versions are JS NUMBERS end-to-end, and `String(72.50) === '72.5'` — the What's-new key `'72.50'` would never resolve for the running version (the v72.38 smoke gate caught it in the release run; same rename as 72.40→72.41). Renamed every 72.50 reference to 72.51 (app.js, check_site.py repo + mirror, README, sw cache, smoke, this log).
 ### Subtasks
 - [x] Log the instruction (first action)
-- [ ] app.js: addOwedEntry derivation + updateOwedEntry split.ledger + e.mine storage + prefill/hint derivation + SHELL_NOTES['72.51']
-- [ ] check_site.py: new v72.51 check (pinning the derivation)
-- [ ] README Owed line: the derived missing part
-- [ ] smoke: v7251Section + registration
-- [ ] node --check + release.ps1 v72.51 "HH:MM" → commit + push
-- [ ] Verify live
-- [ ] Close this log entry (log-only commit)
+- [x] app.js: addOwedEntry derivation + updateOwedEntry split.ledger + e.mine storage + prefill/hint derivation + SHELL_NOTES['72.51']
+- [x] check_site.py: new v72.51 check (pinning the derivation)
+- [x] README Owed line: the derived missing part
+- [x] smoke: v7251Section + registration
+- [x] node --check + release.ps1 v72.51 "02:48" → commit `039af70` + push
+- [x] Verify live (live_check_v7251.js: 9/9 PASS)
+- [x] Close this log entry (log-only commit)
+### (agent, closing)
+- Why the v72.49 smoke missed it: the section drove the pure `owedSplit` table (which derived correctly) + all-parts payloads (mine typed), so the form-shaped RAW-parts path (mine = 0, total + theirs) was never exercised through the writers. The v72.51 section drives exactly what the submit handler sends.
+- Free-cash expectation settled against the v72.42 model: a card_charge COMMITS free (charge → free ↓, raw liquid unchanged, owed ↑) — so the smoke's delta includes the card part (800 + 300 + 400 + 300 = 1800), not just the cash parts.
+- Existing buggy entries (created pre-v72.51 with total + theirs, no filed part) keep their data; the row hint now shows the derived "mine" from total − amt, and editing one files the derived part (the edit prefill shows it). No migration.
 
 ## 2026-09-20 23:1x — "in owed tab in 'i paid for them' and 'they paid for me', add field for 'mine', 'theirs', 'total' …"
 Status: **done**
