@@ -339,6 +339,13 @@ def main():
           and "tData.kind = isCard ? 'card_charge' : 'cash_out';" in js
           and "ledger: (nextDir === 'tpf') ? r2(data.amt) : 0, err: ''" in js
           and "owedSplit: owedSplit" in js)
+    check("v72.51 (user bug: 'when ipf, total of 1000 and theirs is 200, my part is not written in ledger'): the v72.49 T+Th gap — Total + Theirs filled, Mine left blank: owedSplit derived yours = total − theirs, but the writers re-read the RAW typed mine (0) and silently filed NOTHING (no txn, no money-log row, no account move); the form's raw-parts path was never smoke-driven (v72.49 exercised only the pure table + all-parts payloads). The derivation now lives in the writers: addOwedEntry derives the ipf mine before the ledger math (fixes the filed txn + the stored e.mine), updateOwedEntry files split.ledger (owedSplit's derived part, not the raw mine) and stores it as e.mine; the row hint + the edit prefill derive the part for PRE-FIX entries (total + amt(theirs), no mine stored) so old data reads right and an edit keeps the split",
+          "if (dir === 'ipf' && !(mine > 0) && total > 0 && theirs > 0) mine = r2(total - theirs);" in js
+          and "var ledger = isSplitDir ? split.ledger : 0;" in js
+          and "if (nextDir === 'ipf' && ledger > 0) e.mine = ledger;" in js
+          and "var ipfMine = Number(e.mine) || (e.dir === 'ipf' && e.total && Number(e.total) > (Number(e.amt) || 0) ? r2(e.total - (Number(e.amt) || 0)) : 0);" in js
+          and "var preIpFMine = (preDir === 'ipf') ? (Number(ee.mine) || (ee.total && Number(ee.total) > (Number(ee.amt) || 0) ? r2(ee.total - (Number(ee.amt) || 0)) : 0)) : 0;" in js
+          and "'72.51': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",

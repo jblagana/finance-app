@@ -3443,7 +3443,10 @@
       // v72.49: the split hint — the filed part (ipf) / theirs (tpf) + the
       // total for both, when the entry was split
       var hint = '';
-      if (e.dir === 'ipf' && e.mine) hint = ' · ' + money(e.mine) + ' mine';
+      // v72.51: a PRE-FIX T+Th entry stored total + amt(theirs) with no mine
+      // - derive yours = total - amt so the hint reads right (edits keep it)
+      var ipfMine = Number(e.mine) || (e.dir === 'ipf' && e.total && Number(e.total) > (Number(e.amt) || 0) ? r2(e.total - (Number(e.amt) || 0)) : 0);
+      if (e.dir === 'ipf' && ipfMine > 0) hint = ' · ' + money(ipfMine) + ' mine';
       if (e.dir === 'tpf' && e.theirs) hint = ' · ' + money(e.theirs) + ' theirs';
       if (e.total) hint += ' · ' + money(e.total) + ' total';
       rows += '<div class="ow-e">' +
@@ -3744,6 +3747,12 @@
     // entry is the old behavior exactly (legacy payloads: amt only).
     var owed = r2(data.amt);
     var mine = r2(data.mine), theirs = r2(data.theirs), total = r2(data.total);
+    // v72.51: the form passes the RAW parts — on the Total + Theirs line
+    // Mine comes through as 0 (blank), so derive yours = total − theirs here.
+    // v72.49 bug: the ledger was read from the raw typed mine, so the filed
+    // part silently never left the ledger (total 1000 + theirs 200 → my 800
+    // was lost).
+    if (dir === 'ipf' && !(mine > 0) && total > 0 && theirs > 0) mine = r2(total - theirs);
     var hasSplitFields = (data.total !== undefined || data.mine !== undefined || data.theirs !== undefined);
     var acc = String(data.acc || '').trim();
     if (hasSplitFields && !acc) acc = 'CASH::Cash'; // v72.49: Cash is always the default (the new form path); legacy payloads (amt only) keep the old storage
@@ -4055,7 +4064,10 @@
       note: String(data.note || '').trim(),
       cat: cat
     };
-    var ledger = isSplitDir ? ((nextDir === 'tpf') ? split.owed : r2(data.mine)) : 0;
+    // v72.51: split.ledger — owedSplit already derived the missing part
+    // (Total + Theirs, Mine left blank => yours = total − theirs); the raw
+    // r2(data.mine) read 0 there, so a T+Th edit silently un-filed the txn
+    var ledger = isSplitDir ? split.ledger : 0;
     var files = ledger > 0;
     var tData = {
       date: next.d, account: 'Cash', kind: 'cash_out',
@@ -4085,7 +4097,7 @@
       // total; tpf: theirs + total; e.amt IS the debt side)
       delete e.mine; delete e.theirs; delete e.total;
       if (isSplitDir) {
-        if (nextDir === 'ipf' && r2(data.mine) > 0) e.mine = r2(data.mine);
+        if (nextDir === 'ipf' && ledger > 0) e.mine = ledger; // v72.51: yours = the filed part (derived when T+Th)
         if (nextDir === 'tpf' && r2(data.theirs) > 0) e.theirs = r2(data.theirs);
         if (r2(data.total) > 0) e.total = r2(data.total);
       }
@@ -4328,7 +4340,10 @@
                 // the no-split shape: ipf amount = theirs, tpf amount = yours.
                 var preDir = ee.dir || 'ipf';
                 var preT = (preDir === 'ipf' || preDir === 'tpf') ? (ee.total ? String(ee.total) : '') : String(ee.amt);
-                var preM = (preDir === 'tpf') ? String(ee.amt) : (preDir === 'ipf' && ee.mine ? String(ee.mine) : '');
+                // v72.51: a PRE-FIX T+Th entry has no stored mine — prefill
+                // the derived part (total − amt) so the edit keeps the split
+                var preIpFMine = (preDir === 'ipf') ? (Number(ee.mine) || (ee.total && Number(ee.total) > (Number(ee.amt) || 0) ? r2(ee.total - (Number(ee.amt) || 0)) : 0)) : 0;
+                var preM = (preDir === 'tpf') ? String(ee.amt) : (preIpFMine ? String(preIpFMine) : '');
                 var preTh = (preDir === 'ipf') ? String(ee.amt) : (preDir === 'tpf' && ee.theirs ? String(ee.theirs) : '');
                 var a3 = f3.querySelector('.oent-amt');
                 a3.value = preT; owedExprHint(a3);
@@ -4797,12 +4812,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.49, live: new Date(2026, 8, 21, 1, 55) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.51, live: new Date(2026, 8, 21, 2, 48) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.51': [
+      'Owed split fix: when you filled "I paid for them" with the Total and Theirs only (Mine left blank), your part now lands in the ledger as your spend — it was being quietly dropped'
+    ],
     '72.49': [
       'Owed entries can now be split — "I paid for them" and "They paid for me" take Total (the total for both), Mine and Theirs: yours always lands in the ledger as your spend (on the account you pick), and the owed entry keeps the part that is owed (theirs when you paid, yours when they did). Fill in just one part and it is the entry, as before',
       'The "no account" option is gone from the owed form — Cash is the default, so a split "mine" part always lands in the ledger'
