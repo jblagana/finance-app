@@ -216,13 +216,14 @@ def main():
           "or choose Custom" not in js)
     check("emergency_cap fully removed from app + chat math",
           "emergency_cap" not in js and "emergency_cap" not in chatjs)
-    check("example placeholders: only 'e.g. Jan' (your name) + 'e.g. Vhal' (owed person)",
+    check("example placeholders: only 'e.g. Jan' (your name) + 'e.g. Vhal' (owed person) + the v73.2 lesson pin ('e.g. cut food delivery')",
           'placeholder="e.g. Rent"' not in js
           and 'placeholder="optional"' not in html
           and 'placeholder="e.g. Jan"' in js
           and 'placeholder="e.g. Vhal"' in html
+          and 'placeholder="e.g. cut food delivery"' in html
           and js.count('placeholder="e.g.') == 1
-          and html.count('placeholder="e.g.') == 1)
+          and html.count('placeholder="e.g.') == 2)
 
     print("\n== v53: Unsorted, grey LED, named greeting, coach toggle ==")
     check("blank category reads Unsorted (donut, ledger rows, chat breakdown)",
@@ -410,7 +411,7 @@ def main():
           and "h.setAttribute('display', m === 'happy' ? '' : 'none')" in js
           and "if (readUtilMax() > 70) return 'worried';" in js
           and "if (c && c.projectedNet < 0) return 'worried';" in js
-          and js.count("renderMood]") == 5  # txn, plan, snap, adj, ui — every data key
+          and js.count("renderMood, render") == 5  # txn, plan, snap, adj, ui — every data key (the pulse rides after it; the export line is renderMood: renderMood,)
           and "if (!editId && (kind === 'cash_in' || kind === 'card_payment')) happyMoodFlash(1800);" in js
           and 'class="spark-today"' in js
           and "'73.0': [" in js)
@@ -428,6 +429,19 @@ def main():
           and "planOccurrences: planOccurrences" in js
           and "repeat: parts[2] || 'monthly'" in js
           and "'73.1': [" in js)
+    check("v73.2 (user: 'do all them' — the major upgrade, release 3 of 4): the MONEY PULSE — Home opens with last month in one card (in vs out split bar, top-3 spends, the coach's deterministic one-liner, the pinned lesson) and tapping it opens the full recap sheet (#recapSheet) where a LESSON can be pinned for next month (localStorage, keyed by month — readLesson/pinLesson); the DUE-DAY RADAR: a 'coming due' strip on Home shows the next 14 days of plan occurrences + the card prepay (renderDueStrip), and a card between 30% and 70% of its limit gets a coach nudge (over 70% is the v73.0 worried face); recapData is a PURE exported fn (the smoke drives it with a seeded ledger — in = cash_in, out = spend per the v72.44 rule, card_payment is not spend)",
+          'id="recap"' in html and 'id="recapBody"' in html and 'id="recapOpen"' in html
+          and 'id="dueStrip"' in html and 'id="dueBody"' in html
+          and 'id="recapSheet"' in html and 'id="recapLesson"' in html and 'id="recapPin"' in html
+          and "function recapData(txns, month, plans) {" in js
+          and "function renderRecap() {" in js
+          and "function renderDueStrip() {" in js
+          and "function pinLesson(month, text) {" in js
+          and "function readLesson(month) {" in js
+          and "recapData: recapData" in js and "pinLesson: pinLesson" in js and "readLesson: readLesson" in js
+          and "if (u > 70) return; // the mood carries it" in js
+          and "dd >= 0 && dd <= 14" in js
+          and "'73.2': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",
@@ -544,8 +558,8 @@ def main():
     check("add-sheet options = base budget names; Unsorted default when none",
           "Object.keys((state.base && state.base.budgets) || {})" in js
           and "'>Unsorted</option>" in js and "selected>Unsorted</option>" in html)
-    check("re-seeded automatically when the base changes (snap render list; v72.30: renderMoneyLog follows — a base save can file 'Adjustment' rows; v73.0: renderMood rides the same key)",
-          "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood]" in js)
+    check("re-seeded automatically when the base changes (snap render list; v72.30: renderMoneyLog follows — a base save can file 'Adjustment' rows; v73.0: renderMood rides the same key; v73.2: the money pulse + due strip)",
+          "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap, renderDueStrip]" in js)
     check("chat matches only stored budget names: no hint list, no 'Other' fallback",
           "function mentionedBudget(t, ctx)" in chatjs
           and "cat: mentionedBudget(t, ctx)" in chatjs
@@ -885,7 +899,7 @@ def main():
           and "mlShownCount = Math.max(5, mlShownCount - 5);" in js
           and "names.push('Owed')" not in js
           and "prevTxn.category || 'Unsorted'" in js
-          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood]" in js)  # v73.0: renderMood rides the snap key
+          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap, renderDueStrip]" in js)  # v73.0: renderMood + v73.2: the pulse ride the snap key
     check("v72.31 (user: 'add x button in ledger for adjustment, it undoes the record in settings'): an Adjustment row (k='a') carries its own ✕ (data-adj-del = the row's moneyLog index) — it confirms, removes the audit record, and reverses the balance change it filed: the account's Settings value moves by the NEGATIVE of the row's signed diff through the base save with Adjustment-filing SUPPRESSED (deleting an audit record must not file a new one); the account gone from Settings → the row is simply deleted; the toast Undo restores row + value",
           "function findAdjAccount(name)" in js
           and "function askDeleteAdjustment(idx)" in js

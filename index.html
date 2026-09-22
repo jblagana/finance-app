@@ -470,6 +470,23 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
 #boot.off .bface svg .beyes{animation:none}
 @keyframes bootlook{0%,100%{transform:translate(0,0)}22%{transform:translate(2.4px,0)}44%{transform:translate(-2.4px,0)}66%{transform:translate(1.6px,1.6px)}82%{transform:translate(-1.4px,1px)}}
 @media (prefers-reduced-motion:reduce){#boot .bface svg .beyes{animation:none}}
+/* v73.2: the money pulse (Home recap card + due strip) and the recap sheet */
+.recap-h{display:flex;align-items:center;justify-content:space-between;font-weight:800;font-size:14px;margin-bottom:8px}
+.recap-h .coachnote-r{font-size:18px}
+.recap-split{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--line);margin:4px 0 10px}
+.recap-split i{display:block;height:100%}
+.recap-split .in{background:#37d39b}
+.recap-split .out{background:#8fa3c8}
+.recap-nums{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mut);margin-bottom:8px}
+.recap-nums b{color:var(--ink)}
+.recap-cat{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;border-top:1px solid var(--line)}
+.recap-cat:first-of-type{border-top:none}
+.recap-line{margin:10px 0 0;font-size:13px;line-height:1.5}
+.recap-lesson{margin:10px 0 0;font-size:12.5px;color:var(--acc);font-weight:600}
+.due-row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:5px 0;border-top:1px solid var(--line)}
+.due-row:first-child{border-top:none}
+.due-row .due-d{color:var(--mut);font-size:11.5px}
+.due-row.soon .due-d{color:var(--bad);font-weight:700}
 </style>
 </head>
 
@@ -527,6 +544,20 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       <div class="hero-v" id="heroFree">—</div>
       <div class="hero-sub" id="heroSub"></div>
       <div class="spark" id="sparkBox"></div>
+    </section>
+
+    <!-- v73.2: the money pulse — last month in one card (tap for the full recap) -->
+    <section id="recap" class="card" style="display:none">
+      <div class="recap-h">
+        <span id="recapTitle">Last month</span>
+        <button type="button" id="recapOpen" class="coachnote-r" title="Open the full recap" aria-label="Open the full recap">›</button>
+      </div>
+      <div id="recapBody"></div>
+    </section>
+
+    <section id="dueStrip" class="card" style="display:none">
+      <div class="recap-h"><span>Coming due · next 14 days</span></div>
+      <div id="dueBody"></div>
     </section>
 
     <section id="coachNote" class="card coachnote" style="display:none">
@@ -669,6 +700,22 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
   </div>
 
 </main>
+<!-- v73.2: the full recap sheet — last month, the whole story -->
+<div id="recapSheet" class="sheet" role="dialog" aria-label="Monthly recap">
+  <div class="sheet-h">
+    <div class="t" id="recapSheetTitle">Last month</div>
+    <button id="recapClose" class="sheet-x" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-b">
+    <div id="recapSheetBody"></div>
+    <label style="margin-top:14px;display:block">Pin a lesson for next month</label>
+    <input id="recapLesson" type="text" placeholder="e.g. cut food delivery" autocomplete="off">
+    <div style="margin-top:10px">
+      <button class="act" id="recapPin" type="button">Pin it</button>
+    </div>
+    <p id="recapPinned" class="note" style="margin:10px 0 0"></p>
+  </div>
+</div>
 <div id="scrim"></div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="botFace" viewBox="0 0 64 64">

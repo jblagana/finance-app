@@ -34,13 +34,13 @@
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
   var RENDER_BY_KEY = {
     // v73.0: renderMood on every data key — the face is the status light
-    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood],
-    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote, renderMood],
+    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderRecap, renderDueStrip],
+    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote, renderMood, renderDueStrip],
     // v72.30: a base save can file 'Adjustment' ledger rows — the Ledger tab follows
-    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood],
-    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote, renderMood],
+    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap, renderDueStrip],
+    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote, renderMood, renderRecap, renderDueStrip],
     owed: [renderOwed],
-    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood]
+    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood, renderRecap, renderDueStrip]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -2247,6 +2247,139 @@
     if (!state.base) return null;
     return cycleDataFor(currentCycleMonth(state.base, todayISO()), state.base);
   }
+  // v73.2: the MONEY PULSE — last calendar month in deterministic numbers
+  // (pure fn: the smoke drives it with a seeded ledger). In = cash_in,
+  // out = spend (the v72.44 rule: card_payment is not spend), by-category
+  // for the top 3, and a pinned-lesson note (localStorage, keyed by month —
+  // "you said you'd cut food delivery" resurfaces next month).
+  var LESSON_KEY = 'fin.ai.lesson.v1';
+  function readLesson(month) {
+    try {
+      var all = JSON.parse(localStorage.getItem(LESSON_KEY) || 'null');
+      return (all && all[month]) ? String(all[month]) : '';
+    } catch (e) { return ''; }
+  }
+  function pinLesson(month, text) {
+    var t = String(text || '').trim().slice(0, 120);
+    var all = {};
+    try { all = JSON.parse(localStorage.getItem(LESSON_KEY) || '{}') || {}; } catch (e) {}
+    if (t) all[month] = t; else delete all[month];
+    try { localStorage.setItem(LESSON_KEY, JSON.stringify(all)); } catch (e) {}
+    return t;
+  }
+  function recapData(txns, month, plans) {
+    // month = the month being summarized (YYYY-MM); the Home card passes
+    // LAST month, the sheet can pass any
+    var mp = String(month || '').split('-');
+    if (!/^\d{4}$/.test(mp[0]) || !/^\d{2}$/.test(mp[1])) return null;
+    var dim = new Date(Number(mp[0]), Number(mp[1]), 0).getDate();
+    var from = month + '-01', to = month + '-' + (dim < 10 ? '0' : '') + dim;
+    var income = 0, spent = 0, byCat = {};
+    (txns || []).forEach(function (t) {
+      var d = String(t.date || '');
+      if (d < from || d > to) return;
+      var a = Number(t.amount) || 0;
+      if (t.kind === 'cash_in') { income += a; return; }
+      var s = spendOf(t);
+      if (s <= 0) return;
+      spent += s;
+      var c = String(t.category || '').trim() || 'Unsorted';
+      byCat[c] = r2((byCat[c] || 0) + s);
+    });
+    var cats = Object.keys(byCat).map(function (c) { return { cat: c, amt: byCat[c] }; })
+      .sort(function (a, b) { return b.amt - a.amt; });
+    var top = cats.slice(0, 3);
+    var net = r2(income - spent);
+    // the coach's one-liner — deterministic, no API
+    var line = '';
+    if (!income && !spent) line = 'A quiet month — nothing logged.';
+    else if (net >= 0) line = 'You kept ' + money(net) + ' this month. ' + (top[0] ? top[0].cat + ' led the spend at ' + money(top[0].amt) + '.' : '');
+    else line = 'You spent ' + money(Math.abs(net)) + ' more than you took in. ' + (top[0] ? top[0].cat + ' was the biggest at ' + money(top[0].amt) + ' — worth a look?' : '');
+    return { month: month, income: r2(income), spent: r2(spent), net: net, cats: cats, top: top, line: line,
+      lesson: readLesson(month) };
+  }
+  function renderRecap() {
+    var el = byId('recap'); if (!el) return;
+    var now = new Date();
+    var pm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    var prevM = pm.getFullYear() + '-' + (pm.getMonth() + 1 < 10 ? '0' : '') + (pm.getMonth() + 1);
+    var d = recapData(state.txns, prevM);
+    if (!d || (!d.income && !d.spent)) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    var M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var t = byId('recapTitle');
+    if (t) t.textContent = M[pm.getMonth()] + ' · recap';
+    var tot = Math.max(1, d.income + d.spent);
+    var pctIn = Math.round(d.income / tot * 100);
+    var html = '<div class="recap-split"><i class="in" style="width:' + pctIn + '%"></i><i class="out" style="width:' + (100 - pctIn) + '%"></i></div>' +
+      '<div class="recap-nums"><span>In <b>' + money(d.income) + '</b></span><span>Out <b>' + money(d.spent) + '</b></span><span>Net <b>' + money(d.net) + '</b></span></div>';
+    d.top.forEach(function (c) {
+      html += '<div class="recap-cat"><span>' + esc(c.cat) + '</span><b>' + money(c.amt) + '</b></div>';
+    });
+    html += '<p class="recap-line">' + esc(d.line) + '</p>';
+    if (d.lesson) html += '<p class="recap-lesson">Last month you said: ' + esc(d.lesson) + '</p>';
+    var body = byId('recapBody');
+    if (body) body.innerHTML = html;
+  }
+  function renderDueStrip() {
+    var el = byId('dueStrip'); if (!el) return;
+    var d = insightsData();
+    if (!d) { el.style.display = 'none'; return; }
+    var today = d.today;
+    var rows = [];
+    state.plans.forEach(function (p) {
+      planOccurrences(p).forEach(function (od) {
+        var dd = diffDays(today, od);
+        if (dd >= 0 && dd <= 14) rows.push({ date: od, dd: dd, label: p.name || 'Plan', amt: Number(p.amount) || 0, kind: 'plan' });
+      });
+    });
+    if (d.prepayAmt > 0 && d.prepayIn >= 0 && d.prepayIn <= 14) {
+      rows.push({ date: null, dd: d.prepayIn, label: 'Card prepay', amt: d.prepayAmt, kind: 'prepay' });
+    }
+    rows.sort(function (a, b) { return a.dd - b.dd; });
+    rows = rows.slice(0, 5);
+    if (!rows.length) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    var html = '';
+    rows.forEach(function (r) {
+      var when = r.dd === 0 ? 'today' : (r.dd === 1 ? 'tomorrow' : 'in ' + r.dd + 'd');
+      var whenFull = r.date ? (when + ' · ' + fmtDate(r.date)) : (d.prepayIn === 0 ? 'today' : 'in ' + d.prepayIn + 'd');
+      html += '<div class="due-row' + (r.dd <= 2 ? ' soon' : '') + '"><span>' + esc(r.label) +
+        ' <span class="due-d">' + whenFull + '</span></span><b>' + money(r.amt) + '</b></div>';
+    });
+    var body = byId('dueBody');
+    if (body) body.innerHTML = html;
+  }
+  // v73.2: the full recap sheet
+  function openRecap() {
+    var now = new Date();
+    var pm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    var prevM = pm.getFullYear() + '-' + (pm.getMonth() + 1 < 10 ? '0' : '') + (pm.getMonth() + 1);
+    var d = recapData(state.txns, prevM);
+    var M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var st = byId('recapSheetTitle');
+    if (st) st.textContent = M[pm.getMonth()] + ' · the whole story';
+    var body = byId('recapSheetBody');
+    if (body) {
+      if (!d || (!d.income && !d.spent)) {
+        body.innerHTML = '<p class="note" style="margin:2px 0">Nothing was logged in ' + M[pm.getMonth()] + ' — the recap appears once there is a month to tell.</p>';
+      } else {
+        var tot = Math.max(1, d.income + d.spent);
+        var pctIn = Math.round(d.income / tot * 100);
+        var html = '<div class="recap-split"><i class="in" style="width:' + pctIn + '%"></i><i class="out" style="width:' + (100 - pctIn) + '%"></i></div>' +
+          '<div class="recap-nums"><span>In <b>' + money(d.income) + '</b></span><span>Out <b>' + money(d.spent) + '</b></span><span>Net <b>' + money(d.net) + '</b></span></div>';
+        (d.cats.length ? d.cats : d.top).forEach(function (c) {
+          html += '<div class="recap-cat"><span>' + esc(c.cat) + '</span><b>' + money(c.amt) + '</b></div>';
+        });
+        html += '<p class="recap-line">' + esc(d.line) + '</p>';
+        if (d.lesson) html += '<p class="recap-lesson">Your pinned lesson: ' + esc(d.lesson) + '</p>';
+        body.innerHTML = html;
+      }
+    }
+    var pin = byId('recapPinned');
+    if (pin) pin.textContent = d && d.lesson ? ('Pinned for next month: ' + d.lesson) : 'No lesson pinned yet.';
+    openSheet('recapSheet');
+  }
   // v73.1: the recurring-payment detector, as a PURE fn (the smoke drives it
   // with seeded ledgers). Core (v68): same merchant key + amount (±5% now,
   // was ±10%) in ≥2 different months over the last 3; already-planned is
@@ -3223,6 +3356,17 @@
         }
       });
     }
+    // v73.2: the due-day radar's util alert — a card between 30% and 70% of
+    // its limit gets a note (over 70% is the coach's WORRIED face, v73.0)
+    (d.s.cards || []).forEach(function (c) {
+      var u = Number(c.util_pct);
+      if (!isFinite(u) || u < 30) return;
+      if (u > 70) return; // the mood carries it
+      rows.push({ cls: 'warn', tag: 'Card · ' + c.name,
+        text: c.name + ' is at ' + Math.round(u) + '% of its limit — the 30% nudge.',
+        r: Math.round(u) + '%' });
+      alerts.push('util:' + c.name.toLowerCase());
+    });
     // v68 item 4: per-category pace anomaly (worst one; the pace section shows up to 3)
     var pcTop = (d.catPace || [])[0];
     if (pcTop && pcTop.over >= 25) {
@@ -4973,12 +5117,17 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.1, live: new Date(2026, 8, 23, 2, 35) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.2, live: new Date(2026, 8, 23, 3, 22) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.2': [
+      'Home now opens with your MONEY PULSE — last month in one card (in vs out, your top 3 spends, one line from the coach), and tapping it opens the full recap',
+      'The recap lets you PIN A LESSON ("cut food delivery") and it resurfaces in next month\'s recap — you will hear yourself say it',
+      'A "coming due" strip on Home shows the next 14 days of plans and prepays at a glance, and a card between 30% and 70% of its limit gets a nudge from the coach (over 70% is when his face goes worried)'
+    ],
     '73.1': [
       'Plans can now repeat weekly or yearly too, not just monthly — pick the rhythm when you add one, and the coming-up list shows each repeat on its own date',
       'The coach\'s "looks recurring" read got sharper: it now spots repeats you never wrote a note for (it falls back to the category), only trusts amounts that stay within 5%, and it tells you when something is really WEEKLY — so the one-tap "make it a plan" builds the right kind of plan'
@@ -5757,6 +5906,11 @@
     render: render, // v73.0: the full re-render (the smoke reads the sparkline after)
     detectRecurring: detectRecurring, // v73.1: the recurring detector (pure — the smoke drives it)
     planOccurrences: planOccurrences, // v73.1: the occurrence math (weekly/annual)
+    coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut)
+    insightsData: insightsData, // v73.2: the insight math (coachRows' input)
+    recapData: recapData, // v73.2: the money-pulse math (pure — the smoke drives it)
+    pinLesson: pinLesson, // v73.2: the pinned lesson (the smoke drives it)
+    readLesson: readLesson, // v73.2: read the pinned lesson (the smoke drives it)
     bootNow: function () { return Date.now() - bootT0; }, // v72.54: ms since boot (smoke pins the clock)
     owedShown: owedShown, // v72.30: the per-person See more/less page (smoke drives the paging render)
     getBase: function () { return state.base; }, // v72.30: the current base (smoke reads account values for the override test)
@@ -6008,6 +6162,24 @@
     }
     var sbtn2 = byId('setBtn');
     if (sbtn2) sbtn2.onclick = function () { openSheet('setSheet'); };
+    // v73.2: the money pulse — the Home card opens the full recap sheet;
+    // "Pin a lesson" stores the note for next month's recap
+    var ro = byId('recapOpen');
+    if (ro) ro.onclick = openRecap;
+    var rc = byId('recapClose');
+    if (rc) rc.onclick = closeSheets;
+    var rp = byId('recapPin');
+    if (rp) rp.onclick = function () {
+      var now = new Date();
+      var pm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      var prevM = pm.getFullYear() + '-' + (pm.getMonth() + 1 < 10 ? '0' : '') + (pm.getMonth() + 1);
+      var t = pinLesson(prevM, byId('recapLesson').value);
+      byId('recapLesson').value = '';
+      var pin = byId('recapPinned');
+      if (pin) pin.textContent = t ? ('Pinned for next month: ' + t) : 'Lesson unpinned.';
+      renderRecap();
+      snack(t ? 'Lesson pinned — it shows in next month\'s recap' : 'Lesson unpinned', function () { renderRecap(); });
+    };
     var ac = byId('addClose');
     if (ac) ac.onclick = closeSheets;
     var scb = byId('setClose');
