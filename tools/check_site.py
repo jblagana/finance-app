@@ -414,6 +414,20 @@ def main():
           and "if (!editId && (kind === 'cash_in' || kind === 'card_payment')) happyMoodFlash(1800);" in js
           and 'class="spark-today"' in js
           and "'73.0': [" in js)
+    check("v73.1 (user: 'do all them' — the major upgrade, release 2 of 4): the RECURRING ENGINE — plans repeat monthly | weekly | annual (the form's checkbox became a select; addPlan's monthly-only guard became an allow-list; planOccurrences grows shiftWeek/shiftYear: weekly projects 8 ahead, annual 2, monthly keeps the v68 3); the detector is a PURE exported fn (detectRecurring — the smoke drives it with seeded ledgers) that keeps the v68 core (same merchant key + amount in >=2 months over the last 3, already-planned out) and grows a brain: category fallback for unlabeled txns, a +/-5% amount band (was +/-10%), and day-gap cadence (median 6-8d -> weekly); the coach row + make-plan action + the chat chip all carry the detector's repeat",
+          "<select id=\"p_repeat\">" in html
+          and "<option value=\"weekly\">Every week</option>" in html
+          and "<option value=\"annual\">Every year</option>" in html
+          and "function shiftWeek(iso, k) {" in js
+          and "function shiftYear(iso, k) {" in js
+          and "function detectRecurring(txns, plans, todayISOStr) {" in js
+          and "var recurringGuess = detectRecurring(state.txns, state.plans, today);" in js
+          and "var rep = ['monthly', 'weekly', 'annual'].indexOf(data.repeat) >= 0 ? data.repeat : null;" in js
+          and "if (med >= 6 && med <= 8) rep = 'weekly';" in js
+          and "detectRecurring: detectRecurring" in js
+          and "planOccurrences: planOccurrences" in js
+          and "repeat: parts[2] || 'monthly'" in js
+          and "'73.1': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",

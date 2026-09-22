@@ -807,20 +807,26 @@
     if (!am || !(am.amt > 0)) {
       return { html: block('Add a plan', line('Give me the amount.'), 'e.g. “plan: shoes 1,500 on the 20th” — date optional, defaults to today.', 'good') + freshness(ctx) };
     }
-    // v68 items 5/9: "monthly" / "every month" → a recurring plan
-    var repM = /\bevery month\b|\beach month\b|\bmonthly\b|\bper month\b/.test(rest2);
-    var nameSrc = repM ? rest2.replace(/\b(?:every|each)\s+month\b|\bmonthly\b|\bper month\b/g, ' ') : rest2;
+    // v68 items 5/9: "monthly" / "every month" → a recurring plan.
+    // v73.1: the cadence is a real choice — weekly and yearly ride the same
+    // intent ("every week", "once a year", …).
+    var repW = 'monthly';
+    if (/\bevery week\b|\beach week\b|\bweekly\b|\bper week\b/.test(rest2)) repW = 'weekly';
+    else if (/\bevery year\b|\beach year\b|\bannually\b|\byearly\b|\bonce a year\b/.test(rest2)) repW = 'annual';
+    var repM = repW !== 'monthly' || /\bevery month\b|\beach month\b|\bmonthly\b|\bper month\b/.test(rest2);
+    var nameSrc = rest2.replace(/\b(?:every|each|once)\s+(?:week|month|year)\b|\bweekly\b|\bmonthly\b|\bannually\b|\byearly\b|\bper (?:week|month)\b/g, ' ');
     var name = nameSrc.replace(am.raw, ' ').replace(/\s+/g, ' ').replace(/^[\s:,-]+|[\s:,-]+$/g, '')
       .replace(/^(?:for|of|about|on)\s+/, '').replace(/\s+(?:for|of|about|on)$/, '').trim();
     if (!name) {
       return { html: block('Add a plan', line('What is it for?'), 'e.g. “plan: car repair 8,000 this week”', 'good') + freshness(ctx) };
     }
     var date = dm ? dm.iso : todayISO();
+    var repLabel = repW === 'weekly' ? 'weekly' : (repW === 'annual' ? 'yearly' : 'monthly');
     return {
       html: block('New plan',
-        kv(whenLabel(date) + ' · ' + esc(name) + (repM ? ' · monthly' : ''), money(am.amt)),
+        kv(whenLabel(date) + ' · ' + esc(name) + (repM ? ' · ' + repLabel : ''), money(am.amt)),
         'It goes to your plans (Money tab) and feeds the Home insights.', 'good'),
-      actions: [{ label: (repM ? 'Add monthly plan: ' : 'Add plan: ') + esc(name), act: 'add_plan', payload: { name: name, amount: am.amt, date: date, repeat: repM ? 'monthly' : null } }]
+      actions: [{ label: (repM ? 'Add ' + repLabel + ' plan: ' : 'Add plan: ') + esc(name), act: 'add_plan', payload: { name: name, amount: am.amt, date: date, repeat: repM ? repW : null } }]
     };
   }
 
@@ -2099,7 +2105,9 @@
     var stand = standingChips(ca);
     if (!(ca.alerts || []).length) return stand;
     var out = [];
-    if (ca.recurring) out.push('Add plan: ' + capFirst(ca.recurring.merchant) + ' ' + fmtNum(ca.recurring.amount) + ' monthly');
+    // v73.1: the chip says the cadence the detector read (weekly when the
+    // day-gaps are ~7), not a hardcoded "monthly"
+    if (ca.recurring) out.push('Add plan: ' + capFirst(ca.recurring.merchant) + ' ' + fmtNum(ca.recurring.amount) + (ca.recurring.repeat === 'weekly' ? ' weekly' : ' monthly'));
     if (ca.alerts.indexOf('prepay') >= 0) out.push(stand[1]);
     if (ca.alerts.indexOf('floor') >= 0 || ca.alerts.indexOf('dip') >= 0) out.push('When does cash dip?');
     stand.forEach(function (c) { if (out.indexOf(c) < 0 && out.length < 4) out.push(c); });

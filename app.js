@@ -249,16 +249,46 @@
     el.__countRaf = requestAnimationFrame(step);
   }
   // ---------- Phase 4: recurring plans ----------
+  // v73.1: the repeat is no longer monthly-only — weekly and annual ride the
+  // same plan row (p.repeat: 'monthly' | 'weekly' | 'annual'; absent = once).
+  // Old data is untouched: a plan without repeat still yields exactly its
+  // own date, and 'monthly' plans keep the v68 behavior verbatim.
   function shiftMonth(iso, k) {
     var p = String(iso).split('-');
     var d = new Date(Number(p[0]), Number(p[1]) - 1 + k, 1);
     var dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
     return localISO(new Date(d.getFullYear(), d.getMonth(), Math.min(Number(p[2]) || 1, dim)));
   }
+  function shiftWeek(iso, k) {
+    var d = parseISO(iso);
+    d.setDate(d.getDate() + 7 * k);
+    return localISO(d);
+  }
+  function shiftYear(iso, k) {
+    var p = String(iso).split('-');
+    var d = new Date(Number(p[0]) + k, Number(p[1]) - 1, 1);
+    var dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    return localISO(new Date(d.getFullYear(), d.getMonth(), Math.min(Number(p[2]) || 1, dim)));
+  }
   function planOccurrences(p) {
-    if (!p || p.repeat !== 'monthly') return [String(p.date)];
+    if (!p || !p.repeat) return [String(p.date)];
     var today = todayISO();
     var d = String(p.date), guard = 0;
+    if (p.repeat === 'weekly') {
+      var sh = function (x, k) { return shiftWeek(x, k); };
+      while (d < today && guard < 104) { d = sh(d, 1); guard++; }
+      var wo = [];
+      for (var kw = 0; kw < 8; kw++) wo.push(sh(d, kw)); // ~2 months ahead
+      return wo;
+    }
+    if (p.repeat === 'annual') {
+      var sy = function (x, k) { return shiftYear(x, k); };
+      while (d < today && guard < 12) { d = sy(d, 1); guard++; }
+      var yo = [];
+      for (var ky = 0; ky < 2; ky++) yo.push(sy(d, ky));
+      return yo;
+    }
+    // monthly (the original path, unchanged)
     while (d < today && guard < 36) { d = shiftMonth(d, 1); guard++; }
     var out = [];
     for (var k = 0; k < 3; k++) out.push(shiftMonth(d, k));
@@ -2217,6 +2247,71 @@
     if (!state.base) return null;
     return cycleDataFor(currentCycleMonth(state.base, todayISO()), state.base);
   }
+  // v73.1: the recurring-payment detector, as a PURE fn (the smoke drives it
+  // with seeded ledgers). Core (v68): same merchant key + amount (±5% now,
+  // was ±10%) in ≥2 different months over the last 3; already-planned is
+  // out. New: (1) a txn with no note falls back to its CATEGORY as the
+  // merchant key (the note-only rule missed every unlabeled charge); (2)
+  // the occurrences' day-gaps decide the suggested cadence — a median gap
+  // of 6–8 days reads as WEEKLY, otherwise MONTHLY (the coach row offers
+  // the matching plan and the make-plan action carries the repeat).
+  function detectRecurring(txns, plans, todayISOStr) {
+    var out = [];
+    if (!txns || !txns.length) return out;
+    var today = String(todayISOStr || todayISO());
+    var now = new Date();
+    function pk(n) { return (n < 10 ? '0' : '') + n; }
+    var mKeys = [];
+    for (var q = 1; q <= 3; q++) {
+      var dm = new Date(now.getFullYear(), now.getMonth() - q, 1);
+      mKeys.push(dm.getFullYear() + '-' + pk(dm.getMonth() + 1));
+    }
+    var winFrom = mKeys[2];
+    var byMer = {};
+    txns.forEach(function (t) {
+      var mk = String(t.date).slice(0, 7);
+      if (mk < winFrom) return;
+      var raw = String(t.note || '').trim();
+      var nm = raw.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!nm) nm = String(t.category || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim(); // v73.1: category fallback
+      var a = Number(t.amount) || 0;
+      if (nm.length < 3 || a <= 0) return;
+      var e = (byMer[nm] = byMer[nm] || { months: {}, amts: [], dates: [] });
+      e.months[mk] = (e.months[mk] || 0) + 1;
+      e.amts.push(a);
+      e.dates.push(String(t.date));
+    });
+    Object.keys(byMer).forEach(function (nm) {
+      var e = byMer[nm];
+      var months = Object.keys(e.months);
+      if (months.length < 2) return;
+      var avg = e.amts.reduce(function (s, a) { return s + a; }, 0) / e.amts.length;
+      var close = e.amts.filter(function (a) { return a >= avg * 0.95 && a <= avg * 1.05; }).length;
+      if (close * 2 < e.amts.length) return; // amounts too inconsistent
+      var planned = false;
+      (plans || []).forEach(function (p) {
+        var pa = Number(p.amount) || 0;
+        if (pa < avg * 0.9 || pa > avg * 1.1) return;
+        var pw = String(p.name || '').toLowerCase().split(/[^a-z0-9]+/g).filter(function (w) { return w.length >= 3; });
+        var mw = nm.split(' ').filter(function (w) { return w.length >= 3; });
+        if (pw.some(function (w) { return mw.indexOf(w) >= 0; })) planned = true;
+      });
+      if (planned) return;
+      // v73.1: cadence from the day-gaps (median; weekly when 6–8 days)
+      var rep = 'monthly';
+      var ds = e.dates.slice().sort();
+      if (ds.length >= 3) {
+        var gaps = [];
+        for (var i = 1; i < ds.length; i++) gaps.push(Math.round((parseISO(ds[i]) - parseISO(ds[i - 1])) / 86400000));
+        gaps.sort(function (a, b) { return a - b; });
+        var med = gaps[Math.floor(gaps.length / 2)];
+        if (med >= 6 && med <= 8) rep = 'weekly';
+      }
+      out.push({ merchant: nm, amount: Math.round(avg), months: months.length, repeat: rep });
+    });
+    out.sort(function (a, b) { return b.months - a.months || b.amount - a.amount; });
+    return out;
+  }
   function insightsData() {
     var s = effectiveSnap();
     if (!s) return null;
@@ -2293,46 +2388,16 @@
     })();
     // v68 item 5: recurring-payment detection — same merchant note + amount
     // (±10%) in ≥2 different months over the last 3; already-planned is out.
-    var recurringGuess = [];
-    (function () {
-      function pk(n) { return (n < 10 ? '0' : '') + n; }
-      var mKeys = [];
-      for (var q = 1; q <= 3; q++) {
-        var dm3 = new Date(now.getFullYear(), now.getMonth() - q, 1);
-        mKeys.push(dm3.getFullYear() + '-' + pk(dm3.getMonth() + 1));
-      }
-      var winFrom = mKeys[2];
-      var byMer = {};
-      state.txns.forEach(function (t) {
-        var mk = String(t.date).slice(0, 7);
-        if (mk < winFrom) return;
-        var nm = String(t.note || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
-        var a = Number(t.amount) || 0;
-        if (nm.length < 3 || a <= 0) return;
-        var e = (byMer[nm] = byMer[nm] || { months: {}, amts: [] });
-        e.months[mk] = (e.months[mk] || 0) + 1;
-        e.amts.push(a);
-      });
-      Object.keys(byMer).forEach(function (nm) {
-        var e = byMer[nm];
-        var months = Object.keys(e.months);
-        if (months.length < 2) return;
-        var avg = e.amts.reduce(function (s, a) { return s + a; }, 0) / e.amts.length;
-        var close = e.amts.filter(function (a) { return a >= avg * 0.9 && a <= avg * 1.1; }).length;
-        if (close * 2 < e.amts.length) return; // amounts too inconsistent
-        var planned = false;
-        state.plans.forEach(function (p) {
-          var pa = Number(p.amount) || 0;
-          if (pa < avg * 0.9 || pa > avg * 1.1) return;
-          var pw = String(p.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 3; });
-          var mw = nm.split(' ').filter(function (w) { return w.length >= 3; });
-          if (pw.some(function (w) { return mw.indexOf(w) >= 0; })) planned = true;
-        });
-        if (planned) return;
-        recurringGuess.push({ merchant: nm, amount: Math.round(avg), months: months.length });
-      });
-      recurringGuess.sort(function (a, b) { return b.months - a.months || b.amount - a.amount; });
-    })();
+    // v73.1: the detector is a PURE exported fn (detectRecurring) — the
+    // smoke drives it with seeded ledgers. It keeps the v68 core (same
+    // merchant key + amount in ≥2 different months over the last 3,
+    // already-planned is out) and grows a brain: (1) a txn with no note
+    // falls back to its CATEGORY as the merchant key (the note-only rule
+    // missed every unlabeled charge); (2) the amount band tightened to ±5%;
+    // (3) the occurrences' day-gaps decide the suggested cadence — a median
+    // gap of 6–8 days reads as WEEKLY (the coach row then offers a weekly
+    // plan, and the make-plan action carries repeat:'weekly').
+    var recurringGuess = detectRecurring(state.txns, state.plans, today);
     // v68 item 6: goal math — sinking funds (required ₱/mo vs planned, months
     // at pace) and debts (months to payoff at the current pace).
     var goals = [];
@@ -2497,10 +2562,12 @@
       sub = 'Next 7 days stay covered; an eat-out (about ' + money(d.meal) + ') is safe.';
     }
     var rec = [];
-    state.plans.forEach(function (p) { if (p.repeat === 'monthly') rec.push(p); });
+    state.plans.forEach(function (p) { if (p.repeat) rec.push(p); }); // v73.1: weekly + annual ride the same line
     if (rec.length) {
       var recAmt = rec.reduce(function (s, p) { return s + (Number(p.amount) || 0); }, 0);
-      sub += ' On repeat: ' + rec.map(function (p) { return p.name || 'plan'; }).join(', ') + ' — ' + money(recAmt) + ' a month.';
+      var per = rec.every(function (p) { return p.repeat === 'monthly'; }) ? 'a month'
+        : rec.every(function (p) { return p.repeat === 'weekly'; }) ? 'a week' : 'each';
+      sub += ' On repeat: ' + rec.map(function (p) { return p.name || 'plan'; }).join(', ') + ' — ' + money(recAmt) + ' ' + per + '.';
     }
     // ---- coach memory: compare with the last visit, notice what got handled ----
     var mem = state.coachMem;
@@ -2533,9 +2600,10 @@
     if (body) {
       var html = '';
       rows.forEach(function (rw) {
-        // v68 item 5: the recurring row carries a one-tap "make it a monthly plan"
+        // v68 item 5: the recurring row carries a one-tap "make it a plan"
+        // (v73.1: the repeat rides the payload — the detector's cadence)
         if (rw.act === 'make_plan') {
-          html += '<button type="button" class="dig warn" data-makeplan="' + esc(rw.payload.name) + '|' + rw.payload.amount + '">' +
+          html += '<button type="button" class="dig warn" data-makeplan="' + esc(rw.payload.name) + '|' + rw.payload.amount + '|' + (rw.payload.repeat || 'monthly') + '">' +
             '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
             '<span class="dg-r">' + esc(rw.r) + '</span></button>';
           return;
@@ -2554,7 +2622,8 @@
         mpb[j].onclick = (function (b) {
           return function () {
             var parts = b.getAttribute('data-makeplan').split('|');
-            addPlan({ name: parts[0], amount: Number(parts[1]) || 0, date: todayISO(), repeat: 'monthly' });
+            // v73.1: parts[2] is the detector's cadence (monthly | weekly)
+            addPlan({ name: parts[0], amount: Number(parts[1]) || 0, date: todayISO(), repeat: parts[2] || 'monthly' });
           };
         })(mpb[j]);
       }
@@ -3165,9 +3234,10 @@
     // v68 item 5: recurring-payment suggestion — one-tap "make it a monthly plan"
     var recG = (d.recurringGuess || [])[0];
     if (recG) {
+      var recRep = recG.repeat === 'weekly' ? 'weekly' : 'monthly'; // v73.1: the cadence the detector read
       rows.push({ cls: 'warn', tag: 'Looks recurring',
-        text: recG.merchant + ' · ' + money(recG.amount) + ' in ' + recG.months + ' recent months — make it a monthly plan?',
-        r: 'make it a plan', act: 'make_plan', payload: { name: recG.merchant, amount: recG.amount } });
+        text: recG.merchant + ' · ' + money(recG.amount) + ' in ' + recG.months + ' recent months — make it a ' + recRep + ' plan?',
+        r: 'make it a plan', act: 'make_plan', payload: { name: recG.merchant, amount: recG.amount, repeat: recRep } });
       alerts.push('recurring:' + recG.merchant);
     }
     // v68 item 6: debt payoff at the current pace
@@ -3349,10 +3419,11 @@
     var html = '';
     plans.forEach(function (p) {
       var amt = money(p.amount).replace('PHP ', '');
-      var rec = p.repeat === 'monthly';
+      var rec = !!p.repeat; // v73.1: monthly | weekly | annual
+      var per = p.repeat === 'weekly' ? 'weekly' : (p.repeat === 'annual' ? 'yearly' : 'monthly');
       var occ = planOccurrences(p);
       occ.forEach(function (od, i) {
-        var meta = rec ? fmtDate(od) + ' · monthly' : esc(planWhen(p.date)) + ' · ' + fmtDate(p.date);
+        var meta = rec ? fmtDate(od) + ' · ' + per : esc(planWhen(p.date)) + ' · ' + fmtDate(p.date);
         var tag = rec && i === 0 ? ' <span class="pill ok" style="font-size:10px">recurring</span>' : '';
         html += '<div class="txn"><div><div class="txn-cat">' + esc(p.name || 'Plan') + tag + '</div>' +
           '<div class="txn-meta">' + meta + '</div></div>' +
@@ -3366,12 +3437,15 @@
   }
   function addPlan(data) {
     var id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    // v73.1: weekly + annual ride the same row (the v68 monthly-only guard
+    // dropped in favor of an allow-list — anything else is a one-off)
+    var rep = ['monthly', 'weekly', 'annual'].indexOf(data.repeat) >= 0 ? data.repeat : null;
     var p = { id: id, name: data.name, amount: data.amount, date: data.date,
-      repeat: data.repeat === 'monthly' ? 'monthly' : null, created: new Date().toISOString() };
+      repeat: rep, created: new Date().toISOString() };
     state.plans.push(p);
     return idbPut(STORE_PLANS, p).then(function () {
       emit('plan');
-      snack('Planned ' + esc(p.name) + ' · ' + money(p.amount) + (p.repeat ? ' · every month' : ''), function () {
+      snack('Planned ' + esc(p.name) + ' · ' + money(p.amount) + (p.repeat ? ' · every ' + (p.repeat === 'weekly' ? 'week' : (p.repeat === 'annual' ? 'year' : 'month')) : ''), function () {
         state.plans = state.plans.filter(function (x) { return x.id !== id; });
         idbDel(STORE_PLANS, id).then(function () { emit('plan'); });
       });
@@ -4899,12 +4973,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.0, live: new Date(2026, 8, 23, 1, 57) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.1, live: new Date(2026, 8, 23, 2, 27) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.1': [
+      'Plans can now repeat weekly or yearly too, not just monthly — pick the rhythm when you add one, and the coming-up list shows each repeat on its own date',
+      'The coach\'s "looks recurring" read got sharper: it now spots repeats you never wrote a note for (it falls back to the category), only trusts amounts that stay within 5%, and it tells you when something is really WEEKLY — so the one-tap "make it a plan" builds the right kind of plan'
+    ],
     '73.0': [
       'Coach Fin now has a mood — his face (the note, the chat, the corner button) goes worried when a card is over 70% of its limit or your month is projected to end in the red, and he flashes a smile when you log your salary or prepay a card',
       'Your free-cash number now counts up from where it was instead of reloading from zero, and the cash graph marks today with a little halo'
@@ -5677,6 +5755,8 @@
     computeMood: computeMood, // v73.0: the mood decision (smoke drives it)
     happyMoodFlash: happyMoodFlash, // v73.0: the good-moment smile (smoke drives it)
     render: render, // v73.0: the full re-render (the smoke reads the sparkline after)
+    detectRecurring: detectRecurring, // v73.1: the recurring detector (pure — the smoke drives it)
+    planOccurrences: planOccurrences, // v73.1: the occurrence math (weekly/annual)
     bootNow: function () { return Date.now() - bootT0; }, // v72.54: ms since boot (smoke pins the clock)
     owedShown: owedShown, // v72.30: the per-person See more/less page (smoke drives the paging render)
     getBase: function () { return state.base; }, // v72.30: the current base (smoke reads account values for the override test)
@@ -5879,11 +5959,13 @@
       if (!name) { alert('Give the plan a name.'); return; }
       if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
       var repEl = byId('p_repeat');
+      // v73.1: the repeat is a select now (once / monthly / weekly / annual)
+      var repVal = repEl ? String(repEl.value || 'once') : 'once';
       addPlan({ name: name, amount: amount, date: byId('p_date').value || todayISO(),
-        repeat: repEl && repEl.checked ? 'monthly' : null }).then(function () {
+        repeat: repVal === 'once' ? null : repVal }).then(function () {
         byId('p_name').value = '';
         byId('p_amount').value = '';
-        if (repEl) repEl.checked = false;
+        if (repEl) repEl.value = 'once';
         byId('p_name').focus();
       });
     };
