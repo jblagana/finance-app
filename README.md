@@ -13,8 +13,10 @@ with one-tap undo — the rule engine stays the only writer.
 ## Boot
 A short **loading screen** greets you at launch — Coach Fin's face with a
 cycling status line ("waking up…") and an indeterminate bar while your
-numbers load from IndexedDB; it fades out the moment the first screen
-renders (a 4-second safety timer guarantees it can never trap you).
+numbers load from IndexedDB; it fades out once the first screen renders —
+and for at least a full second (a warm boot finishes in ~100 ms, so the
+coach gets 1 s to say hi before the fade; a 4-second safety timer
+guarantees it can never trap you).
 
 ## Tabs
 - **Home** — time-of-day greeting with your name ("Good morning, Jan!" —
@@ -114,7 +116,7 @@ it: `npx wrangler deploy`.)
 - **Backup** (Settings → Backup): Export JSON (everything) / Export CSV (ledger
   only) / Import JSON to restore.
 - Both footers show the shell version + when this build went live. Releases
-  bump the SW cache (`finances-pwa-v72.53`) and the `SHELL_RELEASE` stamp in
+  bump the SW cache (`finances-pwa-v72.54`) and the `SHELL_RELEASE` stamp in
   `app.js` together — the "New version ready" toast offers a one-tap reload.
   If the app ever looks stale: open the Pages URL once in Safari, then
   relaunch the home-screen icon.

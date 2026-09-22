@@ -366,6 +366,8 @@ def main():
           and "animation:bootslide 1.1s ease-in-out infinite" in html
           and "function hideBoot() {" in js
           and "if (b) b.classList.add('off');" in js
+          and "var BOOT_MIN_MS = 1000;" in js
+          and "BOOT_MIN_MS - (Date.now() - bootT0)" in js
           and "function bootTicker() {" in js
           and "'waking up\\u2026', 'counting your numbers\\u2026', 'almost there\\u2026'" in js
           and "bootTicker();" in js and "setTimeout(hideBoot, 4000);" in js
@@ -373,6 +375,10 @@ def main():
           and "hideBoot(); // v72.53: even a failed load must not trap the user on the splash" in js
           and "hideBoot: hideBoot" in js and "bootTicker: bootTicker" in js
           and "'72.53': [" in js)
+    check("v72.54 (user: 'how bout 1sec' — the splash was a flicker on a warm boot): hideBoot holds the overlay for a 1s minimum display time (BOOT_MIN_MS) before the fade, so a fast boot still shows the coach; slow boots are unaffected (the floor only extends, never shortens)",
+          "var bootT0 = Date.now();" in js
+          and "'72.54': [" in js
+          and "bootNow: function () { return Date.now() - bootT0; }" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",
