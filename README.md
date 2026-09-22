@@ -10,6 +10,12 @@ that runs fully offline, plus an **optional online LLM** for open questions.
 Either way the coach only *drafts*: every money change is a card you confirm,
 with one-tap undo — the rule engine stays the only writer.
 
+## Boot
+A short **loading screen** greets you at launch — Coach Fin's face with a
+cycling status line ("waking up…") and an indeterminate bar while your
+numbers load from IndexedDB; it fades out the moment the first screen
+renders (a 4-second safety timer guarantees it can never trap you).
+
 ## Tabs
 - **Home** — time-of-day greeting with your name ("Good morning, Jan!" —
   "Hooman" until you set one) + date, free/unallocated cash with a 6-month
@@ -108,7 +114,7 @@ it: `npx wrangler deploy`.)
 - **Backup** (Settings → Backup): Export JSON (everything) / Export CSV (ledger
   only) / Import JSON to restore.
 - Both footers show the shell version + when this build went live. Releases
-  bump the SW cache (`finances-pwa-v72.52`) and the `SHELL_RELEASE` stamp in
+  bump the SW cache (`finances-pwa-v72.53`) and the `SHELL_RELEASE` stamp in
   `app.js` together — the "New version ready" toast offers a one-tap reload.
   If the app ever looks stale: open the Pages URL once in Safari, then
   relaunch the home-screen icon.

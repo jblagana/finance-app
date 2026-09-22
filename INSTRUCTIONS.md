@@ -6,6 +6,18 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-22 — "add a loading screen for fin.ai" (design C: coach + status ticker)
+Status: **in progress**
+Progress: 0% — plan: `#boot` overlay in index.html (Coach Fin's face + "Coach Fin" + cycling status line + indeterminate bar, z-index 50, real palette, from the approved mockup C); app.js: `hideBoot()` fades it out (`.off` class + stops the ticker) called on BOTH init() paths (IDB success + catch) + a 4s safety timer so a stuck load never blocks the UI; SHELL_NOTES '72.53'; smoke v7253Section (stub `#boot`/`#bootStatus`, drive the real bootTicker/hideBoot: fresh boot starts at the greeting, the line cycles, hideBoot fades + stops); check_site v72.53 structural check; README note; gates via `tools/release.ps1 v72.53`
+### Interpretation (agent)
+The app boots straight into the tab UI — nothing signals the IndexedDB load is in flight. Add the approved design C boot splash: Coach Fin's face (the existing `#botFace` symbol), the name, a cycling status line ("waking up…" → "counting your numbers…" → "almost there…") and an indeterminate bar (honest — no fake percentages; `init()` reports no progress). It fades out when the first render lands; a safety timer guarantees it can never trap the user.
+### Subtasks
+- [x] log the instruction
+- [x] index.html: `#boot` overlay + CSS (z-index 50, above every sheet/dialog; the `#botFace` symbol is defined later in the body but resolves fine — same mechanism as the existing coachFab/coachOv uses)
+- [x] app.js: hideBoot + bootTicker + FinApp bridge + init hooks (ticker start + 4s safety timer + hideBoot on BOTH IDB paths) + SHELL_NOTES '72.53'
+- [x] smoke v7253Section (stub `#boot`/`#bootStatus`, drive the real bootTicker/hideBoot: fresh boot visible, line cycles, fade + idempotent + ticker stops) + check_site v72.53 structural check + README Boot section
+- [ ] gates green + push + close entry
+
 ## 2026-09-22 — "i want the stats in the ledger tab to consolidate records per cycle, not per month"
 Status: **done**
 Progress: 100% — completed 2026-09-22; released as v72.52, commit `1687b2c` pushed to origin/main (live 15:21, SW cache `finances-pwa-v72.52`, GATES all green via tools/release.ps1 v72.52 — both check_site copies + test_chat_parser + node syntax + both smokes; the new v7252 smoke section drives the real renderDonut/renderPace on the DOM stubs: in-cycle spend moves the donut total by exactly the in-cycle amount while a prior-cycle txn does NOT, the cycle's salary cash_in adds no slice, both headings carry the cycle date range, the pace reads "Spent · this cycle" + "Avg / day (N of Md)" over the cycle length, and the previous-cycle comparison delta moves by +500 with the prior-cycle txn)

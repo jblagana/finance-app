@@ -4838,12 +4838,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.52, live: new Date(2026, 8, 22, 15, 21) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.53, live: new Date(2026, 8, 22, 22, 59) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.53': [
+      'Fin.AI now wakes up with a loading screen — Coach Fin appears with a short status ("waking up…") while your numbers load, and it fades away the moment the app is ready'
+    ],
     '72.52': [
       'The Ledger tab\'s stats now follow your SALARY CYCLE (the 15th to the 14th) instead of the calendar month — the by-category donut and the spend pace both consolidate the current cycle, and the pace compares you against last cycle'
     ],
@@ -5589,6 +5592,8 @@
     shellNotesFor: shellNotesFor, // v72.29: the What's-new notes for a version (smoke drives it)
     addSheetKind: addSheetKind, // v72.41: the Add-sheet kind decision (smoke drives it — the submit is DOM-bound)
     shellVersion: SHELL_RELEASE.v, // v72.38: the running shell dot (smoke drives the What's-new fallback check)
+    hideBoot: hideBoot, // v72.53: the boot-splash fade (smoke drives the real path)
+    bootTicker: bootTicker, // v72.53: the status-line cycle (smoke drives it)
     owedShown: owedShown, // v72.30: the per-person See more/less page (smoke drives the paging render)
     getBase: function () { return state.base; }, // v72.30: the current base (smoke reads account values for the override test)
     askDeleteAdjustment: askDeleteAdjustment, // v72.31: the ✕ on an Adjustment row (smoke drives it; the stub has no confirm dialog → auto-yes)
@@ -5647,6 +5652,36 @@
     STORE_META: STORE_META
   };
 
+  // ---------- v72.53: the boot splash (design C — Coach Fin + status ticker) ----------
+  // The overlay is static HTML in index.html (shown by default); init() fades
+  // it out when the first render lands. The status line cycles on a timer and
+  // the bar is INDETERMINATE — init() reports no progress, so the words are
+  // flavor and the bar never claims a percentage. hideBoot is idempotent
+  // (success + catch both call it) and stops the ticker.
+  var bootGone = false;
+  var bootTimer = null;
+  function hideBoot() {
+    if (bootGone) return;
+    bootGone = true;
+    if (bootTimer) { clearInterval(bootTimer); bootTimer = null; }
+    var b = byId('boot');
+    if (b) b.classList.add('off');
+  }
+  function bootTicker() {
+    var st = byId('bootStatus');
+    if (!st) return;
+    var msgs = ['waking up\u2026', 'counting your numbers\u2026', 'almost there\u2026'];
+    var i = 0;
+    bootTimer = setInterval(function () {
+      st.classList.add('out');
+      setTimeout(function () {
+        i = (i + 1) % msgs.length;
+        st.textContent = msgs[i];
+        st.classList.remove('out');
+      }, 300);
+    }, 1600);
+  }
+
   // ---------- service worker: update toast ----------
   var swReg = null;
   function showSwToast() {
@@ -5659,6 +5694,10 @@
     };
   }
   function init() {
+    // v72.53: the splash starts cycling now (it is already visible from the
+    // HTML) and a safety timer guarantees a stuck load can never trap the UI.
+    bootTicker();
+    setTimeout(hideBoot, 4000);
     renderGreet();
     var dateEl = byId('f_date');
     if (dateEl && !dateEl.value) dateEl.value = todayISO();
@@ -5939,6 +5978,7 @@
       renderBaseEditor();
       render();
       setTab(currentTab());
+      hideBoot(); // v72.53: the first render is in — the splash fades
     }).catch(function (err) {
       console.warn('IDB load failed', err);
       state.base = state.base || defaultBase();
@@ -5946,6 +5986,7 @@
       state.adjSig = snapSig(state.snapshot);
       render();
       setTab(currentTab());
+      hideBoot(); // v72.53: even a failed load must not trap the user on the splash
     });
   }
 
