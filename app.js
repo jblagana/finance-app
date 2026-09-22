@@ -3147,19 +3147,38 @@
   }
   // ---------- Phase 3: category donut + spend pace (Ledger) ----------
   var DONUT_COLORS = ['#37d39b', '#a0d1b4', '#ffc45c', '#ff6b6b', '#b48cff', '#64748b'];
+  // v72.52: the cycle window's compact date range ("Sep 15 – Oct 14") under the
+  // cycle-based Ledger stats (the donut heading note).
+  function cycleLabelFor(w) {
+    var M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    function lab(iso) { var p = String(iso).split('-'); return M[Number(p[1]) - 1] + ' ' + Number(p[2]); }
+    return lab(w.start) + ' – ' + lab(w.end);
+  }
+  // v72.52 (user: 'the stats in the ledger tab should consolidate records per
+  // cycle, not per month'): the bucket is the CURRENT SALARY CYCLE — the v72.45
+  // window anchored on the salary_day — not the calendar month. A record dated
+  // the 1st lands in the cycle that started on the 15th, and the cycle's own
+  // salary cash_in is excluded (it is income, not spend — the v72.45 rule).
   function renderDonut() {
-    var wrap = byId('donut'), svgBox = byId('donutSvg'), leg = byId('donutLegend');
+    var wrap = byId('donut'), svgBox = byId('donutSvg'), leg = byId('donutLegend'), rng = byId('donutRange');
     if (!wrap || !svgBox || !leg) return;
-    var mp = todayISO().slice(0, 7);
+    var b = state.base || {};
+    var cd = cycleDataFor(currentCycleMonth(b, todayISO()), b);
+    var w = { start: cd.start, end: cd.end, month: cd.month };
+    var hi = todayISO();
+    if (w.end < hi) hi = w.end;
     var totals = {}, grand = 0;
     state.txns.forEach(function (t) {
-      if (String(t.date).slice(0, 7) !== mp) return;
+      var d = String(t.date || '');
+      if (d < w.start || d > hi) return; // v72.52: the cycle window, not the calendar month
+      if (cd.received && t.id && t.id === cd.received.id) return; // the cycle's salary is income, not spend (the v72.45 rule)
       var a = spendOf(t); // v72.44: prepays are not spend (see the helper)
       if (!a) return; // v72.47: a prepay contributes zero — no phantom "Unsorted ₱0" slice
       var c = t.category || 'Unsorted';
       totals[c] = (totals[c] || 0) + a;
       grand += a;
     });
+    if (rng) rng.textContent = cycleLabelFor(w);
     var names = Object.keys(totals).sort(function (a, b) { return totals[b] - totals[a]; });
     if (!names.length || grand <= 0) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
@@ -3168,7 +3187,7 @@
     names.slice(5).forEach(function (n) { rest += totals[n]; });
     if (rest > 0) segs.push({ name: 'Other', v: rest });
     var R = 40, C = 2 * Math.PI * R, off = 0;
-    var svg = '<svg viewBox="0 0 100 100" role="img" aria-label="This month by category">' +
+    var svg = '<svg viewBox="0 0 100 100" role="img" aria-label="This cycle by category">' +
       '<circle cx="50" cy="50" r="' + R + '" fill="none" stroke="#2c3a56" stroke-width="12" opacity=".5"/>';
     segs.forEach(function (sg, i) {
       var len = C * (sg.v / grand);
@@ -3189,21 +3208,21 @@
     leg.innerHTML = html;
   }
   function renderPace() {
-    var wrap = byId('pace'), box = byId('paceBox'), note = byId('paceNote');
+    var wrap = byId('pace'), box = byId('paceBox'), note = byId('paceNote'), rng = byId('paceRange');
     if (!wrap || !box) return;
-    var now = new Date();
-    var mp = todayISO().slice(0, 7);
-    var dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    var elapsed = now.getDate();
-    var spent = 0;
-    state.txns.forEach(function (t) { if (String(t.date).slice(0, 7) === mp) spent += spendOf(t); }); // v72.44
+    // v72.52 (user: 'consolidate records per cycle, not per month'): the bucket is the
+    // CURRENT SALARY CYCLE — cycleDataFor already computes spent/elapsed/pace with the
+    // cycle's salary cash_in excluded from spend (the v72.45 rule).
+    var b = state.base || {};
+    var cd = cycleDataFor(currentCycleMonth(b, todayISO()), b);
+    var spent = cd.spent, elapsed = cd.elapsed, daily = cd.pace, dim = cd.days;
+    var projected = r2(daily * dim);
     if (!spent && !state.txns.length) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
-    var daily = elapsed > 0 ? r2(spent / elapsed) : 0;
-    var projected = r2(daily * dim);
+    if (rng) rng.textContent = cycleLabelFor(cd);
     box.innerHTML =
-      '<div class="p"><div class="k">Spent · ' + esc(monthLabel(mp)) + '</div><div class="v">' + money(spent) + '</div></div>' +
-      '<div class="p"><div class="k">Avg / day (' + elapsed + 'd)</div><div class="v">' + money(daily) + '</div></div>' +
+      '<div class="p"><div class="k">Spent · this cycle</div><div class="v">' + money(spent) + '</div></div>' +
+      '<div class="p"><div class="k">Avg / day (' + elapsed + ' of ' + dim + 'd)</div><div class="v">' + money(daily) + '</div></div>' +
       '<div class="p"><div class="k">Projected · ' + dim + 'd</div><div class="v">' + money(projected) + '</div></div>';
     if (note) {
       var s = effectiveSnap();
@@ -3211,9 +3230,16 @@
       var free = s.cash ? s.cash.free : 0;
       note.style.display = '';
       note.innerHTML = projected > free
-        ? '<span class="low">At this pace, ' + esc(monthLabel(mp)) + ' spend (' + money(projected) + ') would exceed free cash (' + money(free) + ').</span>'
+        ? '<span class="low">At this pace, this cycle\'s spend (' + money(projected) + ') would exceed free cash (' + money(free) + ').</span>'
         : 'Leaves ' + money(r2(free - projected)) + ' of free cash unspent at this pace.';
-      // v68 item 4: per-category pace anomalies, under the monthly pace
+      // v72.52: the previous-cycle comparison (cycleDataFor already computes it)
+      if (cd.prev && cd.prev.spent > 0) {
+        var diff = r2(spent - cd.prev.spent);
+        note.innerHTML += '<div class="pace-anom"><span' + (diff > 0 ? ' class="low"' : '') + '>' +
+          (diff > 0 ? 'Up ' + money(diff) : (diff < 0 ? 'Down ' + money(-diff) : 'Level')) +
+          ' vs last cycle (' + money(cd.prev.spent) + ' · ' + esc(cycleLabelFor(cd.prev)) + ').</span></div>';
+      }
+      // v68 item 4: per-category pace anomalies (still calendar-month — a Home insight)
       var dP = insightsData();
       var anoms = (dP && dP.catPace || []).slice(0, 3);
       if (anoms.length) {
@@ -4812,12 +4838,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.51, live: new Date(2026, 8, 21, 2, 48) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.52, live: new Date(2026, 8, 22, 15, 21) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.52': [
+      'The Ledger tab\'s stats now follow your SALARY CYCLE (the 15th to the 14th) instead of the calendar month — the by-category donut and the spend pace both consolidate the current cycle, and the pace compares you against last cycle'
+    ],
     '72.51': [
       'Owed split fix: when you filled "I paid for them" with the Total and Theirs only (Mine left blank), your part now lands in the ledger as your spend — it was being quietly dropped'
     ],

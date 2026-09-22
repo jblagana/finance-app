@@ -556,7 +556,8 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
     </div>
 
     <section id="donut" class="card" style="display:none">
-      <h2 style="margin-top:0">This month · by category</h2>
+      <h2 style="margin-top:0">This cycle · by category</h2>
+      <p class="note" id="donutRange" style="margin:0 0 8px"></p>
       <div class="donutwrap">
         <div id="donutSvg"></div>
         <div class="donut-legend" id="donutLegend"></div>
@@ -564,7 +565,8 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
     </section>
 
     <section id="pace" class="card" style="display:none">
-      <h2 style="margin-top:0">Spend pace</h2>
+      <h2 style="margin-top:0">Spend pace · this cycle</h2>
+      <p class="note" id="paceRange" style="margin:0 0 8px"></p>
       <div class="pace" id="paceBox"></div>
       <p class="note" id="paceNote" style="margin:10px 0 0"></p>
     </section>

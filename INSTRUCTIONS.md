@@ -6,6 +6,22 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-22 — "i want the stats in the ledger tab to consolidate records per cycle, not per month"
+Status: **done**
+Progress: 100% — completed 2026-09-22; released as v72.52 (gates all green via tools/release.ps1 v72.52 — both check_site copies + test_chat_parser + node syntax + both smokes; the new v7252 smoke section drives the real renderDonut/renderPace on the DOM stubs: in-cycle spend moves the donut total by exactly 1000 while a prior-cycle 500 does NOT, the cycle's salary cash_in adds no slice, both headings carry the cycle date range, the pace reads "Spent · this cycle" + "Avg / day (N of Md)" over the cycle length, and the previous-cycle comparison delta moves by +500 with the prior-cycle txn)
+### Interpretation (agent)
+The Ledger tab's two stat cards bucket records by CALENDAR month (`todayISO().slice(0,7)`): the donut ("This month · by category", `renderDonut`) and the Spend pace card (`renderPace`). Both should consolidate per SALARY CYCLE — the v72.45 window anchored on `salary_day` (default the 15th) via the existing `cycleWindow`/`currentCycleMonth` helpers — so a record dated the 28th lands in the cycle that started the 15th, not the next calendar month.
+Plan (dot v72.52, one push):
+1. **Donut** — filter by current cycle window (`w.start ≤ date ≤ min(w.end, today)`), reuse `spendOf`; heading → "This cycle · by category" + a small date-range note; empty-state logic unchanged.
+2. **Spend pace** — drive it from `cycleDataFor(currentCycleMonth(...))` (spent/elapsed/pace already computed there, salary cash_in already excluded): Spent · this cycle, Avg/day (N of M days), Projected · M days + a previous-cycle comparison line (data already in `prev`). Keep the free-cash note (it's a snapshot fact, not a month bucket).
+3. **Cat-pace anomalies** in the pace note stay calendar-month (they're a Home insight reused here) — flag to Boss if he wants those on a cycle basis too.
+4. "Your expenses" list stays a full ledger (history view) — no cycle filter; flag if he wants a cycle-only view.
+5. Smoke: extend the existing ledger smoke to assert a txn dated in the prior calendar month but inside the current cycle window counts in the donut/pace totals; gates via `tools\release.ps1 v72.52`.
+### Subtasks
+- [x] plan delivered
+- [x] implementation + smoke (renderDonut filters by the cycle window via cycleDataFor; renderPace driven from cycleDataFor — spent/elapsed/pace/days + previous-cycle comparison; cycleLabelFor date-range notes under both headings; SHELL_NOTES '72.52'; check_site structural check + element ids)
+- [x] gates green + push + close entry
+
 ## 2026-09-21 02:0x — "fix this bug: when ipf, 'total' of 1000 and 'theirs' is 200, my part is not wirtten in ledger"
 Status: **done**
 Progress: 100% — completed 2026-09-21 02:4x; fix released as v72.51, commit `039af70` pushed to origin/main (live 02:48, SW cache `finances-pwa-v72.51`, GATES all green via tools/release.ps1 v72.51 — both check_site copies + test_chat_parser + node syntax + both smokes, all 13 v72.51 smoke checks PASS incl. the user's exact case; live app.js + sw.js verified via live_check_v7251.js: 9/9 PASS)

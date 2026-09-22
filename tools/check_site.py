@@ -174,7 +174,7 @@ def main():
               "impBtn", "impFile", "snack", "swToast", "swReload",
               "hero", "heroFree", "heroSub", "sparkBox", "digBody", "coachActs",
               "coachNote", "coachNoteBody", "coachNoteSub", "coachNoteRefresh",
-              "donut", "donutSvg", "donutLegend", "pace", "paceBox", "paceNote",
+              "donut", "donutSvg", "donutLegend", "donutRange", "pace", "paceBox", "paceNote", "paceRange",
               "p_repeat", "expJson", "expCsv",
               "moneyLog", "mlBody", "mlFilter", "txnCard",
               "tab-owed", "owedForm", "owedName", "owedBody", "owedSum",
@@ -346,6 +346,18 @@ def main():
           and "var ipfMine = Number(e.mine) || (e.dir === 'ipf' && e.total && Number(e.total) > (Number(e.amt) || 0) ? r2(e.total - (Number(e.amt) || 0)) : 0);" in js
           and "var preIpFMine = (preDir === 'ipf') ? (Number(ee.mine) || (ee.total && Number(ee.total) > (Number(ee.amt) || 0) ? r2(ee.total - (Number(ee.amt) || 0)) : 0)) : 0;" in js
           and "'72.51': [" in js)
+    check("v72.52 (user: 'i want the stats in the ledger tab to consolidate records per cycle, not per month'): the Ledger tab's two stat cards bucket by the CURRENT SALARY CYCLE (the v72.45 window anchored on the salary_day) instead of the calendar month — a record dated the 1st lands in the cycle that started on the 15th, and the cycle's own salary cash_in is excluded from the spend (the v72.45 rule, via cycleDataFor's received id). The donut filters txns by the cycle window (w.start..min(w.end, today)) and the pace card is driven straight from cycleDataFor (spent/elapsed/pace/days + the previous-cycle comparison line); both headings carry the cycle's date range (cycleLabelFor) and the pace reads 'Spent · this cycle' / 'Avg / day (N of Md)'. The cat-pace anomalies stay calendar-month (a Home insight) and the expenses list stays the full ledger",
+          "function cycleLabelFor(w) {" in js
+          and "if (d < w.start || d > hi) return; // v72.52: the cycle window, not the calendar month" in js
+          and "if (cd.received && t.id && t.id === cd.received.id) return; // the cycle's salary is income, not spend (the v72.45 rule)" in js
+          and "var cd = cycleDataFor(currentCycleMonth(b, todayISO()), b);" in js
+          and "'<div class=\"p\"><div class=\"k\">Spent · this cycle</div><div class=\"v\">' + money(spent) + '</div></div>'" in js
+          and "Avg / day (' + elapsed + ' of ' + dim + 'd)</div><div class=\"v\">' + money(daily)" in js
+          and "note.innerHTML += '<div class=\"pace-anom\"><span' + (diff > 0 ? ' class=\"low\"' : '') + '>' +" in js
+          and "vs last cycle (" in js
+          and 'id="donutRange"' in html and 'id="paceRange"' in html
+          and 'This cycle · by category' in html
+          and "'72.52': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",
