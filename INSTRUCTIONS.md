@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-22 — "add a loading screen for fin.ai" (design C: coach + status ticker)
-Status: **in progress**
-Progress: 0% — plan: `#boot` overlay in index.html (Coach Fin's face + "Coach Fin" + cycling status line + indeterminate bar, z-index 50, real palette, from the approved mockup C); app.js: `hideBoot()` fades it out (`.off` class + stops the ticker) called on BOTH init() paths (IDB success + catch) + a 4s safety timer so a stuck load never blocks the UI; SHELL_NOTES '72.53'; smoke v7253Section (stub `#boot`/`#bootStatus`, drive the real bootTicker/hideBoot: fresh boot starts at the greeting, the line cycles, hideBoot fades + stops); check_site v72.53 structural check; README note; gates via `tools/release.ps1 v72.53`
+Status: **done**
+Progress: 100% — completed 2026-09-22; released as v72.53, commit `b337ce0` pushed to origin/main (live 22:59, SW cache `finances-pwa-v72.53`, GATES all green via tools/release.ps1 v72.53 — both check_site copies + test_chat_parser + node syntax + both smokes; the new v7253 smoke section drives the real bootTicker/hideBoot: fresh boot visible, the status line cycles, hideBoot fades + is idempotent + stops the ticker; live site verified via live_check_v7253.js (9/9 PASS) + a headless screenshot of the LIVE page caught the splash mid-boot, then the app rendered with the v72.53 footer + What's-new note) — plan: `#boot` overlay in index.html (Coach Fin's face + "Coach Fin" + cycling status line + indeterminate bar, z-index 50, real palette, from the approved mockup C); app.js: `hideBoot()` fades it out (`.off` class + stops the ticker) called on BOTH init() paths (IDB success + catch) + a 4s safety timer so a stuck load never blocks the UI; SHELL_NOTES '72.53'; smoke v7253Section (stub `#boot`/`#bootStatus`, drive the real bootTicker/hideBoot: fresh boot starts at the greeting, the line cycles, hideBoot fades + stops); check_site v72.53 structural check; README note; gates via `tools/release.ps1 v72.53`
 ### Interpretation (agent)
 The app boots straight into the tab UI — nothing signals the IndexedDB load is in flight. Add the approved design C boot splash: Coach Fin's face (the existing `#botFace` symbol), the name, a cycling status line ("waking up…" → "counting your numbers…" → "almost there…") and an indeterminate bar (honest — no fake percentages; `init()` reports no progress). It fades out when the first render lands; a safety timer guarantees it can never trap the user.
 ### Subtasks
@@ -16,7 +16,7 @@ The app boots straight into the tab UI — nothing signals the IndexedDB load is
 - [x] index.html: `#boot` overlay + CSS (z-index 50, above every sheet/dialog; the `#botFace` symbol is defined later in the body but resolves fine — same mechanism as the existing coachFab/coachOv uses)
 - [x] app.js: hideBoot + bootTicker + FinApp bridge + init hooks (ticker start + 4s safety timer + hideBoot on BOTH IDB paths) + SHELL_NOTES '72.53'
 - [x] smoke v7253Section (stub `#boot`/`#bootStatus`, drive the real bootTicker/hideBoot: fresh boot visible, line cycles, fade + idempotent + ticker stops) + check_site v72.53 structural check + README Boot section
-- [ ] gates green + push + close entry
+- [x] gates green + push (b337ce0) + live verified (live_check_v7253.js 9/9 + headless screenshot of the live page: splash mid-boot, then the app with the v72.53 footer + What's-new note)
 
 ## 2026-09-22 — "i want the stats in the ledger tab to consolidate records per cycle, not per month"
 Status: **done**
