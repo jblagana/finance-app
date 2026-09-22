@@ -989,9 +989,11 @@
     state.txns = state.txns.filter(function (x) { return x.id !== id; });
     addAdj(txnAdj(t), -1);
     logMoney('del', t);
+    syncTombAdd('t', id); // v73.3: the deletion syncs (tombstone; Undo clears it)
     return Promise.all([idbDel(STORE_TX, id), saveAdj()]).then(function () {
       emit('txn');
       snack('Deleted ' + money(t.amount) + ' · ' + esc(t.category || t.account), function () {
+        syncTombRemove('t', id); // the record is back — the tombstone goes
         state.txns.push(t);
         addAdj(txnAdj(t), 1);
         logMoney('add', t);
@@ -1025,6 +1027,9 @@
     if (t) {
       state.txns = state.txns.filter(function (x) { return x.id !== tid; });
       addAdj(txnAdj(t), -1);
+      // v73.3: the deletion syncs (Undo clears the tombstone). keepInStore =
+      // the EDIT path (the row is re-logged under the same id) — not a delete.
+      if (!keepInStore) syncTombAdd('t', tid);
     }
     state.moneyLog = log.filter(function (e) { return !(e && e.tid === tid); });
     idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
@@ -1063,6 +1068,7 @@
     r.persist.then(function () {
       emit('txn');
       snack('Deleted ' + (r.t ? money(r.t.amount) + ' · ' + esc(r.t.category || r.t.account) : 'entry'), function () {
+        syncTombRemove('t', tid); // the row is back — the tombstone goes
         restoreTxnRow(r);
       });
     });
@@ -2967,6 +2973,148 @@
     }
     body.innerHTML = html;
   }
+  // ---------- v73.3: gist sync — the crypto + merge, as PURE exported fns ----------
+  // The data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256
+  // (passphrase, random salt, 150k iters)) before it touches the network;
+  // GitHub only ever sees the ciphertext file. The envelope:
+  //   { v: 1, salt: b64, iv: b64, data: b64 }
+  // Merge rule (pull): per record, newest timestamp wins (txn.created,
+  // plan.created, owed entry.d, base.edited) — a tie keeps the LOCAL record
+  // (the phone in your hand is the source of truth); records only the other
+  // side has are added; nothing is silently overwritten.
+  var SYNC_KEY = 'fin.sync.v1'; // gist url + token (the passphrase is NEVER stored)
+  var SYNC_TOMB_KEY = 'fin.sync.tomb.v1'; // recent deletions { id, at } — so a delete syncs
+  var TOMB_CAP = 500;
+  function syncTombRead() {
+    try { return JSON.parse(localStorage.getItem(SYNC_TOMB_KEY) || '[]') || []; } catch (e) { return []; }
+  }
+  function syncTombAdd(kind, id) {
+    if (!id) return;
+    var t = syncTombRead().filter(function (x) { return !(x.k === kind && x.id === id); });
+    t.push({ k: kind, id: id, at: new Date().toISOString() });
+    try { localStorage.setItem(SYNC_TOMB_KEY, JSON.stringify(t.slice(-TOMB_CAP))); } catch (e) {}
+  }
+  function syncTombRemove(kind, id) {
+    if (!id) return;
+    var t = syncTombRead().filter(function (x) { return !(x.k === kind && x.id === id); });
+    try { localStorage.setItem(SYNC_TOMB_KEY, JSON.stringify(t)); } catch (e) {}
+  }
+  function b64(buf) {
+    var bytes = new Uint8Array(buf), s = '';
+    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s);
+  }
+  function unb64(s) {
+    var bin = atob(s), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
+  function syncDeriveKey(passphrase, saltBuf) {
+    // Node (the smoke) has no WebCrypto — reject cleanly; the real page
+    // (secure context) always has it. (window === global in the smoke.)
+    if (!window.crypto || !window.crypto.subtle) return Promise.reject(new Error('no WebCrypto'));
+    return window.crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey'])
+      .then(function (km) {
+        return window.crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt: saltBuf, iterations: 150000, hash: 'SHA-256' },
+          km, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+      });
+  }
+  function syncEncrypt(obj, passphrase) {
+    var salt = window.crypto.getRandomValues(new Uint8Array(16));
+    var iv = window.crypto.getRandomValues(new Uint8Array(12));
+    return syncDeriveKey(passphrase, salt.buffer)
+      .then(function (key) {
+        return window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key,
+          new TextEncoder().encode(JSON.stringify(obj)));
+      })
+      .then(function (ct) {
+        return { v: 1, salt: b64(salt), iv: b64(iv), data: b64(ct) };
+      });
+  }
+  function syncDecrypt(env, passphrase) {
+    var salt = new Uint8Array(unb64(env.salt));
+    var iv = new Uint8Array(unb64(env.iv));
+    return syncDeriveKey(passphrase, salt.buffer)
+      .then(function (key) {
+        return window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, unb64(env.data));
+      })
+      .then(function (pt) {
+        return JSON.parse(new TextDecoder().decode(pt));
+      });
+  }
+  // the merge — pure (the smoke drives it). local/remote = the synced shapes
+  // { base, txns, plans, owed, moneyLog, removedTxn, removedPlan }; returns
+  // the merged shape. Rule: per record, newest timestamp wins; a TIE keeps
+  // LOCAL (the phone in your hand is the source of truth); records only the
+  // other side has are added; a record in the other side's removed* tombstone
+  // list is dropped (deletions sync, nothing is silently overwritten).
+  function syncMerge(local, remote) {
+    function ts(v, f) { return (v && v[f]) ? String(v[f]) : ''; }
+    function inList(list, id) {
+      return (list || []).some(function (x) { return (x && x.id === id) || x === id; });
+    }
+    function mergeById(arrA, arrB, removedB, field) {
+      var out = [];
+      (arrA || []).forEach(function (r) {
+        if (r && r.id && !inList(removedB, r.id)) out.push(r);
+      });
+      (arrB || []).forEach(function (r) {
+        if (!r || !r.id) return;
+        var i = -1;
+        for (var j = 0; j < out.length; j++) if (out[j].id === r.id) { i = j; break; }
+        if (i < 0) out.push(r); // only the remote has it -> add
+        else if (ts(r, field) > ts(out[i], field)) out[i] = r; // remote is newer -> replace
+        // tie / local newer -> keep local (the phone in your hand wins)
+      });
+      return out;
+    }
+    // moneyLog is the audit trail — rows have no id, so it merges as a whole
+    // by its newest row's `at` (the newest-wins rule at the collection level;
+    // the trail is append-only, so the newer phone holds the longer one).
+    function newestAt(arr) {
+      var m = 0;
+      (arr || []).forEach(function (r) { if (r && (r.at || 0) > m) m = r.at || 0; });
+      return m;
+    }
+    var lAt = newestAt(local && local.moneyLog), rAt = newestAt(remote && remote.moneyLog);
+    var b = (remote && remote.base && ts(remote.base, 'edited') > ts(local && local.base, 'edited'))
+      ? remote.base : (local && local.base);
+    return {
+      base: b,
+      txns: mergeById(local && local.txns, remote && remote.txns, remote && remote.removedTxn, 'created'),
+      plans: mergeById(local && local.plans, remote && remote.plans, remote && remote.removedPlan, 'created'),
+      owed: (remote && remote.owed && ts(remote.owed, 'edited') > ts(local && local.owed, 'edited'))
+        ? remote.owed : (local && local.owed || { people: [] }),
+      moneyLog: rAt >= lAt ? (remote && remote.moneyLog || []) : (local && local.moneyLog || [])
+    };
+  }
+  // the goal's PACE, as a pure fn (the smoke drives it). The required
+  // ₱/month is (goal − funded) / months-left; the current rate is the fund's
+  // this-month plan. On pace when the rate covers the requirement; behind
+  // by the monthly shortfall. No deadline / already funded = no pace.
+  function goalPace(f, month) {
+    var goal = Number(f.goal) || 0, funded = Number(f.funded) || 0;
+    var dl = String(f.deadline || '').slice(0, 7);
+    if (goal <= 0 || funded >= goal || !/^\d{4}-\d{2}$/.test(dl) || !month) return { status: 'none' };
+    var pp = dl.split('-'), qq = String(month).split('-');
+    var monthsLeft = (Number(pp[0]) - Number(qq[0])) * 12 + (Number(pp[1]) - Number(qq[1]));
+    if (monthsLeft < 1) monthsLeft = 1;
+    var needed = r2((goal - funded) / monthsLeft);
+    var rate = Number(f.this_month) || 0;
+    if (rate >= needed - 0.004) return { status: 'on pace', needed: needed, rate: rate, monthsLeft: monthsLeft };
+    return { status: 'behind', needed: needed, rate: rate, monthsLeft: monthsLeft, shortfall: r2(needed - rate) };
+  }
+  function ringSVG(pct) {
+    // v73.3: the progress RING (replaces the flat bar) — 44px, 4px stroke
+    var R = 16, C = 2 * Math.PI * R;
+    var off = C * (1 - Math.min(100, Math.max(0, pct)) / 100);
+    return '<svg class="sink-ring" width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">' +
+      '<circle cx="22" cy="22" r="' + R + '" fill="none" stroke="var(--line)" stroke-width="4"/>' +
+      '<circle cx="22" cy="22" r="' + R + '" fill="none" stroke="#37d39b" stroke-width="4" stroke-linecap="round" ' +
+      'stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + off.toFixed(1) + '" transform="rotate(-90 22 22)"/>' +
+      '<text x="22" y="26" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">' + pct + '%</text></svg>';
+  }
   function renderSinking() {
     var wrap = byId('sinking'), body = byId('sinkBody');
     if (!wrap || !body) return;
@@ -2974,13 +3122,20 @@
     var funds = s && s.sinking;
     if (!funds || !funds.length) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
+    var month = s.month || '';
     var html = '<h2 style="margin-top:0">Sinking funds</h2>';
     funds.forEach(function (f) {
       var pct = Number(f.goal) > 0 ? Math.min(100, Math.round((Number(f.funded) || 0) / Number(f.goal) * 100)) : 0;
-      html += '<div class="ins-block" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><div class="ins-t">' + esc(f.name) +
+      var pace = goalPace(f, month); // v73.3: on pace / behind by ₱X
+      var paceLine = '';
+      if (pace.status === 'on pace') paceLine = '<div class="kv"><span class="k">on pace</span><b style="color:#37d39b">' + money(pace.rate) + '/mo clears it in ' + pace.monthsLeft + ' mo</b></div>';
+      else if (pace.status === 'behind') paceLine = '<div class="kv"><span class="k">behind</span><b style="color:var(--bad)">' + money(pace.shortfall) + '/mo short of ' + money(pace.needed) + '</b></div>';
+      html += '<div class="ins-block sink-row" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><div class="sink-flex">' +
+        ringSVG(pct) +
+        '<div style="flex:1;min-width:0"><div class="ins-t">' + esc(f.name) +
         ' <span style="color:var(--mut);font-weight:400">· by ' + esc(f.deadline ? fmtDate(f.deadline) : '—') + '</span></div>' +
-        '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
-        '<div class="kv" style="border-top:0"><span class="k">funded ' + pct + '%</span><b>' + money(f.funded || 0) + ' of ' + money(f.goal || 0) + '</b></div>';
+        '<div class="kv" style="border-top:0"><span class="k">funded ' + pct + '%</span><b>' + money(f.funded || 0) + ' of ' + money(f.goal || 0) + '</b></div>' +
+        paceLine + '</div></div>';
       if (Number(f.this_month) > 0) html += '<div class="kv"><span class="k">this month</span><b>' + money(f.this_month) + '</b></div>';
       var parts = [];
       (f.payments || []).forEach(function (p) { parts.push(monthLabel(p.month) + ' ' + fmtNum(p.amount)); });
@@ -3601,9 +3756,11 @@
     for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === id) p = state.plans[i];
     if (!p) return Promise.resolve();
     state.plans = state.plans.filter(function (x) { return x.id !== id; });
+    syncTombAdd('p', id); // v73.3: the deletion syncs (Undo clears the tombstone)
     return idbDel(STORE_PLANS, id).then(function () {
       emit('plan');
       snack('Removed plan ' + esc(p.name), function () {
+        syncTombRemove('p', id); // the plan is back — the tombstone goes
         state.plans.push(p);
         idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
       });
@@ -4996,6 +5153,133 @@
       render();
     });
   }
+  // ---------- v73.3: gist sync — the network side (DOM-bound, in init) ----------
+  // The gist API: GET /gists/:id returns { files: { <name>: { raw_url } } };
+  // POST /gists (new) or POST /gists/:id (update) with { description, files }.
+  // The file holds ONLY the encrypted envelope — GitHub never sees the data.
+  var SYNC_FILE = 'finances-sync.enc.json';
+  function syncReadCreds() {
+    try {
+      var c = JSON.parse(localStorage.getItem(SYNC_KEY) || 'null') || {};
+      return { url: String(c.url || ''), token: String(c.token || '') };
+    } catch (e) { return { url: '', token: '' }; }
+  }
+  function syncSetCreds(url, token) {
+    try { localStorage.setItem(SYNC_KEY, JSON.stringify({ url: url, token: token })); } catch (e) {}
+  }
+  function syncGistId(url) {
+    var m = String(url || '').match(/gist\.github\.com\/(?:[^/]+\/)?([A-Za-z0-9]+)/);
+    return m ? m[1] : null;
+  }
+  function syncNote(msg, bad) {
+    var el = byId('syncNote');
+    if (el) { el.textContent = msg; el.style.color = bad ? 'var(--bad)' : 'var(--mut)'; }
+  }
+  function syncPush() {
+    var url = (byId('syncUrl').value || '').trim();
+    var token = (byId('syncToken').value || '').trim();
+    var pass = byId('syncPass').value || '';
+    if (!url || !token || !pass) { syncNote('Fill the gist URL, token and passphrase first.', true); return; }
+    if (!window.crypto || !crypto.subtle) { syncNote('Encryption needs a secure context (https or localhost).', true); return; }
+    var gid = syncGistId(url);
+    if (!gid) { syncNote('That does not look like a gist URL (gist.github.com/…).', true); return; }
+    syncNote('Encrypting…');
+    // v73.3: deletions sync as tombstones — the ids deleted on THIS phone
+    // (and no longer present) ride the push, so a pull on the other side
+    // drops them too. A record restored by Undo is back in state, so it is
+    // excluded here (and its tombstone was removed).
+    var tombs = syncTombRead();
+    var liveT = {}, liveP = {};
+    state.txns.forEach(function (t) { liveT[t.id] = true; });
+    state.plans.forEach(function (p) { liveP[p.id] = true; });
+    var removedTxn = tombs.filter(function (x) { return x.k === 't' && !liveT[x.id]; }).map(function (x) { return x.id; });
+    var removedPlan = tombs.filter(function (x) { return x.k === 'p' && !liveP[x.id]; }).map(function (x) { return x.id; });
+    var obj = { app: 'finances-pwa', syncedAt: new Date().toISOString(),
+      base: state.base, txns: state.txns, plans: state.plans,
+      owed: state.owed, moneyLog: state.moneyLog,
+      removedTxn: removedTxn, removedPlan: removedPlan };
+    syncEncrypt(obj, pass).then(function (env) {
+      var body = { description: 'Fin.AI encrypted sync (v1)', files: {} };
+      body.files[SYNC_FILE] = { content: JSON.stringify(env) };
+      var req = { method: 'POST', headers: {
+        'Authorization': 'token ' + token, 'Accept': 'application/vnd.github+json'
+      }, body: JSON.stringify(body) };
+      return fetch(gid ? 'https://api.github.com/gists/' + gid : 'https://api.github.com/gists', req)
+        .then(function (r) {
+          if (!r.ok) return r.text().then(function (t) { throw new Error('GitHub ' + r.status + ': ' + t.slice(0, 140)); });
+          return r.json();
+        });
+    }).then(function (g) {
+      syncSetCreds(url, token);
+      var newUrl = (g && g.html_url) ? g.html_url : url;
+      if (byId('syncUrl')) byId('syncUrl').value = newUrl;
+      syncNote('Pushed — ' + state.txns.length + ' entries, ' + state.plans.length + ' plans. Ciphertext only; the passphrase never left this phone.');
+    })['catch'](function (e) {
+      syncNote('Push failed: ' + (e && e.message ? e.message : e), true);
+    });
+  }
+  function syncPull() {
+    var url = (byId('syncUrl').value || '').trim();
+    var token = (byId('syncToken').value || '').trim();
+    var pass = byId('syncPass').value || '';
+    if (!url || !token || !pass) { syncNote('Fill the gist URL, token and passphrase first.', true); return; }
+    var gid = syncGistId(url);
+    if (!gid) { syncNote('That does not look like a gist URL (gist.github.com/…).', true); return; }
+    syncNote('Fetching…');
+    fetch('https://api.github.com/gists/' + gid, {
+      headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github+json' }
+    }).then(function (r) {
+      if (!r.ok) return r.text().then(function (t) { throw new Error('GitHub ' + r.status + ': ' + t.slice(0, 140)); });
+      return r.json();
+    }).then(function (g) {
+      var f = g && g.files && g.files[SYNC_FILE];
+      if (!f) { throw new Error('no ' + SYNC_FILE + ' in that gist — push from this phone first'); }
+      var rawUrl = f.raw_url;
+      return fetch(rawUrl, { headers: { 'Authorization': 'token ' + token } })
+        .then(function (r) { return r.json(); });
+    }).then(function (env) {
+      syncNote('Decrypting…');
+      // the decrypt stage is the only failure left after a successful fetch —
+      // WebCrypto's rejection is a generic "Operation error", so name it
+      return syncDecrypt(env, pass).then(null, function (e) {
+        throw new Error('could not decrypt — wrong passphrase?');
+      }).then(function (remote) {
+        // v73.3: the merge — per record, newest wins; a tie keeps LOCAL.
+        // (The design wall the plan warned about: the rule is timestamp
+        //  comparison per record, and it is what the smoke pins below.)
+        var local = { base: state.base, txns: state.txns, plans: state.plans,
+          owed: state.owed, moneyLog: state.moneyLog };
+        var merged = syncMerge(local, remote);
+        var prev = { base: cloneObj(state.base || defaultBase()), txns: cloneObj(state.txns || []),
+          plans: cloneObj(state.plans || []), owed: cloneObj(state.owed || { people: [], sort: 'recent' }),
+          moneyLog: cloneObj(state.moneyLog || []) };
+        var puts = [];
+        // delete what the merge dropped (tombstoned on the other side)
+        var keepT = {}, keepP = {};
+        (merged.txns || []).forEach(function (t) { keepT[t.id] = true; });
+        (merged.plans || []).forEach(function (p) { keepP[p.id] = true; });
+        state.txns.forEach(function (t) { if (!keepT[t.id]) puts.push(idbDel(STORE_TX, t.id)); });
+        state.plans.forEach(function (p) { if (!keepP[p.id]) puts.push(idbDel(STORE_PLANS, p.id)); });
+        (merged.txns || []).forEach(function (t) { puts.push(idbPut(STORE_TX, t)); });
+        (merged.plans || []).forEach(function (p) { puts.push(idbPut(STORE_PLANS, p)); });
+        state.txns = merged.txns || [];
+        state.plans = merged.plans || [];
+        state.owed = merged.owed || { people: [] };
+        state.moneyLog = merged.moneyLog || [];
+        if (merged.base) state.base = migrateBaseKinds(merged.base);
+        return Promise.all(puts).then(function () {
+          refreshLocalSnapshot();
+          return Promise.all([persistSnapshot(), saveAdj(), saveOwed(),
+            idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {})]);
+        }).then(function () {
+          render();
+          syncNote('Pulled + merged — ' + state.txns.length + ' entries, ' + state.plans.length + ' plans now on this phone. Newest record won every conflict; ties kept this phone.');
+        });
+      });
+    })['catch'](function (e) {
+      syncNote('Pull failed: ' + (e && e.message ? e.message : e), true);
+    });
+  }
   function importData(file) {
     var fr = new FileReader();
     fr.onload = function () {
@@ -5117,12 +5401,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.2, live: new Date(2026, 8, 23, 3, 27) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.3, live: new Date(2026, 8, 23, 4, 5) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.3': [
+      'Sinking funds now show a progress RING and a pace line — "on pace" when your monthly plan clears the goal by the deadline, "behind by ₱X/mo" when it does not',
+      'SYNC through your own GitHub gist: your numbers are encrypted on this phone (AES-GCM, key from your passphrase) before they leave — GitHub only ever sees ciphertext. Push uploads, pull downloads + merges (per record, newest wins; a tie keeps the phone in your hand; deletions sync too). The passphrase is never stored and never sent'
+    ],
     '73.2': [
       'Home now opens with your MONEY PULSE — last month in one card (in vs out, your top 3 spends, one line from the coach), and tapping it opens the full recap',
       'The recap lets you PIN A LESSON ("cut food delivery") and it resurfaces in next month\'s recap — you will hear yourself say it',
@@ -5908,6 +6196,10 @@
     planOccurrences: planOccurrences, // v73.1: the occurrence math (weekly/annual)
     coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut)
     insightsData: insightsData, // v73.2: the insight math (coachRows' input)
+    goalPace: goalPace, // v73.3: the goal pace (pure — the smoke drives it)
+    syncEncrypt: syncEncrypt, // v73.3: the envelope (the smoke round-trips it)
+    syncDecrypt: syncDecrypt, // v73.3: decrypt the envelope (the smoke round-trips it)
+    syncMerge: syncMerge, // v73.3: the merge rule (pure — the smoke drives it)
     recapData: recapData, // v73.2: the money-pulse math (pure — the smoke drives it)
     pinLesson: pinLesson, // v73.2: the pinned lesson (the smoke drives it)
     readLesson: readLesson, // v73.2: read the pinned lesson (the smoke drives it)
@@ -6180,6 +6472,13 @@
       renderRecap();
       snack(t ? 'Lesson pinned — it shows in next month\'s recap' : 'Lesson unpinned', function () { renderRecap(); });
     };
+    // v73.3: gist sync — the creds prefill from the stored url+token (the
+    // passphrase is never stored); push/pull are the two buttons
+    var sc0 = syncReadCreds();
+    var su = byId('syncUrl'); if (su && sc0.url) su.value = sc0.url;
+    var st = byId('syncToken'); if (st && sc0.token) st.value = sc0.token;
+    var sp = byId('syncPush'); if (sp) sp.onclick = syncPush;
+    var sl = byId('syncPull'); if (sl) sl.onclick = syncPull;
     var ac = byId('addClose');
     if (ac) ac.onclick = closeSheets;
     var scb = byId('setClose');

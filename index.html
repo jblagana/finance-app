@@ -920,6 +920,24 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
         <input id="impFile" type="file" accept="application/json,.json" style="display:none">
       </div>
     </section>
+    <section class="card" style="margin-top:16px">
+      <h2 style="margin-top:0">Sync (your own GitHub gist)</h2>
+      <p class="note" style="margin:4px 0 10px">Move your numbers to another phone through a PRIVATE gist — the data is encrypted on this phone (AES-GCM, key from your passphrase) before it ever leaves; GitHub only ever sees ciphertext. Push uploads, pull downloads + merges (per record, newest wins — nothing is silently overwritten). You need a GitHub account + a gist token (fine-grained, "Gists: read &amp; write").</p>
+      <label style="font-size:12px;color:var(--mut);font-weight:600" for="syncUrl">Gist URL</label>
+      <input type="url" id="syncUrl" inputmode="url" placeholder="https://gist.github.com/YOU/abc123" autocomplete="off" spellcheck="false"
+        style="width:100%;font-size:12.5px;padding:8px;margin:4px 0 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
+      <label style="font-size:12px;color:var(--mut);font-weight:600" for="syncToken">Gist token</label>
+      <input type="password" id="syncToken" inputmode="text" placeholder="github_pat_…" autocomplete="off" spellcheck="false"
+        style="width:100%;font-size:12.5px;padding:8px;margin:4px 0 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
+      <label style="font-size:12px;color:var(--mut);font-weight:600" for="syncPass">Passphrase (never stored, never sent)</label>
+      <input type="password" id="syncPass" inputmode="text" placeholder="the lock for the ciphertext" autocomplete="off" spellcheck="false"
+        style="width:100%;font-size:12.5px;padding:8px;margin:4px 0 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
+      <div class="row">
+        <div><button class="act" id="syncPush" type="button">Push (upload)</button></div>
+        <div><button class="act ghost" id="syncPull" type="button">Pull (download + merge)</button></div>
+      </div>
+      <p id="syncNote" class="note" style="margin:10px 0 0" aria-live="polite"></p>
+    </section>
     <section class="card" style="margin-top:16px" id="wnSec">
       <h2 style="margin-top:0" id="wnTitle">What's new</h2>
       <ul id="wnList" style="margin:6px 0 0;padding-left:18px;font-size:13.5px;line-height:1.5"></ul>

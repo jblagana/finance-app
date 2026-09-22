@@ -442,6 +442,22 @@ def main():
           and "if (u > 70) return; // the mood carries it" in js
           and "dd >= 0 && dd <= 14" in js
           and "'73.2': [" in js)
+    check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
+          "function goalPace(f, month) {" in js
+          and "function ringSVG(pct) {" in js
+          and 'class="sink-ring"' in js
+          and "function syncEncrypt(obj, passphrase) {" in js
+          and "function syncDecrypt(env, passphrase) {" in js
+          and "function syncMerge(local, remote) {" in js
+          and "function syncPush() {" in js and "function syncPull() {" in js
+          and "iterations: 150000, hash: 'SHA-256'" in js
+          and "goalPace: goalPace" in js and "syncMerge: syncMerge" in js
+          and "syncEncrypt: syncEncrypt" in js and "syncDecrypt: syncDecrypt" in js
+          and 'id="syncUrl"' in html and 'id="syncToken"' in html and 'id="syncPass"' in html
+          and 'id="syncPush"' in html and 'id="syncPull"' in html
+          and "syncTombAdd('t', id)" in js and "syncTombAdd('p', id)" in js
+          and "SYNC_FILE" in js
+          and "'73.3': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",
