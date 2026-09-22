@@ -584,10 +584,15 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
           </div>
         </div>
       </div>
-      <label class="chk" for="p_repeat">
-        <input type="checkbox" id="p_repeat">
-        <span>Every month (recurring — shown 3 months ahead)</span>
-      </label>
+      <!-- v73.1: the repeat became a select (once / monthly / weekly / annual) —
+           the recurring engine, not just a monthly checkbox -->
+      <label for="p_repeat">Repeats</label>
+      <select id="p_repeat">
+        <option value="once" selected>Once</option>
+        <option value="monthly">Every month</option>
+        <option value="weekly">Every week</option>
+        <option value="annual">Every year</option>
+      </select>
       <div style="margin-top:14px">
         <button class="act" type="submit">Add plan</button>
       </div>
@@ -739,12 +744,18 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
         <button type="button" id="addModeSpend" class="amb on">Spend</button>
         <button type="button" id="addModePrepay" class="amb">Pay card</button>
       </div>
-      <label for="f_amount" style="margin-top:6px">Amount (₱)</label>
-      <input id="f_amount" type="text" placeholder="0.00, or a quick sum like 300-125+10">
+      <div class="row" style="margin-top:6px">
+        <div>
+          <label for="f_amount">Amount (₱)</label>
+          <input id="f_amount" type="text" placeholder="0.00, or a quick sum like 300-125+10">
+        </div>
+        <div>
+          <label for="f_category">Category</label>
+          <select id="f_category"><option value="" selected>Unsorted</option></select>
+        </div>
+      </div>
       <p id="amtEq" class="amtEq" style="display:none"></p>
       <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
-      <label for="f_category">Category</label>
-      <select id="f_category"><option value="" selected>Unsorted</option></select>
       <div class="row">
         <div>
           <label for="f_account">Paid with</label>
