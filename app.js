@@ -33,13 +33,14 @@
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
   var RENDER_BY_KEY = {
-    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote],
-    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote],
+    // v73.0: renderMood on every data key — the face is the status light
+    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood],
+    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote, renderMood],
     // v72.30: a base save can file 'Adjustment' ledger rows — the Ledger tab follows
-    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog],
-    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote],
+    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood],
+    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote, renderMood],
     owed: [renderOwed],
-    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote]
+    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -2852,6 +2853,58 @@
     })['catch'](function () { el.style.display = 'none'; });
   }
 
+  // ---------- v73.0: Coach Fin's mood — the face IS the status ----------
+  // neutral (default) / worried (a card over 70% of its limit, or the
+  // current salary cycle projected to end negative) / happy (a brief flash
+  // on a good moment — salary logged, card prepaid). The mood groups live
+  // INSIDE the #botFace symbol (like the v72.56 SMIL dart): JS flips
+  // display on the symbol's light-DOM children and the <use> shadow clones
+  // live-sync, so the coach note, chat avatar and FAB all change together.
+  var MOOD = 'neutral';
+  var moodFlashUntil = 0, moodFlashTimer = null;
+  function readUtilMax() {
+    var s = effectiveSnap();
+    var m = 0;
+    (s && s.cards || []).forEach(function (c) {
+      var u = Number(c.util_pct);
+      if (isFinite(u) && u > m) m = u;
+    });
+    return m;
+  }
+  function computeMood() {
+    if (Date.now() < moodFlashUntil) return 'happy';
+    if (readUtilMax() > 70) return 'worried';
+    var c = cycleData();
+    if (c && c.projectedNet < 0) return 'worried';
+    return 'neutral';
+  }
+  function renderMood(force) {
+    var m = force || computeMood();
+    if (m !== MOOD) {
+      MOOD = m;
+      var sym = document.querySelector('#botFace');
+      if (sym) {
+        var w = sym.querySelector('.mood-worried');
+        var h = sym.querySelector('.mood-happy');
+        if (w) w.setAttribute('display', m === 'worried' ? '' : 'none');
+        if (h) h.setAttribute('display', m === 'happy' ? '' : 'none');
+      }
+    }
+    // re-arm the happy reversion: when the flash expires, recompute so the
+    // face drops back to its real state without waiting for the next render
+    if (m === 'happy') {
+      if (moodFlashTimer) clearTimeout(moodFlashTimer);
+      moodFlashTimer = setTimeout(function () { moodFlashTimer = null; renderMood(); },
+        Math.max(0, moodFlashUntil - Date.now()) + 50);
+    }
+  }
+  function setMood(m) { // smoke-driven: force a mood (no flash expiry)
+    renderMood(m === 'worried' ? 'worried' : (m === 'happy' ? 'happy' : 'neutral'));
+  }
+  function happyMoodFlash(ms) {
+    moodFlashUntil = Date.now() + (ms || 1800);
+    renderMood();
+  }
   function renderHero() {
     var el = byId('hero'); if (!el) return;
     var s = effectiveSnap();
@@ -2861,6 +2914,8 @@
     var hv = byId('heroFree');
     if (hv) {
       hv.className = 'hero-v' + (free < 0 ? ' bad' : '');
+      // v73.0: count up from the PREVIOUS value (the hero's own last number,
+      // not a fresh-from-zero on every render) — the number moves, it doesn't reload
       countUp(hv, heroVal == null ? free : heroVal, free, function (v) { return money(v); });
     }
     heroVal = free;
@@ -2966,6 +3021,12 @@
         '<text x="' + (W - PR - 2) + '" y="' + (fy - 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="#ffc45c">floor ' + fmtNum(floor) + '</text>';
     }
     svg += '<circle cx="' + X(0).toFixed(1) + '" cy="' + Y(pts[0].v).toFixed(1) + '" r="3.2" fill="#37d39b" stroke="#0f1420" stroke-width="1.5"/>';
+    // v73.0: the TODAY marker — the start point is "now" (asOf) and the rest
+    // are month-ends, so today sits ON the first point; mark it with a halo
+    // so "where am I" is readable at a glance. (When the as-of predates
+    // today, the point IS today's live number — same spot.)
+    var t0x = X(0).toFixed(1), t0y = Y(pts[0].v).toFixed(1);
+    svg += '<circle class="spark-today" cx="' + t0x + '" cy="' + t0y + '" r="6.5" fill="rgba(55,211,155,.28)" stroke="none"/>';
     // v72.41 (user: 'write the x axis ticks as end of month, e.g. 30 Sep, 31 Oct, etc'):
     // EVERY tick is a date — the month points sit on the last day of their month
     // (the plotted value is that month-end projection), so the axis reads
@@ -4838,12 +4899,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.56, live: new Date(2026, 8, 23, 0, 35) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.0, live: new Date(2026, 8, 23, 1, 55) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.0': [
+      'Coach Fin now has a mood — his face (the note, the chat, the corner button) goes worried when a card is over 70% of its limit or your month is projected to end in the red, and he flashes a smile when you log your salary or prepay a card',
+      'Your free-cash number now counts up from where it was instead of reloading from zero, and the cash graph marks today with a little halo'
+    ],
     '72.56': [
       'Coach Fin now looks around everywhere, not just on the loading screen — the little face in your coach note, the chat, and the button in the corner all have moving eyes (and he goes still if your phone asks for reduced motion)'
     ],
@@ -5600,9 +5665,18 @@
     owedSplit: owedSplit, // v72.49: the mine/theirs/total split (smoke drives the table)
     shellNotesFor: shellNotesFor, // v72.29: the What's-new notes for a version (smoke drives it)
     addSheetKind: addSheetKind, // v72.41: the Add-sheet kind decision (smoke drives it — the submit is DOM-bound)
-    shellVersion: SHELL_RELEASE.v, // v72.38: the running shell dot (smoke drives the What's-new fallback check)
+    // v72.38: the running shell dot (smoke drives the What's-new fallback
+    // check). v73.0: the dot SURVIVES — 73.0 is a whole number, so String()
+    // prints "73" while the SHELL_NOTES key is "73.0"; re-append a dropped
+    // ".0" (72.56-style dots are untouched).
+    shellVersion: (function () { var s = String(SHELL_RELEASE.v); return s.indexOf('.') < 0 ? s + '.0' : s; })(),
     hideBoot: hideBoot, // v72.53: the boot-splash fade (smoke drives the real path)
     bootTicker: bootTicker, // v72.53: the status-line cycle (smoke drives it)
+    renderMood: renderMood, // v73.0: the coach's mood (smoke drives it)
+    setMood: setMood, // v73.0: force a mood (smoke drives it)
+    computeMood: computeMood, // v73.0: the mood decision (smoke drives it)
+    happyMoodFlash: happyMoodFlash, // v73.0: the good-moment smile (smoke drives it)
+    render: render, // v73.0: the full re-render (the smoke reads the sparkline after)
     bootNow: function () { return Date.now() - bootT0; }, // v72.54: ms since boot (smoke pins the clock)
     owedShown: owedShown, // v72.30: the per-person See more/less page (smoke drives the paging render)
     getBase: function () { return state.base; }, // v72.30: the current base (smoke reads account values for the override test)
@@ -5781,6 +5855,9 @@
       var editId = editingTxn ? editingTxn.id : null;
       var done = editId ? saveTxnEdit(editId, payload) : addTxn(payload);
       done.then(function () {
+        // v73.0: the good moments — salary in, card prepaid — Coach Fin
+        // smiles for a beat (the flash reverts to the real mood on its own)
+        if (!editId && (kind === 'cash_in' || kind === 'card_payment')) happyMoodFlash(1800);
         if (editId) exitTxnEdit();
         byId('f_amount').value = '';
         byId('f_category').value = '';

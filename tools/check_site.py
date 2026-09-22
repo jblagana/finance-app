@@ -188,16 +188,16 @@ def main():
           html.index("app.js") < html.index("chat.js") < html.index("ai.js"))
 
     print("\n== PWA shell (offline app, online coach) ==")
-    check("sw.js cache is v72 (dot releases v72.x per subtask)",
-          "finances-pwa-v72" in sw and "finances-pwa-v71" not in sw)
+    check("sw.js cache is v73 (dot releases v73.x per subtask)",
+          "finances-pwa-v73" in sw and "finances-pwa-v72" not in sw)
     check("sw.js handles SKIP_WAITING", "'SKIP_WAITING'" in sw)
     check("shell cache holds the app scripts + manifest + icons (no model files)",
           "'./app.js'" in sw and "'./chat.js'" in sw and "'./ai.js'" in sw
           and "'./manifest.webmanifest'" in sw and "'./favicon.png'" in sw)
     check("sw.js: non-GET and cross-origin (coach) calls stay network-only",
           "url.origin !== self.location.origin" in sw and "req.method !== 'GET'" in sw)
-    check("footer stamp: brand + shell v72 + live date/time, one source for both footers",
-          "var SHELL_RELEASE = { v: 72" in js and "function shellStamp" in js
+    check("footer stamp: brand + shell v73 + live date/time, one source for both footers",
+          "var SHELL_RELEASE = { v: 73" in js and "function shellStamp" in js
           and "'Fin.AI · shell v'" in js and 'id="setFoot"' in html
           and "byId('setFoot')" in js)
     check("service worker registration wired (page or app.js)",
@@ -398,6 +398,22 @@ def main():
           and "document.querySelector('#botFace animateTransform')" in js
           and "if (sym) sym.parentNode.removeChild(sym);" in js
           and "'72.56': [" in js)
+    check("v73.0 (user: 'do all them' — the major upgrade, release 1 of 4): Coach Fin has a MOOD — worried brows + happy closed-eye arcs live inside the #botFace symbol (display:none by default); renderMood() flips display on the symbol's light-DOM children so the <use> shadow clones live-sync (all three in-app faces change together); the mood is decided by computeMood() (a card over 70% of its limit, or the current salary cycle projected to end negative -> worried; a good moment — salary logged / card prepaid — flashes happy for a beat); renderMood rides every RENDER_BY_KEY data key; the hero free-cash number counts up from its PREVIOUS value and the sparkline marks today with a halo",
+          '<g class="mood-worried" style="display:none">' in html
+          and '<g class="mood-happy" style="display:none">' in html
+          and html.split('id="botFace"', 1)[1].split('</symbol>', 1)[0].count('mood-worried') == 1
+          and html.split('id="botFace"', 1)[1].split('</symbol>', 1)[0].count('mood-happy') == 1
+          and "function computeMood() {" in js
+          and "function renderMood(force) {" in js
+          and "function happyMoodFlash(ms) {" in js
+          and "w.setAttribute('display', m === 'worried' ? '' : 'none')" in js
+          and "h.setAttribute('display', m === 'happy' ? '' : 'none')" in js
+          and "if (readUtilMax() > 70) return 'worried';" in js
+          and "if (c && c.projectedNet < 0) return 'worried';" in js
+          and js.count("renderMood]") == 5  # txn, plan, snap, adj, ui — every data key
+          and "if (!editId && (kind === 'cash_in' || kind === 'card_payment')) happyMoodFlash(1800);" in js
+          and 'class="spark-today"' in js
+          and "'73.0': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",
@@ -514,8 +530,8 @@ def main():
     check("add-sheet options = base budget names; Unsorted default when none",
           "Object.keys((state.base && state.base.budgets) || {})" in js
           and "'>Unsorted</option>" in js and "selected>Unsorted</option>" in html)
-    check("re-seeded automatically when the base changes (snap render list; v72.30: renderMoneyLog follows — a base save can file 'Adjustment' rows)",
-          "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog]" in js)
+    check("re-seeded automatically when the base changes (snap render list; v72.30: renderMoneyLog follows — a base save can file 'Adjustment' rows; v73.0: renderMood rides the same key)",
+          "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood]" in js)
     check("chat matches only stored budget names: no hint list, no 'Other' fallback",
           "function mentionedBudget(t, ctx)" in chatjs
           and "cat: mentionedBudget(t, ctx)" in chatjs
@@ -855,7 +871,7 @@ def main():
           and "mlShownCount = Math.max(5, mlShownCount - 5);" in js
           and "names.push('Owed')" not in js
           and "prevTxn.category || 'Unsorted'" in js
-          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog]" in js)
+          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood]" in js)  # v73.0: renderMood rides the snap key
     check("v72.31 (user: 'add x button in ledger for adjustment, it undoes the record in settings'): an Adjustment row (k='a') carries its own ✕ (data-adj-del = the row's moneyLog index) — it confirms, removes the audit record, and reverses the balance change it filed: the account's Settings value moves by the NEGATIVE of the row's signed diff through the base save with Adjustment-filing SUPPRESSED (deleting an audit record must not file a new one); the account gone from Settings → the row is simply deleted; the toast Undo restores row + value",
           "function findAdjAccount(name)" in js
           and "function askDeleteAdjustment(idx)" in js

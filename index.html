@@ -690,6 +690,18 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
     <circle cx="21" cy="38.5" r="2" fill="#f2a2b4"/>
     <circle cx="43" cy="38.5" r="2" fill="#f2a2b4"/>
     <path d="M27.5 40.5q4.5 3.5 9 0" stroke="#37d39b" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    <!-- v73.0: the mood groups — worried brows + happy closed-eye arcs. JS
+         (renderMood) flips display on these light-DOM children of the
+         symbol; the <use> shadow clones live-sync, so all three in-app
+         faces (coach note, chat avatar, FAB) change mood together. -->
+    <g class="mood-worried" style="display:none">
+      <path d="M20.5 24.5l9 2.6" stroke="#16233d" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+      <path d="M45.5 24.5l-9 2.6" stroke="#16233d" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+    </g>
+    <g class="mood-happy" style="display:none">
+      <path d="M20.8 34.4q5.2-6.4 10.4 0" stroke="#16233d" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+      <path d="M32.8 34.4q5.2-6.4 10.4 0" stroke="#16233d" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+    </g>
   </symbol>
 </svg>
 <div id="coachOv" role="dialog" aria-label="Coach chat">
