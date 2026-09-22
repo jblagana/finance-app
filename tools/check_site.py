@@ -389,6 +389,15 @@ def main():
           and "#boot .bface svg .beyes{animation:none}" in html  # the reduced-motion kill
           and html.split('id="boot"', 1)[1].split('<div id="topbar"', 1)[0].count('cx="27.2"') == 1  # the inline face carries the real pupil geometry
           and html.split('id="boot"', 1)[1].split('<div id="topbar"', 1)[0].count('cx="39.2"') == 1)
+    check("v72.56 (user: 'can we add that moving eyes in all icons of coach fin inside the app?'): the darting eyes live INSIDE the #botFace symbol (SMIL animateTransform — page CSS can't reach a <use> shadow tree, but SMIL is cloned into every instance), so the coach note avatar, chat avatar and FAB all dart on the same 3.4s cadence as the splash; SMIL can't honor prefers-reduced-motion natively, so init() strips the animateTransform from the symbol (the shadow trees live-sync, so all instances go still)",
+          html.count('<use href="#botFace"/>') == 3  # the three in-app faces
+          and "<g class=\"beyes\">" in html.split('id="botFace"', 1)[1].split('</symbol>', 1)[0]
+          and "animateTransform" in html.split('id="botFace"', 1)[1].split('</symbol>', 1)[0]
+          and 'dur="3.4s"' in html.split('id="botFace"', 1)[1].split('</symbol>', 1)[0]
+          and "matchMedia('(prefers-reduced-motion: reduce)').matches" in js
+          and "document.querySelector('#botFace animateTransform')" in js
+          and "if (sym) sym.parentNode.removeChild(sym);" in js
+          and "'72.56': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",

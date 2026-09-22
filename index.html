@@ -675,10 +675,18 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
     <rect x="16" y="21" width="32" height="26" rx="10" fill="#101828"/>
     <circle cx="26" cy="32" r="5" fill="#cdd9f2"/>
     <circle cx="38" cy="32" r="5" fill="#cdd9f2"/>
-    <circle cx="27.2" cy="33.4" r="2.3" fill="#16233d"/>
-    <circle cx="39.2" cy="33.4" r="2.3" fill="#16233d"/>
-    <circle cx="28.4" cy="30.6" r="1.1" fill="#ffffff"/>
-    <circle cx="40.4" cy="30.6" r="1.1" fill="#ffffff"/>
+    <!-- v72.56: darting eyes live INSIDE the symbol — SMIL is cloned into
+         every <use> shadow tree (page CSS can't reach them), so the coach
+         note avatar, chat avatar and FAB all look around on the same 3.4s
+         cadence as the splash. prefers-reduced-motion strips this node
+         from app.js (SMIL doesn't honor the media query natively). -->
+    <g class="beyes">
+      <circle cx="27.2" cy="33.4" r="2.3" fill="#16233d"/>
+      <circle cx="39.2" cy="33.4" r="2.3" fill="#16233d"/>
+      <circle cx="28.4" cy="30.6" r="1.1" fill="#ffffff"/>
+      <circle cx="40.4" cy="30.6" r="1.1" fill="#ffffff"/>
+      <animateTransform attributeName="transform" attributeType="XML" type="translate" values="0 0; 2.4 0; -2.4 0; 1.6 1.6; -1.4 1; 0 0" keyTimes="0;0.22;0.44;0.66;0.82;1" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"/>
+    </g>
     <circle cx="21" cy="38.5" r="2" fill="#f2a2b4"/>
     <circle cx="43" cy="38.5" r="2" fill="#f2a2b4"/>
     <path d="M27.5 40.5q4.5 3.5 9 0" stroke="#37d39b" stroke-width="2.4" fill="none" stroke-linecap="round"/>

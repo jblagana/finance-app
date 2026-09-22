@@ -19,6 +19,14 @@ finishes in ~100 ms, so the coach gets 3 s to say hi before the fade; the
 eye-darting stops when the fade lands and under reduced-motion; a 4-second
 safety timer guarantees it can never trap you).
 
+The darting eyes also live on every in-app Coach Fin face (coach note,
+chat header, the floating button): the `animateTransform` sits **inside**
+the `#botFace` symbol, so SMIL is cloned into each `<use>` shadow tree and
+all instances animate on the same 3.4 s cadence. SMIL can't honor
+`prefers-reduced-motion` natively, so `init()` strips the node from the
+symbol when the media query matches (the shadow trees live-sync with their
+source, so all instances go still).
+
 ## Tabs
 - **Home** — time-of-day greeting with your name ("Good morning, Jan!" —
   "Hooman" until you set one) + date, free/unallocated cash with a 6-month
@@ -117,7 +125,7 @@ it: `npx wrangler deploy`.)
 - **Backup** (Settings → Backup): Export JSON (everything) / Export CSV (ledger
   only) / Import JSON to restore.
 - Both footers show the shell version + when this build went live. Releases
-  bump the SW cache (`finances-pwa-v72.55`) and the `SHELL_RELEASE` stamp in
+  bump the SW cache (`finances-pwa-v72.56`) and the `SHELL_RELEASE` stamp in
   `app.js` together — the "New version ready" toast offers a one-tap reload.
   If the app ever looks stale: open the Pages URL once in Safari, then
   relaunch the home-screen icon.

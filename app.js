@@ -4838,12 +4838,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.55, live: new Date(2026, 8, 22, 23, 35) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.56, live: new Date(2026, 8, 23, 0, 27) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.56': [
+      'Coach Fin now looks around everywhere, not just on the loading screen — the little face in your coach note, the chat, and the button in the corner all have moving eyes (and he goes still if your phone asks for reduced motion)'
+    ],
     '72.55': [
       'The loading screen now lingers for 3 seconds and Coach Fin looks around while you wait — his eyes dart about during the splash (and he opens the app rarely enough that 3 seconds of coach is worth it)'
     ],
@@ -5712,6 +5715,17 @@
   function init() {
     // v72.53: the splash starts cycling now (it is already visible from the
     // HTML) and a safety timer guarantees a stuck load can never trap the UI.
+    // v72.56: prefers-reduced-motion — SMIL (the #botFace darting eyes) can't
+    // honor the media query natively, so strip the animateTransform from the
+    // symbol; the <use> shadow trees live-sync with their source, so all
+    // instances (coach note, chat avatar, FAB) go still. The splash's CSS
+    // animation is already gated by a @media rule in index.html.
+    try {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        var sym = document.querySelector('#botFace animateTransform');
+        if (sym) sym.parentNode.removeChild(sym);
+      }
+    } catch (e) {}
     bootTicker();
     setTimeout(hideBoot, 4000);
     renderGreet();
