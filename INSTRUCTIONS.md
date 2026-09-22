@@ -6,6 +6,10 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-22 — "what if i make it 3 seconds" + "can we make coach fins eyes move during boot"
+Status: **in progress**
+Progress: 0% — logged 2026-09-22. Interpretation: (1) the splash floor goes 1s → 3s (user opens the app only a few times a day, so the extra 2s of coach time is worth it); (2) Coach Fin's pupils dart around during the splash — CSS-only, splash-scoped, stops when the fade lands. Plan: `BOOT_MIN_MS = 3000`, SHELL_NOTES '72.55', inline boot-face SVG (darting pupil groups) + `#boot.off` stops the animation, check_site v72.55 structural check, smoke v7253Section floor assertions on the 3s number, release v72.55, live check + screenshot, push + close.
+
 ## 2026-09-22 — "how bout 1sec" (the loading screen shows for a split second on a warm boot)
 Status: **done**
 Progress: 100% — completed 2026-09-22; released as v72.54, commit `b50fbae` pushed to origin/main (live 23:19, SW cache `finances-pwa-v72.54`, GATES all green via tools/release.ps1 v72.54 — both check_site copies + test_chat_parser + node syntax + both smokes; the v7253 smoke section now pins the clock to bootT0 via the new `bootNow()` bridge so the fast-boot path is deterministic: hideBoot holds (no .off), the second call stays a no-op, then after the 1s floor .off lands exactly once; live site verified via live_check_v7254.js 5/5 PASS after the Pages deploy lag + a headless screenshot of the LIVE page caught the splash mid-boot (Coach Fin + "waking up…" + bar) — plan: `hideBoot()` schedules the `.off` fade at `max(0, BOOT_MIN_MS - elapsed)` with `BOOT_MIN_MS = 1000` (a warm boot finishes in ~100 ms, so the splash was a flicker, not a greeting; the floor only extends, never shortens, so slow boots are unaffected); the face pulse + bar keep animating via CSS during the hold while the status line freezes on its current word (reads as "settling", not "stuck"); the 4s safety timer is untouched; SHELL_NOTES '72.54'; README Boot section; check_site v72.54 structural check

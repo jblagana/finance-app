@@ -4838,12 +4838,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 72.54, live: new Date(2026, 8, 22, 23, 19) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 72.55, live: new Date(2026, 8, 22, 23, 35) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '72.55': [
+      'The loading screen now lingers for 3 seconds and Coach Fin looks around while you wait — his eyes dart about during the splash (and he opens the app rarely enough that 3 seconds of coach is worth it)'
+    ],
     '72.54': [
       'The loading screen now stays for a full second before fading — a warm boot finishes so fast the splash used to be a flicker, now Coach Fin actually gets to say hi'
     ],
@@ -5665,14 +5668,15 @@
   var bootGone = false;
   var bootTimer = null;
   var bootT0 = Date.now();
-  var BOOT_MIN_MS = 1000; // v72.54: the coach gets 1s to say hi (a warm boot finishes in ~100ms — without a floor the splash was a flicker, not a greeting)
+  var BOOT_MIN_MS = 3000; // v72.55: the coach gets 3s to say hi (user: 'what if i make it 3 seconds, i only ever open it a few times a day' — the extra 2s of coach time is worth it at that open frequency; the floor only extends, never shortens, so slow boots are still unaffected)
   function hideBoot() {
     if (bootGone) return;
     bootGone = true;
     if (bootTimer) { clearInterval(bootTimer); bootTimer = null; }
-    // v72.54: minimum display time — the fade waits out the 1s floor (the
-    // face pulse + bar keep animating via CSS during it; the status line
-    // freezes on its current word, which reads as "settling", not "stuck").
+    // v72.54 (v72.55: floor raised to 3s): minimum display time — the fade
+    // waits out the BOOT_MIN_MS floor (the face + darting eyes + bar keep
+    // animating via CSS during it; the status line freezes on its current
+    // word, which reads as "settling", not "stuck").
     var wait = Math.max(0, BOOT_MIN_MS - (Date.now() - bootT0));
     setTimeout(function () {
       var b = byId('boot');

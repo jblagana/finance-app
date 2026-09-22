@@ -360,14 +360,14 @@ def main():
           and "'72.52': [" in js)
     check("v72.53 (user: 'add a loading screen for fin.ai' — design C, coach + status ticker): the #boot overlay (Coach Fin's face via the #botFace symbol + name + cycling status line + INDETERMINATE bar — no fake percentages) is static HTML shown by default; hideBoot() fades it (.off class) when the first render lands on BOTH init() paths (IDB success + catch) and stops the ticker; a 4s safety timer in init() guarantees a stuck load can never trap the UI",
           'id="boot"' in html and 'id="bootStatus"' in html
-          and '<use href="#botFace"/>' in html.split('id="boot"', 1)[1].split('<div id="topbar"', 1)[0]
+          and ('<use href="#botFace"/>' in html.split('id="boot"', 1)[1].split('<div id="topbar"', 1)[0]
+               or 'class="beyes"' in html.split('id="boot"', 1)[1].split('<div id="topbar"', 1)[0])  # v72.55: the face went inline so the pupils can dart
           and "waking up…" in html
           and "#boot.off{opacity:0;pointer-events:none}" in html
           and "animation:bootslide 1.1s ease-in-out infinite" in html
           and "function hideBoot() {" in js
           and "if (b) b.classList.add('off');" in js
-          and "var BOOT_MIN_MS = 1000;" in js
-          and "BOOT_MIN_MS - (Date.now() - bootT0)" in js
+          and "BOOT_MIN_MS - (Date.now() - bootT0)" in js  # the value itself is pinned by the v72.54/v72.55 checks
           and "function bootTicker() {" in js
           and "'waking up\\u2026', 'counting your numbers\\u2026', 'almost there\\u2026'" in js
           and "bootTicker();" in js and "setTimeout(hideBoot, 4000);" in js
@@ -375,10 +375,20 @@ def main():
           and "hideBoot(); // v72.53: even a failed load must not trap the user on the splash" in js
           and "hideBoot: hideBoot" in js and "bootTicker: bootTicker" in js
           and "'72.53': [" in js)
-    check("v72.54 (user: 'how bout 1sec' — the splash was a flicker on a warm boot): hideBoot holds the overlay for a 1s minimum display time (BOOT_MIN_MS) before the fade, so a fast boot still shows the coach; slow boots are unaffected (the floor only extends, never shortens)",
+    check("v72.54 (user: 'how bout 1sec' — the splash was a flicker on a warm boot): hideBoot holds the overlay for a minimum display time (BOOT_MIN_MS) before the fade, so a fast boot still shows the coach; slow boots are unaffected (the floor only extends, never shortens)",
           "var bootT0 = Date.now();" in js
           and "'72.54': [" in js
           and "bootNow: function () { return Date.now() - bootT0; }" in js)
+    check("v72.55 (user: 'what if i make it 3 seconds, i only ever open it a few times a day tho? and can we make coach fins eyes move during boot'): the splash floor goes 1s -> 3s (BOOT_MIN_MS) and Coach Fin's pupils dart around during the splash — the splash face is an INLINE copy of #botFace (a <use> shadow tree can't be animated from here) with the two pupils in one .beyes group on a CSS keyframe loop that STOPS on the .off fade (and under prefers-reduced-motion)",
+          "var BOOT_MIN_MS = 3000;" in js
+          and "'72.55': [" in js
+          and "class=\"beyes\"" in html
+          and "#boot .bface svg .beyes{animation:bootlook 3.4s ease-in-out infinite}" in html
+          and "#boot.off .bface svg .beyes{animation:none}" in html
+          and "@keyframes bootlook{" in html
+          and "#boot .bface svg .beyes{animation:none}" in html  # the reduced-motion kill
+          and html.split('id="boot"', 1)[1].split('<div id="topbar"', 1)[0].count('cx="27.2"') == 1  # the inline face carries the real pupil geometry
+          and html.split('id="boot"', 1)[1].split('<div id="topbar"', 1)[0].count('cx="39.2"') == 1)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",
