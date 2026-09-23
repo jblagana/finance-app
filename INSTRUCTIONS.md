@@ -7,8 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-23 — "it does in the browser, not in pwa in phone" (the add-expense rows stack on small screens)
-Status: **open**
-Progress: in flight — the layout edit is in (below); release + live check + log close pending
+Status: **done** — v73.4 shipped (commits `d2682c8` + the 10:06 live re-stamp, pushed to origin/main `76ad73f`, live 10:06, SW cache `finances-pwa-v73.4`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.4 (both check_site copies + test_chat_parser + node syntax + both smokes; the first run was RED only on the v72.29 "future fallback must be the newest note" smoke — fixed by adding the SHELL_NOTES '73.4' entry, re-run green) + live_check_v734.js 13/13 on jblagana.github.io (the rowpair CSS + all 3 rows, plus the v73.0–v73.3/v72.55/v72.56 markers still in)
 
 ### Interpretation (agent)
 The v72.5x edit (`db31405`) put Amount+Category and Paid with+Date into `.row`
