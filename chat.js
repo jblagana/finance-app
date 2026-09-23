@@ -1611,6 +1611,15 @@
     var ppList = (e.cards || []).filter(function (c) { return (Number(c.prepay) || 0) > 0; })
       .map(function (c) { return c.name + ' ' + money(c.prepay); }).join(', ');
     L.push('- cards owed ' + money(e.card_owed || 0) + ', prepay on the ' + ordinal(e.prepay_day || 14) + ': ' + money(e.total_prepay || 0) + (ppList ? ' (' + ppList + ')' : ''));
+    // v73.6: the CC DUE (the 5th) — the statement window's charges minus the
+    // prepays in it (spending until the cutoff, minus what was already paid).
+    // The coach can now answer "how much is due on the 5th" with the number.
+    if (typeof F.ccDue === 'function') {
+      var du6 = F.ccDue();
+      if (du6) {
+        L.push('- cc due on the ' + ordinal(du6.due_day) + ' (' + (du6.dueIn <= 0 ? 'today' : du6.dueIn + 'd from now') + '): ' + money(du6.due) + ' — ' + money(du6.charges) + ' charged since the ' + du6.windowStart + ' cutoff, ' + money(du6.prepays) + ' already prepaid');
+      }
+    }
     // exact stored names, so a remote draft can name an existing
     // account/budget instead of inventing one.
     var sn = storyNames(ctx);

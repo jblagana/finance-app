@@ -442,7 +442,7 @@
       v: 1, name: '', as_of: todayISO(),
       salary: 0, salary_overrides: {},
       salary_day: 15, // v72.45: the day the salary lands — the salary cycle starts on it
-      prepay_day: 14, cutoff_day: 15, card_util_target: 0.099,
+      prepay_day: 14, cutoff_day: 15, due_day: 5, card_util_target: 0.099, // v73.6: the due day (the 5th) — the bill is due on it
       liquidity_floor: 0,
       accounts: [], budgets: {}, budget_overrides: {},
       one_offs: {}, debts: {}, sinking: {},
@@ -684,6 +684,7 @@
       months: months,
       prepay_day: Number(b.prepay_day) || 14,
       cutoff_day: Number(b.cutoff_day) || 15,
+      due_day: Number(b.due_day) || 5, // v73.6: the card bill is due on this day
       display_name: String(b.name || '').trim(),
       salary: Number(b.salary) || 0,
       floor: Number(b.liquidity_floor) || 0,
@@ -1732,6 +1733,7 @@
     h += brow('<span class="bnote">liquidity floor</span><input class="grow" id="b_floor" type="text" value="' + (b.liquidity_floor || '') + '">');
     h += brow('<span class="bnote">cc prepay day</span><input class="grow" id="b_pday" type="text" value="' + (b.prepay_day || 14) + '">' +
       '<span class="bnote">cutoff</span><input class="grow" id="b_cday" type="text" value="' + (b.cutoff_day || 15) + '">');
+    h += brow('<span class="bnote">cc due day</span><input class="grow" id="b_dday" type="text" value="' + (b.due_day || 5) + '" title="the day of the month the card bill is due — the due amount is the charges since the last cutoff minus the prepays logged in that window">');
     h += brow('<span class="bnote">salary day</span><input class="grow" id="b_sday" type="text" value="' + (b.salary_day || b.cutoff_day || 15) + '" title="the day of the month your salary lands — the salary cycle starts on it">');
     h += brow('<span class="bnote">card target util</span><input class="grow" id="b_util" type="text" value="' + (b.card_util_target || '') + '" title="0.099 = just under 10%">');
     var salRows = '';
@@ -1833,8 +1835,10 @@
     var pd = Math.round(numVal(byId('b_pday'), true)); // v71: quick sums here too (10+4 -> 14)
     var cd = Math.round(numVal(byId('b_cday'), true));
     var sd = Math.round(numVal(byId('b_sday'), true)); // v72.45: the salary day (the cycle anchor)
+    var dd = Math.round(numVal(byId('b_dday'), true)); // v73.6: the cc due day (the 5th)
     b.prepay_day = pd > 0 ? pd : 14;
     b.cutoff_day = cd > 0 ? cd : 15;
+    b.due_day = dd > 0 ? dd : 5;
     b.salary_day = sd > 0 ? sd : (b.cutoff_day || 15);
     var ut = numVal(byId('b_util'), true);
     b.card_util_target = ut > 0 ? ut : 0.099;
@@ -2110,7 +2114,7 @@
     var liveMark = adjActive() ? ' · live' : '';
     html += tile('Free / unallocated', money(free), 'card backing' + liveMark, free < 0 ? 'bad' : 'good');
     html += tile('Cards owed', money(s.card_owed), (s.cards || []).length + ' card(s)' + liveMark);
-    html += tile(ordinal(s.prepay_day || 14) + ' prepay', money(s.total_prepay), 'due before the ' + (s.cutoff_day || 15) + liveMark, 'accent');
+    html += tile(ordinal(s.prepay_day || 14) + ' prepay', money(s.total_prepay), 'cutoff ' + (s.cutoff_day || 15) + ' · due ' + (s.due_day || 5) + liveMark, 'accent');
     el.innerHTML = '<div class="tiles">' + html + '</div>' + adjBar();
     var rb = byId('resetAdj');
     if (rb) rb.onclick = resetAdj;
@@ -2253,6 +2257,66 @@
     if (!state.base) return null;
     return cycleDataFor(currentCycleMonth(state.base, todayISO()), state.base);
   }
+  // ---------- v73.6: the CC due day (the 5th) ----------
+  // Boss's model: the bill is DUE on the due_day (the 5th) and equals the
+  // spending until the cutoff (the 15th) MINUS the prepays made in that
+  // window. So the statement window for the due date on day D of month M is
+  // (prevCutoff, cutoffOnOrBeforeD] — charges logged after the previous
+  // cutoff up to the cutoff that falls on or before the due date, minus the
+  // card_payment (prepay) entries in the same window. Ledger-derived, no new
+  // manual fields: the due amount is only as good as the logged charges.
+  // Pure (txns + base + today as args) so the smoke drives it with a seeded
+  // ledger; absent due_day = 5 (the default), older exports stay valid.
+  function ccDueData(txns, b, todayStr) {
+    var dd = Math.round(Number(b && b.due_day) || 5);
+    if (dd < 1 || dd > 28) dd = 5;
+    var cd = Math.round(Number(b && b.cutoff_day) || 15);
+    if (cd < 1 || cd > 28) cd = 15;
+    var today = String(todayStr || todayISO());
+    // Pure string/number date math — NO Date getters: parseISO yields UTC
+    // dates and this machine is UTC+8, so local getters would be off by a
+    // day (the v73.1 smoke failures are the same trap; the window math must
+    // be timezone-proof because it is the due AMOUNT).
+    function iso(y, m, day) { return y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day; }
+    function dim(y, m) { return new Date(y, m, 0).getDate(); } // m = 1..12 (calendar month)
+    function addM(y, m, k) { var t = (m - 1 + k) % 12; if (t < 0) t += 12; return { y: y + Math.floor((m - 1 + k) / 12), m: t + 1 }; }
+    var tp = today.split('-'), ty = Number(tp[0]), tm = Number(tp[1]), tday = Number(tp[2]);
+    // next due date on/after today
+    var dueDate = iso(ty, tm, dd);
+    if (dueDate < today) { var dn = addM(ty, tm, 1); dueDate = iso(dn.y, dn.m, dd); }
+    var dp = dueDate.split('-'), dy = Number(dp[0]), dm = Number(dp[1]), dday = Number(dp[2]);
+    var dueIn = Math.round((parseISO(dueDate) - parseISO(today)) / 86400000);
+    // the cutoff that falls on or before the due date (the 15th > the 5th,
+    // so that is the PREVIOUS month's cutoff; if the due day were after the
+    // cutoff it would be the due month's own cutoff)
+    var cutoffDate = dday >= cd ? iso(dy, dm, cd) : iso(addM(dy, dm, -1).y, addM(dy, dm, -1).m, cd);
+    // the previous cutoff (the window opens just after it): the cutoff month
+    // is the due month when dday >= cd, else the previous month — so the
+    // previous cutoff is one month before THAT.
+    var pc = dday >= cd ? addM(dy, dm, -1) : addM(dy, dm, -2);
+    var prevCutoffDate = iso(pc.y, pc.m, cd);
+    var charges = 0, prepays = 0, chargeCount = 0, prepayCount = 0;
+    (txns || []).forEach(function (t) {
+      var d = String(t.date || '');
+      if (d <= prevCutoffDate || d > cutoffDate) return;
+      var a = Number(t.amount) || 0;
+      if (a <= 0) return;
+      if (t.kind === 'card_charge') { charges += a; chargeCount++; }
+      else if (t.kind === 'card_payment') { prepays += a; prepayCount++; }
+    });
+    return {
+      due_day: dd, cutoff_day: cd,
+      dueDate: dueDate, dueIn: dueIn,
+      windowStart: prevCutoffDate, windowEnd: cutoffDate,
+      charges: r2(charges), prepays: r2(prepays),
+      due: r2(Math.max(0, charges - prepays)),
+      chargeCount: chargeCount, prepayCount: prepayCount
+    };
+  }
+  function ccDue() {
+    if (!state.base) return null;
+    return ccDueData(state.txns, state.base, todayISO());
+  }
   // v73.2: the MONEY PULSE — last calendar month in deterministic numbers
   // (pure fn: the smoke drives it with a seeded ledger). In = cash_in,
   // out = spend (the v72.44 rule: card_payment is not spend), by-category
@@ -2341,6 +2405,12 @@
     });
     if (d.prepayAmt > 0 && d.prepayIn >= 0 && d.prepayIn <= 14) {
       rows.push({ date: null, dd: d.prepayIn, label: 'Card prepay', amt: d.prepayAmt, kind: 'prepay' });
+    }
+    // v73.6: the CC DUE (the 5th) — the statement window's charges minus the
+    // prepays in it; the due amount is ledger-derived (only as good as the
+    // logged charges), so it shows whenever there is a due day and a window
+    if (d.ccDue) {
+      rows.push({ date: d.ccDue.dueDate, dd: d.ccDue.dueIn, label: 'CC due', amt: d.ccDue.due, kind: 'ccdue' });
     }
     rows.sort(function (a, b) { return a.dd - b.dd; });
     rows = rows.slice(0, 5);
@@ -2590,6 +2660,7 @@
       catPace: catPace.slice(0, 5), recurringGuess: recurringGuess.slice(0, 2), // v68 items 4–5
       goals: goals, lowestDip: lowestDip, // v68 items 6–7
       cycle: cycleData(), // v72.45: the salary cycle (the 15th) — hero + insights + coach + snapshot
+      ccDue: ccDue(), // v73.6: the cc due (the 5th) — charges since the last cutoff minus the prepays in that window
       freeAfterPace: r2(free - r2(pace * Math.max(0, daysLeft - 1)))
     };
   }
@@ -3233,6 +3304,14 @@
     if (readUtilMax() > 70) return 'worried';
     var c = cycleData();
     if (c && c.projectedNet < 0) return 'worried';
+    // v73.6: the cc due is a week out (or closer) and the remaining due
+    // (charges minus the prepays already logged) exceeds the free cash
+    var du = ccDue();
+    if (du && du.dueIn >= 0 && du.dueIn <= 7 && du.due > 0) {
+      var s0 = effectiveSnap();
+      var f0 = s0 && s0.cash ? s0.cash.free : 0;
+      if (du.due > f0) return 'worried';
+    }
     return 'neutral';
   }
   function renderMood(force) {
@@ -5406,12 +5485,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.5, live: new Date(2026, 8, 23, 10, 43) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.6, live: new Date(2026, 8, 24, 0, 35) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.6': [
+      'The app now knows your CC DUE (the 5th): the coming-due strip shows the due date with the amount — charges since the last cutoff minus the prepays you logged in that window — and the coach warns when it is a week out and more than your free cash (that is when his face goes worried)',
+      'Settings → Your numbers has a "cc due day" field (5 by default), and the prepay tile now reads cutoff 15 · due 5'
+    ],
     '73.5': [
       'Fixed the mood: Coach Fin actually shows it now (worried brows and the smile were coded but never rendered on a phone — the flip was writing to the wrong place)'
     ],
@@ -6220,6 +6303,7 @@
     askDeleteAdjustment: askDeleteAdjustment, // v72.31: the ✕ on an Adjustment row (smoke drives it; the stub has no confirm dialog → auto-yes)
     deleteAdjustment: deleteAdjustment, // v72.31: the undo itself (row out + the Settings value reversed, no new filing)
     saveBase: saveBase, // v72.31: a base save (smoke: remove the account for the gone-account path)
+    renderBaseEditor: renderBaseEditor, // v73.6: the base editor render (smoke: the cc due day input)
     delOwedEntry: delOwedEntry,
     delOwedPerson: delOwedPerson,
     effectiveSnap: effectiveSnap,
@@ -6249,6 +6333,8 @@
     expectedSalaryFor: expectedSalaryFor, // v72.45: the cycle's expected salary (override or base)
     cycleDataFor: cycleDataFor, // v72.45: the cycle math for a given cycle month (smoke drives it)
     cycleData: cycleData, // v72.45: the current cycle (chat.js snapshot + smoke)
+    ccDueData: ccDueData, // v73.6: the cc-due math (pure — the smoke drives it with a seeded ledger)
+    ccDue: ccDue, // v73.6: the current cc due (chat.js snapshot + smoke)
     merchantCatFor: merchantCatFor, // v68 item 1: learned merchant→category lookup for the coach
     effectiveMerchantMap: effectiveMerchantMap,
     coachAlerts: coachAlerts, // v68 item 9: alert-driven chat chips

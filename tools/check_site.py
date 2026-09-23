@@ -462,6 +462,18 @@ def main():
           and "syncTombAdd('t', id)" in js and "syncTombAdd('p', id)" in js
           and "SYNC_FILE" in js
           and "'73.3': [" in js)
+    check("v73.6 (user: 'my cc due is on oct 5 and its based on my spending until the 15th minus the prepay i made'): the CC DUE — the base gains due_day (5 by default; older bases fall back to it) + the Settings form's 'cc due day' input; ccDueData (PURE: txns + base + today) computes the due as the charges since the previous cutoff minus the prepays in the window (prevCutoff, cutoffOnOrBeforeDue] — string/number date math, NO Date getters (the UTC+8 local-getter trap); the coming-due strip gets the CC due row (date + amount, red when <= 2d); the prepay tile reads 'cutoff 15 · due 5'; computeMood goes worried when the due is a week out and exceeds the free cash; the coach snapshot carries the due line (charges/prepays breakdown)",
+          "due_day: 5, card_util_target: 0.099" in js
+          and 'id="b_dday"' in js and "b.due_day = dd > 0 ? dd : 5;" in js
+          and "function ccDueData(txns, b, todayStr) {" in js
+          and "function ccDue() {" in js
+          and "ccDueData: ccDueData" in js and "ccDue: ccDue" in js
+          and "due_day: Number(b.due_day) || 5" in js
+          and "label: 'CC due', amt: d.ccDue.due, kind: 'ccdue'" in js
+          and "cutoff ' + (s.cutoff_day || 15) + ' · due ' + (s.due_day || 5)" in js
+          and "du.due > f0) return 'worried';" in js
+          and "cc due on the ' + ordinal(du6.due_day)" in chatjs
+          and "'73.6': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",
