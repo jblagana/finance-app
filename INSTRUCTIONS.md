@@ -6,6 +6,27 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-23 — "im sure v73.0 not working in phone" (the coach mood never rendered)
+Status: **done** — v73.5 shipped (commit `ecbe09c`, pushed to origin/main, live 10:43, SW cache `finances-pwa-v73.5`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.5 (both check_site copies + test_chat_parser + node syntax + both smokes; the first run was RED on the v73.0 check_site pin — the pin asserted the OLD setAttribute flip, updated to pin the style.display flip in both repo + root mirror, re-run green) + mood_proof_v730.py GREEN 11/11 (rewritten to assert COMPUTED display, light DOM + the #coachFab shadow clone; FAB pixels move 1.53% worried / 2.00% happy) + live_check_v735.js 14/14 on jblagana.github.io + live_mood_proof_v735.py GREEN 8/8 on the LIVE site (footer reads shell v73.5, live FAB pixels move 0.94% / 1.02%, all 3 in-app faces flip together)
+
+### Interpretation (agent)
+The v73.0 mood groups (`<g class="mood-worried"/.mood-happy">` inside `#botFace`)
+carry an inline `style="display:none"`; renderMood flipped the SVG presentation
+attribute (`setAttribute('display', ...)`). Inline styles beat presentation
+attributes in the cascade, so the flip was a no-op and the face stayed neutral
+forever. The v73.0 local proof went green because it asserted the ATTRIBUTE
+(`w.getAttribute('display') === ''`), not the computed display — the exact wrong
+check. Fix: `w.style.display = ...` / `h.style.display = ...`.
+
+### Subtasks
+- [x] renderMood flips via style.display (app.js) + SHELL_NOTES '73.5'
+- [x] mood_proof_v730.py rewritten to assert getComputedStyle (light + shadow) — GREEN 11/11
+- [x] smoke_app_v68.js FACE_STUB gains style + the 3 mood asserts pin style.display
+- [x] check_site.py (repo + root mirror) pin the style.display flip
+- [x] tools/release.ps1 v73.5 (GATES green)
+- [x] commit + push, live_check_v735.js 14/14, live_mood_proof_v735.py GREEN 8/8
+
 ## 2026-09-23 — "it does in the browser, not in pwa in phone" (the add-expense rows stack on small screens)
 Status: **done** — v73.4 shipped (commits `d2682c8` + the 10:06 live re-stamp, pushed to origin/main `76ad73f`, live 10:06, SW cache `finances-pwa-v73.4`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.4 (both check_site copies + test_chat_parser + node syntax + both smokes; the first run was RED only on the v72.29 "future fallback must be the newest note" smoke — fixed by adding the SHELL_NOTES '73.4' entry, re-run green) + live_check_v734.js 13/13 on jblagana.github.io (the rowpair CSS + all 3 rows, plus the v73.0–v73.3/v72.55/v72.56 markers still in)
