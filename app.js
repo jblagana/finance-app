@@ -3243,8 +3243,13 @@
       if (sym) {
         var w = sym.querySelector('.mood-worried');
         var h = sym.querySelector('.mood-happy');
-        if (w) w.setAttribute('display', m === 'worried' ? '' : 'none');
-        if (h) h.setAttribute('display', m === 'happy' ? '' : 'none');
+        // v73.5: flip via style.display, NOT setAttribute('display', ...) —
+        // the groups carry an inline style="display:none" and inline styles
+        // beat the SVG presentation attribute in the cascade, so the attr
+        // flip was a no-op and the moods never rendered (v73.0 bug, caught
+        // on the phone: the face stayed neutral forever).
+        if (w) w.style.display = m === 'worried' ? '' : 'none';
+        if (h) h.style.display = m === 'happy' ? '' : 'none';
       }
     }
     // re-arm the happy reversion: when the flash expires, recompute so the
@@ -5401,12 +5406,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.4, live: new Date(2026, 8, 23, 10, 6) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.5, live: new Date(2026, 8, 23, 10, 43) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.5': [
+      'Fixed the mood: Coach Fin actually shows it now (worried brows and the smile were coded but never rendered on a phone — the flip was writing to the wrong place)'
+    ],
     '73.4': [
       'The Add expense sheet now fits your thumb: Amount and Category share one row, and Paid with and Date share the other — even on a small phone, they no longer stack'
     ],

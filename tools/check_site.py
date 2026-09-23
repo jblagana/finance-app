@@ -407,8 +407,12 @@ def main():
           and "function computeMood() {" in js
           and "function renderMood(force) {" in js
           and "function happyMoodFlash(ms) {" in js
-          and "w.setAttribute('display', m === 'worried' ? '' : 'none')" in js
-          and "h.setAttribute('display', m === 'happy' ? '' : 'none')" in js
+          # v73.5: the flip is via style.display, NOT setAttribute('display') —
+          # the groups carry an inline style="display:none" and inline styles
+          # beat the SVG presentation attribute in the cascade, so the attr
+          # flip (v73.0) was a no-op and the moods never rendered on a phone.
+          and "w.style.display = m === 'worried' ? '' : 'none'" in js
+          and "h.style.display = m === 'happy' ? '' : 'none'" in js
           and "if (readUtilMax() > 70) return 'worried';" in js
           and "if (c && c.projectedNet < 0) return 'worried';" in js
           and js.count("renderMood, render") == 5  # txn, plan, snap, adj, ui — every data key (the pulse rides after it; the export line is renderMood: renderMood,)
