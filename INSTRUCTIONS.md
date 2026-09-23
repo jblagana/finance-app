@@ -6,6 +6,27 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-23 — "it does in the browser, not in pwa in phone" (the add-expense rows stack on small screens)
+Status: **open**
+Progress: in flight — the layout edit is in (below); release + live check + log close pending
+
+### Interpretation (agent)
+The v72.5x edit (`db31405`) put Amount+Category and Paid with+Date into `.row`
+divs, but the phone-width media query (`@media (max-width:600px){.row{flex-direction:column}}`)
+stacks every `.row` below 600px — so the browser (wide) shows the pairs side by
+side and the PWA (a phone, <600px) stacks them. Fix: a `.rowpair` class that
+overrides the media query (`flex-direction:row` below 600px) applied to the two
+add-expense rows (Amount+Category, Paid with+Date) and the plan sheet's
+Amount+Date row.
+
+### Subtasks
+- [x] `.rowpair` CSS override + class on the 3 rows (index.html)
+- [x] playwright proof at 390px + 1024px: both cells share the same y (sameRow true)
+- [x] SHELL_NOTES '73.4' entry (smoke asserts the future fallback is the newest note)
+- [ ] tools/release.ps1 v73.4 (GATES green on the -GatesOnly re-run)
+- [ ] commit + push, live re-stamp, live_check_v734.js
+- [ ] close this entry
+
 ## 2026-09-23 — "do all them" (the major upgrade: v73.0 moods → v73.1 recurring → v73.2 pulse/radar → v73.3 goals/gist-sync)
 Status: **done** — all four releases shipped (v73.0 + v73.1 + v73.2 + v73.3, below); the v73 major-upgrade train is complete (task_notes_v73.md)
 Progress: 100% — v73.3 released (this commit; commits `23f966f` + `1c2654f` live re-stamp, pushed to origin/main, live 04:45, SW cache `finances-pwa-v73.3`, GATES all green via tools/release.ps1 v73.3 — both check_site copies + test_chat_parser + node syntax + both smokes). (1) GOAL PROGRESS — sinking funds with a deadline get a progress RING (ringSVG, the funded share of the goal) + a pace line from the pure goalPace(): "on pace" when the monthly plan covers (goal-funded)/monthsLeft, "behind by P X" when it does not, "none" when funded or no deadline. (2) GIST SYNC — local-first stays local-first but now survives a phone swap: the Settings sync section (gist url + token + passphrase, manual Push/Pull) serializes base/txns/plans/owed/moneyLog, encrypts it with REAL browser WebCrypto (PBKDF2-SHA256 150k iters -> AES-GCM 256, random salt+iv per push, envelope {v,salt,iv,data}) so the gist holds ciphertext only, and syncMerge() reconciles per-record: newer created wins, a tie keeps LOCAL, remote-only records are added, the other side’s tombstones (removedTxn) drop records, the newer base/owed/moneyLog win wholesale. PROOF: smoke v733Section (goalPace math + envelope shape + decrypt round-trip + wrong-passphrase wall + the full merge matrix in Node) + sync_proof_v733.py (playwright on the REAL page: goalPace on-pace vs behind, the sync section is present, the REAL WebCrypto round-trips and a wrong passphrase is a wall (OperationError), the merge rules run in-page — t1 newer-remote wins, t2 tie keeps local, t4 remote-only added, t3 tombstoned, newer base wins). live_check_v733.js 13/13 on jblagana.github.io (v73.3 stamps + every v73.x marker still in place + v72.56 eyes + v72.55 floor).

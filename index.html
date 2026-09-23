@@ -59,7 +59,7 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--in
  pointer-events:none;overflow:hidden;white-space:nowrap}
 .dfield .dlabel.empty{color:var(--mut)}
 .dfield:focus-within .dlabel{border-color:var(--acc)}
-@media (max-width:600px){.row{flex-direction:column;gap:0}}
+@media (max-width:600px){.row{flex-direction:column;gap:0}.rowpair{flex-direction:row}}
 .note.ok{color:var(--ok)}
 .ins-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .ins-ctrls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
@@ -602,7 +602,7 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
     <form id="planForm" class="card" autocomplete="off">
       <label for="p_name">What you're planning</label>
       <input id="p_name">
-      <div class="row">
+      <div class="row rowpair">
         <div>
           <label for="p_amount">Amount (₱) — number or quick sum</label>
           <input id="p_amount" type="text">
@@ -791,7 +791,7 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
         <button type="button" id="addModeSpend" class="amb on">Spend</button>
         <button type="button" id="addModePrepay" class="amb">Pay card</button>
       </div>
-      <div class="row" style="margin-top:6px">
+      <div class="row rowpair" style="margin-top:6px">
         <div>
           <label for="f_amount">Amount (₱)</label>
           <input id="f_amount" type="text" placeholder="0.00, or a quick sum like 300-125+10">
@@ -803,7 +803,7 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       </div>
       <p id="amtEq" class="amtEq" style="display:none"></p>
       <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
-      <div class="row">
+      <div class="row rowpair">
         <div>
           <label for="f_account">Paid with</label>
           <select id="f_account"><option value="CASH::Cash" selected>Cash</option></select>

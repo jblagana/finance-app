@@ -5401,12 +5401,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.3, live: new Date(2026, 8, 23, 4, 45) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.4, live: new Date(2026, 8, 23, 10, 1) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.4': [
+      'The Add expense sheet now fits your thumb: Amount and Category share one row, and Paid with and Date share the other — even on a small phone, they no longer stack'
+    ],
     '73.3': [
       'Sinking funds now show a progress RING and a pace line — "on pace" when your monthly plan clears the goal by the deadline, "behind by ₱X/mo" when it does not',
       'SYNC through your own GitHub gist: your numbers are encrypted on this phone (AES-GCM, key from your passphrase) before they leave — GitHub only ever sees ciphertext. Push uploads, pull downloads + merges (per record, newest wins; a tie keeps the phone in your hand; deletions sync too). The passphrase is never stored and never sent'
