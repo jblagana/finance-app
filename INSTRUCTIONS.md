@@ -6,6 +6,38 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-24 — "my cc due is on oct 5 and its based on my spending until the 15th minus the prepay i made" (the CC due)
+Status: **done** — v73.6 shipped (commit `304f2c3`, pushed to origin/main, live 00:35, SW cache `finances-pwa-v73.6`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.6 (both check_site copies + test_chat_parser + node syntax + both smokes) + due_proof_v736.py GREEN 8/8 (local page: ccDue() window math, the due strip's "CC due · in 11d · Oct 5, 2026 · PHP 6,000.00" row, the prepay tile's "cutoff 15 · due 5", the settings b_dday input, the chat.js due line) + live_check_v736.js 17/17 on jblagana.github.io (v73.6 stamps + all v73.0–v73.5 + v72.56 markers still in place)
+
+### Interpretation (agent)
+Boss's model: the bill is DUE on the due_day (the 5th) and equals the spending
+until the cutoff (the 15th) MINUS the prepays made in that window. The app
+already stored prepay_day (14) + cutoff_day (15) but had no due_day and no
+due-amount concept. v73.6 adds `due_day` to the base (5 by default; older
+bases/exports fall back to it — no schema migration, the field is absent =
+default) + the Settings "cc due day" input, and `ccDueData` (a PURE fn: txns +
+base + today) computes the due date (next due_day on/after today) and the due
+amount = card_charges − card_payments in (prevCutoff, cutoffOnOrBeforeDue] —
+for Boss: (Aug 15, Sep 15] for the Oct 5 due. The window math is string/number
+date math with NO Date getters — parseISO yields local dates and this machine
+is UTC+8, so local getters are a day off (the same trap that turned the v73.1
+occurrence smoke red when the day rolled over mid-run; that section's
+hardcoded '2026-09-23' expectations were re-anchored to today). The due amount
+is ledger-derived (only as good as the logged charges) — the honest version; a
+manual statement-amount override is the named follow-up if it drifts.
+
+### Subtasks
+- [x] base `due_day` (default 5) + snapshot field + Settings input (b_dday)
+- [x] ccDueData pure fn (window math: due before/after cutoff, year rollover, floor at 0, default fallback)
+- [x] due strip "CC due" row (date + amount, red when <= 2d)
+- [x] prepay tile "cutoff 15 · due 5"
+- [x] computeMood: worried when the due is <= 7d out and exceeds the free cash
+- [x] coach snapshot (chat.js) due line with the charges/prepays breakdown
+- [x] smoke v736Section (11 checks) + v73.1 occurrence checks re-anchored to today (date-rot fix)
+- [x] check_site v73.6 pin + gates green
+- [x] due_proof_v736.py GREEN + live_check_v736.js 17/17 + push + log close
+
 ## 2026-09-23 — "im sure v73.0 not working in phone" (the coach mood never rendered)
 Status: **done** — v73.5 shipped (commit `ecbe09c`, pushed to origin/main, live 10:43, SW cache `finances-pwa-v73.5`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.5 (both check_site copies + test_chat_parser + node syntax + both smokes; the first run was RED on the v73.0 check_site pin — the pin asserted the OLD setAttribute flip, updated to pin the style.display flip in both repo + root mirror, re-run green) + mood_proof_v730.py GREEN 11/11 (rewritten to assert COMPUTED display, light DOM + the #coachFab shadow clone; FAB pixels move 1.53% worried / 2.00% happy) + live_check_v735.js 14/14 on jblagana.github.io + live_mood_proof_v735.py GREEN 8/8 on the LIVE site (footer reads shell v73.5, live FAB pixels move 0.94% / 1.02%, all 3 in-app faces flip together)
