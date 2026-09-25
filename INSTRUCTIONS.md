@@ -6,6 +6,29 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-25 — "continue with ur task on fixing that salary changing the month spent. Also, reduce its boot screen time from 3 to 2 seconds"
+Status: **done** — v73.7 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.7`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.7 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v737Section 9/9 and the retimed v72.53 boot-floor checks)
+
+### Interpretation (agent — user may edit this section)
+Two asks, one release (v73.7):
+
+1. **Boot screen 3s → 2s.** `BOOT_MIN_MS` in app.js (the v72.55 3s floor) → 2000. The floor only extends, never shortens, so slow boots are unaffected. Structural pin: check_site v72.55 asserts `var BOOT_MIN_MS = 3000;` → update to 2000; smoke v72.53Section's hold-window timing (2200/3400 ms around the floor) → retimed to the 2s floor.
+
+2. **"Salary changing the month spent."** The money-log "month spent" line (`s`) nets EVERY cash_in down — including the salary (v72.10 rule: `cash_in → -a`). So logging the salary (₱46,615) makes the month-spent line drop by the full salary — e.g. "month spent 12,340 → −34,275" — which is not "spending"; the salary is income, not negative spend. The cycle/donut/pace aggregates already EXCLUDE the cycle's own salary cash_in (v72.45 rule via `receivedId`), but the per-row `s` line in `logMoney` + the edit rebase (`monthEffect`) still net it. Fix: in `logMoney`'s `s` computation and `monthEffect`, treat the CYCLE'S OWN SALARY cash_in as 0 (same `receivedId`/90%-of-expected rule the cycle uses) — the line then changes only for real spend and non-salary inflows (refunds, etc.).
+   - **Pending Boss edit if the symptom was different** (e.g. the line DISAPPEARS on a month-crossing salary edit, or the recap card's "spent" shows the salary): the fix point moves to `saveTxnEdit`'s month-crossing branch / `recapData`.
+
+### Subtasks
+- [x] Log the instruction (this entry)
+- [x] Implement boot floor 2s (app.js) in the live copy (`.cline\...\chat\finances\finance-app` — the on-duty copy with the mirrors + smokes; the `C:\Users\Jan\Muji\finance-app` clone is a read-only map copy, stray edits there were reverted)
+- [x] Implement the salary-exclusion in logMoney + monthEffect (app.js) — new `salaryTxnIdInMonth` (the cycle's own salary cash_in, the same 90%/window rule as cycleDataFor's received) + `monthEffect` takes the txn and returns 0 for it; the edit rebase routes through it
+- [x] check_site.py: v73.7 structural check (BOOT_MIN_MS = 2000 + the salary-exclusion lines); the v72.55 pin updated to 2000
+- [x] smoke_app_v68.js: v72.53Section retimed to the 2s floor (clock pinned to bootT0+1000 so the hold bites, the fade lands at +1000); new v737Section (9 checks: spend +100, salary 0, refund −50, salaryTxnIdInMonth, monthEffect, edit rebase +50)
+- [x] SHELL_NOTES '73.7' entry
+- [x] tools\release.ps1 v73.7 (stamps + full gates green)
+- [x] commit + push (done = pushed)
+- [x] close this log entry with the commit hash
+
 ## 2026-09-24 — "my cc due is on oct 5 and its based on my spending until the 15th minus the prepay i made" (the CC due)
 Status: **done** — v73.6 shipped (commit `304f2c3`, pushed to origin/main, live 00:35, SW cache `finances-pwa-v73.6`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.6 (both check_site copies + test_chat_parser + node syntax + both smokes) + due_proof_v736.py GREEN 8/8 (local page: ccDue() window math, the due strip's "CC due · in 11d · Oct 5, 2026 · PHP 6,000.00" row, the prepay tile's "cutoff 15 · due 5", the settings b_dday input, the chat.js due line) + live_check_v736.js 17/17 on jblagana.github.io (v73.6 stamps + all v73.0–v73.5 + v72.56 markers still in place)

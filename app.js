@@ -1100,7 +1100,38 @@
   // kinds; month spend counts spend, nets inflows, ignores card payments.
   function freeEffect(kind, amt) { if (kind === 'card_payment') return 0; return (kind === 'cash_in') ? amt : -amt; }
   function cardEffect(kind, amt) { return kind === 'card_charge' ? amt : kind === 'card_payment' ? -amt : 0; }
-  function monthEffect(kind, amt) { return kind === 'card_payment' ? 0 : kind === 'cash_in' ? -amt : amt; }
+  // v73.7: the cycle's OWN SALARY is income, not negative spend — the money-log
+  // month-spent line must not swing by the full salary when the "Salary in"
+  // check-in lands (v72.10 netted every cash_in down, so logging ₱46,615 took
+  // the line from 12,340 to −34,275). Same identity rule as cycleDataFor's
+  // received: a cash_in of at least 90% of the month's expected salary, dated
+  // from the 1st to 2 days past payday. Other inflows (refunds) still net.
+  function salaryTxnIdInMonth(month) {
+    var b = state.base || {};
+    var expected = expectedSalaryFor(month, b);
+    if (!(expected > 0)) return null;
+    var sd = salaryDayOf(b);
+    var mp = String(month).split('-');
+    var mDim = new Date(Number(mp[0]), Number(mp[1]), 0).getDate();
+    var lo = month + '-01';
+    var hiDay = Math.min(sd + 2, mDim);
+    var hi = month + '-' + (hiDay < 10 ? '0' : '') + hiDay;
+    var best = null;
+    state.txns.forEach(function (t) {
+      if (t.kind !== 'cash_in') return;
+      var amt = Number(t.amount) || 0;
+      if (amt < 0.9 * expected) return;
+      var d = String(t.date || '');
+      if (d < lo || d > hi) return;
+      if (!best || d < String(best.date || '')) best = t;
+    });
+    return best ? best.id : null;
+  }
+  function monthEffect(kind, amt, t) {
+    if (kind === 'card_payment') return 0;
+    if (kind === 'cash_in') return (t && salaryTxnIdInMonth(String(t.date || '').slice(0, 7)) === t.id) ? 0 : -amt;
+    return amt;
+  }
   function saveTxnEdit(tid, data, opts) {
     var o = null, oIdx = -1;
     for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) { o = state.txns[i]; oIdx = i; }
@@ -1117,7 +1148,7 @@
     // effect delta (new − old) across free / card / month-spent
     var dFree = freeEffect(t.kind, newAmt) - freeEffect(o.kind, oldAmt);
     var dCard = cardEffect(t.kind, newAmt) - cardEffect(o.kind, oldAmt);
-    var meOld = monthEffect(o.kind, oldAmt), meNew = monthEffect(t.kind, newAmt);
+    var meOld = monthEffect(o.kind, oldAmt, o), meNew = monthEffect(t.kind, newAmt, t); // v73.7: salary-aware
     var M_old = String(o.date || '').slice(0, 7), M_new = String(t.date || '').slice(0, 7);
     function rebase(e, dF, dC, sMode) {
       if (e.f != null) e.f = r2(e.f + dF);
@@ -1266,11 +1297,12 @@
     if (String(t.date).slice(0, 7) === mp && t.kind !== 'card_payment') {
       // v72.10: month spend nets inflows down; a card payment isn't spend
       // (the charge that created the debt already counted).
+      // v73.7: the cycle's own SALARY is income, not negative spend — it does
+      // not move the month-spent line (monthEffect carries the same rule).
       var sp = 0;
       state.txns.forEach(function (x) {
         if (String(x.date).slice(0, 7) !== mp) return;
-        var a = Number(x.amount) || 0;
-        sp += x.kind === 'card_payment' ? 0 : x.kind === 'cash_in' ? -a : a;
+        sp += monthEffect(x.kind, Number(x.amount) || 0, x);
       });
       e.s = r2(sp);
     }
@@ -5485,12 +5517,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.6, live: new Date(2026, 8, 24, 0, 45) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.7, live: new Date(2026, 8, 25, 14, 27) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.7': [
+      'Logging your salary no longer swings the "month spent" line — the salary is income, not negative spend (refunds still net it down)',
+      'The boot screen now holds for 2 seconds instead of 3 — Coach Fin still says hi, just faster'
+    ],
     '73.6': [
       'The app now knows your CC DUE (the 5th): the coming-due strip shows the due date with the amount — charges since the last cutoff minus the prepays you logged in that window — and the coach warns when it is a week out and more than your free cash (that is when his face goes worried)',
       'Settings → Your numbers has a "cc due day" field (5 by default), and the prepay tile now reads cutoff 15 · due 5'
@@ -6330,6 +6366,8 @@
     undoBaseStory: undoBaseStory,
     spendOf: spendOf, // v72.44: the one spend rule for aggregates (chat.js coach snapshot + smoke)
     salaryDayOf: salaryDayOf, // v72.45: the payday (the 15th) with the cutoff fallback
+    monthEffect: monthEffect, // v73.7: the month-spent effect (salary-aware — smoke drives it)
+    salaryTxnIdInMonth: salaryTxnIdInMonth, // v73.7: the cycle's own salary cash_in id (smoke drives it)
     expectedSalaryFor: expectedSalaryFor, // v72.45: the cycle's expected salary (override or base)
     cycleDataFor: cycleDataFor, // v72.45: the cycle math for a given cycle month (smoke drives it)
     cycleData: cycleData, // v72.45: the current cycle (chat.js snapshot + smoke)
@@ -6368,7 +6406,7 @@
   var bootGone = false;
   var bootTimer = null;
   var bootT0 = Date.now();
-  var BOOT_MIN_MS = 3000; // v72.55: the coach gets 3s to say hi (user: 'what if i make it 3 seconds, i only ever open it a few times a day' — the extra 2s of coach time is worth it at that open frequency; the floor only extends, never shortens, so slow boots are still unaffected)
+  var BOOT_MIN_MS = 2000; // v73.7: the coach gets 2s to say hi (user: 'reduce its boot screen time from 3 to 2 seconds' — the v72.55 3s floor was overkill; the floor only extends, never shortens, so slow boots are still unaffected)
   function hideBoot() {
     if (bootGone) return;
     bootGone = true;

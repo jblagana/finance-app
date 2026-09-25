@@ -380,8 +380,8 @@ def main():
           "var bootT0 = Date.now();" in js
           and "'72.54': [" in js
           and "bootNow: function () { return Date.now() - bootT0; }" in js)
-    check("v72.55 (user: 'what if i make it 3 seconds, i only ever open it a few times a day tho? and can we make coach fins eyes move during boot'): the splash floor goes 1s -> 3s (BOOT_MIN_MS) and Coach Fin's pupils dart around during the splash — the splash face is an INLINE copy of #botFace (a <use> shadow tree can't be animated from here) with the two pupils in one .beyes group on a CSS keyframe loop that STOPS on the .off fade (and under prefers-reduced-motion)",
-          "var BOOT_MIN_MS = 3000;" in js
+    check("v72.55 (user: 'what if i make it 3 seconds, i only ever open it a few times a day tho? and can we make coach fins eyes move during boot'): the splash floor goes 1s -> 3s (BOOT_MIN_MS; v73.7 trimmed it to 2s — pinned there) and Coach Fin's pupils dart around during the splash — the splash face is an INLINE copy of #botFace (a <use> shadow tree can't be animated from here) with the two pupils in one .beyes group on a CSS keyframe loop that STOPS on the .off fade (and under prefers-reduced-motion)",
+          "var BOOT_MIN_MS = 2000;" in js  # v73.7: 3000 -> 2000 (user: 'reduce its boot screen time from 3 to 2 seconds')
           and "'72.55': [" in js
           and "class=\"beyes\"" in html
           and "#boot .bface svg .beyes{animation:bootlook 3.4s ease-in-out infinite}" in html
@@ -474,6 +474,14 @@ def main():
           and "du.due > f0) return 'worried';" in js
           and "cc due on the ' + ordinal(du6.due_day)" in chatjs
           and "'73.6': [" in js)
+    check("v73.7 (user: 'fix that salary changing the month spent' + 'reduce its boot screen time from 3 to 2 seconds'): the money-log MONTH-SPENT line no longer swings by the full salary when the 'Salary in' check-in lands — the cycle's own salary cash_in (>= 90% of the month's expected salary, dated 1st..payday+2, the same identity rule as cycleDataFor's received) is income, not negative spend, so monthEffect returns 0 for it (logMoney's s sum + the edit rebase both route through it) while other inflows (refunds) still net; the boot floor is 2s (BOOT_MIN_MS 2000)",
+          "function salaryTxnIdInMonth(month) {" in js
+          and "function monthEffect(kind, amt, t) {" in js
+          and "monthEffect: monthEffect" in js and "salaryTxnIdInMonth: salaryTxnIdInMonth" in js
+          and "sp += monthEffect(x.kind, Number(x.amount) || 0, x);" in js
+          and "var meOld = monthEffect(o.kind, oldAmt, o), meNew = monthEffect(t.kind, newAmt, t);" in js
+          and "var BOOT_MIN_MS = 2000;" in js
+          and "'73.7': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",
