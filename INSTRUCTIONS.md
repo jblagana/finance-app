@@ -7,7 +7,7 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-25 — "the money spent bug is fixed, but still shows it on the ledger entries wrong (which should be correct already and hidden)"
-Status: **done** — v73.9 shipped (commit + the live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.9`)
+Status: **done** — v73.9 shipped (commit `7fa98f3` + the `82a0cf4` live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.9`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.9 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v739Section 3/3)
 
 ### Interpretation (agent)
