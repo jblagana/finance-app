@@ -2180,7 +2180,13 @@
   function spendOf(t) {
     var a = Number(t.amount) || 0;
     if (t.kind === 'card_payment') return 0;
-    if (t.kind === 'cash_in') return -a;
+    // v73.8: a cash_in is INCOME, not negative spend — it contributes zero to
+    // EVERY spend aggregate (the v72.44 rule netted it down, so logging the
+    // salary swung "App spend so far" / spent-today / the donut / the chat
+    // snapshot by the full salary — the v73.7 fix only covered the money-log
+    // s line). monthEffect keeps the narrower rule (refunds still net the
+    // ledger line down) for the audit trail.
+    if (t.kind === 'cash_in') return 0;
     return a;
   }
   // ---------- v72.45: the salary cycle (the 15th) ----------
@@ -2707,27 +2713,31 @@
   var addMode = 'spend';
   function addSheetKind(mode, type, editingKind) {
     if (mode === 'prepay') return 'card_payment';
-    if (mode === 'salary') return 'cash_in'; // v72.45: the "Salary in" check-in is a real cash inflow
+    // v72.45: the "Salary in" check-in is a real cash inflow — v73.8: the
+    // visible "Money in" tab (salary / refunds / any inflow) uses the same
+    // direction
+    if (mode === 'salary' || mode === 'moneyin') return 'cash_in';
     return type === 'CARD'
       ? (editingKind === 'card_payment' ? 'card_payment' : 'card_charge')
       : (editingKind === 'cash_in' ? 'cash_in' : 'cash_out');
   }
   function setAddMode(m) {
-    addMode = m === 'prepay' ? 'prepay' : (m === 'salary' ? 'salary' : 'spend'); // v72.45: the third direction
-    var sb = byId('addModeSpend'), pb = byId('addModePrepay');
+    addMode = m === 'prepay' ? 'prepay' : (m === 'salary' || m === 'moneyin' ? 'moneyin' : 'spend'); // v73.8: the visible third direction (the v72.45 'salary' mode is its hidden coach-chip entry — both land on the same tab)
+    var sb = byId('addModeSpend'), pb = byId('addModePrepay'), mb = byId('addModeMoneyin');
     if (sb) sb.className = 'amb' + (addMode === 'spend' ? ' on' : '');
     if (pb) pb.className = 'amb' + (addMode === 'prepay' ? ' on' : '');
+    if (mb) mb.className = 'amb' + (addMode === 'moneyin' ? ' on' : '');
     var ttl = byId('addSheetTitle'), sub = byId('addSubmit');
-    if (ttl) ttl.textContent = addMode === 'prepay' ? 'Card prepay' : (addMode === 'salary' ? 'Salary in' : 'Add expense');
-    if (sub) sub.textContent = addMode === 'prepay' ? 'Add payment' : (addMode === 'salary' ? 'Log salary' : 'Add expense');
+    if (ttl) ttl.textContent = addMode === 'prepay' ? 'Card prepay' : (addMode === 'moneyin' ? 'Money in' : 'Add expense');
+    if (sub) sub.textContent = addMode === 'prepay' ? 'Add payment' : (addMode === 'moneyin' ? 'Add money in' : 'Add expense');
     var as = byId('f_account');
     if (addMode === 'prepay' && as) {
       // the payoff has to land on a CARD account — preselect the first one
       for (var i = 0; i < as.options.length; i++) {
         if (as.options[i].value.indexOf('CARD::') === 0) { as.value = as.options[i].value; break; }
       }
-    } else if (addMode === 'salary' && as) {
-      // v72.45: the salary lands in a CASH account — preselect the first one
+    } else if (addMode === 'moneyin' && as) {
+      // v72.45 / v73.8: money in lands in a CASH account — preselect the first one
       for (var j2 = 0; j2 < as.options.length; j2++) {
         if (as.options[j2].value.indexOf('CASH::') === 0) { as.value = as.options[j2].value; break; }
       }
@@ -5517,12 +5527,17 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.7, live: new Date(2026, 8, 25, 14, 30) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.8, live: new Date(2026, 8, 25, 17, 12) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.8': [
+      'Logging your salary no longer swings ANY spend number — the "App spend so far" line, spent-today, the donut and the coach note all treat a cash-in as income, not negative spend (v73.7 only fixed the money-log line; refunds still net it down)',
+      'The Add sheet gains its third direction — Spend | Pay card | Money in: salary, refunds and any other inflow now have a visible tab (a cash account is preselected; the coach\'s "Salary in" chip lands here too)',
+      'The boot screen now holds for 1.5 seconds instead of 2 — Coach Fin still says hi, just faster'
+    ],
     '73.7': [
       'Logging your salary no longer swings the "month spent" line — the salary is income, not negative spend (refunds still net it down)',
       'The boot screen now holds for 2 seconds instead of 3 — Coach Fin still says hi, just faster'
@@ -6406,7 +6421,7 @@
   var bootGone = false;
   var bootTimer = null;
   var bootT0 = Date.now();
-  var BOOT_MIN_MS = 2000; // v73.7: the coach gets 2s to say hi (user: 'reduce its boot screen time from 3 to 2 seconds' — the v72.55 3s floor was overkill; the floor only extends, never shortens, so slow boots are still unaffected)
+  var BOOT_MIN_MS = 1500; // v73.8: the coach gets 1.5s to say hi (user: 'boot screen change to 1.5 now from 2' — the floor only extends, never shortens, so slow boots are still unaffected)
   function hideBoot() {
     if (bootGone) return;
     bootGone = true;
@@ -6497,8 +6512,8 @@
         alert('Pick the card you paid — Pay card logs a payment to a credit card.');
         return;
       }
-      if (addMode === 'salary' && type === 'CARD') {
-        alert('The salary lands in a cash account — pick the account it entered.'); // v72.45
+      if (addMode === 'moneyin' && type === 'CARD') {
+        alert('Money in lands in a cash account — pick the account it entered.'); // v72.45 / v73.8
         return;
       }
       var kind = addSheetKind(addMode, type, editingTxn ? editingTxn.kind : null);
@@ -6573,10 +6588,11 @@
 
     var ab = byId('addBtn');
     if (ab) ab.onclick = function () { setAddMode('spend'); openSheet('addSheet'); }; // v72.41: a fresh Add opens in Spend mode
-    // v72.41: the Add sheet's direction toggle (Spend / Pay card)
-    var amS = byId('addModeSpend'), amP = byId('addModePrepay');
+    // v72.41: the Add sheet's direction toggle (Spend / Pay card) — v73.8: + Money in
+    var amS = byId('addModeSpend'), amP = byId('addModePrepay'), amM = byId('addModeMoneyin');
     if (amS) amS.onclick = function () { setAddMode('spend'); };
     if (amP) amP.onclick = function () { setAddMode('prepay'); };
+    if (amM) amM.onclick = function () { setAddMode('moneyin'); };
     var cfab = byId('coachFab');
     if (cfab) {
       fabInitDrag(); // v72.15: draggable bot — settles to the nearest edge, the bubble anchors to it

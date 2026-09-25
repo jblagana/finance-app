@@ -6,6 +6,29 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-25 — "The bug for month-spent still there, also boot screen change to 1.5 now from 2" + "add a third option to handle incoming fund/salary… combine 'pay card' into it, whats a good term"
+Status: **done** — v73.8 shipped (SW cache `finances-pwa-v73.8`, pushed to origin/main)
+Progress: 100% — GATES all green via tools/release.ps1 v73.8 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v738Section 6/6, the retimed v72.53 boot-floor checks, and the v72.44/v72.45 pins retargeted to the v73.8 spend rule)
+
+### Interpretation (agent)
+Three asks, one release (v73.8):
+
+1. **"The bug for month-spent still there."** v73.7 fixed the money-log `s` line (monthEffect/salaryTxnIdInMonth) but EVERY spend AGGREGATE — "App spend so far" (insights spentM/pace), spent-today, the donut, the recap, the chat snapshot — still ran the raw v72.44 `spendOf`, which netted every cash_in down (`-a`). Logging the salary swung all of them by the full salary. Fix: `spendOf` returns 0 for cash_in (income is not negative spend — the v72.45 cycle/donut exclusion rule, generalized to every aggregate). `monthEffect` KEEPS the narrower rule (refunds still net the ledger line down) — the audit trail.
+2. **Boot 2s → 1.5s.** `BOOT_MIN_MS` 2000 → 1500; smoke v72.53Section retimed (pin bootT0+1000, fade lands at +500, wait 1000ms); check_site v72.55 pin → 1500.
+3. **"Third option to handle incoming fund/salary."** Boss asked whether to combine Pay card into it — muji's call (ratified by boss: 'Add "Money in" tab now, ship both as v73.8'): DON'T merge Pay card (it's an outflow; merging makes the account field ambiguous). The v72.45 'salary' mode already existed but was hidden behind the coach chip — now VISIBLE as a third tab: **Spend | Pay card | Money in**. `setAddMode` normalizes 'salary' → 'moneyin' (same tab); kind rule `mode === 'salary' || mode === 'moneyin' → cash_in`; CASH-only guard; first cash account preselected; title 'Money in' / submit 'Add money in'.
+
+### Subtasks
+- [x] Log the instruction (this entry)
+- [x] app.js: spendOf cash_in → 0 (with the v73.7 comment trail)
+- [x] app.js: BOOT_MIN_MS 1500
+- [x] app.js + index.html: the Money in tab (addModeMoneyin, setAddMode moneyin, guard, wiring, labels)
+- [x] app.js: SHELL_NOTES '73.8' (3 lines)
+- [x] tools/check_site.py: v73.8 structural check (spendOf 0 + monthEffect -amt + 1500 + tab pins); v72.45 pins retargeted to the moneyin strings; v72.55 pin → 1500
+- [x] smoke_app_v68.js: v72.53Section retimed to the 1.5s floor; new v738Section (6 checks: spendOf rule, monthEffect refund, tab in HTML, addSheetKind moneyin, source pins) + chain updated
+- [x] tools/release.ps1 v73.8 (stamps SHELL_RELEASE/sw/README/check_site + full gates green)
+- [x] commit + push (done = pushed)
+- [x] close this log entry with the commit hash
+
 ## 2026-09-25 — "continue with ur task on fixing that salary changing the month spent. Also, reduce its boot screen time from 3 to 2 seconds"
 Status: **done** — v73.7 shipped (commit `94cc5b8` + the `8d46fd6` live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.7`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.7 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v737Section 9/9 and the retimed v72.53 boot-floor checks)

@@ -381,7 +381,7 @@ def main():
           and "'72.54': [" in js
           and "bootNow: function () { return Date.now() - bootT0; }" in js)
     check("v72.55 (user: 'what if i make it 3 seconds, i only ever open it a few times a day tho? and can we make coach fins eyes move during boot'): the splash floor goes 1s -> 3s (BOOT_MIN_MS; v73.7 trimmed it to 2s — pinned there) and Coach Fin's pupils dart around during the splash — the splash face is an INLINE copy of #botFace (a <use> shadow tree can't be animated from here) with the two pupils in one .beyes group on a CSS keyframe loop that STOPS on the .off fade (and under prefers-reduced-motion)",
-          "var BOOT_MIN_MS = 2000;" in js  # v73.7: 3000 -> 2000 (user: 'reduce its boot screen time from 3 to 2 seconds')
+          "var BOOT_MIN_MS = 1500;" in js  # v73.8: 2000 -> 1500 (user: 'boot screen change to 1.5 now from 2')
           and "'72.55': [" in js
           and "class=\"beyes\"" in html
           and "#boot .bface svg .beyes{animation:bootlook 3.4s ease-in-out infinite}" in html
@@ -480,8 +480,19 @@ def main():
           and "monthEffect: monthEffect" in js and "salaryTxnIdInMonth: salaryTxnIdInMonth" in js
           and "sp += monthEffect(x.kind, Number(x.amount) || 0, x);" in js
           and "var meOld = monthEffect(o.kind, oldAmt, o), meNew = monthEffect(t.kind, newAmt, t);" in js
-          and "var BOOT_MIN_MS = 2000;" in js
-          and "'73.7': [" in js)
+          and "'73.7': [" in js)  # the boot-floor pin moved to v73.8 (1500)
+    check("v73.8 (user: 'The bug for month-spent still there, also boot screen change to 1.5 now from 2' + 'add a third option to handle incoming fund/salary'): (1) the money-log s-line fix (v73.7) only covered the AUDIT line — every spend AGGREGATE still ran the raw v72.44 spendOf, which netted every cash_in down, so logging the salary swung 'App spend so far' (insights spentM/pace), spent-today, the donut, the recap and the chat snapshot by the full salary. Now spendOf returns 0 for cash_in (income is not negative spend — the v72.45 cycle/donut rule, generalized); monthEffect keeps the narrower rule (refunds still net the ledger line down) for the audit trail; (2) the Add sheet gains the VISIBLE third direction — Spend | Pay card | Money in (the v72.45 'salary' mode was hidden behind the coach chip; both now land on the same 'moneyin' tab: cash_in, CASH-only, first cash account preselected, title 'Money in' / submit 'Add money in'); (3) the boot floor goes 2s -> 1.5s (BOOT_MIN_MS 1500)",
+          "function spendOf(t) {" in js
+          and "if (t.kind === 'cash_in') return 0;" in js
+          and "? 0 : -amt;" in js  # monthEffect: the salary returns 0, a non-salary cash_in (refund) still nets (the narrower audit rule)
+          and "var BOOT_MIN_MS = 1500;" in js  # v73.8: 2000 -> 1500
+          and 'id="addModeMoneyin"' in html and ">Money in</button>" in html
+          and "if (mode === 'salary' || mode === 'moneyin') return 'cash_in';" in js
+          and "addMode = m === 'prepay' ? 'prepay' : (m === 'salary' || m === 'moneyin' ? 'moneyin' : 'spend');" in js
+          and "if (addMode === 'moneyin' && type === 'CARD')" in js
+          and "if (amM) amM.onclick = function () { setAddMode('moneyin'); };" in js
+          and "'Money in' : 'Add expense'" in js
+          and "'73.8': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",
@@ -858,7 +869,7 @@ def main():
           and "money(Number(prepayPaid.amount) || 0) + ' logged on ' + planWhen(String(prepayPaid.date))" in js
           and "function spendOf(t) {" in js
           and "if (t.kind === 'card_payment') return 0;" in js
-          and "if (t.kind === 'cash_in') return -a;" in js
+          and "if (t.kind === 'cash_in') return 0;" in js  # v73.8: cash_in is income, not negative spend (was -a)
           and "todaySpend += spendOf(t)" in js
           and "spentM += spendOf(t)" in js
           and js.count("var a = spendOf(t);") >= 2
@@ -877,8 +888,8 @@ def main():
           and "function expectedSalaryFor(month, b) {" in js
           and "function cycleDataFor(month, b) {" in js
           and "function cycleData() {" in js
-          and "if (mode === 'salary') return 'cash_in';" in js
-          and "if (addMode === 'salary' && type === 'CARD')" in js
+          and "if (mode === 'salary' || mode === 'moneyin') return 'cash_in';" in js  # v73.8: the pin moved — the salary mode now shares the visible 'moneyin' tab
+          and "if (addMode === 'moneyin' && type === 'CARD')" in js  # v73.8: same retarget
           and 'id="b_sday"' in js
           and "b.salary_day = sd > 0 ? sd : (b.cutoff_day || 15);" in js
           and "cycle: cycleData()," in js
