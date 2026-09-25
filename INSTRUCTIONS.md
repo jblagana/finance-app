@@ -6,6 +6,23 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-25 — "In finance-app todays insights headroom, base it per cycle too"
+Status: **done** — v73.11 shipped (commit `695c3af` + the `d6f5fdd` live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.11`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.11 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7311Section 4/4)
+
+### Interpretation (agent)
+The Today block's headroom divided the free cash by the **calendar** days left (`dim - date + 1` — 6 on the 25th), but the money has to last until the **next salary (the 14th)** — the cycle end (20 days). The per-cycle daily is 3.3x tighter than the calendar one (live seed: PHP 3,772.70/day vs the old PHP 12,575.67/day), so the old number was silently over-optimistic about treats. `insightsData` gains `cycleDaysLeft` (days to `cycleData`'s window end; calendar fallback when there is no cycle; guarded to >= 1). The Today block divides by it, names the cycle end on the line ("…across the next 20 days. this cycle (to 14 Oct)"), and the eat-out/treat check compares against the per-cycle daily. Verified LIVE in real Chromium with a seeded IndexedDB (salary 45000, payday 15th, cash 83454): the rendered line is the per-cycle number, not the calendar one.
+
+### Subtasks
+- [x] app.js: `cycleDaysLeft` in insightsData + the Today block (hDays/hDaily + cycle-end label + treat check on hDaily)
+- [x] app.js: SHELL_NOTES '73.11'
+- [x] tools/check_site.py: v73.11 structural check
+- [x] smoke_app_v68.js: new v7311Section (4 checks) chained after v7310Section
+- [x] live check (Playwright/Chromium, seeded IDB): the rendered headroom is the per-cycle daily to 14 Oct
+- [x] tools/release.ps1 v73.11 (stamps + full gates green)
+- [x] commit + push (done = pushed)
+- [x] close this log entry with the commit hash
+
 ## 2026-09-25 — "i now have 73.9 in phone but still when i log money in entries, the month spent's still there and wrongly changing"
 Status: **done** — v73.10 shipped (commit `3d27d45` + the `f0a69d6` live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.10`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.10 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7310Section 4/4)
