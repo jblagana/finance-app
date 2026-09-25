@@ -493,6 +493,11 @@ def main():
           and "if (amM) amM.onclick = function () { setAddMode('moneyin'); };" in js
           and "'Money in' : 'Add expense'" in js
           and "'73.8': [" in js)
+    check("v73.9 (user: 'the money spent bug is fixed, but still shows it on the ledger entries wrong (which should be correct already and hidden)'): the salary row's s VALUE was already right (v73.7 — the line does not move), but the flat 'month spent X → X' chip still rendered on it. Income is not spend — the cycle's own salary row (salaryTxnIdInMonth identity, same rule as v73.7) now shows NO month-spent chip at all; a refund's chip stays (it still nets the audit line)",
+          "var isSalRow = add && e.k === 'i' &&" in js
+          and "salaryTxnIdInMonth(monthOfTxn(e.tid)) === e.tid;" in js
+          and "if (!isSalRow) {" in js
+          and "'73.9': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",

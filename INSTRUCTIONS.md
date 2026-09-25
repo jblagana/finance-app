@@ -6,6 +6,22 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-25 — "the money spent bug is fixed, but still shows it on the ledger entries wrong (which should be correct already and hidden)"
+Status: **done** — v73.9 shipped (commit + the live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.9`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.9 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v739Section 3/3)
+
+### Interpretation (agent)
+The v73.8 fix made the salary row's s **value** correct (v73.7 — the line doesn't move), but the row still rendered the flat "month spent X → X" chip — the part the boss wanted "hidden". Income is not spend: the cycle's own salary row (same `salaryTxnIdInMonth` identity as v73.7) now shows NO month-spent chip at all; a refund's chip stays (it still nets the audit line). Render-side only — the stored s value is untouched, so the audit math (rebase/undo) is unaffected.
+
+### Subtasks
+- [x] app.js: renderMoneyLog — `isSalRow` guard skips the month-spent chip on the salary row
+- [x] app.js: SHELL_NOTES '73.9'
+- [x] tools/check_site.py: v73.9 structural check (isSalRow + salaryTxnIdInMonth(monthOfTxn(e.tid)) + '73.9' note)
+- [x] smoke_app_v68.js: new v739Section (3 checks — salary row chipless, refund chip kept) chained after v738Section
+- [x] tools/release.ps1 v73.9 (stamps + full gates green)
+- [x] commit + push (done = pushed)
+- [x] close this log entry with the commit hash
+
 ## 2026-09-25 — "The bug for month-spent still there, also boot screen change to 1.5 now from 2" + "add a third option to handle incoming fund/salary… combine 'pay card' into it, whats a good term"
 Status: **done** — v73.8 shipped (commit `31144fd` + the live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.8`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.8 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v738Section 6/6, the retimed v72.53 boot-floor checks, and the v72.44/v72.45 pins retargeted to the v73.8 spend rule)

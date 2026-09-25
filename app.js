@@ -1420,8 +1420,18 @@
           extra = '<span class="ml-x">card ' + money(r2(e.o - e.n)) + ' → ' + money(e.o) + '</span>';
         }
         if (e.s != null) {
-          var sBefore = r2(e.s + (add ? (e.k === 'i' ? e.n : -e.n) : (e.k === 'i' ? -e.n : e.n)));
-          extra += '<span class="ml-x">month spent ' + money(sBefore) + ' → ' + money(e.s) + '</span>';
+          // v73.9 (user: 'still shows it on the ledger entries wrong (which
+          // should be correct already and hidden)'): the salary row's s value
+          // is correct now (v73.7 — the line doesn't move), but the flat
+          // "month spent X → X" chip still rendered on it. Income is not
+          // spend — the cycle's own salary row shows NO month-spent line;
+          // refunds still net the audit line, so their chip stays.
+          var isSalRow = add && e.k === 'i' &&
+            salaryTxnIdInMonth(monthOfTxn(e.tid)) === e.tid;
+          if (!isSalRow) {
+            var sBefore = r2(e.s + (add ? (e.k === 'i' ? e.n : -e.n) : (e.k === 'i' ? -e.n : e.n)));
+            extra += '<span class="ml-x">month spent ' + money(sBefore) + ' → ' + money(e.s) + '</span>';
+          }
         }
         var p = mlParts(e);
         // v71: add rows with a live txn are editable — tap the row (not the ✕).
@@ -5527,12 +5537,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.8, live: new Date(2026, 8, 25, 17, 15) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.9, live: new Date(2026, 8, 25, 18, 14) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.9': [
+      'The salary row in the ledger no longer shows a "month spent" line at all — the number was already right (it does not move), but the flat "month spent X → X" chip still rendered on it; income is not spend. Refunds still show their line'
+    ],
     '73.8': [
       'Logging your salary no longer swings ANY spend number — the "App spend so far" line, spent-today, the donut and the coach note all treat a cash-in as income, not negative spend (v73.7 only fixed the money-log line; refunds still net it down)',
       'The Add sheet gains its third direction — Spend | Pay card | Money in: salary, refunds and any other inflow now have a visible tab (a cash account is preselected; the coach\'s "Salary in" chip lands here too)',
