@@ -7,7 +7,7 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-25 — "continue with ur task on fixing that salary changing the month spent. Also, reduce its boot screen time from 3 to 2 seconds"
-Status: **done** — v73.7 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.7`)
+Status: **done** — v73.7 shipped (commit `94cc5b8` + the `8d46fd6` live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.7`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.7 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v737Section 9/9 and the retimed v72.53 boot-floor checks)
 
 ### Interpretation (agent — user may edit this section)
