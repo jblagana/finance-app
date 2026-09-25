@@ -6,6 +6,23 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-25 — "i now have 73.9 in phone but still when i log money in entries, the month spent's still there and wrongly changing"
+Status: **done** — v73.10 shipped (commit `3d27d45` + the `f0a69d6` live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.10`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.10 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7310Section 4/4)
+
+### Interpretation (agent)
+The v73.7 identity (`salaryTxnIdInMonth`) had a **date window** (1st..payday+2 — an early-payday allowance for cycleDataFor's received display), but it is ALSO the money-log's swing guard — and the Money in tab (v73.8) defaults the date to **TODAY**. A salary logged on the 25th fell outside the window, was classified as a "refund", and swung the line by the full salary. **Reproduced LIVE in Chromium (Playwright + real IndexedDB, the boss's exact flow: salary dated today)**: the row stored `s: -44,900` and rendered `month spent 100 → -44,900`. The v73.9 Node smoke could not catch it — its DOM/IDB stubs never run init(), so a late-dated salary was never exercised. Fix: new `salaryIsTxn(t, amt)` — a cash_in of **≥ 90% of the month's expected salary is the salary on ANY date** (a real refund is never 90% of the salary; a double-salary month: both are salary; `amt` overrides `t.amount` for the rebase path's live amount). `monthEffect` + the chip hide route through it. `salaryTxnIdInMonth` stays for the v73.7 row-identity pins; cycleDataFor keeps its own window for the received display.
+
+### Subtasks
+- [x] app.js: `salaryIsTxn(t, amt)` + monthEffect routing + chip-hide re-target + export
+- [x] app.js: SHELL_NOTES '73.10'
+- [x] tools/check_site.py: v73.10 structural check; v73.9 pin retargeted to the amount-rule guard
+- [x] smoke_app_v68.js: new v7310Section (4 checks) chained after v739Section; v73.7/v73.8 monthEffect pins retargeted (the amount is the rule's input now)
+- [x] live repro (Playwright/Chromium): scenario C before fix = swung (100 → -44,900, chip rendered); after fix = no swing, no chip
+- [x] tools/release.ps1 v73.10 (stamps + full gates green)
+- [x] commit + push (done = pushed)
+- [x] close this log entry with the commit hash
+
 ## 2026-09-25 — "the money spent bug is fixed, but still shows it on the ledger entries wrong (which should be correct already and hidden)"
 Status: **done** — v73.9 shipped (commit `7fa98f3` + the `82a0cf4` live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.9`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.9 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v739Section 3/3)
