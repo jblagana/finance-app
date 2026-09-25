@@ -505,6 +505,14 @@ def main():
           and "if (amt < 0.9 * expected) return;" in js  # salaryTxnIdInMonth keeps its amount gate (the v73.7 pins + row identity still use it)
           and "if (d < lo || d > hi) return;" in js  # cycleDataFor's received display still uses its own window
           and "'73.10': [" in js)
+    check("v73.11 (user: 'In finance-app todays insights headroom, base it per cycle too'): the Today block's headroom ran the free cash across the CALENDAR month (dim - date + 1), but the money has to last until the NEXT salary (the 14th) - the cycle end. insightsData gains cycleDaysLeft (days to cycleData's window end, calendar fallback when there is no cycle) and the Today block divides by it, names the cycle end, and the treat check compares against the per-cycle daily",
+          "cycleDaysLeft: (function () {" in js  # the per-cycle days left (calendar fallback when no cycle)
+          and "return dl > 0 ? dl : 1;" in js  # the guard: never zero/negative (the cycle end is today at the latest)
+          and "var hDays = d.cycleDaysLeft || daysLeft;" in js  # the render uses the cycle days (calendar when absent)
+          and "var hDaily = hDays > 0 ? r2(Math.max(0, free) / hDays) : 0;" in js  # the per-cycle daily
+          and "this cycle (to ' + dayMonth(d.cycle.end) + ')'" in js  # the line names the cycle end
+          and "else if (hDaily >= meal) {" in js  # the treat check runs on the per-cycle daily
+          and "'73.11': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",

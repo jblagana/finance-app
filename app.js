@@ -2734,7 +2734,17 @@
       goals: goals, lowestDip: lowestDip, // v68 items 6–7
       cycle: cycleData(), // v72.45: the salary cycle (the 15th) — hero + insights + coach + snapshot
       ccDue: ccDue(), // v73.6: the cc due (the 5th) — charges since the last cutoff minus the prepays in that window
-      freeAfterPace: r2(free - r2(pace * Math.max(0, daysLeft - 1)))
+      freeAfterPace: r2(free - r2(pace * Math.max(0, daysLeft - 1))),
+      // v73.11 (user: 'base it per cycle too'): the headroom runs to the CYCLE
+      // end (the 14th), not the calendar month end — the money lasts until the
+      // next salary, not until the 30th. Falls back to the calendar days when
+      // there is no cycle (no base / no salary day).
+      cycleDaysLeft: (function () {
+        var cd = cycleData();
+        if (!cd) return daysLeft;
+        var dl = Math.round((parseISO(cd.end) - parseISO(today)) / 86400000) + 1;
+        return dl > 0 ? dl : 1;
+      })()
     };
   }
   // ---------- Phase 5: unified coach card (narrative + attention rows + one-tap actions) ----------
@@ -2998,14 +3008,21 @@
     var blocks = '';
 
     // ---- Today: daily headroom + treat check
+    // v73.11 (user: 'base it per cycle too'): the headroom is per CYCLE — the
+    // free cash has to last until the NEXT salary (the 14th), not the calendar
+    // month end. cycleDaysLeft falls back to the calendar days when there is
+    // no cycle, so the old text is the no-cycle case.
     var todaySpend = d.todaySpend;
     var daily = d.daily;
-    var tLines = ['Headroom: <b>' + money(daily) + '/day</b> left across the next ' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + '.'];
+    var hDays = d.cycleDaysLeft || daysLeft;
+    var hDaily = hDays > 0 ? r2(Math.max(0, free) / hDays) : 0;
+    var cycLbl = d.cycle && d.cycle.end ? ' this cycle (to ' + dayMonth(d.cycle.end) + ')' : '';
+    var tLines = ['Headroom: <b>' + money(hDaily) + '/day</b> left across the next ' + hDays + ' day' + (hDays === 1 ? '' : 's') + '.' + cycLbl];
     if (todaySpend > 0) tLines.push('Spent in this app today: <b>' + money(todaySpend) + '</b>.');
     var tCls, tTxt;
     if (free < 0) { tCls = 'bad'; tTxt = 'No room for treats — free cash is negative. Back the cards first.'; }
-    else if (daily >= meal) { tCls = 'good'; tTxt = 'Eat out OK: a ' + money(meal) + ' treat still leaves you on track (about ' + money(r2(daily - meal)) + ' under your daily headroom).'; }
-    else if (daily > 0) { tCls = 'warn'; tTxt = 'Tight today: only ' + money(daily) + '/day left — a ' + money(meal) + ' treat would overshoot by ' + money(r2(meal - daily)) + '.'; }
+    else if (hDaily >= meal) { tCls = 'good'; tTxt = 'Eat out OK: a ' + money(meal) + ' treat still leaves you on track (about ' + money(r2(hDaily - meal)) + ' under your daily headroom).'; }
+    else if (hDaily > 0) { tCls = 'warn'; tTxt = 'Tight today: only ' + money(hDaily) + '/day left — a ' + money(meal) + ' treat would overshoot by ' + money(r2(meal - hDaily)) + '.'; }
     else { tCls = 'warn'; tTxt = 'Nothing left after this month\'s commitments.'; }
     blocks += insBlock('Today', tLines, tCls, tTxt);
 
@@ -5562,12 +5579,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.10, live: new Date(2026, 8, 25, 20, 43) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.11, live: new Date(2026, 8, 25, 22, 2) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.11': [
+      'The Today headroom is now per CYCLE, not per calendar month — it divides your free cash by the days left until the next salary (the 14th), and the line says where the cycle ends. The eat-out check follows the same per-cycle number'
+    ],
     '73.10': [
       'The "month spent" line is finally honest for ANY money-in: a salary-sized inflow (90%+ of your expected salary) no longer swings it, no matter what date you log it — the old check only recognized a salary dated around payday, so logging it later in the month was treated like a refund and the line dropped by the full salary. The salary row still shows no month-spent line; refunds do'
     ],
