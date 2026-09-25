@@ -6,6 +6,23 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-26 — "the cards owed should be subtracted already from the liquid cash to know how much cash is free/unallocated"
+Status: **done** — v73.12 shipped (commit `2bf9b7f` + the `ef9685f` live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.12`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.12 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7312Section 6/6)
+
+### Interpretation (agent)
+The base month's committed outflows carried only the **prepay-to-target slice** of the cards (balance above 9.9% of limit), so free cash overstated what was truly free — with the boss's exact numbers (liquid 49k, owed 15k, no budget) it rendered 41k instead of the honest 34k. The base now commits the **FULL card balance** (`baseCardTotal` replaces `baseCardPrepays` in `baseMonthComponents`): free = liquid − owed − other outflows. The v72.42 overlay rule is unchanged and is exactly what keeps the identity live: a charge commits free by the full amount (free −a, raw liquid untouched, owed +a); the payoff drops raw liquid + owed and leaves free untouched (free 0) — so effective free = base free − (Σ charges − Σ payments) = liquid − owed − other, always. No migration needed: a phone's persisted overlay already satisfies the new identity. Verified LIVE in real Chromium with the boss's exact seed (49k debit, 15k card of 100k limit, no budget): the Money tab renders Free / unallocated **PHP 34,000.00** (old model: 41,000.00), snapshot free 34000 / committed 15000.
+
+### Subtasks
+- [x] app.js: `baseMonthComponents` commits the FULL owed (cardOwed = baseCardTotal in the base month; comp field card_prepay carries it)
+- [x] app.js: SHELL_NOTES '73.12'
+- [x] tools/check_site.py: v73.12 structural pin (cardOwed in outflows + comp field + v72.42 overlay rule intact + notes)
+- [x] smoke_app_v68.js: new v7312Section (6 checks) chained after v7311Section; the v72.31 card-undo pin re-pinned (a card override now moves free by the owed delta)
+- [x] live check (Playwright/Chromium, boss's exact seed): the rendered Free tile is PHP 34,000.00
+- [x] tools/release.ps1 v73.12 (stamps + full gates green)
+- [x] commit + push (done = pushed)
+- [x] close this log entry with the commit hash
+
 ## 2026-09-25 — "In finance-app todays insights headroom, base it per cycle too"
 Status: **done** — v73.11 shipped (commit `695c3af` + the `d6f5fdd` live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.11`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.11 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7311Section 4/4)
