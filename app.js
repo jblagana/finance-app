@@ -342,10 +342,13 @@
   // v72.10: the ledger learns INFLOWS — cash_in (money came to a cash pocket)
   // and card_payment (a payment landed on a card). cash_in is the exact inverse
   // of cash_out on the cash side: cash_out {+a, +a, 0, 0} <-> cash_in {-a, -a, 0, 0}.
-  // v72.42: card_payment is NOT the inverse of card_charge — the charge already
-  // spent the free cash (the credit limit isn't money), so the payoff only
-  // settles the debt: raw liquid drops (cash +a → the money leaves the bank),
-  // owed/prepay drop, and free stays UNTOUCHED (free: 0):
+  // v72.42 (the payoff rule — still the owed model's rule, v73.12): a
+  // card_payment settles the debt — it drops the RAW liquid and the owed, and
+  // leaves free UNTOUCHED (free: 0). v73.12 (user: 'the cards owed should be
+  // subtracted already from the liquid cash to know how much cash is
+  // free/unallocated'): the base snapshot now commits the FULL card balance
+  // (free = liquid − owed − other outflows), and this overlay rule is exactly
+  // what keeps that identity live:
   // card_charge  {0, +a, +a, +a}  charge: free committed, raw still in the bank
   // card_payment {+a, 0,  -a, -a} payoff: free unchanged, raw leaves the bank
   // (overlay: effective free = snap.free − adj.free, raw = snap.total − adj.cash,
@@ -581,10 +584,16 @@
     var oneOffs = (b.one_offs || {})[month] || {}, oneOffTotal = 0;
     Object.keys(oneOffs).forEach(function (k) { oneOffTotal += Number(oneOffs[k]) || 0; });
     oneOffTotal = r2(oneOffTotal);
-    var cardPrepay = (month === months[0]) ? baseCardPrepays(b).total : 0;
-    var outflows = r2(budgetTotal + debtTotal + sinkTotal + oneOffTotal + cardPrepay);
+    // v73.12 (user: 'the cards owed should be subtracted already from the
+    // liquid cash to know how much cash is free/unallocated'): the FULL card
+    // balance is committed in the base month — the old model locked only the
+    // prepay-to-target slice, so free cash overstated what was truly free.
+    // The overlay (txnAdj) keeps the identity live: a charge commits free by
+    // the full amount, the payoff leaves free untouched (raw liquid drops).
+    var cardOwed = (month === months[0]) ? baseCardTotal(b) : 0;
+    var outflows = r2(budgetTotal + debtTotal + sinkTotal + oneOffTotal + cardOwed);
     return { month: month, salary: salary, budget_total: budgetTotal, debt_total: debtTotal,
-      sinking_total: sinkTotal, one_off_total: oneOffTotal, card_prepay: cardPrepay,
+      sinking_total: sinkTotal, one_off_total: oneOffTotal, card_prepay: cardOwed,
       partner_repay: 0, outflows: outflows, net: r2(salary - outflows) };
   }
   function baseMatrix(b, months) {
@@ -1424,9 +1433,11 @@
         // behind the row; a debit row's free moved by exactly the diff
         // (before = f − n), a card row (o set) never moves free — only the
         // card balance does (before = o − n).
-        // v72.42: 'p' (card payment) moves free by ZERO — the charge already
-        // spent it; the payoff only settles the debt (raw cash + owed drop),
-        // so free before == after (the card sub-line still shows owed drop).
+        // v72.42 (still the rule under the v73.12 owed model): 'p' (card
+        // payment) moves free by ZERO — the charge already committed it (and
+        // under v73.12 the FULL balance is committed in the base); the payoff
+        // only settles the debt (raw cash + owed drop), so free before == after
+        // (the card sub-line still shows owed drop).
         var isAdj = e.k === 'a';
         var inflow = e.k === 'i' || e.k === 'p';
         var before = (e.k === 'p') ? r2(e.f)
@@ -5579,12 +5590,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.11, live: new Date(2026, 8, 25, 22, 18) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.12, live: new Date(2026, 8, 26, 1, 57) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.12': [
+      'Free cash is now honest: it subtracts your FULL card balance (liquid − cards owed − other commitments), not just the prepay-to-target slice. Your free number will sit lower than before — that is the fix, not a bug. Paying a card still does not move free (the charge already committed it)'
+    ],
     '73.11': [
       'The Today headroom is now per CYCLE, not per calendar month — it divides your free cash by the days left until the next salary (the 14th), and the line says where the cycle ends. The eat-out check follows the same per-cycle number'
     ],

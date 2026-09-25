@@ -513,6 +513,12 @@ def main():
           and "this cycle (to ' + dayMonth(d.cycle.end) + ')'" in js  # the line names the cycle end
           and "else if (hDaily >= meal) {" in js  # the treat check runs on the per-cycle daily
           and "'73.11': [" in js)
+    check("v73.12 (user: 'the cards owed should be subtracted already from the liquid cash to know how much cash is free/unallocated'): the base snapshot commits the FULL card balance (free = liquid - owed - other outflows), not just the prepay-to-target slice. The v72.42 overlay rule (charge -a free, payoff 0) is unchanged - it is exactly what keeps the identity live (a charge commits free by the full amount; the payoff only drops raw liquid + owed)",
+          "var cardOwed = (month === months[0]) ? baseCardTotal(b) : 0;" in js  # the base month commits the full owed
+          and "var outflows = r2(budgetTotal + debtTotal + sinkTotal + oneOffTotal + cardOwed);" in js  # owed replaces the prepay slice in outflows
+          and "card_prepay: cardOwed" in js  # the comp field carries the full owed (the tile/committed read it)
+          and "if (t.kind === 'card_payment') return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js  # v72.42 overlay rule intact (keeps free = liquid - owed live)
+          and "'73.12': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",
