@@ -494,10 +494,17 @@ def main():
           and "'Money in' : 'Add expense'" in js
           and "'73.8': [" in js)
     check("v73.9 (user: 'the money spent bug is fixed, but still shows it on the ledger entries wrong (which should be correct already and hidden)'): the salary row's s VALUE was already right (v73.7 — the line does not move), but the flat 'month spent X → X' chip still rendered on it. Income is not spend — the cycle's own salary row (salaryTxnIdInMonth identity, same rule as v73.7) now shows NO month-spent chip at all; a refund's chip stays (it still nets the audit line)",
-          "var isSalRow = add && e.k === 'i' &&" in js
-          and "salaryTxnIdInMonth(monthOfTxn(e.tid)) === e.tid;" in js
+          "var isSalRow = add && e.k === 'i' && salaryIsTxn(" in js  # v73.10: the pin moved from the salaryTxnIdInMonth identity to the amount rule (same guard, wider net)
           and "if (!isSalRow) {" in js
           and "'73.9': [" in js)
+    check("v73.10 (user: 'i now have 73.9 in phone but still when i log money in entries, the month spent's still there and wrongly changing'): the v73.7 identity had a DATE window (1st..payday+2 - an early-payday allowance for cycleDataFor's RECEIVED display), but salaryTxnIdInMonth is ALSO the money-log's swing guard - and the Money in tab (v73.8) defaults the date to TODAY, so a salary logged on the 25th fell outside the window, was classified as a 'refund', and swung the line by the full salary (reproduced live in Chromium: 100 -> -44,900, chip rendered). The identity is now the AMOUNT: any cash_in of >= 90% of the month's expected salary is the salary, any date (a real refund is never 90% of the salary; earliest date wins on ties)",
+          "function salaryIsTxn(t, amt) {" in js  # the amount-based identity (amt overrides t.amount — the rebase path passes the live amount)
+          and "if (kind === 'cash_in') return salaryIsTxn(t, amt) ? 0 : -amt;" in js  # monthEffect routes through it
+          and "salaryIsTxn: salaryIsTxn" in js  # exported (smoke drives it)
+          and "var isSalRow = add && e.k === 'i' && salaryIsTxn(" in js  # the chip hide follows the same rule (v73.9's identity was the one-salary-per-month tie-break)
+          and "if (amt < 0.9 * expected) return;" in js  # salaryTxnIdInMonth keeps its amount gate (the v73.7 pins + row identity still use it)
+          and "if (d < lo || d > hi) return;" in js  # cycleDataFor's received display still uses its own window
+          and "'73.10': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",

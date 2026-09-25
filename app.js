@@ -1103,33 +1103,53 @@
   // v73.7: the cycle's OWN SALARY is income, not negative spend — the money-log
   // month-spent line must not swing by the full salary when the "Salary in"
   // check-in lands (v72.10 netted every cash_in down, so logging ₱46,615 took
-  // the line from 12,340 to −34,275). Same identity rule as cycleDataFor's
-  // received: a cash_in of at least 90% of the month's expected salary, dated
-  // from the 1st to 2 days past payday. Other inflows (refunds) still net.
+  // the line from 12,340 to −34,275). v73.10: the identity is the AMOUNT — a
+  // cash_in of at least 90% of the month's expected salary IS the salary no
+  // matter its date: the v73.7 date window (1st..payday+2, an early-payday
+  // allowance) was for cycleDataFor's RECEIVED display, but this function is
+  // also the money-log's swing guard, and the Money in tab (v73.8) defaults
+  // the date to TODAY — a salary logged on the 25th fell outside the window,
+  // was classified as a "refund", and swung the line by the full salary
+  // (reproduced live in Chromium: 100 → −44,900). A real refund is never
+  // 90% of the salary, so the amount rule is safe; the earliest date still
+  // wins when two candidates exist (a double-salary month).
   function salaryTxnIdInMonth(month) {
     var b = state.base || {};
     var expected = expectedSalaryFor(month, b);
     if (!(expected > 0)) return null;
-    var sd = salaryDayOf(b);
-    var mp = String(month).split('-');
-    var mDim = new Date(Number(mp[0]), Number(mp[1]), 0).getDate();
-    var lo = month + '-01';
-    var hiDay = Math.min(sd + 2, mDim);
-    var hi = month + '-' + (hiDay < 10 ? '0' : '') + hiDay;
     var best = null;
     state.txns.forEach(function (t) {
       if (t.kind !== 'cash_in') return;
       var amt = Number(t.amount) || 0;
       if (amt < 0.9 * expected) return;
-      var d = String(t.date || '');
-      if (d < lo || d > hi) return;
-      if (!best || d < String(best.date || '')) best = t;
+      if (!best || String(t.date || '') < String(best.date || '')) best = t;
     });
     return best ? best.id : null;
   }
+  // v73.10: is THIS txn a salary? The identity is the AMOUNT, per month — a
+  // cash_in of at least 90% of the month's expected salary is salary on ANY
+  // date, and a second one (a double-salary month) is salary too. The
+  // v73.7/v73.10-earliest rules keyed off the month's ONE identified salary
+  // (salaryTxnIdInMonth's earliest-date tie-break), so a salary logged LATE
+  // in the month — the Money in tab defaults the date to today — was
+  // classified as a "refund" and swung the line by the full salary
+  // (reproduced live in Chromium: 100 → −44,900). A real refund is never
+  // 90% of the salary, so the amount rule is safe. salaryTxnIdInMonth stays
+  // for the row-identity checks (the chip hide, the v73.7 pins).
+  // the kind guard lives at the call sites (monthEffect checks kind ===
+  // 'cash_in'; the chip hide checks e.k === 'i') — this is the AMOUNT rule
+  // only, so it also works on the rebase path's plain {id, date}. `amt`
+  // overrides t.amount: monthEffect's amt is the LIVE amount (t may be the
+  // pre-edit original on the rebase path).
+  function salaryIsTxn(t, amt) {
+    if (!t) return false;
+    var a = (amt !== undefined) ? Number(amt) : (Number(t.amount) || 0);
+    var exp = expectedSalaryFor(String(t.date || '').slice(0, 7), state.base || {});
+    return a >= 0.9 * exp;
+  }
   function monthEffect(kind, amt, t) {
     if (kind === 'card_payment') return 0;
-    if (kind === 'cash_in') return (t && salaryTxnIdInMonth(String(t.date || '').slice(0, 7)) === t.id) ? 0 : -amt;
+    if (kind === 'cash_in') return salaryIsTxn(t, amt) ? 0 : -amt;
     return amt;
   }
   function saveTxnEdit(tid, data, opts) {
@@ -1426,8 +1446,13 @@
           // "month spent X → X" chip still rendered on it. Income is not
           // spend — the cycle's own salary row shows NO month-spent line;
           // refunds still net the audit line, so their chip stays.
-          var isSalRow = add && e.k === 'i' &&
-            salaryTxnIdInMonth(monthOfTxn(e.tid)) === e.tid;
+          // v73.10: the chip hide follows the SAME amount rule as monthEffect
+          // (salaryIsTxn) — the v73.9 identity (salaryTxnIdInMonth) only
+          // covered the month's earliest salary-sized txn, so a late-logged
+          // salary still got its chip.
+          var isSalRow = add && e.k === 'i' && salaryIsTxn(
+            (function () { for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === e.tid) return state.txns[i]; return null; })()
+          );
           if (!isSalRow) {
             var sBefore = r2(e.s + (add ? (e.k === 'i' ? e.n : -e.n) : (e.k === 'i' ? -e.n : e.n)));
             extra += '<span class="ml-x">month spent ' + money(sBefore) + ' → ' + money(e.s) + '</span>';
@@ -5537,12 +5562,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.9, live: new Date(2026, 8, 25, 18, 16) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.10, live: new Date(2026, 8, 25, 20, 41) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.10': [
+      'The "month spent" line is finally honest for ANY money-in: a salary-sized inflow (90%+ of your expected salary) no longer swings it, no matter what date you log it — the old check only recognized a salary dated around payday, so logging it later in the month was treated like a refund and the line dropped by the full salary. The salary row still shows no month-spent line; refunds do'
+    ],
     '73.9': [
       'The salary row in the ledger no longer shows a "month spent" line at all — the number was already right (it does not move), but the flat "month spent X → X" chip still rendered on it; income is not spend. Refunds still show their line'
     ],
@@ -6396,6 +6424,7 @@
     salaryDayOf: salaryDayOf, // v72.45: the payday (the 15th) with the cutoff fallback
     monthEffect: monthEffect, // v73.7: the month-spent effect (salary-aware — smoke drives it)
     salaryTxnIdInMonth: salaryTxnIdInMonth, // v73.7: the cycle's own salary cash_in id (smoke drives it)
+    salaryIsTxn: salaryIsTxn, // v73.10: the amount-based salary identity (smoke drives it)
     expectedSalaryFor: expectedSalaryFor, // v72.45: the cycle's expected salary (override or base)
     cycleDataFor: cycleDataFor, // v72.45: the cycle math for a given cycle month (smoke drives it)
     cycleData: cycleData, // v72.45: the current cycle (chat.js snapshot + smoke)
