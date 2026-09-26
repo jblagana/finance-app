@@ -7,7 +7,7 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-26 — "rename it to just 'Coming up'" + "the home tab is so full of info?" + the Fin AI backlog "repeatable entries"
-Status: **done** — v73.14 shipped (SW cache `finances-pwa-v73.14`)
+Status: **done** — v73.14 shipped (commit `35cb0fc`, pushed to origin/main, SW cache `finances-pwa-v73.14`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.14 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7314Section 16/16)
 
 ### Interpretation (boss-confirmed choices)
