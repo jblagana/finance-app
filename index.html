@@ -102,6 +102,29 @@ button.act.ghost{background:transparent;color:var(--acc)}
 .pill.warn{background:rgba(255,196,92,.15);color:var(--warn)}
 .mini{cursor:pointer;background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:7px;padding:1px 9px;font-size:12px;line-height:1.5}
 .mini:active{border-color:var(--bad);color:var(--bad)}
+/* ---- v73.15: Coming up — series grouping (the v18 ledger rework deleted the
+     old .txn row styles; the v73.14 rows shipped unstyled — this restores the
+     row look AND groups a recurring plan into ONE tappable series row) ---- */
+.plrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.plrow:last-child{border-bottom:0}
+.plrow .pl-l{flex:1;min-width:0}
+.plrow .pl-r{flex:0 0 auto;text-align:right}
+.pl-name{font-weight:700;font-size:14px}
+.pl-sub{color:var(--mut);font-size:11.5px;margin-top:2px}
+.pl-amt{font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+.pl-per{color:var(--mut);font-size:10.5px;margin-top:2px}
+.plrow.grp{cursor:pointer;min-height:44px}
+.plrow.grp:active{filter:brightness(1.15)}
+.chev{flex:0 0 auto;width:20px;color:var(--mut);font-size:12px;text-align:center;transition:transform .15s ease}
+.plrow.grp.open .chev{transform:rotate(90deg)}
+.plrow.grp.open{border-bottom:0}
+.occwrap{padding:2px 0 10px 30px}
+.occ{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.occ:last-child{border-bottom:0}
+.occ .oc-d{flex:0 0 76px;color:var(--mut);font-size:12px;font-variant-numeric:tabular-nums}
+.occ .oc-a{flex:0 0 auto;font-weight:700;font-variant-numeric:tabular-nums}
+.occ .oc-x{flex:0 0 auto}
+.occ .oc-n{flex:1;min-width:0;color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .note{color:var(--mut);font-size:13px;margin:6px 0}
 .low{color:var(--bad)}
 code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:12px}
@@ -599,44 +622,10 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
     <section id="sinking" class="card" style="display:none"><div id="sinkBody"></div></section>
 
     <!-- v73.14: the Money tab's plans heading is now just "Coming up" (boss call) -->
+    <!-- v73.15: the add form collapsed to a one-line trigger — it now lives in
+         the plan sheet (#planSheet), same bottom-sheet family as the edit sheet -->
     <h2>Coming up</h2>
-    <form id="planForm" class="card" autocomplete="off">
-      <label for="p_name">What you're planning</label>
-      <input id="p_name">
-      <div class="row rowpair">
-        <div>
-          <label for="p_amount">Amount (₱) — number or quick sum</label>
-          <input id="p_amount" type="text">
-        </div>
-        <div>
-          <label for="p_date">Date</label>
-          <div class="dfield">
-            <input id="p_date" type="date">
-            <span class="dlabel empty" id="p_dateLabel" aria-hidden="true">Pick a date</span>
-          </div>
-        </div>
-      </div>
-      <!-- v73.1: the repeat became a select (once / monthly / weekly / annual) —
-           the recurring engine, not just a monthly checkbox -->
-      <!-- v73.14: + Every day, and the count field appears only when a repeat
-           is picked (blank = keep showing the next few, as before) -->
-      <label for="p_repeat">Repeats</label>
-      <select id="p_repeat">
-        <option value="once" selected>Once</option>
-        <option value="daily">Every day</option>
-        <option value="weekly">Every week</option>
-        <option value="monthly">Every month</option>
-        <option value="annual">Every year</option>
-      </select>
-      <div id="p_countWrap" style="display:none;margin-top:10px">
-        <label for="p_count">How many times <span class="note" style="margin-left:6px">blank = keep showing the next few</span></label>
-        <input id="p_count" type="number" min="1" step="1" inputmode="numeric">
-      </div>
-      <div style="margin-top:14px">
-        <button class="act" type="submit">Add plan</button>
-      </div>
-      <p class="note" style="margin:10px 0 0">Plans stay on this phone — they drive the coach note and insights on Home.</p>
-    </form>
+    <button class="act ghost" id="planAddBtn" type="button" style="margin:0 0 10px">＋ Add a plan</button>
     <div id="plans" class="card"></div>
   </div>
 
@@ -722,6 +711,53 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       <button class="act" id="recapPin" type="button">Pin it</button>
     </div>
     <p id="recapPinned" class="note" style="margin:10px 0 0"></p>
+  </div>
+</div>
+<!-- v73.15: the add-plan form lives in a bottom sheet now (the Money tab's
+     inline form card collapsed to the one-line "＋ Add a plan" trigger) -->
+<div id="planSheet" class="sheet" role="dialog" aria-label="Add a plan">
+  <div class="sheet-h">
+    <div class="t">Add a plan</div>
+    <button id="planAddClose" class="sheet-x" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-b">
+    <form id="planForm" autocomplete="off">
+      <label for="p_name">What you're planning</label>
+      <input id="p_name">
+      <div class="row rowpair">
+        <div>
+          <label for="p_amount">Amount (₱)</label>
+          <input id="p_amount" type="text">
+        </div>
+        <div>
+          <label for="p_date">Date</label>
+          <div class="dfield">
+            <input id="p_date" type="date">
+            <span class="dlabel empty" id="p_dateLabel" aria-hidden="true">Pick a date</span>
+          </div>
+        </div>
+      </div>
+      <!-- v73.1: the repeat became a select (once / monthly / weekly / annual) —
+           the recurring engine, not just a monthly checkbox -->
+      <!-- v73.14: + Every day, and the count field appears only when a repeat
+           is picked (blank = keep showing the next few, as before) -->
+      <label for="p_repeat" style="margin-top:12px;display:block">Repeats</label>
+      <select id="p_repeat">
+        <option value="once" selected>Once</option>
+        <option value="daily">Every day</option>
+        <option value="weekly">Every week</option>
+        <option value="monthly">Every month</option>
+        <option value="annual">Every year</option>
+      </select>
+      <div id="p_countWrap" style="display:none;margin-top:10px">
+        <label for="p_count">How many times <span class="note" style="margin-left:6px">blank = keep showing the next few</span></label>
+        <input id="p_count" type="number" min="1" step="1" inputmode="numeric">
+      </div>
+      <div style="margin-top:14px">
+        <button class="act" type="submit">Add plan</button>
+      </div>
+      <p class="note" style="margin:10px 0 0">Plans stay on this phone — they drive the coach note and insights on Home.</p>
+    </form>
   </div>
 </div>
 <!-- v73.14: per-occurrence edit sheet — fork this one / this+following / all,

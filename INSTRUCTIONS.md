@@ -6,6 +6,38 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-26 — "the ui for coming up and the entries is so cluttered" (the approved mockup) + "remove this part '— number or quick sum'"
+Status: **done** — v73.15 shipped (commit `PENDING`, pushed to origin/main, SW cache `finances-pwa-v73.15`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.15 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7315Section 10/10)
+
+### Interpretation (boss-confirmed choices)
+1. **Series, not projections** — the boss approved the mockup (`C:\Users\Jan\Muji\mockup_comingup.html`, built this session): a recurring plan renders as ONE tappable series row (name · "Every \<cadence\> · next \<date\>" · count badge · amount "each") that expands into occurrence sub-rows capped at 5 with "+N more…"; one-offs are plain rows.
+2. **Form-to-sheet** — the add-plan form card (the biggest card on the tab) collapsed to a one-line "＋ Add a plan" trigger; the form now lives in `#planSheet` (the bottom-sheet family, same as the edit sheet).
+3. **Pills earn their place** — the "recurring" pill is gone (the row IS the series); "edited" survives on the head (any fork) AND on the specific forked sub-row; skipped occurrences vanish.
+4. **The ✕ foot-gun left the list for series** — delete-whole-plan lives in the edit sheet (the explicit "Delete whole plan" button, unchanged from v73.14); one-offs keep their ✕ (a single date — nothing to nuke by accident). The ✎ on a collapsed series head edits the NEXT occurrence.
+5. **Label trim** — the add form's Amount label drops the "— number or quick sum" tail (the boss's exact ask; quick sums still work, the v54 hints elsewhere are untouched).
+6. **Latent bug found + fixed** — the v73.14 rows used `.txn`/`.txn-cat`/`.badgedel` classes whose CSS was deleted in the v18 ledger rework (commit `ffc92a3`), so the v73.14 list shipped UNSTYLED. The new `.plrow`/`.occ` CSS in `index.html` restores the row look.
+
+### What changed
+- `index.html` — the `#planForm` card deleted from the Money tab (replaced by the `#planAddBtn` one-line trigger); the form moved into the new `#planSheet` bottom sheet (`#planAddClose`); the Amount label trimmed to "Amount (₱)"; new `.plrow`/`.plrow.grp`/`.plrow.oneoff`/`.chev`/`.occwrap`/`.occ` CSS (series row, expand chevron, dashed sub-rows).
+- `app.js` — `renderPlans` rewritten around the new pure-ish `planHTML(p, opts)` (one-off plain row with ✕; series head with cadence/next/count/each + ✎ on the head; expanded sub-rows capped at `OCC_CAP = 5` with "+N more…"; "edited" on head when any occurrence is forked + on the forked sub-row; skipped dates absent); expand/collapse state (`planOpen`) survives re-renders until the plan SET changes; ✎ clicks stopPropagation (no accidental series toggle); the form binding now opens `#planSheet` via the trigger + closes the sheet on successful add; one-off sub-line de-dupes when `planWhen` already returns the full date; `planHTML` exported for the smoke; `SHELL_NOTES['73.15']` (3 plain-word lines).
+- `tools/check_site.py` — new v73.15 gate (sheet/trigger ids, "＋ Add a plan", label trim, `.plrow`/`.occwrap`/`.chev` CSS, `planHTML`/`OCC_CAP`/`data-grp`/`planOpen` pins, `openSheet('planSheet')`, the export, `'73.15': [`); required-ids list gains `planSheet`/`planAddBtn`/`planAddClose`.
+- `smoke_app_v68.js` — new `v7315Section` (10 checks: one-off plain row + own ✕; series row collapsed — cadence/next/count/each/✎, no ✕, no recurring pill, no sub-rows; expanded cap 5 + "+7 more…" (12 monthly) and "+3 more…" (uncapped weekly 8); fork wears "edited" on head + sub-row only (count 2); skip hides (3→2 rows); "all" fork marks the head edited); wired into the section chain.
+- `SHELL_NOTES['73.15']` — the three plain-word What's-new lines.
+
+### Files
+`index.html`, `app.js`, `sw.js` (v73.15 cache), `README.md` (stamp ref), `tools/check_site.py` (+ the root mirror), `smoke_app_v68.js` (root), `INSTRUCTIONS.md` (this entry).
+
+### Subtasks
+- [x] Mockup built + approved (`mockup_comingup.html` before/after)
+- [x] Series-grouped renderPlans (planHTML, OCC_CAP 5, expand/collapse state)
+- [x] Form-to-sheet (planSheet + one-line trigger)
+- [x] "— number or quick sum" tail removed from the add form's Amount label
+- [x] ✕ foot-gun out of the series list (delete-whole-plan in the edit sheet)
+- [x] Unstyled-rows latent bug fixed (.plrow/.occ CSS)
+- [x] Gates: v7315Section 10/10, release.ps1 v73.15 all green, headless screenshot (collapsed Rent, expanded Gym +3 more, forked Laptop w/ edited pills + ₱1,200, one-off gift)
+- [x] Commit + push (this entry's commit cites v73.15)
+
 ## 2026-09-26 — "rename it to just 'Coming up'" + "the home tab is so full of info?" + the Fin AI backlog "repeatable entries"
 Status: **done** — v73.14 shipped (commit `35cb0fc`, pushed to origin/main, SW cache `finances-pwa-v73.14`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.14 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7314Section 16/16)

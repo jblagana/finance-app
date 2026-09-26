@@ -176,6 +176,7 @@ def main():
               "coachNoteBlock", "coachNoteBody", "coachNoteSub", "coachNoteRefresh",
               "donut", "donutSvg", "donutLegend", "donutRange", "pace", "paceBox", "paceNote", "paceRange",
               "p_repeat", "p_count", "p_countWrap", "expJson", "expCsv",
+              "planSheet", "planAddBtn", "planAddClose",
               "planEditSheet", "pe_name", "pe_amount", "pe_date", "pe_scope", "peSave", "peSkip", "peDeleteAll", "peClose",
               "moneyLog", "mlBody", "mlFilter", "txnCard",
               "tab-owed", "owedForm", "owedName", "owedBody", "owedSum",
@@ -462,6 +463,20 @@ def main():
           and "data-editp" in js and "edited</span>" in js
           and "overrides: {}" in js
           and "'73.14': [" in js)
+    check("v73.15 (user: 'the ui for coming up and the entries is so cluttered' — the mockup he approved): the Coming-up list renders SERIES, not projections — a recurring plan is ONE tappable row (name · 'Every <cadence> · next <date>' · count badge · amount 'each') that expands into occurrence sub-rows capped at 5 with '+N more…'; one-offs are plain rows with their own ✕; the 'recurring' pill is gone (the row IS the series), 'edited' survives on the head (any fork) and on the specific sub-row; the ✕ foot-gun left the list for series (delete-whole-plan lives in the edit sheet); the add form collapsed to the one-line '＋ Add a plan' trigger and now lives in #planSheet (bottom-sheet family); the v73.14 rows' unstyled .txn classes are replaced by the .plrow/.occ styles (the v18 ledger rework had deleted the old .txn CSS); the form's Amount label drops the '— number or quick sum' tail",
+          'id="planSheet"' in html and 'id="planAddBtn"' in html and 'id="planAddClose"' in html
+          and '＋ Add a plan' in html and '<h2>Coming up</h2>' in html
+          and 'id="planForm"' in html and 'id="p_amount"' in html
+          and "number or quick sum" not in html
+          and ".plrow{" in html and ".occwrap{" in html and ".chev{" in html
+          and "function planHTML(p, opts) {" in js
+          and "var OCC_CAP = 5;" in js and "'+N more'" not in js
+          and "data-grp=" in js and "planOpen[" in js
+          and "class=\"plrow grp" in js and "class=\"plrow oneoff\"" in js
+          and "data-delp" in js and "data-editp" in js
+          and "openSheet('planSheet')" in js
+          and "planHTML: planHTML" in js
+          and "'73.15': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js

@@ -3945,6 +3945,63 @@
     sel.innerHTML = html;
     if (prev) sel.value = prev;
   }
+  // v73.15: the Coming-up list renders SERIES, not projections. A recurring
+  // plan is ONE tappable row (name · cadence · count badge · next date ·
+  // amount "each") that expands into quiet occurrence sub-rows (capped at
+  // OCC_CAP, "+N more…"); a one-off is a plain row. The "recurring" pill is
+  // gone (the row IS the series), "edited" survives — on the head when any
+  // occurrence is forked, and on the specific sub-row. The ✕ foot-gun left
+  // the list for series (delete-whole-plan lives in the edit sheet); one-offs
+  // keep their ✕ (it's a single date — nothing to nuke by accident).
+  var OCC_CAP = 5;
+  var planOpen = {}; // planId -> true while the series is expanded
+  var planSig = '';  // the plan set the open-state was captured for
+  function planHTML(p, opts) {
+    opts = opts || {};
+    var rec = !!p.repeat;
+    var per = p.repeat === 'daily' ? 'daily' : (p.repeat === 'weekly' ? 'weekly' : (p.repeat === 'annual' ? 'yearly' : 'monthly'));
+    var amt = function (v) { return money(v).replace('PHP ', ''); };
+    if (!rec) {
+      // a one-off: plain row, no pills, its own ✕. planWhen already returns
+      // the full date when it's not a relative window — don't double it.
+      var when = planWhen(p.date);
+      var subTxt = when === fmtDate(p.date) ? when : when + ' · ' + fmtDate(p.date);
+      return '<div class="plrow oneoff"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') + '</div>' +
+        '<div class="pl-sub">' + esc(subTxt) + '</div></div>' +
+        '<div class="pl-r"><div class="pl-amt">₱ ' + amt(p.amount) + '</div></div>' +
+        '<button class="mini" data-delp="' + p.id + '" title="Delete plan">✕</button></div>';
+    }
+    var occ = planOccurrences(p);
+    var shown = [];
+    var anyEdited = false;
+    occ.forEach(function (od) {
+      var ro = resolveOccurrence(p, od); // v73.14: the 3-scope resolver
+      if (ro && ro.skip) return;         // skipped dates don't render at all
+      if (ro && ro.edited) anyEdited = true;
+      shown.push({ d: od, ro: ro });
+    });
+    var headSub = 'Every ' + per + ' · next ' + (shown.length ? fmtDate(shown[0].d) : '—');
+    if (p.count) headSub += ' · ' + p.count + '×';
+    var head = '<div class="plrow grp' + (opts.open ? ' open' : '') + '" data-grp="' + p.id + '">' +
+      '<div class="chev">▸</div><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') +
+      (anyEdited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') +
+      '</div><div class="pl-sub">' + headSub + '</div></div>' +
+      '<div class="pl-r"><div class="pl-amt">₱ ' + amt(p.amount) + '</div><div class="pl-per">each</div></div>' +
+      (shown.length ? '<button class="mini" data-editp="' + p.id + '" data-editd="' + shown[0].d + '" title="Edit this occurrence">✎</button>' : '') + '</div>';
+    if (!opts.open) return head;
+    var sub = '<div class="occwrap">';
+    shown.slice(0, OCC_CAP).forEach(function (o) {
+      var nm = o.ro.name, a = o.ro.amount;
+      sub += '<div class="occ"><span class="oc-d">' + fmtDate(o.d) + '</span>' +
+        '<span class="oc-n">' + (nm !== p.name ? esc(nm) : '') + (o.ro.edited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') + '</span>' +
+        (a !== p.amount ? '<span class="oc-a">₱ ' + amt(a) + '</span>' : '') +
+        '<button class="mini oc-x" data-editp="' + p.id + '" data-editd="' + o.d + '" title="Edit this occurrence">✎</button></div>';
+    });
+    if (shown.length > OCC_CAP) sub += '<div class="occ"><span class="oc-d">+' + (shown.length - OCC_CAP) + ' more…</span></div>';
+    if (!shown.length) sub += '<div class="occ"><span class="oc-d">nothing left</span></div>';
+    sub += '</div>';
+    return head + sub;
+  }
   function renderPlans() {
     var el = byId('plans'); if (!el) return;
     var plans = state.plans.slice().sort(function (a, b) {
@@ -3952,39 +4009,28 @@
       return (a.created || '') < (b.created || '') ? -1 : 1;
     });
     if (!plans.length) {
-      el.innerHTML = '<p class="note" style="margin:2px 0">No plans yet — add one above to see what\'s coming and whether you can afford it.</p>';
+      el.innerHTML = '<p class="note" style="margin:2px 0">No plans yet — add one below to see what\'s coming and whether you can afford it.</p>';
       return;
     }
+    // expand/collapse state survives re-renders until the plan SET changes
+    var sig = plans.map(function (p) { return p.id; }).join('|');
+    if (sig !== planSig) { planOpen = {}; planSig = sig; }
     var html = '';
-    plans.forEach(function (p) {
-      var rec = !!p.repeat; // v73.1: monthly | weekly | annual (+ v73.14 daily)
-      var per = p.repeat === 'daily' ? 'daily' : (p.repeat === 'weekly' ? 'weekly' : (p.repeat === 'annual' ? 'yearly' : 'monthly'));
-      var occ = planOccurrences(p);
-      occ.forEach(function (od, i) {
-        // v73.14: render the RESOLVED occurrence (overrides: fork /
-        // this+following / all) — skipped dates don't render at all
-        var ro = rec ? resolveOccurrence(p, od) : null;
-        if (ro && ro.skip) return;
-        var nm = ro ? ro.name : p.name;
-        var amt = money(ro ? ro.amount : p.amount).replace('PHP ', '');
-        var meta = rec ? fmtDate(od) + ' · ' + per : esc(planWhen(p.date)) + ' · ' + fmtDate(p.date);
-        var tag = rec && i === 0 ? ' <span class="pill ok" style="font-size:10px">recurring</span>' : '';
-        // v73.14: forked dates wear an "edited" pill (distinct from recurring)
-        if (ro && ro.edited) tag += ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>';
-        // v73.14: the pencil edits THIS occurrence (recurring rows only);
-        // the ✕ is now explicit about nuking the whole series
-        var editBtn = rec ? '<button class="mini" data-editp="' + p.id + '" data-editd="' + od + '" title="Edit this occurrence">✎</button>' : '';
-        html += '<div class="txn"><div><div class="txn-cat">' + esc(nm || 'Plan') + tag + '</div>' +
-          '<div class="txn-meta">' + meta + '</div></div>' +
-          '<div class="txn-r"><div class="txn-amt">₱ ' + amt + '</div><div class="badgedel">' + editBtn +
-          '<button class="mini" data-delp="' + p.id + '" title="Delete' + (rec ? ' whole recurring plan' : ' plan') + '">✕</button></div></div></div>';
-      });
-    });
+    plans.forEach(function (p) { html += planHTML(p, { open: !!planOpen[p.id] }); });
     el.innerHTML = html;
+    var grps = el.querySelectorAll('[data-grp]');
+    for (var g = 0; g < grps.length; g++) grps[g].onclick = function () {
+      var id = this.getAttribute('data-grp');
+      planOpen[id] = !planOpen[id];
+      renderPlans();
+    };
     var btns = el.querySelectorAll('[data-delp]');
     for (var i = 0; i < btns.length; i++) btns[i].onclick = function () { deletePlan(this.getAttribute('data-delp')); };
     var ebtns = el.querySelectorAll('[data-editp]');
-    for (var j = 0; j < ebtns.length; j++) ebtns[j].onclick = function () { openPlanEdit(this.getAttribute('data-editp'), this.getAttribute('data-editd')); };
+    for (var j = 0; j < ebtns.length; j++) ebtns[j].onclick = function (e) {
+      if (e && e.stopPropagation) e.stopPropagation(); // don't toggle the series
+      openPlanEdit(this.getAttribute('data-editp'), this.getAttribute('data-editd'));
+    };
   }
   function addPlan(data) {
     var id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
@@ -5733,12 +5779,17 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.14, live: new Date(2026, 8, 26, 20, 58) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.15, live: new Date(2026, 8, 26, 23, 41) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.15': [
+      'Coming up is quieter: a recurring plan is now ONE row (the series — cadence, next date, how many times, amount each) that you tap to see its dates, instead of a wall of identical rows. The "recurring" tag is gone, edited dates still wear their tag, and deleting a whole plan no longer hides in the list — it lives in the plan\'s edit sheet',
+      'Adding a plan is one tap now: the big form on the Money tab collapsed to a single "＋ Add a plan" line that opens the form as a sheet',
+      'The amount field in the add form just says "Amount (₱)" now — the quick-sum hint tail is gone (quick sums still work, you just don\'t need to be told twice)'
+    ],
     '73.14': [
       'Home is slimmer: the "coming due" strip is gone (it just previewed the Coming-up list) and Coach Fin now has ONE card — his note sits at the top of it, not as a second bot card',
       'The Money tab section is now just "Coming up"',
@@ -6564,6 +6615,7 @@
     happyMoodFlash: happyMoodFlash, // v73.0: the good-moment smile (smoke drives it)
     render: render, // v73.0: the full re-render (the smoke reads the sparkline after)
     detectRecurring: detectRecurring, // v73.1: the recurring detector (pure — the smoke drives it)
+    planHTML: planHTML, // v73.15: the series-grouped row render (pure-ish — the smoke drives it)
     planOccurrences: planOccurrences, // v73.1: the occurrence math (weekly/annual; v73.14: daily + count)
     resolveOccurrence: resolveOccurrence, // v73.14: the 3-scope override resolver (pure — the smoke drives it)
     coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut)
@@ -6778,6 +6830,13 @@
       });
     };
 
+    // v73.15: the add form moved into #planSheet — the one-line trigger
+    // ("＋ Add a plan") opens it, the same bottom-sheet family as the edit
+    // sheet. The Money tab is just heading + trigger + list now.
+    var pAddBtn = byId('planAddBtn');
+    if (pAddBtn) pAddBtn.onclick = function () { openSheet('planSheet'); };
+    var pAddClose = byId('planAddClose');
+    if (pAddClose) pAddClose.onclick = function () { closeSheets(); };
     var pform = byId('planForm');
     if (pform) {
       // v73.14: the count field appears only when a repeat is picked
@@ -6805,7 +6864,7 @@
           byId('p_amount').value = '';
           if (cntEl) cntEl.value = '';
           if (repEl) { repEl.value = 'once'; if (cntWrap) cntWrap.style.display = 'none'; }
-          byId('p_name').focus();
+          closeSheets(); // v73.15: the sheet is done — the "Planned …" snack confirms
         });
       };
     }
