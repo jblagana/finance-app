@@ -173,9 +173,10 @@ def main():
               "baseStatus", "baseBody", "baseMigrated", "homeOpenSet", "homeCoach",
               "impBtn", "impFile", "snack", "swToast", "swReload",
               "hero", "heroFree", "heroSub", "sparkBox", "digBody", "coachActs",
-              "coachNote", "coachNoteBody", "coachNoteSub", "coachNoteRefresh",
+              "coachNoteBlock", "coachNoteBody", "coachNoteSub", "coachNoteRefresh",
               "donut", "donutSvg", "donutLegend", "donutRange", "pace", "paceBox", "paceNote", "paceRange",
-              "p_repeat", "expJson", "expCsv",
+              "p_repeat", "p_count", "p_countWrap", "expJson", "expCsv",
+              "planEditSheet", "pe_name", "pe_amount", "pe_date", "pe_scope", "peSave", "peSkip", "peDeleteAll", "peClose",
               "moneyLog", "mlBody", "mlFilter", "txnCard",
               "tab-owed", "owedForm", "owedName", "owedBody", "owedSum",
               "owedSumIn", "owedSumOut", "owedSumNet",
@@ -415,7 +416,7 @@ def main():
           and "h.style.display = m === 'happy' ? '' : 'none'" in js
           and "if (readUtilMax() > 70) return 'worried';" in js
           and "if (c && c.projectedNet < 0) return 'worried';" in js
-          and js.count("renderMood, render") == 5  # txn, plan, snap, adj, ui — every data key (the pulse rides after it; the export line is renderMood: renderMood,)
+          and js.count("renderMood, render") == 4  # txn, snap, adj, ui — every data key (the pulse rides after it; the export line is renderMood: renderMood,; v73.14: the plan key's due strip left the list)
           and "if (!editId && (kind === 'cash_in' || kind === 'card_payment')) happyMoodFlash(1800);" in js
           and 'class="spark-today"' in js
           and "'73.0': [" in js)
@@ -427,7 +428,7 @@ def main():
           and "function shiftYear(iso, k) {" in js
           and "function detectRecurring(txns, plans, todayISOStr) {" in js
           and "var recurringGuess = detectRecurring(state.txns, state.plans, today);" in js
-          and "var rep = ['monthly', 'weekly', 'annual'].indexOf(data.repeat) >= 0 ? data.repeat : null;" in js
+          and "var rep = ['daily', 'weekly', 'monthly', 'annual'].indexOf(data.repeat) >= 0 ? data.repeat : null;" in js  # v73.14: daily joined the allow-list
           and "if (med >= 6 && med <= 8) rep = 'weekly';" in js
           and "detectRecurring: detectRecurring" in js
           and "planOccurrences: planOccurrences" in js
@@ -435,17 +436,32 @@ def main():
           and "'73.1': [" in js)
     check("v73.2 (user: 'do all them' — the major upgrade, release 3 of 4): the MONEY PULSE — Home opens with last month in one card (in vs out split bar, top-3 spends, the coach's deterministic one-liner, the pinned lesson) and tapping it opens the full recap sheet (#recapSheet) where a LESSON can be pinned for next month (localStorage, keyed by month — readLesson/pinLesson); the DUE-DAY RADAR: a 'coming due' strip on Home shows the next 14 days of plan occurrences + the card prepay (renderDueStrip), and a card between 30% and 70% of its limit gets a coach nudge (over 70% is the v73.0 worried face); recapData is a PURE exported fn (the smoke drives it with a seeded ledger — in = cash_in, out = spend per the v72.44 rule, card_payment is not spend)",
           'id="recap"' in html and 'id="recapBody"' in html and 'id="recapOpen"' in html
-          and 'id="dueStrip"' in html and 'id="dueBody"' in html
           and 'id="recapSheet"' in html and 'id="recapLesson"' in html and 'id="recapPin"' in html
           and "function recapData(txns, month, plans) {" in js
           and "function renderRecap() {" in js
-          and "function renderDueStrip() {" in js
+          # v73.14: the due strip was REMOVED (Home slim) — the pin now asserts its absence
+          and 'id="dueStrip"' not in html and "function renderDueStrip() {" not in js
           and "function pinLesson(month, text) {" in js
           and "function readLesson(month) {" in js
           and "recapData: recapData" in js and "pinLesson: pinLesson" in js and "readLesson: readLesson" in js
           and "if (u > 70) return; // the mood carries it" in js
-          and "dd >= 0 && dd <= 14" in js
+          # v73.14: the strip's 14-day window string left with the strip — the recap sheet pin stands in
+          and "function openRecap() {" in js
           and "'73.2': [" in js)
+    check("v73.14 (user: 'rename it to just Coming up' + 'the home tab is so full of info?' + the Fin AI backlog 'repeatable entries'): (1) the Money tab's 'Plans · coming up' heading is now 'Coming up'; (2) Home slim — the due strip is GONE (it previewed the Coming-up list two taps away) and the two AI cards are MERGED: the coach's note is the opening block (#coachNoteBlock) INSIDE the #coach card, so Home reads as one coach voice; (3) REPEATABLE ENTRIES — the repeat select gains 'daily', the form gains a count field (visible only when a repeat is picked; blank = the old window), the plan row carries count + overrides, and the 3-scope model (boss-confirmed) lands in resolveOccurrence: 'just this one' = an exact-date fork, 'this one and after' = applyFrom, 'all' = applyFrom at the series' first occurrence, skip hides the occurrence; (4) the per-occurrence edit sheet (#planEditSheet) — name/amount/date pre-filled from the RESOLVED occurrence + the scope select + skip-this-occurrence + explicit delete-whole-plan; forked dates wear an 'edited' pill; (5) the coach's math (insightsData week items + month plans + the Plan-due rows) reads RESOLVED occurrences, so forks and skips change what the coach says",
+          '<h2>Coming up</h2>' in html and 'Plans · coming up' not in html
+          and 'id="coachNoteBlock"' in html and 'id="coachNote"' not in html
+          and 'id="dueStrip"' not in html and 'id="dueBody"' not in html
+          and '.coachnote-block{' in html
+          and '<option value="daily">Every day</option>' in html and 'id="p_count"' in html and 'id="p_countWrap"' in html
+          and "function resolveOccurrence(p, dateISO) {" in js
+          and "var cnt = Math.floor(Number(p.count));" in js
+          and 'id="planEditSheet"' in html and 'id="pe_scope"' in html and 'id="peSkip"' in html and 'id="peDeleteAll"' in html
+          and "function openPlanEdit(planId, dateISO) {" in js
+          and "function savePlanOccurrence() {" in js and "function skipPlanOccurrence() {" in js
+          and "data-editp" in js and "edited</span>" in js
+          and "overrides: {}" in js
+          and "'73.14': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js
@@ -469,7 +485,8 @@ def main():
           and "function ccDue() {" in js
           and "ccDueData: ccDueData" in js and "ccDue: ccDue" in js
           and "due_day: Number(b.due_day) || 5" in js
-          and "label: 'CC due', amt: d.ccDue.due, kind: 'ccdue'" in js
+          # v73.14: the due-strip row ('CC due' label) was removed with the strip — the ccDue math + mood stay
+          and "du.dueIn >= 0 && du.dueIn <= 7 && du.due > 0" in js
           and "cutoff ' + (s.cutoff_day || 15) + ' · due ' + (s.due_day || 5)" in js
           and "du.due > f0) return 'worried';" in js
           and "cc due on the ' + ordinal(du6.due_day)" in chatjs
@@ -606,10 +623,11 @@ def main():
     check("shared month snapshot (chat prompts + Home note) with a fingerprint for the note cache",
           "function coachSnapshot" in chatjs and "coachSnapshot: coachSnapshot" in chatjs
           and "function renderCoachNote" in js and "function readNoteCache" in js)
-    check("coach's note card on Home: read-only, cached, hidden without a coach",
-          'id="coachNote"' in html and 'id="coachNoteBody"' in html
+    check("coach's note card on Home: read-only, cached, hidden without a coach (v73.14: the note is the block INSIDE the coach card — Home slim)",
+          'id="coachNoteBlock"' in html and 'id="coachNoteBody"' in html
           and 'id="coachNoteRefresh"' in html and ".coachnote-t{" in html
-          and "FAI.note(snap.text)" in js and "NOTE_KEY" in js)
+          and "FAI.note(snap.text)" in js and "NOTE_KEY" in js
+          and "var el = byId('coachNoteBlock');" in js)
     check("token caps raised for the protocol: ai.js 512, sendLlm 256, worker 512",
           "Math.min(512, (opts && opts.maxNew) || 256)" in aijs
           and "{ maxNew: 256 }" in chatjs
@@ -643,8 +661,8 @@ def main():
     check("add-sheet options = base budget names; Unsorted default when none",
           "Object.keys((state.base && state.base.budgets) || {})" in js
           and "'>Unsorted</option>" in js and "selected>Unsorted</option>" in html)
-    check("re-seeded automatically when the base changes (snap render list; v72.30: renderMoneyLog follows — a base save can file 'Adjustment' rows; v73.0: renderMood rides the same key; v73.2: the money pulse + due strip)",
-          "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap, renderDueStrip]" in js)
+    check("re-seeded automatically when the base changes (snap render list; v72.30: renderMoneyLog follows — a base save can file 'Adjustment' rows; v73.0: renderMood rides the same key; v73.2: the money pulse; v73.14: the due strip left the list)",
+          "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap]" in js)
     check("chat matches only stored budget names: no hint list, no 'Other' fallback",
           "function mentionedBudget(t, ctx)" in chatjs
           and "cat: mentionedBudget(t, ctx)" in chatjs
@@ -984,7 +1002,7 @@ def main():
           and "mlShownCount = Math.max(5, mlShownCount - 5);" in js
           and "names.push('Owed')" not in js
           and "prevTxn.category || 'Unsorted'" in js
-          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap, renderDueStrip]" in js)  # v73.0: renderMood + v73.2: the pulse ride the snap key
+          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap]" in js)  # v73.0: renderMood + v73.2: the pulse ride the snap key; v73.14: the due strip left the list
     check("v72.31 (user: 'add x button in ledger for adjustment, it undoes the record in settings'): an Adjustment row (k='a') carries its own ✕ (data-adj-del = the row's moneyLog index) — it confirms, removes the audit record, and reverses the balance change it filed: the account's Settings value moves by the NEGATIVE of the row's signed diff through the base save with Adjustment-filing SUPPRESSED (deleting an audit record must not file a new one); the account gone from Settings → the row is simply deleted; the toast Undo restores row + value",
           "function findAdjAccount(name)" in js
           and "function askDeleteAdjustment(idx)" in js

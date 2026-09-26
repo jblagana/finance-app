@@ -6,6 +6,36 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-26 — "rename it to just 'Coming up'" + "the home tab is so full of info?" + the Fin AI backlog "repeatable entries"
+Status: **done** — v73.14 shipped (SW cache `finances-pwa-v73.14`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.14 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7314Section 16/16)
+
+### Interpretation (boss-confirmed choices)
+1. **Rename** — the Money tab's "Plans · coming up" heading is now just **"Coming up"** (the boss's words).
+2. **Home slim** — the boss felt Home was too full of info. Verified layout: 6 cards, of which the two AI cards (coach's note + coach) were duplicates and the due strip only previewed the Money tab's plan list. Decision (ratified by the boss's "Build rename + Home slim"): **cut the due strip** (its CC-due/prepay urgency still rides the coach card rows + the mood face) and **merge the coach's note INTO the coach card** as its opening block (`#coachNoteBlock`) — Home drops to 4 cards (greet, hero, recap, one coach card, insights) with nothing lost.
+3. **Repeatable entries** (the parked Fin AI backlog item) — recurring plans get **daily** cadence, a **count** (how many times; blank = the old "next few" window), and **per-occurrence editing** via the **3-scope model** the boss confirmed: **just this one** (default — a fork: exact-date override, siblings untouched) / **this one and after** (`applyFrom`) / **all occurrences** (`applyFrom` at the series' first occurrence). Plus **skip this occurrence** (a skip-override — the date hides, the series survives) and an explicit **delete whole plan** (the old ✕'s foot-gun, now labeled).
+
+### What changed
+- `index.html` — the h2 rename; the due-strip section deleted; the `#coachNote` card replaced by `#coachNoteBlock` inside `#coach` (+ `.coachnote-block` divider CSS); the Repeats select gains **Every day**; the `#p_countWrap`/`#p_count` field (shown only when a repeat is picked, "blank = keep showing the next few"); the new `#planEditSheet` bottom sheet (name/amount/date + `#pe_scope` 3-scope select + Skip + Delete whole plan, `#peClose`).
+- `app.js` — `planOccurrences` gains the daily shift (+1d, 730-guard) and honors `p.count` for EVERY cadence (no count = the old windows verbatim, so pre-v73.14 data renders identically); new pure `resolveOccurrence(p, dateISO)` (exact-date entry wins for its date, else the latest `applyFrom` ≤ date wins, `skip` hides, returns `{name, amount, skip, edited}`); `addPlan` allow-list `['daily','weekly','monthly','annual']` + stores `count` + `overrides: {}`; `renderPlans` renders RESOLVED occurrences (skipped dates don't render, forked dates wear an "edited" pill, recurring rows get a ✎ that opens the sheet, the ✕ title is now "Delete whole recurring plan"); new `openPlanEdit`/`savePlanOccurrence`/`skipPlanOccurrence` (save writes the scope's override — no-change clears back to the template; skip writes `{skip:true}` with a real Undo); the coach's math goes resolved — `insightsData` week items + month plans + the coach's Plan-due rows all read `resolveOccurrence` (a forked amount is what the coach quotes, a skipped date is absent); `renderDueStrip` deleted + dropped from every RENDER_BY_KEY list; `renderCoachNote`/`paintCoachNote` now target `#coachNoteBlock`; `resolveOccurrence` exported for the smoke.
+- `tools/check_site.py` — new v73.14 gate (rename, merged note block, due-strip ABSENCE, daily/count form fields, resolver + sheet pins, `'73.14': [` note); the v73.1 allow-list pin updated (daily is real now); the v73.2 gate now asserts the strip's absence; the v73.6 gate's due-strip row pin moved to the mood's `du.dueIn` check; the v73.0 `renderMood, render` count 5→4 (the plan key's strip left the list); both snap-key list pins updated; required-ids list swapped `coachNote`→`coachNoteBlock`, added the count + sheet ids.
+- `smoke_app_v68.js` — new `v7314Section` (16 checks: daily 14/+1d, count bounds for daily/weekly/monthly, past-date start, no-count compat, and the resolver's full 3-scope matrix incl. latest-applyFrom-wins, exact-beats-rule, skip, name+amount together, + addPlan storing daily+count+empty overrides); the v73.1 bogus-repeat probe moved from `'daily'` (now real) to `'fortnightly'`.
+- `SHELL_NOTES['73.14']` — the three plain-word What's-new lines (slimmer Home, the rename, the recurring teeth).
+
+### Files
+`index.html`, `app.js`, `sw.js` (v73.14 cache), `README.md` (stamp ref), `tools/check_site.py` (+ the root mirror), `smoke_app_v68.js` (root), `INSTRUCTIONS.md` (this entry).
+
+### Subtasks
+- [x] Rename "Plans · coming up" → "Coming up"
+- [x] Home slim: due strip cut, coach note merged into the coach card (6 → 4 cards)
+- [x] daily cadence + count in the occurrence math (old data renders identically)
+- [x] 3-scope override model (resolveOccurrence, pure) + skip
+- [x] Per-occurrence edit sheet (scope select, skip, explicit whole-plan delete)
+- [x] Coach math reads resolved occurrences (week items, month plans, Plan-due rows)
+- [x] Gates: v7314Section 16/16, release.ps1 v73.14 all green, headless DOM check (h2 "Coming up", merged card, sheet present)
+- [x] BACKLOG.md: the Fin AI item moved to Done
+- [x] Commit + push (this entry's commit cites v73.14)
+
 ## 2026-09-26 — "why did u change my numbers" — v73.12's upgrade zeroed the phone's overlay (41k free → −6,664.88)
 Status: **done** — v73.13 shipped (commit `ab5ebbd` + the `df6a002` live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.13`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.13 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7313Section 6/6)

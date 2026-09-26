@@ -85,6 +85,8 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--in
 .coachnote-r{margin-left:auto;border:0;background:none;color:var(--mut);font-size:15px;line-height:1;cursor:pointer;padding:2px 4px}
 .coachnote-r:active{color:var(--ink)}
 .coachnote-t{font-size:14px;line-height:1.45;margin:0;color:var(--ink)}
+/* v73.14: the note block lives INSIDE the coach card now (Home slim) */
+.coachnote-block{padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid rgba(255,255,255,.08)}
 input:focus,select:focus{outline:none;border-color:var(--acc)}
 select{appearance:none;-webkit-appearance:none;
 background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2393a1bd' viewBox='0 0 16 16'><path d='M8 11L3 6h10z'/></svg>");
@@ -555,21 +557,19 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       <div id="recapBody"></div>
     </section>
 
-    <section id="dueStrip" class="card" style="display:none">
-      <div class="recap-h"><span>Coming due · next 14 days</span></div>
-      <div id="dueBody"></div>
-    </section>
-
-    <section id="coachNote" class="card coachnote" style="display:none">
-      <div class="coachnote-h">
-        <svg class="coachnote-av" viewBox="0 0 64 64" aria-hidden="true"><use href="#botFace"/></svg>Coach’s note
-        <button type="button" id="coachNoteRefresh" class="coachnote-r" title="Ask the coach again" aria-label="Refresh coach’s note">↻</button>
-      </div>
-      <p class="coachnote-t" id="coachNoteBody"></p>
-      <p class="note" id="coachNoteSub" style="margin:6px 0 0"></p>
-    </section>
-
+    <!-- v73.14: Home slim — the due strip is gone (it previews the Money tab's
+         "Coming up" list, now two taps away) and the two AI cards are merged:
+         the coach's note is the opening block INSIDE the coach card, so Home
+         reads as one coach voice, not two bot cards back to back. -->
     <section id="coach" class="card coach" style="display:none">
+      <div id="coachNoteBlock" class="coachnote-block" style="display:none">
+        <div class="coachnote-h">
+          <svg class="coachnote-av" viewBox="0 0 64 64" aria-hidden="true"><use href="#botFace"/></svg>Coach’s note
+          <button type="button" id="coachNoteRefresh" class="coachnote-r" title="Ask the coach again" aria-label="Refresh coach’s note">↻</button>
+        </div>
+        <p class="coachnote-t" id="coachNoteBody"></p>
+        <p class="note" id="coachNoteSub" style="margin:6px 0 0"></p>
+      </div>
       <p class="coach-h" id="coachHead"></p>
       <p class="coach-s" id="coachSub"></p>
       <div id="digBody"></div>
@@ -598,7 +598,8 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
 
     <section id="sinking" class="card" style="display:none"><div id="sinkBody"></div></section>
 
-    <h2>Plans · coming up</h2>
+    <!-- v73.14: the Money tab's plans heading is now just "Coming up" (boss call) -->
+    <h2>Coming up</h2>
     <form id="planForm" class="card" autocomplete="off">
       <label for="p_name">What you're planning</label>
       <input id="p_name">
@@ -617,13 +618,20 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       </div>
       <!-- v73.1: the repeat became a select (once / monthly / weekly / annual) —
            the recurring engine, not just a monthly checkbox -->
+      <!-- v73.14: + Every day, and the count field appears only when a repeat
+           is picked (blank = keep showing the next few, as before) -->
       <label for="p_repeat">Repeats</label>
       <select id="p_repeat">
         <option value="once" selected>Once</option>
-        <option value="monthly">Every month</option>
+        <option value="daily">Every day</option>
         <option value="weekly">Every week</option>
+        <option value="monthly">Every month</option>
         <option value="annual">Every year</option>
       </select>
+      <div id="p_countWrap" style="display:none;margin-top:10px">
+        <label for="p_count">How many times <span class="note" style="margin-left:6px">blank = keep showing the next few</span></label>
+        <input id="p_count" type="number" min="1" step="1" inputmode="numeric">
+      </div>
       <div style="margin-top:14px">
         <button class="act" type="submit">Add plan</button>
       </div>
@@ -714,6 +722,42 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       <button class="act" id="recapPin" type="button">Pin it</button>
     </div>
     <p id="recapPinned" class="note" style="margin:10px 0 0"></p>
+  </div>
+</div>
+<!-- v73.14: per-occurrence edit sheet — fork this one / this+following / all,
+     plus skip-this-occurrence and the explicit whole-plan delete -->
+<div id="planEditSheet" class="sheet" role="dialog" aria-label="Edit this occurrence">
+  <div class="sheet-h">
+    <div class="t">Edit this occurrence</div>
+    <button id="peClose" class="sheet-x" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-b">
+    <label for="pe_name">Name</label>
+    <input id="pe_name">
+    <div class="row rowpair">
+      <div>
+        <label for="pe_amount">Amount (₱)</label>
+        <input id="pe_amount" type="text">
+      </div>
+      <div>
+        <label for="pe_date">Date</label>
+        <div class="dfield">
+          <input id="pe_date" type="date">
+        </div>
+      </div>
+    </div>
+    <label for="pe_scope" style="margin-top:12px;display:block">Apply to</label>
+    <select id="pe_scope">
+      <option value="this" selected>Just this one</option>
+      <option value="following">This one and after</option>
+      <option value="all">All occurrences</option>
+    </select>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="act" id="peSave" type="button">Save</button>
+      <button class="act ghost" id="peSkip" type="button">Skip this occurrence</button>
+    </div>
+    <p class="note" id="peHint" style="margin:10px 0 0"></p>
+    <button class="act ghost" id="peDeleteAll" type="button" style="margin-top:10px;width:100%">Delete whole plan</button>
   </div>
 </div>
 <div id="scrim"></div>

@@ -34,13 +34,14 @@
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
   var RENDER_BY_KEY = {
     // v73.0: renderMood on every data key — the face is the status light
-    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderRecap, renderDueStrip],
-    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote, renderMood, renderDueStrip],
+    // v73.14: renderDueStrip dropped from every key (the due strip is gone — Home slim)
+    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderRecap],
+    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote, renderMood],
     // v72.30: a base save can file 'Adjustment' ledger rows — the Ledger tab follows
-    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap, renderDueStrip],
-    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote, renderMood, renderRecap, renderDueStrip],
+    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap],
+    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote, renderMood, renderRecap],
     owed: [renderOwed],
-    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood, renderRecap, renderDueStrip]
+    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood, renderRecap]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -270,29 +271,73 @@
     var dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
     return localISO(new Date(d.getFullYear(), d.getMonth(), Math.min(Number(p[2]) || 1, dim)));
   }
+  // v73.14: the cadence gained 'daily' and a COUNT. p.count (int >= 1) bounds
+  // the series to exactly that many occurrences from the first one >= today;
+  // absent count keeps the old windows verbatim (weekly 8 / monthly 3 /
+  // annual 2; daily defaults to 14), so pre-v73.14 data renders identically.
   function planOccurrences(p) {
     if (!p || !p.repeat) return [String(p.date)];
     var today = todayISO();
     var d = String(p.date), guard = 0;
+    var win = p.repeat === 'weekly' ? 8 : (p.repeat === 'annual' ? 2 : (p.repeat === 'daily' ? 14 : 3));
+    var cnt = Math.floor(Number(p.count));
+    if (!(cnt >= 1)) cnt = win;
+    if (p.repeat === 'daily') {
+      var sd = function (x, k) { var dd = parseISO(x); dd.setDate(dd.getDate() + k); return localISO(dd); };
+      while (d < today && guard < 730) { d = sd(d, 1); guard++; }
+      var do2 = [];
+      for (var kd = 0; kd < cnt; kd++) do2.push(sd(d, kd));
+      return do2;
+    }
     if (p.repeat === 'weekly') {
       var sh = function (x, k) { return shiftWeek(x, k); };
       while (d < today && guard < 104) { d = sh(d, 1); guard++; }
       var wo = [];
-      for (var kw = 0; kw < 8; kw++) wo.push(sh(d, kw)); // ~2 months ahead
+      for (var kw = 0; kw < cnt; kw++) wo.push(sh(d, kw));
       return wo;
     }
     if (p.repeat === 'annual') {
       var sy = function (x, k) { return shiftYear(x, k); };
       while (d < today && guard < 12) { d = sy(d, 1); guard++; }
       var yo = [];
-      for (var ky = 0; ky < 2; ky++) yo.push(sy(d, ky));
+      for (var ky = 0; ky < cnt; ky++) yo.push(sy(d, ky));
       return yo;
     }
     // monthly (the original path, unchanged)
     while (d < today && guard < 36) { d = shiftMonth(d, 1); guard++; }
     var out = [];
-    for (var k = 0; k < 3; k++) out.push(shiftMonth(d, k));
+    for (var k = 0; k < cnt; k++) out.push(shiftMonth(d, k));
     return out;
+  }
+  // v73.14: per-occurrence overrides — the 3-scope model (boss-confirmed).
+  // p.overrides maps dateISO -> { name?, amount?, skip?, applyFrom? }:
+  //   "just this one"      -> entry keyed exactly at that date (a fork)
+  //   "this one and after" -> entry with applyFrom <= date (latest wins)
+  //   "all occurrences"    -> entry at the series' first occurrence
+  // Resolution per occurrence: the exact-date entry wins for that date;
+  // otherwise the latest applyFrom entry at or before it wins. skip hides.
+  function resolveOccurrence(p, dateISO) {
+    var res = { name: p.name, amount: p.amount, skip: false, edited: false };
+    var ov = p.overrides;
+    if (!ov) return res;
+    var exact = ov[dateISO];
+    var best = null, bestKey = '';
+    Object.keys(ov).forEach(function (k) {
+      var e = ov[k];
+      if (!e || k > dateISO) return;
+      if (e.applyFrom) {
+        var f = e.applyFrom;
+        if (f > dateISO) return;
+        if (!best || f > bestKey) { best = e; bestKey = f; }
+      }
+    });
+    var e = exact || best;
+    if (!e) return res;
+    if (e.skip) { res.skip = true; return res; }
+    if (e.name != null) res.name = e.name;
+    if (e.amount != null) res.amount = e.amount;
+    res.edited = true;
+    return res;
   }
   function mealBudget() {
     try { var v = parseFloat(localStorage.getItem(LS_MEAL)); return (v > 0) ? v : MEAL_DEFAULT; } catch (e) { return MEAL_DEFAULT; }
@@ -2491,41 +2536,10 @@
     var body = byId('recapBody');
     if (body) body.innerHTML = html;
   }
-  function renderDueStrip() {
-    var el = byId('dueStrip'); if (!el) return;
-    var d = insightsData();
-    if (!d) { el.style.display = 'none'; return; }
-    var today = d.today;
-    var rows = [];
-    state.plans.forEach(function (p) {
-      planOccurrences(p).forEach(function (od) {
-        var dd = diffDays(today, od);
-        if (dd >= 0 && dd <= 14) rows.push({ date: od, dd: dd, label: p.name || 'Plan', amt: Number(p.amount) || 0, kind: 'plan' });
-      });
-    });
-    if (d.prepayAmt > 0 && d.prepayIn >= 0 && d.prepayIn <= 14) {
-      rows.push({ date: null, dd: d.prepayIn, label: 'Card prepay', amt: d.prepayAmt, kind: 'prepay' });
-    }
-    // v73.6: the CC DUE (the 5th) — the statement window's charges minus the
-    // prepays in it; the due amount is ledger-derived (only as good as the
-    // logged charges), so it shows whenever there is a due day and a window
-    if (d.ccDue) {
-      rows.push({ date: d.ccDue.dueDate, dd: d.ccDue.dueIn, label: 'CC due', amt: d.ccDue.due, kind: 'ccdue' });
-    }
-    rows.sort(function (a, b) { return a.dd - b.dd; });
-    rows = rows.slice(0, 5);
-    if (!rows.length) { el.style.display = 'none'; return; }
-    el.style.display = '';
-    var html = '';
-    rows.forEach(function (r) {
-      var when = r.dd === 0 ? 'today' : (r.dd === 1 ? 'tomorrow' : 'in ' + r.dd + 'd');
-      var whenFull = r.date ? (when + ' · ' + fmtDate(r.date)) : (d.prepayIn === 0 ? 'today' : 'in ' + d.prepayIn + 'd');
-      html += '<div class="due-row' + (r.dd <= 2 ? ' soon' : '') + '"><span>' + esc(r.label) +
-        ' <span class="due-d">' + whenFull + '</span></span><b>' + money(r.amt) + '</b></div>';
-    });
-    var body = byId('dueBody');
-    if (body) body.innerHTML = html;
-  }
+  // v73.14: the due strip is GONE (Home slim) — it previewed the Money tab's
+  // "Coming up" list, which is two taps away and now carries the same
+  // resolved-occurrence data. The CC-due / prepay urgency it surfaced still
+  // rides the coach card (renderCoach rows + mood), so nothing is lost.
   // v73.2: the full recap sheet
   function openRecap() {
     var now = new Date();
@@ -2638,9 +2652,14 @@
     state.plans.forEach(function (p) {
       var countedLater = false;
       planOccurrences(p).forEach(function (od) {
+        // v73.14: the coach sees RESOLVED occurrences (forks + skips)
+        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        if (ro && ro.skip) return;
+        var nm = ro ? ro.name : p.name;
+        var am = ro ? ro.amount : p.amount;
         var dd = diffDays(today, od);
-        if (dd >= 0 && dd <= 6) items.push({ d: dd, date: od, label: p.name || 'Plan', amt: Number(p.amount) || 0 });
-        else if (dd > 6 && !countedLater) { laterCount++; laterAmt += Number(p.amount) || 0; countedLater = true; }
+        if (dd >= 0 && dd <= 6) items.push({ d: dd, date: od, label: nm || 'Plan', amt: Number(am) || 0 });
+        else if (dd > 6 && !countedLater) { laterCount++; laterAmt += Number(am) || 0; countedLater = true; }
       });
     });
     var prepayDay = Number(s.prepay_day) || 14;
@@ -2658,7 +2677,12 @@
     state.plans.forEach(function (p) {
       var occ = planOccurrences(p);
       for (var i = 0; i < occ.length; i++) {
-        if (String(occ[i]).slice(0, 7) === monthPrefix) { monthPlans += Number(p.amount) || 0; monthPlanCount++; break; }
+        if (String(occ[i]).slice(0, 7) === monthPrefix) {
+          // v73.14: resolved (a forked amount counts, a skipped one doesn't)
+          var ro = p.repeat ? resolveOccurrence(p, occ[i]) : null;
+          if (ro && ro.skip) continue;
+          monthPlans += Number(ro ? ro.amount : p.amount) || 0; monthPlanCount++; break;
+        }
       }
     });
     var spentM = 0;
@@ -3352,6 +3376,8 @@
     try { return JSON.parse(localStorage.getItem(NOTE_KEY) || 'null'); } catch (e) { return null; }
   }
   function paintCoachNote(el, txt, stale) {
+    // v73.14: el is the note BLOCK inside the coach card (not a card) —
+    // hiding it never touches the coach card itself
     if (!txt) { el.style.display = 'none'; return; }
     el.style.display = '';
     var body = byId('coachNoteBody');
@@ -3365,7 +3391,9 @@
     }
   }
   function renderCoachNote() {
-    var el = byId('coachNote');
+    // v73.14: the note paints the block INSIDE #coach (Home slim) — the
+    // coach card's own show/hide gate (insightsData) is untouched
+    var el = byId('coachNoteBlock');
     if (!el) return;
     var FAI = typeof window !== 'undefined' ? window.FinAI : null;
     var chat = typeof window !== 'undefined' ? window.__financeChat : null;
@@ -3754,8 +3782,12 @@
     var urgent = [];
     state.plans.forEach(function (p) {
       planOccurrences(p).forEach(function (od) {
-        var dd = diffDays(d.today, od);
-        if (dd >= 0 && dd <= 7) urgent.push({ p: p, date: od, dd: dd });
+        // v73.14: resolved (forked name/amount show, skipped dates don't)
+        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        if (ro && ro.skip) return;
+        var u2 = { p: p, date: od, dd: diffDays(d.today, od) };
+        if (ro) { u2.nm = ro.name; u2.am = ro.amount; }
+        if (u2.dd >= 0 && u2.dd <= 7) urgent.push(u2);
       });
     });
     urgent.sort(function (a, b) { return a.dd - b.dd; });
@@ -3768,10 +3800,13 @@
         text: 'Handled — ' + money(Number(paid.amount) || 0) + ' logged on ' + planWhen(paid.date) + '.',
         r: 'done' });
       else {
+        // v73.14: the row shows the RESOLVED name/amount (fork-aware)
+        var un = u.nm != null ? u.nm : u.p.name;
+        var ua = u.am != null ? u.am : u.p.amount;
         rows.push({ cls: u.dd <= 2 ? 'bad' : 'warn', tag: 'Plan due',
-          text: (u.p.name || 'Plan') + ' is due ' + pw2 + '.',
-          r: money(u.p.amount) });
-        alerts.push('plan:' + (u.p.name || 'Plan'));
+          text: (un || 'Plan') + ' is due ' + pw2 + '.',
+          r: money(ua) });
+        alerts.push('plan:' + (un || 'Plan'));
         shown++;
       }
     }
@@ -3922,38 +3957,130 @@
     }
     var html = '';
     plans.forEach(function (p) {
-      var amt = money(p.amount).replace('PHP ', '');
-      var rec = !!p.repeat; // v73.1: monthly | weekly | annual
-      var per = p.repeat === 'weekly' ? 'weekly' : (p.repeat === 'annual' ? 'yearly' : 'monthly');
+      var rec = !!p.repeat; // v73.1: monthly | weekly | annual (+ v73.14 daily)
+      var per = p.repeat === 'daily' ? 'daily' : (p.repeat === 'weekly' ? 'weekly' : (p.repeat === 'annual' ? 'yearly' : 'monthly'));
       var occ = planOccurrences(p);
       occ.forEach(function (od, i) {
+        // v73.14: render the RESOLVED occurrence (overrides: fork /
+        // this+following / all) — skipped dates don't render at all
+        var ro = rec ? resolveOccurrence(p, od) : null;
+        if (ro && ro.skip) return;
+        var nm = ro ? ro.name : p.name;
+        var amt = money(ro ? ro.amount : p.amount).replace('PHP ', '');
         var meta = rec ? fmtDate(od) + ' · ' + per : esc(planWhen(p.date)) + ' · ' + fmtDate(p.date);
         var tag = rec && i === 0 ? ' <span class="pill ok" style="font-size:10px">recurring</span>' : '';
-        html += '<div class="txn"><div><div class="txn-cat">' + esc(p.name || 'Plan') + tag + '</div>' +
+        // v73.14: forked dates wear an "edited" pill (distinct from recurring)
+        if (ro && ro.edited) tag += ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>';
+        // v73.14: the pencil edits THIS occurrence (recurring rows only);
+        // the ✕ is now explicit about nuking the whole series
+        var editBtn = rec ? '<button class="mini" data-editp="' + p.id + '" data-editd="' + od + '" title="Edit this occurrence">✎</button>' : '';
+        html += '<div class="txn"><div><div class="txn-cat">' + esc(nm || 'Plan') + tag + '</div>' +
           '<div class="txn-meta">' + meta + '</div></div>' +
-          '<div class="txn-r"><div class="txn-amt">₱ ' + amt + '</div><div class="badgedel">' +
-          '<button class="mini" data-delp="' + p.id + '" title="Delete' + (rec ? ' recurring plan' : ' plan') + '">✕</button></div></div></div>';
+          '<div class="txn-r"><div class="txn-amt">₱ ' + amt + '</div><div class="badgedel">' + editBtn +
+          '<button class="mini" data-delp="' + p.id + '" title="Delete' + (rec ? ' whole recurring plan' : ' plan') + '">✕</button></div></div></div>';
       });
     });
     el.innerHTML = html;
     var btns = el.querySelectorAll('[data-delp]');
     for (var i = 0; i < btns.length; i++) btns[i].onclick = function () { deletePlan(this.getAttribute('data-delp')); };
+    var ebtns = el.querySelectorAll('[data-editp]');
+    for (var j = 0; j < ebtns.length; j++) ebtns[j].onclick = function () { openPlanEdit(this.getAttribute('data-editp'), this.getAttribute('data-editd')); };
   }
   function addPlan(data) {
     var id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
     // v73.1: weekly + annual ride the same row (the v68 monthly-only guard
-    // dropped in favor of an allow-list — anything else is a one-off)
-    var rep = ['monthly', 'weekly', 'annual'].indexOf(data.repeat) >= 0 ? data.repeat : null;
+    // dropped in favor of an allow-list — anything else is a one-off);
+    // v73.14: daily joins, and the row carries count (series length) +
+    // overrides (per-occurrence forks — empty until the first edit)
+    var rep = ['daily', 'weekly', 'monthly', 'annual'].indexOf(data.repeat) >= 0 ? data.repeat : null;
+    var cnt = Math.floor(Number(data.count));
     var p = { id: id, name: data.name, amount: data.amount, date: data.date,
-      repeat: rep, created: new Date().toISOString() };
+      repeat: rep, count: (rep && cnt >= 1) ? cnt : null, overrides: {},
+      created: new Date().toISOString() };
     state.plans.push(p);
     return idbPut(STORE_PLANS, p).then(function () {
       emit('plan');
-      snack('Planned ' + esc(p.name) + ' · ' + money(p.amount) + (p.repeat ? ' · every ' + (p.repeat === 'weekly' ? 'week' : (p.repeat === 'annual' ? 'year' : 'month')) : ''), function () {
+      var perTxt = p.repeat === 'daily' ? 'day' : (p.repeat === 'weekly' ? 'week' : (p.repeat === 'annual' ? 'year' : 'month'));
+      var cntTxt = p.count ? ' · ' + p.count + 'x' : '';
+      snack('Planned ' + esc(p.name) + ' · ' + money(p.amount) + (p.repeat ? ' · every ' + perTxt + cntTxt : ''), function () {
         state.plans = state.plans.filter(function (x) { return x.id !== id; });
         idbDel(STORE_PLANS, id).then(function () { emit('plan'); });
       });
       return id;
+    });
+  }
+  // v73.14: the per-occurrence edit sheet. The 3-scope model (boss-confirmed):
+  // "just this one" forks (exact-date override), "this one and after" writes
+  // applyFrom=date, "all" writes the override at the series' first
+  // occurrence. Skip writes a skip-override (the occurrence hides, the
+  // series survives). Delete-whole-plan is the old deletePlan, now explicit.
+  var planEditCtx = null; // { plan, dateISO }
+  function openPlanEdit(planId, dateISO) {
+    var p = null;
+    for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === planId) p = state.plans[i];
+    if (!p || !p.repeat) return;
+    planEditCtx = { plan: p, dateISO: dateISO };
+    var ro = resolveOccurrence(p, dateISO);
+    var n = byId('pe_name'), a = byId('pe_amount'), dt = byId('pe_date'), sc = byId('pe_scope'), h = byId('peHint');
+    if (n) n.value = ro.name || '';
+    if (a) a.value = String(ro.amount != null ? ro.amount : '');
+    if (dt) dt.value = dateISO;
+    if (sc) sc.value = 'this';
+    if (h) {
+      h.textContent = 'Editing ' + fmtDate(dateISO) + ' of ' + esc(p.name || 'plan') + ' — the rest of the series keeps the plan as-is unless you say otherwise.';
+      h.style.display = '';
+    }
+    openSheet('planEditSheet');
+  }
+  function savePlanOccurrence() {
+    if (!planEditCtx) return;
+    var p = planEditCtx.plan, dateISO = planEditCtx.dateISO;
+    var name = (byId('pe_name').value || '').trim();
+    var amount = evalExpr(byId('pe_amount').value);
+    if (amount === null) amount = NaN;
+    if (!name) { alert('Give the plan a name.'); return; }
+    if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
+    var scope = byId('pe_scope').value;
+    var occ = planOccurrences(p);
+    var first = occ.length ? occ[0] : dateISO;
+    var entry = {};
+    if (name !== p.name) entry.name = name;
+    if (amount !== p.amount) entry.amount = amount;
+    // no change at all -> clear any prior override for this date (back to template)
+    var ov = p.overrides || {};
+    if (scope === 'all') {
+      // the series-wide rule rides applyFrom at the FIRST occurrence; an
+      // exact-date entry there would only cover that one date
+      delete ov[first];
+      if (Object.keys(entry).length) ov[first] = { name: entry.name != null ? entry.name : p.name, amount: entry.amount != null ? entry.amount : p.amount, applyFrom: first };
+    } else if (scope === 'following') {
+      delete ov[dateISO]; // an exact entry at this date would shadow the rule
+      if (Object.keys(entry).length) ov[dateISO] = { name: entry.name != null ? entry.name : p.name, amount: entry.amount != null ? entry.amount : p.amount, applyFrom: dateISO };
+    } else {
+      if (Object.keys(entry).length) ov[dateISO] = entry; else delete ov[dateISO];
+    }
+    p.overrides = ov;
+    closeSheets();
+    planEditCtx = null;
+    return idbPut(STORE_PLANS, p).then(function () {
+      emit('plan');
+      snack('Updated ' + esc(name) + ' · ' + fmtDate(dateISO) + (scope === 'all' ? ' · all occurrences' : (scope === 'following' ? ' · this one and after' : '')), function () { /* the override stands — undo would need the prior row; keep it simple */ });
+    });
+  }
+  function skipPlanOccurrence() {
+    if (!planEditCtx) return;
+    var p = planEditCtx.plan, dateISO = planEditCtx.dateISO;
+    var ov = p.overrides || {};
+    ov[dateISO] = { skip: true };
+    p.overrides = ov;
+    closeSheets();
+    planEditCtx = null;
+    return idbPut(STORE_PLANS, p).then(function () {
+      emit('plan');
+      snack('Skipped ' + esc(p.name || 'plan') + ' · ' + fmtDate(dateISO), function () {
+        delete ov[dateISO];
+        idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
+      });
     });
   }
   function deletePlan(id) {
@@ -5606,12 +5733,17 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.13, live: new Date(2026, 8, 26, 12, 29) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.14, live: new Date(2026, 8, 26, 20, 45) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.14': [
+      'Home is slimmer: the "coming due" strip is gone (it just previewed the Coming-up list) and Coach Fin now has ONE card — his note sits at the top of it, not as a second bot card',
+      'The Money tab section is now just "Coming up"',
+      'Recurring plans get real teeth: you can repeat them daily, cap how many times they run, and edit any single occurrence — just that one, that one and everything after, or all of them (edited dates wear an "edited" tag, and you can skip one occurrence without killing the plan)'
+    ],
     '73.13': [
       'Fixed the v73.12 upgrade wiping your entries: the overlay (your logged txns since the last base edit) was being zeroed out because a formula change looked like a base edit. Your free cash is back to liquid − cards owed, and your entries are kept. If your free still looks off after this, re-import your last backup once'
     ],
@@ -6432,7 +6564,8 @@
     happyMoodFlash: happyMoodFlash, // v73.0: the good-moment smile (smoke drives it)
     render: render, // v73.0: the full re-render (the smoke reads the sparkline after)
     detectRecurring: detectRecurring, // v73.1: the recurring detector (pure — the smoke drives it)
-    planOccurrences: planOccurrences, // v73.1: the occurrence math (weekly/annual)
+    planOccurrences: planOccurrences, // v73.1: the occurrence math (weekly/annual; v73.14: daily + count)
+    resolveOccurrence: resolveOccurrence, // v73.14: the 3-scope override resolver (pure — the smoke drives it)
     coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut)
     insightsData: insightsData, // v73.2: the insight math (coachRows' input)
     goalPace: goalPace, // v73.3: the goal pace (pure — the smoke drives it)
@@ -6646,23 +6779,49 @@
     };
 
     var pform = byId('planForm');
-    if (pform) pform.onsubmit = function (e) {
-      e.preventDefault();
-      var name = (byId('p_name').value || '').trim();
-      var amount = evalExpr(byId('p_amount').value);
-      if (amount === null) amount = NaN;
-      if (!name) { alert('Give the plan a name.'); return; }
-      if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
-      var repEl = byId('p_repeat');
-      // v73.1: the repeat is a select now (once / monthly / weekly / annual)
-      var repVal = repEl ? String(repEl.value || 'once') : 'once';
-      addPlan({ name: name, amount: amount, date: byId('p_date').value || todayISO(),
-        repeat: repVal === 'once' ? null : repVal }).then(function () {
-        byId('p_name').value = '';
-        byId('p_amount').value = '';
-        if (repEl) repEl.value = 'once';
-        byId('p_name').focus();
-      });
+    if (pform) {
+      // v73.14: the count field appears only when a repeat is picked
+      var repEl0 = byId('p_repeat'), cntWrap = byId('p_countWrap');
+      if (repEl0 && cntWrap) repEl0.onchange = function () {
+        cntWrap.style.display = repEl0.value === 'once' ? 'none' : '';
+      };
+      pform.onsubmit = function (e) {
+        e.preventDefault();
+        var name = (byId('p_name').value || '').trim();
+        var amount = evalExpr(byId('p_amount').value);
+        if (amount === null) amount = NaN;
+        if (!name) { alert('Give the plan a name.'); return; }
+        if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
+        var repEl = byId('p_repeat');
+        // v73.1: the repeat is a select now (once / monthly / weekly / annual);
+        // v73.14: + daily, and the count bounds the series (blank = next few)
+        var repVal = repEl ? String(repEl.value || 'once') : 'once';
+        var cntEl = byId('p_count');
+        var cntVal = cntEl ? Math.floor(Number(cntEl.value)) : NaN;
+        if (!(cntVal >= 1)) cntVal = null;
+        addPlan({ name: name, amount: amount, date: byId('p_date').value || todayISO(),
+          repeat: repVal === 'once' ? null : repVal, count: cntVal }).then(function () {
+          byId('p_name').value = '';
+          byId('p_amount').value = '';
+          if (cntEl) cntEl.value = '';
+          if (repEl) { repEl.value = 'once'; if (cntWrap) cntWrap.style.display = 'none'; }
+          byId('p_name').focus();
+        });
+      };
+    }
+    // v73.14: the per-occurrence edit sheet
+    var peClose = byId('planEditClose');
+    if (peClose) peClose.onclick = function () { closeSheets(); planEditCtx = null; };
+    var peSave = byId('peSave');
+    if (peSave) peSave.onclick = function () { savePlanOccurrence(); };
+    var peSkip = byId('peSkip');
+    if (peSkip) peSkip.onclick = function () { skipPlanOccurrence(); };
+    var peDel = byId('peDeleteAll');
+    if (peDel) peDel.onclick = function () {
+      var id = planEditCtx ? planEditCtx.plan.id : null;
+      closeSheets();
+      planEditCtx = null;
+      if (id) deletePlan(id);
     };
     owedBindEvents();
     bindConfirm();
