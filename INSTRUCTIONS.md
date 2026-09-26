@@ -7,7 +7,7 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-26 — "the ui for coming up and the entries is so cluttered" (the approved mockup) + "remove this part '— number or quick sum'"
-Status: **done** — v73.15 shipped (commit `PENDING`, pushed to origin/main, SW cache `finances-pwa-v73.15`)
+Status: **done** — v73.15 shipped (commit `e3e35a4` + the live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.15`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.15 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7315Section 10/10)
 
 ### Interpretation (boss-confirmed choices)
