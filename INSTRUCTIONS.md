@@ -7,7 +7,7 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-26 — "why did u change my numbers" — v73.12's upgrade zeroed the phone's overlay (41k free → −6,664.88)
-Status: **done** — v73.13 shipped (commit `PENDING` + the live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.13`)
+Status: **done** — v73.13 shipped (commit `ab5ebbd` + the `df6a002` live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.13`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.13 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7313Section 6/6)
 
 ### Interpretation (agent)
