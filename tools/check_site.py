@@ -519,6 +519,14 @@ def main():
           and "card_prepay: cardOwed" in js  # the comp field carries the full owed (the tile/committed read it)
           and "if (t.kind === 'card_payment') return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js  # v72.42 overlay rule intact (keeps free = liquid - owed live)
           and "'73.12': [" in js)
+    check("v73.13 (user: 'why did u change my numbers' - the v73.12 upgrade zeroed the phone's overlay, 41k free -> -6,664.88): the rebase trigger (snapSig) carried the DERIVED cash.free, so the owed-model formula change altered the sig without any base edit -> boot ran a FALSE REBASE and wiped the live overlay. The sig is now the RAW inputs only (liquid|owed|prepay slice) and old 4-component stored sigs normalize to the 3-component one at boot + import - a formula change can never trip the rebase again",
+          "return [s.cash && s.cash.total, s.card_owed, s.total_prepay].join('|');" in js  # raw inputs only, no derived free
+          and "function normalizeStoredSig(sig) {" in js  # old 4-comp -> 3-comp
+          and "return p.length === 4 ? [p[0], p[2], p[3]].join('|') : sig;" in js  # drops the derived free (comp 2)
+          and "state.adjSig = normalizeStoredSig(m.value || '');" in js  # boot normalizes the stored sig
+          and "normalizeStoredSig(data.adjSig)" in js  # import normalizes too
+          and "function snapSig(s) { return F.snapSig ? F.snapSig(s) : ''; }" in chatjs  # the coach reuses the app's sig (no drift)
+          and "'73.13': [" in js)
 
     print("\n== online coach (optional, remote-only) ==")
     check("coach prompt: system + short memory + stored account/budget names",

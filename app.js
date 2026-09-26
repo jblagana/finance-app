@@ -385,9 +385,25 @@
       idbPut(STORE_META, { key: 'adjSig', value: state.adjSig })
     ]);
   }
+  // v73.13: the sig carries the RAW inputs only (liquid, owed, prepay slice) —
+  // NEVER the derived cash.free. v73.12's sig included cash.free, so the
+  // owed-model formula change (free = liquid − owed) changed the sig WITHOUT
+  // any sheet/base edit -> boot read that as "sheet numbers moved" and ran a
+  // FALSE REBASE that zeroed the phone's live overlay (the boss's 41k free
+  // became the base-only −6,664.88). A derived value in the rebase trigger
+  // is the bug: the overlay must survive formula changes, not just base edits.
   function snapSig(s) {
     if (!s) return '';
-    return [s.cash && s.cash.total, s.cash && s.cash.free, s.card_owed, s.total_prepay].join('|');
+    return [s.cash && s.cash.total, s.card_owed, s.total_prepay].join('|');
+  }
+  // v73.13: a stored/imported sig from the old 4-component format (total|free|
+  // owed|prepay) maps to the new 3-component one by dropping the derived free
+  // — so an old phone's persisted overlay matches the current snapshot and
+  // survives the upgrade instead of tripping a false rebase.
+  function normalizeStoredSig(sig) {
+    if (typeof sig !== 'string' || !sig) return sig;
+    var p = sig.split('|');
+    return p.length === 4 ? [p[0], p[2], p[3]].join('|') : sig;
   }
   function adjActive() { return !!(state.adj.cash || state.adj.free || state.adj.card); }
   function setServerSnapshot(snap) {
@@ -5543,7 +5559,7 @@
             var mlRows = sanitizeMoneyLogRows(data.moneyLog);
             state.moneyLog = mlRows;
             state.adj = sanitizeAdj(data.adj);
-            state.adjSig = typeof data.adjSig === 'string' ? data.adjSig : snapSig(state.snapshot);
+            state.adjSig = typeof data.adjSig === 'string' ? normalizeStoredSig(data.adjSig) : snapSig(state.snapshot); // v73.13: old 4-comp sigs map to the 3-comp one
             state.adjLoaded = true;
             if (!data.adj) computeAdjFromTxns(); // v72.8: a pre-72.8 backup has no adj — recompute from the imported txns
             if (hasSec('txns')) migratePayoffModel(); // v72.43: a pre-v72.42 backup's adj still carries the old payoff model (adj + txns come from the same file)
@@ -5590,12 +5606,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.12, live: new Date(2026, 8, 26, 2, 2) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.13, live: new Date(2026, 8, 26, 11, 40) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.13': [
+      'Fixed the v73.12 upgrade wiping your entries: the overlay (your logged txns since the last base edit) was being zeroed out because a formula change looked like a base edit. Your free cash is back to liquid − cards owed, and your entries are kept. If your free still looks off after this, re-import your last backup once'
+    ],
     '73.12': [
       'Free cash is now honest: it subtracts your FULL card balance (liquid − cards owed − other commitments), not just the prepay-to-target slice. Your free number will sit lower than before — that is the fix, not a bug. Paying a card still does not move free (the charge already committed it)'
     ],
@@ -6437,6 +6456,10 @@
     migratePayoffModel: migratePayoffModel, // v72.43: the one-shot persisted-overlay migration (smoke drives it)
     getAdj: function () { return state.adj; }, // v72.43: the live overlay (smoke simulates a pre-v72.42 phone)
     setAdj: function (a) { state.adj = a; }, // v72.43: test hook (smoke)
+    snapSig: snapSig, // v73.13: the rebase trigger (raw inputs only — smoke pins the format)
+    normalizeStoredSig: normalizeStoredSig, // v73.13: old 4-comp sigs -> 3-comp (smoke drives it)
+    setAdjSig: function (s) { state.adjSig = s; }, // v73.13: test hook (smoke simulates an old phone's stored sig)
+    getAdjSig: function () { return state.adjSig; }, // v73.13: test hook (smoke reads the stored sig)
     getTxns: function () { return state.txns; }, // v72.43: the ledger txns (smoke sums the old prepays)
     // v72.15: the FAB edge-settle + bubble-anchor geometry (smoke drives the pure math)
     fabSafe: fabSafe,
@@ -6842,7 +6865,7 @@
         if (m.key === 'base') { state.base = migrateBaseKinds(m.value); } // v65
         else if (m.key === 'snapshot') { cachedSnap = m.value; }
         else if (m.key === 'adj') { state.adj = m.value; hasAdj = true; }
-        else if (m.key === 'adjSig') { state.adjSig = m.value || ''; }
+        else if (m.key === 'adjSig') { state.adjSig = normalizeStoredSig(m.value || ''); } // v73.13: old 4-comp sigs map to the 3-comp one (no false rebase on upgrade)
         else if (m.key === 'coachMem') { state.coachMem = m.value; }
         else if (m.key === MERCHANT_MAP_KEY) { state.merchantMap = (m.value && typeof m.value === 'object') ? m.value : {}; } // v68 item 1
         else if (m.key === SHADOW_KEY) { state.shadowLog = (m.value && m.value.length) ? m.value.slice(-SHADOW_CAP) : []; } // v68 item 11

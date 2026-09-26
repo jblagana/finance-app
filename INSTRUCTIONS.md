@@ -6,6 +6,25 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-26 — "why did u change my numbers" — v73.12's upgrade zeroed the phone's overlay (41k free → −6,664.88)
+Status: **done** — v73.13 shipped (commit `PENDING` + the live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.13`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.13 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7313Section 6/6)
+
+### Interpretation (agent)
+Reconciled the boss's pre/post-v73.12 phone exports against his real card balances (Maya 4,637.95, MariBank 11,477.29). The −6,664.88 was NOT the owed model being wrong — it was a **false rebase**: the rebase trigger (`snapSig`) carried the DERIVED `cash.free` as one of its 4 components, so v73.12's formula change (free = liquid − owed) changed the sig WITHOUT any base/sheet edit. Boot read that as "sheet numbers moved" and zeroed the phone's live overlay (the 33k of salary-in/spend-out since the 9/11 base). Base-only owed model with a zeroed overlay = 16,662.41 − 23,327.29 = −6,664.88. The v73.12 formula itself is exactly what the boss wanted (free = liquid − owed) — with the overlay intact it computes 49,697.77 − 15,136.25 = 34,561.52, the honest ~34k.
+Fix: `snapSig` is now the RAW inputs only (liquid|owed|prepay slice — 3 components, no derived free), and old 4-component stored sigs normalize to the 3-component one at boot + import, so an old phone's persisted overlay matches the current snapshot and survives the upgrade. `chat.js` reuses `F.snapSig` (its private copy of the 4-comp sig is gone — the two can never drift again). Recovery: `finances-recovery-2026-09-26.json` (log section only — the pre overlay + the +10 for the 410→420 Grab edit + the post moneyLog) restores the overlay; after import the phone shows free = 34,561.52. Separate data issue flagged to the boss: the 9/14 prepays are double-logged (11,469.64 + 2,000 twice), so app owed (15,136.25) understates his real 16,115.24 by 978.99 — fixable by re-basing the two card values in Settings.
+
+### Subtasks
+- [x] app.js: `snapSig` = raw inputs only (3 comp); `normalizeStoredSig` (old 4-comp → 3-comp) applied at IDB boot + import
+- [x] chat.js: the coach's overlay guard reuses `F.snapSig` (private 4-comp copy removed)
+- [x] app.js: SHELL_NOTES '73.13' + smoke hooks (snapSig/normalizeStoredSig/setAdjSig/getAdjSig)
+- [x] tools/check_site.py: v73.13 structural pin (3-comp sig + normalizer + boot/import application + chat.js reuse + notes)
+- [x] smoke_app_v68.js: new v7313Section (6 checks — sig format, no derived free, 4→3 normalization, idempotence, no rebase on formula change, rebase still fires on a real base move) chained after v7312Section
+- [x] tools/release.ps1 v73.13 (stamps + full gates green)
+- [x] recovery JSON built + verified (expected display: liquid 49,697.77 / owed 15,136.25 / free 34,561.52, identity holds)
+- [x] commit + push (done = pushed)
+- [x] close this log entry with the commit hash
+
 ## 2026-09-26 — "the cards owed should be subtracted already from the liquid cash to know how much cash is free/unallocated"
 Status: **done** — v73.12 shipped (commit `2bf9b7f` + the `ef9685f` live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.12`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.12 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7312Section 6/6)

@@ -216,10 +216,11 @@
   }
 
   // ---------- data: read our own copies from IndexedDB (race-free) ----------
-  function snapSig(s) {
-    if (!s) return '';
-    return [s.cash && s.cash.total, s.cash && s.cash.free, s.card_owed, s.total_prepay].join('|');
-  }
+  // v73.13: the coach's overlay guard must use the SAME sig as the app — the
+  // app's snapSig (raw inputs only; the old 4-comp format with the derived
+  // free caused a false rebase on the owed-model upgrade). Reuse F.snapSig /
+  // F.normalizeStoredSig so the two can never drift again.
+  function snapSig(s) { return F.snapSig ? F.snapSig(s) : ''; }
   function loadCtx() {
     return Promise.all([F.idbAll(F.STORE_META), F.idbAll(F.STORE_PLANS), F.idbAll(F.STORE_TX)]).then(function (res) {
       var snap = null, adj = { cash: 0, free: 0, card: 0, prepay: 0 }, adjSig = '', at = null, base = null;
