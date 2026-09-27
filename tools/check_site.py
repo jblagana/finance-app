@@ -490,6 +490,24 @@ def main():
           and "unlinkPlanTxn: unlinkPlanTxn" in js
           and 'id="pePaidBy"' in html and 'id="peUnlink"' in html
           and "'73.17': [" in js)
+    check("v73.20 (user: 'for card prepays in coach card, i wanted the design to be like that of the plans' + 'the chips in the plans are not clickable still' + rev 2: 'salary should be green its a good thing hehe, drop the due in salary due'): the PLAN-DUE design for every coach action row — the row is a plain list row (a div with data-digto) and the PILL CHIP on the right is the only button (prepay = red, plan due = severity-colored, salary = green); the v73.19 full-row dig-chip look is gone; the TAP FIX is structural — the row handler bails on e.target.closest('.rowchip') so the chip's tap is the chip's and the row's tap is the row's (no stopPropagation, no button-in-button); the salary row is cls 'ok' with tag 'Salary' (no 'due') and 'lands' copy",
+          # the prepay/salary rows: plain row + the pill chip button
+          ("""'<div class="dig ' + rw.cls + '" data-digto="money">'""" in js)
+          and """class="rowchip ' + rw.cls + '" data-' + rw.act + '="' + chipAttr(rw)""" in js
+          # the plan-due chip wears the shared pill class (the design it gave)
+          and """class="rowchip ' + rw.cls + ' plchip-inline" data-payplan=""" in js
+          # the tap fix: the row handler bails on a chip tap
+          and "if (e && e.target && e.target.closest && e.target.closest('.rowchip')) return;" in js
+          # the v73.19 full-row-chip look is gone
+          and "dig-chip" not in js and "dig.dig-chip" not in html
+          # the salary row: green, tag "Salary", "lands" copy
+          and "rows.push({ cls: 'ok', tag: 'Salary'," in js
+          and "'Salary ' + money(cy0.expected) + ' lands on the '" in js
+          and "tag: 'Salary due'" not in js
+          # the pill styling (severity variants)
+          and ".rowchip{" in html and ".rowchip.warn{" in html and ".rowchip.bad{" in html
+          and ".dig.ok{border-left-color:var(--ok)}" in html
+          and "'73.20': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js
@@ -928,12 +946,14 @@ def main():
           and "if (mode === 'prepay') return 'card_payment';" in js
           and "if (addMode === 'prepay' && type !== 'CARD')" in js
           and 'id="addModeSpend"' in html and 'id="addModePrepay"' in html and 'class="amrow"' in html
-          # v73.19: the per-card chip moved UP into the coach rows (the row IS
-          # the chip — a dig-chip div whose data-<act> attr is built by
-          # chipAttr, the card riding the payload) and the prefill rides
+          # v73.19: the per-card chip moved UP into the coach rows; v73.20:
+          # the chip is the PILL BUTTON on the right of a plain row (the
+          # plan-due design — the v73.19 full-row dig-chip look is gone).
+          # chipAttr builds the data-<act> payload (amount|date|day|card,
+          # the card riding the payload) and the prefill rides
           # prepayRowChip's exported handler body (same v72.41 shape:
           # that card's live amount + its own account, Pay-card mode)
-          and "dig-chip" in js
+          and "rowchip" in js
           and "function chipAttr(rw) {" in js
           and "function prepayRowChip(attr) {" in js
           and "card ? 'CARD::' + card : null, 'prepay');" in js
@@ -985,7 +1005,7 @@ def main():
           and "id=\"actPrepay\"" not in js  # v73.19: the old coachActs prepay chip is GONE (per-card rows replaced it)
           and "function prepayRowChip(attr) {" in js  # v73.19: the prepay row-chip's handler body
           and "function salaryRowChip(attr) {" in js  # v73.19: the salary row-chip's handler body
-          and "dig.dig-chip" in html  # v73.19: the row-chip styling (the row IS the chip)
+          and ".rowchip{" in html  # v73.20: the row-chip pill styling (the plan-due design for every action row)
           and "insBlock('This cycle'" in js
           and "var salDelta = 0, salDate = null;" in js
           and "pts.splice(1, 0, { label: dayMonth(salDate), v: vAtSal, date: salDate });" in js

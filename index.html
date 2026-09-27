@@ -402,24 +402,30 @@ padding:7px 14px;font-size:12.5px}
 .dig .dg-r{flex:0 0 auto;font-weight:700;font-size:12.5px;color:var(--mut);white-space:nowrap}
 .dig.warn{border-left-color:var(--warn)}
 .dig.bad{border-left-color:var(--bad)}
+.dig.ok{border-left-color:var(--ok)}
 .dig.done{border-left-color:var(--ok);opacity:.85}
 .dg-tag{display:block;font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;margin-bottom:2px}
 .dig.warn .dg-tag{color:var(--warn)}
 .dig.bad .dg-tag{color:var(--bad)}
+.dig.ok .dg-tag{color:var(--ok)}
 .dig.done .dg-tag{color:var(--ok)}
-/* v73.19: the ROW chips — the boss's call: the big coachActs buttons
-   (Log prepay / Salary in) moved UP into the attention rows and the whole
-   row IS the chip now. The chip border wraps the row (the row's own
-   left accent stays as the severity stripe inside the border). */
-.dig.dig-chip{border:1px solid var(--line);border-radius:14px;background:var(--card2);
- padding:10px 14px;margin-top:10px;min-height:0}
-.dig.dig-chip.warn{border-color:var(--warn)}
-.dig.dig-chip.bad{border-color:var(--bad)}
-.dig.dig-chip .dg-r{color:var(--ink)}
-.dig.dig-chip:active{filter:brightness(1.18)}
+/* v73.20: the row chips — the PLAN-DUE design for every action row (the
+   boss's call: 'i wanted the design to be like that of the plans'). The
+   row is a plain list row; the pill chip on the right is the ONLY button.
+   Severity colors: prepay = bad (red), plan due = warn (amber), salary =
+   ok (green — money coming in is a good thing). */
+.rowchip{cursor:pointer;font:inherit;font-weight:700;font-size:12.5px;
+ background:rgba(55,211,155,.12);border:1px solid var(--ok);color:var(--ok);
+ border-radius:999px;padding:4px 12px;white-space:nowrap;min-height:30px}
+.rowchip.warn{background:rgba(255,196,92,.12);border-color:var(--warn);color:var(--warn)}
+.rowchip.bad{background:rgba(255,107,107,.12);border-color:var(--bad);color:var(--bad)}
+.rowchip:active{filter:brightness(1.2)}
+.rowchip:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 /* v73.18: the Plan-due amount chip — a real button nested in the row (the
-   row's own handler stopPropagation's, so tapping the chip opens the Add
-   sheet prefilled + pre-linked instead of jumping to Money) */
+   row's own handler bails on e.target.closest('.rowchip'), so tapping the
+   chip opens the Add sheet prefilled + pre-linked instead of jumping to
+   Money). v73.20: it wears the shared .rowchip pill class (same design as
+   the prepay/salary chips). */
 .plchip-inline{cursor:pointer;font:inherit;font-weight:700;font-size:12.5px;
  background:rgba(55,211,155,.12);border:1px solid var(--ok);color:var(--ok);
  border-radius:999px;padding:4px 12px;white-space:nowrap}

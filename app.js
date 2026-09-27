@@ -3006,11 +3006,12 @@
   }
   // v73.19: the row-chip attr (the payload packed the v73.18 way) —
   // prepay: amount|date|day|card (card = that card's name, empty for the
-  // total row), salary: amount|date|sday.
+  // total row), salary: amount|date|sday. v73.20: returns the RAW value
+  // (the markup adds the quotes) — it rides the chip button's data-<act>.
   function chipAttr(rw) {
     return rw.act === 'prepay'
-      ? '="' + rw.payload.amount + '|' + rw.payload.date + '|' + rw.payload.day + '|' + esc(rw.payload.card || '') + '"'
-      : '="' + rw.payload.amount + '|' + rw.payload.date + '|' + rw.payload.sday + '"';
+      ? rw.payload.amount + '|' + rw.payload.date + '|' + rw.payload.day + '|' + esc(rw.payload.card || '')
+      : rw.payload.amount + '|' + rw.payload.date + '|' + rw.payload.sday;
   }
   // v73.19: the row-chip handler bodies (exported — the smoke drives them
   // without a DOM). The row IS the chip: tapping it opens the Add sheet
@@ -3140,17 +3141,20 @@
             '<span class="dg-r">' + esc(rw.r) + '</span></button>';
           return;
         }
-        // v73.19: the row chips — the whole ROW is the chip (the boss's call:
-        // the big coachActs buttons moved up into the rows themselves). The
-        // row is a DIV with role=button: a real <button> cannot nest inside a
-        // <button> (invalid HTML5, the parser closes the outer one early),
-        // and the chip styling on the row itself is what makes it read as a
-        // tap target. data-digto is ABSENT — tapping the row fires the chip,
-        // not a tab jump (the sheet opens right there).
+        // v73.20 (user: 'for card prepays in coach card, i wanted the design
+        // to be like that of the plans' + 'the chips in the plans are not
+        // clickable still'): the PLAN-DUE design for every action row — the
+        // row is a plain list row (a DIV, not a button) and the PILL CHIP on
+        // the right is the only button. The v73.19 full-row-chip look is
+        // gone. The chip carries the same payload (data-<act>, the
+        // v72.41/v72.45 prefill) and the row keeps data-digto — tapping the
+        // ROW jumps to Money, tapping the CHIP opens the Add sheet prefilled
+        // (the row handler bails on e.target.closest('.rowchip') below, so
+        // the two taps can never collide again).
         if (rw.act === 'prepay' || rw.act === 'salary') {
-          html += '<div class="dig ' + rw.cls + ' dig-chip ' + rw.act + '" role="button" tabindex="0" data-' + rw.act + chipAttr(rw) + '>' +
+          html += '<div class="dig ' + rw.cls + '" data-digto="money">' +
             '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
-            '<span class="dg-r">' + esc(rw.r) + '</span></div>';
+            '<span class="dg-r"><button type="button" class="rowchip ' + rw.cls + '" data-' + rw.act + '="' + chipAttr(rw) + '" aria-label="' + esc(rw.tag) + '">' + esc(rw.r) + '</button></span></div>';
           return;
         }
         // v73.18: the Plan-due row's amount is its OWN chip — tapping it
@@ -3159,11 +3163,12 @@
         // the planRef without a second tap. The row body still goes to Money.
         // The OUTER row is a DIV, not a button: a <button> inside a <button>
         // is invalid HTML5 and the parser closes the outer one early (the
-        // chip would detach from the row). role/aria keep it keyboard-tappable.
+        // chip would detach from the row). v73.20: the chip wears the shared
+        // .rowchip pill class (the prepay/salary chips' design).
         if (rw.act === 'pay_plan') {
-          html += '<div class="dig ' + rw.cls + '" role="button" tabindex="0" data-digto="money">' +
+          html += '<div class="dig ' + rw.cls + '" data-digto="money">' +
             '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
-            '<span class="dg-r"><button type="button" class="plchip-inline" data-payplan="' + esc(rw.payload.planId) + '|' + rw.payload.date + '|' + esc(rw.payload.name) + '|' + rw.payload.amount + '" aria-label="Log this payment">' + esc(rw.r) + '</button></span></div>';
+            '<span class="dg-r"><button type="button" class="rowchip ' + rw.cls + ' plchip-inline" data-payplan="' + esc(rw.payload.planId) + '|' + rw.payload.date + '|' + esc(rw.payload.name) + '|' + rw.payload.amount + '" aria-label="Log this payment">' + esc(rw.r) + '</button></span></div>';
           return;
         }
         html += '<button type="button" class="dig ' + rw.cls + '" data-digto="money">' +
@@ -3171,41 +3176,43 @@
           '<span class="dg-r">' + esc(rw.r) + '</span></button>';
       });
       body.innerHTML = html;
+      // v73.20: the TAP FIX (the boss: 'the chips in the plans are not
+      // clickable still'). The chip is the ONLY button on the row, and the
+      // row handler now bails when the tap started on a chip
+      // (e.target.closest('.rowchip')) — the chip's tap is the chip's, the
+      // row's tap is the row's. No stopPropagation, no button-in-button,
+      // no collision: this is the structural fix for the v73.18/19 dead
+      // taps.
       var btns = body.querySelectorAll('[data-digto]');
       for (var i = 0; i < btns.length; i++) {
-        btns[i].onclick = function () { setTab(this.getAttribute('data-digto')); };
+        btns[i].onclick = function (e) {
+          if (e && e.target && e.target.closest && e.target.closest('.rowchip')) return;
+          setTab(this.getAttribute('data-digto'));
+        };
       }
       // v73.18: the Plan-due amount chip — opens the Add sheet prefilled
       // (amount + the occurrence's date + a note naming the plan) AND
       // pre-LINKED: state.planLinkRef is set from the payload, so the saved
-      // txn carries the planRef without a second tap. stopPropagation keeps
-      // the row's data-digto handler from also firing (the chip is nested
-      // inside the row button). The handler body is payPlanChip (exported —
-      // the smoke drives the same code path without a DOM).
+      // txn carries the planRef without a second tap. The handler body is
+      // payPlanChip (exported — the smoke drives the same code path without
+      // a DOM).
       var ppb = body.querySelectorAll('[data-payplan]');
       for (var k = 0; k < ppb.length; k++) {
         ppb[k].onclick = (function (b) {
-          return function (e) {
-            if (e && e.stopPropagation) e.stopPropagation();
+          return function () {
             payPlanChip(b.getAttribute('data-payplan'));
           };
         })(ppb[k]);
       }
-      // v73.19: the row chips (prepay + salary) — the ROW is the chip.
-      // Keyboard: Enter/Space fire the same handler (role=button rows).
+      // v73.20: the prepay + salary row chips (v73.19: they were the whole
+      // row; now they are the pill on the right). Real <button>s — Enter/
+      // Space come free, no keyboard shims needed.
       var rcRows = body.querySelectorAll('[data-prepay],[data-salary]');
       for (var rc = 0; rc < rcRows.length; rc++) {
         (function (b) {
-          var fire = function () {
+          b.onclick = function () {
             if (b.getAttribute('data-prepay') != null) prepayRowChip(b.getAttribute('data-prepay'));
             else salaryRowChip(b.getAttribute('data-salary'));
-          };
-          b.onclick = fire;
-          b.onkeydown = function (e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-              if (e.preventDefault) e.preventDefault();
-              fire();
-            }
           };
         })(rcRows[rc]);
       }
@@ -3222,12 +3229,12 @@
     }
     // ---- one-tap actions ----
     // v73.19 (user: 'the row chips are not clickable, remove the chips in the
-    // image and move them as row chips'): the Log-prepay + Salary-in chips
-    // (this block's old residents) moved UP into the attention rows — they
-    // are the rows themselves now (the coachRows act:'prepay' / act:'salary'
-    // rows, rendered as dig-chip and wired above). The per-card breakdown
-    // (v72.41) lives on in the Money tab's prepay rows; this card carries
-    // the total. What stays here: the plans shortcut.
+    // image and move them as row chips') + v73.20 (the plan-due design): the
+    // Log-prepay + Salary-in chips (this block's old residents) moved UP
+    // into the attention rows — they are the pill chips on those rows now
+    // (the coachRows act:'prepay' / act:'salary' rows, wired above). The
+    // per-card breakdown (v72.41) lives on in the Money tab's prepay rows;
+    // this card carries the total. What stays here: the plans shortcut.
     var acts = byId('coachActs');
     if (acts) {
       var ah = '';
@@ -3888,10 +3895,11 @@
       // owed card (the card's own live amount, the v72.41 prefill: that
       // card's account in Pay-card mode). NO total row: the v72.41 call was
       // to prepay each card separately, and the image confirms it (one chip
-      // per card, no combined). The row IS the chip (dig-chip): tapping it
-      // opens the Add sheet prefilled; it no longer jumps to Money. Same
-      // gate as the v72.41 chips: prepayActive (something owed above target)
-      // — the "due in N days" text carries the timing.
+      // per card, no combined). v73.20: the row is a plain row and the chip
+      // is the pill button on its right — tapping the chip opens the Add
+      // sheet prefilled, tapping the row body jumps to Money. Same gate as
+      // the v72.41 chips: prepayActive (something owed above target) — the
+      // "due in N days" text carries the timing.
       var pcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.prepay) || 0) > 0; });
       pcards.sort(function (a, b) { return (Number(b.prepay) || 0) - (Number(a.prepay) || 0); });
       pcards.slice(0, 4).forEach(function (c) {
@@ -3918,9 +3926,14 @@
       // the row text does, so a past payday gets no chip — the hero line
       // carries the "late" state).
       if (sIn >= 0 && sIn <= 2) {
-        rows.push({ cls: sIn <= 1 ? 'bad' : 'warn', tag: 'Salary due',
-          text: 'Salary ' + money(cy0.expected) + ' is expected on the ' + ordinal(cy0.sday) + ' — ' + (sIn === 0 ? 'today' : (sIn === 1 ? 'tomorrow' : 'in ' + sIn + ' days')) + '.',
-          r: 'Salary in · ' + money(cy0.expected),
+        // v73.20 (user: 'salary should be green its a good thing hehe, drop
+        // the "due" in "salary due"'): the row is GREEN (money coming in),
+        // the tag is just "Salary" (a payday is not a bill — "due" was the
+        // wrong word), the copy says the salary LANDS, and the chip text is
+        // the amount only (the tag carries the "salary" part).
+        rows.push({ cls: 'ok', tag: 'Salary',
+          text: 'Salary ' + money(cy0.expected) + ' lands on the ' + ordinal(cy0.sday) + ' — ' + (sIn === 0 ? 'today' : (sIn === 1 ? 'tomorrow' : 'in ' + sIn + ' days')) + '.',
+          r: money(cy0.expected),
           act: 'salary', payload: { amount: cy0.expected, date: d.today, sday: cy0.sday } });
       }
     }
@@ -6091,12 +6104,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.19, live: new Date(2026, 8, 28, 0, 13) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.20, live: new Date(2026, 8, 28, 3, 2) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.20': [
+      'The coach card\'s prepay and salary rows now wear the PLAN-DUE design: a plain row with a pill chip on the right (prepay red, salary green — money coming in is a good thing). The "Salary due" row is just "Salary" now, and it says the money LANDS, not that it is due',
+      'The chips actually work now: the chip is the only button on the row, and the row\'s tap-jump bails when your tap started on a chip — the prepay, salary and plan chips all open the Add sheet prefilled (and the plan chip still pre-links the occurrence), while tapping the row body still jumps to Money'
+    ],
     '73.19': [
       'The coach card\'s action chips are now the rows themselves: each owed card is its own row-chip ("Log prepay · MariBank CC · ₱X" is the row — tap it and the Add sheet opens prefilled with that card\'s amount, date and account), and the "Salary in" check-in is a row-chip too. The big button strip under the card is gone — everything you could tap there now lives where the problem is named',
       'The "Plan due" amount chip is back on its row (the row is tappable again, and so is the chip)'
