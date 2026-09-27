@@ -2248,10 +2248,16 @@
     }
     var free = s.cash ? s.cash.free : 0;
     var belowFloor = !!(s.cash && s.floor && s.cash.total < s.floor);
+    // v73.16 (boss-confirmed: everywhere): the Free tile shows the NET free —
+    // the raw snapshot minus the current cycle's plan share (occurrences
+    // inside the cycle window, resolved, unpaid ones).
+    var dSum = insightsData();
+    var freeNet = dSum && dSum.freeNet != null ? dSum.freeNet : free;
     var html = '';
     html += tile('Liquid cash', money(s.cash ? s.cash.total : 0), 'floor ' + money(s.floor || 0), belowFloor ? 'bad' : '');
     var liveMark = adjActive() ? ' · live' : '';
-    html += tile('Free / unallocated', money(free), 'card backing' + liveMark, free < 0 ? 'bad' : 'good');
+    var freeNote = 'card backing' + liveMark + (dSum && dSum.planDeduct > 0 ? ' · − ' + money(dSum.planDeduct) + ' plans this cycle' : '');
+    html += tile('Free / unallocated', money(freeNet), freeNote, freeNet < 0 ? 'bad' : 'good');
     html += tile('Cards owed', money(s.card_owed), (s.cards || []).length + ' card(s)' + liveMark);
     html += tile(ordinal(s.prepay_day || 14) + ' prepay', money(s.total_prepay), 'cutoff ' + (s.cutoff_day || 15) + ' · due ' + (s.due_day || 5) + liveMark, 'accent');
     el.innerHTML = '<div class="tiles">' + html + '</div>' + adjBar();
@@ -2401,6 +2407,32 @@
   function cycleData() {
     if (!state.base) return null;
     return cycleDataFor(currentCycleMonth(state.base, todayISO()), state.base);
+  }
+  // v73.16 (user: 'if the instance falls within the cycle, deduct them from
+  // the free cash'): the CURRENT cycle's share of the plans — every
+  // occurrence (resolved: forked amounts count, skipped ones don't) whose
+  // date falls in the current salary-cycle window, MINUS the occurrences
+  // already paid (the same name+amount match the coach's "handled" row
+  // uses, findPaidTxn's plan branch). This is a display projection only —
+  // the snapshot's cash.free is NEVER mutated, so the overlay/rebase sig
+  // (which reads cash.free) is untouched. Gated on a real salary: no
+  // salary = no cycle = no deduction.
+  function cyclePlanDeduction() {
+    var cd = cycleData();
+    if (!cd || !(cd.expected > 0)) return 0;
+    var total = 0;
+    state.plans.forEach(function (p) {
+      planOccurrences(p).forEach(function (od) {
+        if (od < cd.start || od > cd.end) return;
+        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        if (ro && ro.skip) return;
+        var nm = ro ? ro.name : p.name;
+        var am = ro ? ro.amount : p.amount;
+        if (findPaidTxn({ monthPrefix: todayISO().slice(0, 7) }, { date: od, name: nm, amount: am })) return;
+        total += Number(am) || 0;
+      });
+    });
+    return r2(total);
   }
   // ---------- v73.6: the CC due day (the 5th) ----------
   // Boss's model: the bill is DUE on the due_day (the 5th) and equals the
@@ -2771,10 +2803,16 @@
         if (!lowestDip || rv < lowestDip.v) lowestDip = { v: rv, m: row.month };
       });
     }
+    // v73.16: the cycle's plan share is deducted from the free cash EVERYWHERE
+    // (boss-confirmed: hero, coach, and the Free tile). d.free stays the RAW
+    // snapshot number (the coach memory + the sig read it); d.freeNet is the
+    // projected one every display path now uses.
+    var planDeduct = cyclePlanDeduction();
     return {
       s: s, now: now, today: today, monthPrefix: monthPrefix, daysLeft: daysLeft,
       meal: meal, free: free,
-      daily: daysLeft > 0 ? r2(Math.max(0, free) / daysLeft) : 0,
+      planDeduct: planDeduct, freeNet: r2(free - planDeduct),
+      daily: daysLeft > 0 ? r2(Math.max(0, free - planDeduct) / daysLeft) : 0, // v73.16: net of the cycle's plan share
       todaySpend: r2(todaySpend), items: items,
       prepayDay: prepayDay, prepayIn: prepayIn, prepayAmt: prepayAmt,
       prepayDate: localISO(new Date(now.getFullYear(), now.getMonth(), prepayDay)),
@@ -2785,7 +2823,7 @@
       goals: goals, lowestDip: lowestDip, // v68 items 6–7
       cycle: cycleData(), // v72.45: the salary cycle (the 15th) — hero + insights + coach + snapshot
       ccDue: ccDue(), // v73.6: the cc due (the 5th) — charges since the last cutoff minus the prepays in that window
-      freeAfterPace: r2(free - r2(pace * Math.max(0, daysLeft - 1))),
+      freeAfterPace: r2(r2(free - planDeduct) - r2(pace * Math.max(0, daysLeft - 1))), // v73.16: from the NET free
       // v73.11 (user: 'base it per cycle too'): the headroom runs to the CYCLE
       // end (the 14th), not the calendar month end — the money lasts until the
       // next salary, not until the 30th. Falls back to the calendar days when
@@ -2867,8 +2905,13 @@
     // per-card buttons, each showing the live amount still owed on that card.
     var prepayActive = info.prepayActive;
     var cls, head, sub;
-    var shortfall = r2(d.weekCost - d.free);
-    var afterWeek = r2(d.free - d.weekCost);
+    // v73.16: the coach's head/sub math runs on the NET free (the raw minus
+    // the cycle's plan share) — the "Free cash is ₱X" line and every
+    // comparison quote the same number the hero shows. d.free (raw) is
+    // still what the coach memory below compares visits against.
+    var freeN = d.freeNet != null ? d.freeNet : d.free;
+    var shortfall = r2(d.weekCost - freeN);
+    var afterWeek = r2(freeN - d.weekCost);
     var floor = info.floor;
     var due = d.prepayIn === 0 ? 'today' : 'in ' + d.prepayIn + ' day' + (d.prepayIn === 1 ? '' : 's');
     var trim = null;
@@ -2876,10 +2919,10 @@
       if (/card prepay/i.test(it.label)) return;
       if (!trim || it.amt > trim.amt) trim = it;
     });
-    if (d.free < 0) {
+    if (freeN < 0) {
       cls = 'bad';
       head = hi + 'no room to breathe right now.';
-      sub = 'Free cash is ' + money(d.free) + '.' + (prepayActive
+      sub = 'Free cash is ' + money(freeN) + '.' + (prepayActive
         ? ' Skip the treats today and put it toward the ' + money(d.prepayAmt) + ' prepay due on the ' + ordinal(d.prepayDay) + ' (below).'
         : ' Skip the treats today — back the cards first.');
     } else if (prepayActive && d.prepayIn <= 3) {
@@ -2892,7 +2935,7 @@
     } else if (shortfall > 0) {
       cls = 'bad';
       head = hi + 'this week is over budget by ' + money(shortfall) + '.';
-      sub = (prepayActive ? 'The card prepay below is the reason: ' : 'This week\'s plans total ') + money(d.weekCost) + ' vs ' + money(d.free) + ' free.';
+      sub = (prepayActive ? 'The card prepay below is the reason: ' : 'This week\'s plans total ') + money(d.weekCost) + ' vs ' + money(freeN) + ' free.';
       if (trim) sub += ' Biggest lever: ' + trim.label + ' (' + money(trim.amt) + ').';
       if (afterWeek < floor) sub += ' As is, cash dips to ' + money(afterWeek) + ' — under your ' + money(floor) + ' floor.';
       else sub += ' Keep today at zero extras and it stays above the floor.';
@@ -3055,7 +3098,10 @@
     if (he) he.style.display = d ? 'none' : '';
     if (!d) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
-    var s = d.s, free = d.free, daysLeft = d.daysLeft, meal = d.meal;
+    var s = d.s, daysLeft = d.daysLeft, meal = d.meal;
+    // v73.16: the headroom runs on the NET free (raw minus the cycle's plan
+    // share) — the same number the hero + coach quote.
+    var free = d.freeNet != null ? d.freeNet : d.free;
     var blocks = '';
 
     // ---- Today: daily headroom + treat check
@@ -3102,6 +3148,7 @@
         ? 'Salary <b>' + money(cyc.received.amount) + '</b> — in on ' + dayMonth(cyc.received.date) + '.'
         : 'Salary <b>' + money(cyc.expected) + '</b> — due on the ' + ordinal(cyc.sday) + '.');
       cLines.push('Spent this cycle: <b>' + money(cyc.spent) + '</b> (' + Math.round((cyc.spent / cyc.expected) * 100) + '% of the salary).');
+      if (d.planDeduct > 0) cLines.push('Plans landing in this cycle: <b>' + money(d.planDeduct) + '</b> — already deducted from your free cash.'); // v73.16
       if (cyc.elapsed >= 7) cLines.push('At this pace the cycle ends with <b>' + money(cyc.projectedNet) + '</b> of the salary.');
       if (cyc.prev && (cyc.prev.spent > 0 || cyc.prev.expected > 0)) {
         cLines.push('Last cycle (' + dayMonth(cyc.prev.start) + ' – ' + dayMonth(cyc.prev.end) + '): spent <b>' + money(cyc.prev.spent) + '</b>, kept ' + money(cyc.prev.net) + '.');
@@ -3500,7 +3547,11 @@
     var s = effectiveSnap();
     if (!s) { el.style.display = 'none'; heroVal = null; return; }
     el.style.display = '';
-    var free = s.cash ? s.cash.free : 0;
+    var d = insightsData();
+    // v73.16: the hero shows the NET free (the raw snapshot minus the
+    // current cycle's plan share — the money that is actually free to spend
+    // before the plans in this cycle land).
+    var free = d && d.freeNet != null ? d.freeNet : (s.cash ? s.cash.free : 0);
     var hv = byId('heroFree');
     if (hv) {
       hv.className = 'hero-v' + (free < 0 ? ' bad' : '');
@@ -3509,9 +3560,11 @@
       countUp(hv, heroVal == null ? free : heroVal, free, function (v) { return money(v); });
     }
     heroVal = free;
-    var d = insightsData();
     var sub = [];
     sub.push('Liquid <b>' + money(s.cash ? s.cash.total : 0) + '</b>');
+    if (d && d.planDeduct > 0) {
+      sub.push('− ' + money(d.planDeduct) + ' plans this cycle');
+    }
     sub.push('Cards owed <b>' + money(s.card_owed) + '</b>');
     if (d && d.prepayAmt > 0) {
       var pw = d.prepayIn <= 0 ? 'Prepay due today' : 'Prepay in ' + d.prepayIn + ' day' + (d.prepayIn === 1 ? '' : 's');
@@ -5779,12 +5832,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.15, live: new Date(2026, 8, 26, 23, 46) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.16, live: new Date(2026, 8, 27, 15, 47) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.16': [
+      'Your free cash now knows about your plans: any plan date that lands inside the current salary cycle is deducted from the free number (hero, coach, and the Free tile all show it, with a "− ₱X plans this cycle" note) — once you log the payment, it stops being deducted'
+    ],
     '73.15': [
       'Coming up is quieter: a recurring plan is now ONE row (the series — cadence, next date, how many times, amount each) that you tap to see its dates, instead of a wall of identical rows. The "recurring" tag is gone, edited dates still wear their tag, and deleting a whole plan no longer hides in the list — it lives in the plan\'s edit sheet',
       'Adding a plan is one tap now: the big form on the Money tab collapsed to a single "＋ Add a plan" line that opens the form as a sheet',
@@ -6618,6 +6674,7 @@
     planHTML: planHTML, // v73.15: the series-grouped row render (pure-ish — the smoke drives it)
     planOccurrences: planOccurrences, // v73.1: the occurrence math (weekly/annual; v73.14: daily + count)
     resolveOccurrence: resolveOccurrence, // v73.14: the 3-scope override resolver (pure — the smoke drives it)
+    cyclePlanDeduction: cyclePlanDeduction, // v73.16: the cycle's plan share (the smoke drives it)
     coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut)
     insightsData: insightsData, // v73.2: the insight math (coachRows' input)
     goalPace: goalPace, // v73.3: the goal pace (pure — the smoke drives it)

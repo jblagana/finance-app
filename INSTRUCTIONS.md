@@ -6,6 +6,21 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-27 — "for the coming up plans, if the instance falls within the cycle, deduct them from the free cash"
+Status: **done** — v73.16 shipped (commit + the live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.16`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.16 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7316Section)
+
+### Interpretation (boss-confirmed choice)
+1. **Everywhere** — when asked which "free cash" should show the cycle deduction, the boss picked: hero, coach, AND the "Free / unallocated" tile all show the deducted number (not just the hero + coach math with the tile raw).
+2. **Window = the current salary cycle** (v72.45's window: the 15th → the 14th): every plan occurrence (resolved — forked amounts count, skipped ones don't) whose date falls inside it is deducted. No salary = no cycle = no deduction.
+3. **Paid occurrences stop being deducted** — the same name+amount match the coach's "handled" row uses (findPaidTxn's plan branch): log the payment and the number bounces back.
+4. **Display-only** — the snapshot's `cash.free` is NEVER mutated (the overlay/rebase sig reads it), so the v73.13 rebase-wipe class of bug can't come back through this path.
+
+### What changed
+- `app.js`: new `cyclePlanDeduction()` (after `cycleData`); `insightsData` gains `planDeduct` + `freeNet` (free − deduct); `daily` + `freeAfterPace` now run on the net; `renderHero` shows the net + a "− ₱X plans this cycle" sub line; `renderSummary`'s Free tile shows the net + the note; `renderCoach`'s head/sub math (free<0, shortfall, afterWeek) runs on `freeNet` (coach memory still compares the raw `d.free`); `renderInsights`' Today headroom runs on the net; the This-cycle block states "Plans landing in this cycle: ₱X — already deducted from your free cash."; `SHELL_NOTES['73.16']` + export.
+- `smoke_app_v68.js`: new `v7316Section` (deduction math, hero sub line, paid-exclusion, no-salary case, store cleanup for v72.36's count hygiene) wired before v7236Section.
+- `check_site.py` (+ root mirror via the release script): the v73.16 pin.
+
 ## 2026-09-26 — "the ui for coming up and the entries is so cluttered" (the approved mockup) + "remove this part '— number or quick sum'"
 Status: **done** — v73.15 shipped (commit `e3e35a4` + the live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.15`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.15 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7315Section 10/10)
