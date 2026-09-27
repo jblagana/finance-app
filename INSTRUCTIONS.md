@@ -7,7 +7,7 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-27 — "for the coming up plans, if the instance falls within the cycle, deduct them from the free cash"
-Status: **done** — v73.16 shipped (commit + the live re-stamp, pushed to origin/main, SW cache `finances-pwa-v73.16`)
+Status: **done** — v73.16 shipped (commit `ba9f3bc` + the live re-stamp `5638466`, pushed to origin/main, SW cache `finances-pwa-v73.16`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.16 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7316Section)
 
 ### Interpretation (boss-confirmed choice)
