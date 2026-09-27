@@ -6,6 +6,27 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-27 — "how can we make 1 robust" → "Build the plan-link chip (v73.17)"
+Status: **in progress** — code + gates done (release.ps1 v73.17 all green), commit + push pending
+
+### Interpretation (boss-approved design)
+Paying a plan is no longer a guess. The fuzzy match (±2 days + a 4+ letter name word in the category/note + amount within 0.5×–2.5×) is demoted to a SUGGESTION; the boss's tap is the TRUTH:
+1. **The chip** — the add form recomputes `planLinkSuggestion()` (the fuzzy rules as a pure pre-save function) on every keystroke of amount/date/category/note. A match shows a tappable chip ("Looks like Rent · Sep 26 — tap to link this payment"). Tapping sets `state.planLinkRef`; tapping again unlinks. The suggestion itself changes nothing.
+2. **The link rides the record** — `txn.planRef = { planId, date, name, amount }` is stored on the txn (additive field: sync rides the record, tombstones unchanged, old txns just lack it).
+3. **Explicit link = truth** — `findPaidTxn`'s plan branch checks the link FIRST (deterministic planId+date match), so a linked payment can never be missed or wrong-matched even when the fuzzy rules would fail (wordless category, amount out of range). The fuzzy fallback stays for unlinked txns.
+4. **Visible proof + Unlink** — the per-occurrence edit sheet shows "✓ Linked — ₱X on date" (or "Matched … (auto-match)" for a fuzzy hit) with an Unlink button that only acts on explicit links (you can't unlink a guess). `unlinkPlanTxn` keeps the txn's money — it only breaks the proof.
+5. **Stale-ref hygiene** — a ref pointing at a deleted plan / skipped occurrence is dropped (`planRefAlive`), but a saved link survives the fuzzy match drifting off (the explicit decision outranks the heuristic).
+
+### What changed
+- `app.js`: `planLinkSuggestion(payload, plans)` + `planRefAlive(ref)` (pure, exported); `findPaidTxn` link-first branch (+ `kind.planId` threaded through `cyclePlanDeduction` + `coachRows`); `addTxn`/`saveTxnEdit` carry `data.planRef`; the chip (`#planLinkChip`, `updatePlanLinkChip`, wired to the four fields + openTxnEdit/prefillAdd); `openPlanEdit` "paid by" line + `unlinkPlanTxn`; SHELL_NOTES '73.17'; exports.
+- `index.html`: `#planLinkChip` in the add form + `.plchip` styles (suggested = dashed amber, linked = solid green); `#pePaidBy` + `#peUnlink` in the plan edit sheet.
+- `smoke_app_v68.js` (finances root, not in git): `v7317Section` (suggestion match/no-word/out-of-range/nearest-date/out-of-window, linked-excludes-even-when-fuzzy-fails, fuzzy fallback, unlink → deduction returns, unlink keeps the money, cleanup) + **`later()` now returns a promise** (root cause of the v73.16/v73.17 cross-section interleaving: `return later(fn)` resolved immediately and fn fired 60ms later, so each section raced its own cleanup — v73.17's plan existed during v73.16's late assertions: deduct 3,111 = 1,111 + a stray 2,000). v7316Section gained a self-heal (crashed-run strays) + a done-guard.
+- `tools/check_site.py` (+ mirror): the v73.17 structural pin.
+
+### Notes for the next session
+- The smoke files live at `C:\Users\Jan\.cline\data\workspaces\chat\finances\` (NOT in git); the on-duty repo copy is `C:\Users\Jan\.cline\data\workspaces\chat\finances\finance-app`. release.ps1 must run from there (its smoke gates need the root smokes).
+- v73.16's release.ps1 never touched check_site.py (the commit message claimed a pin that was never written) — the v73.17 pin is the first check_site addition since v73.15.
+
 ## 2026-09-27 — "for the coming up plans, if the instance falls within the cycle, deduct them from the free cash"
 Status: **done** — v73.16 shipped (commit `ba9f3bc` + the live re-stamp `5638466`, pushed to origin/main, SW cache `finances-pwa-v73.16`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.16 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7316Section)

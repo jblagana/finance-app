@@ -100,6 +100,14 @@ button.act.ghost{background:transparent;color:var(--acc)}
 .pill.ok{background:rgba(55,211,155,.15);color:var(--ok)}
 .pill.bad{background:rgba(255,107,107,.15);color:var(--bad)}
 .pill.warn{background:rgba(255,196,92,.15);color:var(--warn)}
+/* v73.17: the plan-link chip on the add form — a full-width tappable row
+   (suggested = ghost/amber, linked = solid green). The tap is the ONLY
+   thing that links; the suggestion itself changes nothing. */
+button.plchip{cursor:pointer;width:100%;margin-top:10px;border-radius:11px;padding:10px 12px;
+font-size:12.5px;font-weight:700;text-align:left;background:transparent;
+border:1px dashed var(--warn);color:var(--warn);display:flex;align-items:center;gap:8px}
+button.plchip:active{filter:brightness(1.15)}
+button.plchip.linked{border:1px solid var(--ok);background:rgba(55,211,155,.12);color:var(--ok)}
 .mini{cursor:pointer;background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:7px;padding:1px 9px;font-size:12px;line-height:1.5}
 .mini:active{border-color:var(--bad);color:var(--bad)}
 /* ---- v73.15: Coming up — series grouping (the v18 ledger rework deleted the
@@ -793,6 +801,13 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       <button class="act ghost" id="peSkip" type="button">Skip this occurrence</button>
     </div>
     <p class="note" id="peHint" style="margin:10px 0 0"></p>
+    <!-- v73.17: the "paid by" proof — which ledger entry makes this
+         occurrence paid (the explicit link wins, the fuzzy match is the
+         fallback). Tap Unlink to break an explicit link. -->
+    <div id="pePaidBy" style="display:none;margin-top:10px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:12px;color:var(--mut);align-items:center;gap:8px;justify-content:space-between">
+      <span id="pePaidByTxt"></span>
+      <button class="mini" id="peUnlink" type="button" title="Unlink this payment">Unlink</button>
+    </div>
     <button class="act ghost" id="peDeleteAll" type="button" style="margin-top:10px;width:100%">Delete whole plan</button>
   </div>
 </div>
@@ -899,6 +914,11 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       </div>
       <label for="f_note">Note (optional)</label>
       <input id="f_note">
+      <!-- v73.17: the plan-link chip — the add form's fuzzy match
+           (planLinkSuggestion) offers "this looks like a plan payment";
+           the boss's tap is the only thing that links (txn.planRef).
+           Hidden unless there is a suggestion or an existing link. -->
+      <button type="button" id="planLinkChip" class="plchip" style="display:none" aria-pressed="false"></button>
       <div style="margin-top:14px">
         <button class="act" id="addSubmit" type="submit">Add expense</button>
       </div>

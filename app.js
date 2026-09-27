@@ -339,6 +339,59 @@
     res.edited = true;
     return res;
   }
+  // v73.17 (the plan-link chip): the FUZZY suggestion engine — the exact
+  // findPaidTxn plan-branch rules (±2 days, a 4+ letter name word in the
+  // category/note, amount within 0.5×–2.5×), but as a pure function over
+  // (payload, plans) so the add form can ask "does this entry look like a
+  // plan payment?" BEFORE it is saved. Returns the best occurrence
+  // { planId, date, name, amount } or null. It is a SUGGESTION only — the
+  // truth is the boss's tap (txn.planRef); nothing auto-links.
+  function planLinkSuggestion(payload, plans) {
+    if (!payload || !payload.date) return null;
+    var amt = Number(payload.amount) || 0;
+    if (!(amt > 0)) return null;
+    var hay = ((payload.category || '') + ' ' + (payload.note || '')).toLowerCase();
+    var best = null;
+    (plans || []).forEach(function (p) {
+      planOccurrences(p).forEach(function (od) {
+        var dd = diffDays(od, String(payload.date));
+        if (dd < -2 || dd > 2) return;
+        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        if (ro && ro.skip) return;
+        var nm = ro ? ro.name : p.name;
+        var am = ro ? ro.amount : p.amount;
+        var words = String(nm || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 4; });
+        if (!words.length || !words.some(function (w) { return hay.indexOf(w) >= 0; })) return;
+        var pa = Number(am) || 0;
+        if (!(amt >= 0.5 * pa && amt <= 2.5 * pa)) return;
+        // nearest date wins; a tie goes to the earlier occurrence
+        if (!best || Math.abs(dd) < Math.abs(best.dd) || (Math.abs(dd) === Math.abs(best.dd) && od < best.date)) {
+          best = { planId: p.id, date: od, name: nm, amount: am, dd: dd };
+        }
+      });
+    });
+    if (!best) return null;
+    delete best.dd;
+    return best;
+  }
+  // v73.17: does an explicit link still point at a live occurrence?
+  // (The plan can be deleted, or the series re-anchored, after the link.)
+  function planRefAlive(ref) {
+    if (!ref || !ref.planId) return false;
+    for (var i = 0; i < state.plans.length; i++) {
+      var p = state.plans[i];
+      if (String(p.id) !== String(ref.planId)) continue;
+      var occs = planOccurrences(p);
+      for (var j = 0; j < occs.length; j++) {
+        if (occs[j] === String(ref.date)) {
+          var ro = p.repeat ? resolveOccurrence(p, occs[j]) : null;
+          if (ro && ro.skip) return false;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
   function mealBudget() {
     try { var v = parseFloat(localStorage.getItem(LS_MEAL)); return (v > 0) ? v : MEAL_DEFAULT; } catch (e) { return MEAL_DEFAULT; }
   }
@@ -1035,6 +1088,10 @@
       category: data.category, amount: data.amount, note: data.note,
       created: new Date().toISOString()
     };
+    // v73.17: the explicit plan link (the boss tapped the chip on the add
+    // form) — rides the record, so it syncs with the txn and survives
+    // reboots. Absent (undefined) when there is no link.
+    if (data.planRef) t.planRef = data.planRef;
     state.txns.push(t);
     addAdj(txnAdj(t), 1);
     logMoney('add', t);
@@ -1231,6 +1288,10 @@
       category: data.category, amount: data.amount, note: data.note,
       created: o.created || new Date().toISOString()
     };
+    // v73.17: the explicit plan link rides the record too — the form
+    // re-passes it on every save (chip state), so editing an entry can
+    // link, unlink, or keep the link just like a fresh add.
+    if (data.planRef) t.planRef = data.planRef;
     state.txns[oIdx] = t; // in place — position preserved
     addAdj(txnAdj(t), 1);
     addAdj(txnAdj(o), -1);
@@ -1347,6 +1408,11 @@
     var dtEl = byId('f_date');
     if (dtEl) { dtEl.value = t.date || todayISO(); syncDateLabel(dtEl); }
     addAmtEq(amtEl); // refresh the quick-sum hint for the prefilled value
+    // v73.17: an entry with an existing link re-opens the chip LINKED —
+    // the ref is restored so the chip renders its ✓ state and a re-save
+    // (or a tap) can keep or break the link.
+    state.planLinkRef = t.planRef ? { planId: t.planRef.planId, date: t.planRef.date, name: t.planRef.name, amount: t.planRef.amount } : null;
+    updatePlanLinkChip();
     setAddMode('spend'); // v72.41: editing an entry re-opens the sheet in Spend mode (the kind follows the entry)
     var ttl = byId('addSheetTitle');
     if (ttl) ttl.textContent = 'Edit entry';
@@ -2428,7 +2494,7 @@
         if (ro && ro.skip) return;
         var nm = ro ? ro.name : p.name;
         var am = ro ? ro.amount : p.amount;
-        if (findPaidTxn({ monthPrefix: todayISO().slice(0, 7) }, { date: od, name: nm, amount: am })) return;
+        if (findPaidTxn({ monthPrefix: todayISO().slice(0, 7) }, { planId: p.id, date: od, name: nm, amount: am })) return;
         total += Number(am) || 0;
       });
     });
@@ -2890,6 +2956,50 @@
       }
     }
     openSheet('addSheet');
+    state.planLinkRef = null; // v73.17: a coach prefill starts unlinked
+    updatePlanLinkChip();
+  }
+  // ---------- v73.17: the plan-link chip (the add form's suggestion) ----------
+  // state.planLinkRef = { planId, date, name, amount } | null — the boss's
+  // EXPLICIT decision. The suggestion (planLinkSuggestion) is recomputed on
+  // every keystroke of the four fields that feed it; it changes nothing by
+  // itself. Tapping the chip links (sets the ref from the suggestion);
+  // tapping a linked chip unlinks. Submitting stores the ref on the txn.
+  var planLinkSug = null; // the live suggestion (null when none)
+  function addFormPayload() {
+    var raw = byId('f_account').value || 'CASH::Cash';
+    var sep = raw.indexOf('::');
+    return {
+      date: byId('f_date').value || todayISO(),
+      account: raw.slice(sep + 2),
+      category: (byId('f_category').value || '').trim(),
+      amount: evalExpr(String(byId('f_amount').value || '').trim()),
+      note: (byId('f_note').value || '').trim()
+    };
+  }
+  function updatePlanLinkChip() {
+    var el = byId('planLinkChip');
+    if (!el) return;
+    var p = addFormPayload();
+    var amtOk = p.amount != null && p.amount > 0;
+    planLinkSug = amtOk ? planLinkSuggestion(p, state.plans) : null;
+    // a stale ref (the plan was deleted, or the fields moved off the
+    // occurrence) is dropped — a link that points at nothing is just junk.
+    // NOTE: the ref survives even when the fuzzy SUGGESTION no longer
+    // matches (the boss's explicit decision outranks the heuristic —
+    // editing the amount off-range must not silently break a saved link).
+    if (state.planLinkRef && !planRefAlive(state.planLinkRef)) state.planLinkRef = null;
+    var linked = !!state.planLinkRef;
+    if (!planLinkSug && !linked) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.setAttribute('aria-pressed', linked ? 'true' : 'false');
+    if (linked) {
+      el.className = 'plchip linked';
+      el.textContent = '✓ Linked to ' + esc(state.planLinkRef.name) + ' · ' + fmtDate(state.planLinkRef.date) + ' — tap to unlink';
+    } else {
+      el.className = 'plchip';
+      el.textContent = 'Looks like ' + esc(planLinkSug.name) + ' · ' + fmtDate(planLinkSug.date) + ' — tap to link this payment';
+    }
   }
   function renderCoach() {
     var el = byId('coach'); if (!el) return;
@@ -3688,6 +3798,12 @@
     state.txns.forEach(function (t) {
       var amt = Number(t.amount) || 0;
       var hay = ((t.category || '') + ' ' + (t.note || '')).toLowerCase();
+      // v73.17: an EXPLICIT link (txn.planRef, the boss's tap on the add
+      // form's chip) is deterministic truth — it wins before any fuzzy rule,
+      // so a linked payment can never be "wrong-matched" away or missed.
+      if (kind !== 'prepay' && t.planRef &&
+          String(t.planRef.planId) === String(kind.planId) &&
+          String(t.planRef.date) === String(kind.date)) { out = t; return; }
       if (kind === 'prepay') {
         if (String(t.date).slice(0, 7) !== d.monthPrefix) return;
         if (!/prepay|card|amex|visa|master|credit/.test(hay)) return;
@@ -3847,7 +3963,7 @@
     var shown = 0;
     for (var i = 0; i < urgent.length && shown < 2; i++) {
       var u = urgent[i];
-      var paid = findPaidTxn(d, { date: u.date, name: u.p.name, amount: u.p.amount });
+      var paid = findPaidTxn(d, { planId: u.p.id, date: u.date, name: u.p.name, amount: u.p.amount });
       var pw2 = u.dd === 0 ? 'today' : (u.dd === 1 ? 'tomorrow' : 'in ' + u.dd + ' days');
       if (paid) rows.push({ cls: 'done', tag: 'Plan · ' + (u.p.name || 'Plan'),
         text: 'Handled — ' + money(Number(paid.amount) || 0) + ' logged on ' + planWhen(paid.date) + '.',
@@ -4129,7 +4245,47 @@
       h.textContent = 'Editing ' + fmtDate(dateISO) + ' of ' + esc(p.name || 'plan') + ' — the rest of the series keeps the plan as-is unless you say otherwise.';
       h.style.display = '';
     }
+    // v73.17: the "paid by" proof — the explicit link wins, the fuzzy
+    // match is the fallback (old txns pre-link keep working). The Unlink
+    // button only acts on an EXPLICIT link (you can't unlink a guess).
+    var pb = byId('pePaidBy'), pbt = byId('pePaidByTxt'), unb = byId('peUnlink');
+    var ro2 = resolveOccurrence(p, dateISO);
+    var paid = findPaidTxn({}, { planId: p.id, date: dateISO, name: ro2.name, amount: ro2.amount });
+    if (pb) {
+      if (paid) {
+        var linked = !!(paid.planRef && String(paid.planRef.planId) === String(p.id) && String(paid.planRef.date) === String(dateISO));
+        pbt.textContent = (linked ? '✓ Linked — ' : 'Matched — ') + money(Number(paid.amount) || 0) + ' on ' + planWhen(String(paid.date)) +
+          (linked ? '' : ' (auto-match)');
+        pb.style.display = 'flex';
+        unb.style.display = linked ? '' : 'none';
+        unb.onclick = function () { unlinkPlanTxn(p.id, dateISO); };
+      } else {
+        pb.style.display = 'none';
+      }
+    }
     openSheet('planEditSheet');
+  }
+  // v73.17: break an explicit link — the txn keeps its money (it is a real
+  // payment); it just stops being THE proof for this occurrence. The fuzzy
+  // fallback may still match it, which is honest: it really does look like
+  // this plan's payment.
+  function unlinkPlanTxn(planId, dateISO) {
+    var hit = null;
+    for (var i = 0; i < state.txns.length; i++) {
+      var t = state.txns[i];
+      if (t.planRef && String(t.planRef.planId) === String(planId) && String(t.planRef.date) === String(dateISO)) {
+        hit = t;
+        break;
+      }
+    }
+    if (!hit) return Promise.resolve();
+    delete hit.planRef;
+    closeSheets();
+    planEditCtx = null;
+    return idbPut(STORE_TX, hit).then(function () {
+      emit('txn');
+      snack('Unlinked — the entry stays in the ledger, it just no longer counts as this plan\'s payment');
+    });
   }
   function savePlanOccurrence() {
     if (!planEditCtx) return;
@@ -5832,12 +5988,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.16, live: new Date(2026, 8, 27, 15, 51) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.17, live: new Date(2026, 8, 27, 18, 33) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.17': [
+      'Paying a plan is no longer a guess: when you log an entry that looks like a plan payment, the add form shows a chip ("Looks like Rent · Sep 26 — tap to link this payment"). Your tap is what links it — from then on the app KNOWS that entry paid that occurrence, no matter how you worded it or how far the amount drifts. In the plan\'s edit sheet each occurrence now shows its proof ("✓ Linked — ₱5,500 on Sep 26") with an Unlink if you linked the wrong one. Old entries without a link still use the old fuzzy match'
+    ],
     '73.16': [
       'Your free cash now knows about your plans: any plan date that lands inside the current salary cycle is deducted from the free number (hero, coach, and the Free tile all show it, with a "− ₱X plans this cycle" note) — once you log the payment, it stops being deducted'
     ],
@@ -6675,6 +6834,11 @@
     planOccurrences: planOccurrences, // v73.1: the occurrence math (weekly/annual; v73.14: daily + count)
     resolveOccurrence: resolveOccurrence, // v73.14: the 3-scope override resolver (pure — the smoke drives it)
     cyclePlanDeduction: cyclePlanDeduction, // v73.16: the cycle's plan share (the smoke drives it)
+    planLinkSuggestion: planLinkSuggestion, // v73.17: the fuzzy SUGGESTION (pure — the smoke drives it)
+    planRefAlive: planRefAlive, // v73.17: does an explicit link still point at a live occurrence
+    unlinkPlanTxn: unlinkPlanTxn, // v73.17: break an explicit link (the txn keeps its money)
+    setPlanLinkRef: function (r) { state.planLinkRef = r; }, // v73.17: the chip's link state (smoke drives it)
+    getPlanLinkRef: function () { return state.planLinkRef; },
     coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut)
     insightsData: insightsData, // v73.2: the insight math (coachRows' input)
     goalPace: goalPace, // v73.3: the goal pace (pure — the smoke drives it)
@@ -6866,6 +7030,12 @@
         amount: amount,
         note: (byId('f_note').value || '').trim()
       };
+      // v73.17: the explicit link (the boss tapped the chip) rides the
+      // record — the truth the deduction + coach rows read before any
+      // fuzzy rule. A stale ref (the fields changed after the tap and the
+      // chip re-rendered unlinked) can't happen: submit reads the CURRENT
+      // ref, and the chip only holds it while its suggestion still matches.
+      if (state.planLinkRef) payload.planRef = state.planLinkRef;
       // v71: the same sheet doubles as the ledger editor — when an entry is
       // being edited, its values re-log through saveTxnEdit (same id, Undo
       // restores the ORIGINAL entry); otherwise a plain add.
@@ -6950,9 +7120,26 @@
       render();
     };
     var amtEl = byId('f_amount');
-    if (amtEl) amtEl.addEventListener('input', function () { addAmtEq(amtEl); updateChargeHint(); });
+    if (amtEl) amtEl.addEventListener('input', function () { addAmtEq(amtEl); updateChargeHint(); updatePlanLinkChip(); });
     var noteEl = byId('f_note'); // v68 item 1: learned merchant→category prefill
-    if (noteEl) noteEl.addEventListener('input', function () { autoCatFromNote(noteEl); });
+    if (noteEl) noteEl.addEventListener('input', function () { autoCatFromNote(noteEl); updatePlanLinkChip(); });
+    // v73.17: the plan-link chip — the four fields that feed the
+    // suggestion all re-run it (the chip is a SUGGESTION until tapped)
+    var catEl = byId('f_category');
+    if (catEl) catEl.addEventListener('change', function () { updatePlanLinkChip(); });
+    var dtEl2 = byId('f_date');
+    if (dtEl2) dtEl2.addEventListener('change', function () { updatePlanLinkChip(); });
+    var plc = byId('planLinkChip');
+    if (plc) plc.onclick = function () {
+      if (state.planLinkRef && planLinkSug &&
+          String(state.planLinkRef.planId) === String(planLinkSug.planId) &&
+          String(state.planLinkRef.date) === String(planLinkSug.date)) {
+        state.planLinkRef = null; // linked -> tap unlinks
+      } else {
+        state.planLinkRef = planLinkSug ? { planId: planLinkSug.planId, date: planLinkSug.date, name: planLinkSug.name, amount: planLinkSug.amount } : null;
+      }
+      updatePlanLinkChip();
+    };
     var mlf = byId('mlFilter');
     if (mlf) mlf.onchange = function () { mlFilterCat = mlf.value; mlShownCount = 5; renderMoneyLog(); };
     wireSnackSwipe(); // v72.32: the top banner swipes up to dismiss

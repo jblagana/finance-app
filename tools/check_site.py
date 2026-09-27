@@ -477,6 +477,19 @@ def main():
           and "openSheet('planSheet')" in js
           and "planHTML: planHTML" in js
           and "'73.15': [" in js)
+    check("v73.17 (the plan-link chip — boss-approved): paying a plan is no longer a guess — the add form's fuzzy match (planLinkSuggestion, the findPaidTxn plan-branch rules as a pure pre-save function) offers a SUGGESTION chip; the boss's tap is the only thing that links (txn.planRef rides the record, so it syncs + survives reboots); findPaidTxn's plan branch reads the explicit link FIRST (deterministic — a linked payment can never be wrong-matched or missed), the fuzzy match stays as the fallback for old txns; the per-occurrence edit sheet shows its proof ('✓ Linked' vs 'Matched (auto-match)') with an Unlink that only breaks an explicit link (unlinkPlanTxn — the txn keeps its money); the chip's ref is dropped when it points at a dead occurrence (planRefAlive) but a saved link survives the fuzzy match drifting off",
+          'id="planLinkChip"' in html and 'button.plchip' in html
+          and "function planLinkSuggestion(payload, plans) {" in js
+          and "function planRefAlive(ref) {" in js
+          and "function unlinkPlanTxn(planId, dateISO) {" in js
+          and "function updatePlanLinkChip() {" in js
+          and "if (data.planRef) t.planRef = data.planRef;" in js
+          and "t.planRef &&" in js and "String(t.planRef.planId) === String(kind.planId)" in js
+          and "planId: p.id, date: od, name: nm, amount: am, dd: dd" in js
+          and "planLinkSuggestion: planLinkSuggestion" in js
+          and "unlinkPlanTxn: unlinkPlanTxn" in js
+          and 'id="pePaidBy"' in html and 'id="peUnlink"' in html
+          and "'73.17': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js
