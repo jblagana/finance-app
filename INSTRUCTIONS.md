@@ -7,7 +7,7 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-28 — "the coach card's row chips are not clickable, and remove the big chips (the image) and move them as row chips"
-Status: **done** — v73.19 shipped (commit `a7cf75c`, pushed to origin/main, SW cache `finances-pwa-v73.19`)
+Status: **done** — v73.19 shipped (commit `aa0ce01`, pushed to origin/main, SW cache `finances-pwa-v73.19`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.19 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7319Section)
 
 ### Interpretation (boss-confirmed ask, from the attached screenshot)
