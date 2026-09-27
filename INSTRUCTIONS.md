@@ -7,7 +7,7 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-27 — "make the coach card's plan-due amount a chip that opens the add sheet + links the same way, and mark the occurrence paid in the money tab"
-Status: **done** — v73.18 shipped (commit `TBD`, pushed to origin/main, SW cache `finances-pwa-v73.18`)
+Status: **done** — v73.18 shipped (commit `505abf5` + the live re-stamp `9e3c81a`, pushed to origin/main, SW cache `finances-pwa-v73.18`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.18 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7318Section)
 
 ### Interpretation (boss-confirmed ask)
