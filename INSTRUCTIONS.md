@@ -8,7 +8,7 @@ commit is not done.
 
 # v73.21 entry (prepended to INSTRUCTIONS.md)
 ## 2026-09-28 — "bump the tint to 5%" (the hazy fill inside the coach row chips)
-Status: **done** — v73.21 shipped (commit TBD, pushed to origin/main, SW cache `finances-pwa-v73.21`)
+Status: **done** — v73.21 shipped (commit `155ba15`, pushed to origin/main, SW cache `finances-pwa-v73.21`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.21 (both check_site copies + test_chat_parser + node syntax + both smokes)
 
 ### Interpretation
