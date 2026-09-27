@@ -6,6 +6,30 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.20 entry (prepended to INSTRUCTIONS.md)
+## 2026-09-28 — "for card prepays in coach card, i wanted the design to be like that of the plans" + "the chips in the plans are not clickable still" (rev 2: "salary should be green its a good thing hehe, drop the 'due' in 'salary due'")
+Status: **done** — v73.20 shipped (commit `ceb7704`, pushed to origin/main, SW cache `finances-pwa-v73.20`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.20 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7320Section)
+
+### Interpretation (boss-approved mockup: C:\Users\Jan\Muji\mockup_coach_rows_v7320.html, rev 2)
+1. **Prepay/salary rows get the PLAN-DUE design** — the v73.19 full-row-chip (dig-chip) look is out. Every action row is now a plain list row with a PILL CHIP on the right (one design for prepay, plan due, and salary).
+2. **The dead-tap fix, structural** — the chip is the ONLY button on the row; the row's tap-jump handler bails on `e.target.closest('.rowchip')`. No stopPropagation, no button-in-button: the chip's tap is the chip's, the row's tap is the row's.
+3. **rev 2** — the salary row is GREEN (money coming in is a good thing), the tag is just "Salary" (a payday is not a bill — "due" dropped), and the copy says the salary LANDS.
+
+### What changed
+- `app.js` renderCoach: prepay/salary rows render as `<div class="dig <cls>" data-digto="money">` + `<button class="rowchip <cls>" data-<act>="<chipAttr>">` (prepay = red, salary = green); the plan-due chip wears the same `rowchip` class. chipAttr now returns the raw attr value (quotes added in the markup).
+- `app.js` wiring: the row handler bails on a chip tap (the fix); the chip buttons are real `<button>`s (Enter/Space come free — the v73.19 keyboard shims are gone).
+- `app.js` coachRows: the salary row is `cls 'ok'`, tag `Salary`, text "Salary ₱X lands on the <ordinal> — in N days", chip text = the amount only.
+- `index.html`: `.rowchip` pill styles (ok/warn/bad) + `.dig.ok` stripe/tag; the `.dig.dig-chip` block removed.
+- `smoke_app_v68.js`: v7319Section assertions updated to the chip-button markup; NEW v7320Section (plain rows + pill chips, plan-chip prefill+pre-link, prepay/salary chip prefills, the tap-fix guard proven on a synthetic row+chip); v7320 runs right after v7316 (cleaner state — its plan row survives the coach's top-5 cut).
+- `check_site.py` (repo + root mirror): v72.41/v72.45 pins updated to the rowchip design; NEW v73.20 check.
+- SHELL_NOTES '73.20'.
+
+### Proof
+- Gates: release.ps1 v73.20 all green (both check_site copies, parser tests, node syntax, both smokes).
+- Live: live_check_v7320.js 18/18 on jblagana.github.io (stamps, pill CSS, templates, tap-fix guard, salary green/no-due/lands, dig-chip absence, v73.19/18/17 markers still).
+- Mockup: rev 2 approved by the boss before the build.
+
 ## 2026-09-28 — "the coach card's row chips are not clickable, and remove the big chips (the image) and move them as row chips"
 Status: **done** — v73.19 shipped (commit `aa0ce01`, pushed to origin/main, SW cache `finances-pwa-v73.19`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.19 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7319Section)
