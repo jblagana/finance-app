@@ -407,6 +407,16 @@ padding:7px 14px;font-size:12.5px}
 .dig.warn .dg-tag{color:var(--warn)}
 .dig.bad .dg-tag{color:var(--bad)}
 .dig.done .dg-tag{color:var(--ok)}
+/* v73.19: the ROW chips — the boss's call: the big coachActs buttons
+   (Log prepay / Salary in) moved UP into the attention rows and the whole
+   row IS the chip now. The chip border wraps the row (the row's own
+   left accent stays as the severity stripe inside the border). */
+.dig.dig-chip{border:1px solid var(--line);border-radius:14px;background:var(--card2);
+ padding:10px 14px;margin-top:10px;min-height:0}
+.dig.dig-chip.warn{border-color:var(--warn)}
+.dig.dig-chip.bad{border-color:var(--bad)}
+.dig.dig-chip .dg-r{color:var(--ink)}
+.dig.dig-chip:active{filter:brightness(1.18)}
 /* v73.18: the Plan-due amount chip — a real button nested in the row (the
    row's own handler stopPropagation's, so tapping the chip opens the Add
    sheet prefilled + pre-linked instead of jumping to Money) */

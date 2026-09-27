@@ -3004,6 +3004,34 @@
       el.textContent = 'Looks like ' + esc(planLinkSug.name) + ' · ' + fmtDate(planLinkSug.date) + ' — tap to link this payment';
     }
   }
+  // v73.19: the row-chip attr (the payload packed the v73.18 way) —
+  // prepay: amount|date|day|card (card = that card's name, empty for the
+  // total row), salary: amount|date|sday.
+  function chipAttr(rw) {
+    return rw.act === 'prepay'
+      ? '="' + rw.payload.amount + '|' + rw.payload.date + '|' + rw.payload.day + '|' + esc(rw.payload.card || '') + '"'
+      : '="' + rw.payload.amount + '|' + rw.payload.date + '|' + rw.payload.sday + '"';
+  }
+  // v73.19: the row-chip handler bodies (exported — the smoke drives them
+  // without a DOM). The row IS the chip: tapping it opens the Add sheet
+  // prefilled (the old coachActs chips' prefill, moved up into the row —
+  // the per-card row preselects THAT card's account, the v72.41 shape).
+  function prepayRowChip(attr) {
+    var parts = String(attr).split('|');
+    var day = Number(parts[2]) || 14;
+    var card = parts[3] || '';
+    prefillAdd(Number(parts[0]) || 0, parts[1],
+      'Card prepay (the ' + ordinal(day) + ')' + (card ? ' — ' + card : ''),
+      card ? 'CARD::' + card : null, 'prepay');
+  }
+  function salaryRowChip(attr) {
+    var parts = String(attr).split('|');
+    var cashAcc = 'CASH::Cash';
+    ((state.base && state.base.accounts) || []).forEach(function (a) {
+      if (a.kind === 'debit' && a.name) cashAcc = 'CASH::' + a.name;
+    });
+    prefillAdd(Number(parts[0]) || 0, parts[1], 'Salary (the ' + ordinal(Number(parts[2]) || 15) + ')', cashAcc, 'salary');
+  }
   function renderCoach() {
     var el = byId('coach'); if (!el) return;
     var d = insightsData();
@@ -3112,6 +3140,19 @@
             '<span class="dg-r">' + esc(rw.r) + '</span></button>';
           return;
         }
+        // v73.19: the row chips — the whole ROW is the chip (the boss's call:
+        // the big coachActs buttons moved up into the rows themselves). The
+        // row is a DIV with role=button: a real <button> cannot nest inside a
+        // <button> (invalid HTML5, the parser closes the outer one early),
+        // and the chip styling on the row itself is what makes it read as a
+        // tap target. data-digto is ABSENT — tapping the row fires the chip,
+        // not a tab jump (the sheet opens right there).
+        if (rw.act === 'prepay' || rw.act === 'salary') {
+          html += '<div class="dig ' + rw.cls + ' dig-chip ' + rw.act + '" role="button" tabindex="0" data-' + rw.act + chipAttr(rw) + '>' +
+            '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
+            '<span class="dg-r">' + esc(rw.r) + '</span></div>';
+          return;
+        }
         // v73.18: the Plan-due row's amount is its OWN chip — tapping it
         // opens the Add sheet prefilled (amount + date + note) AND pre-linked
         // (state.planLinkRef set from the payload), so the saved txn carries
@@ -3150,6 +3191,24 @@
           };
         })(ppb[k]);
       }
+      // v73.19: the row chips (prepay + salary) — the ROW is the chip.
+      // Keyboard: Enter/Space fire the same handler (role=button rows).
+      var rcRows = body.querySelectorAll('[data-prepay],[data-salary]');
+      for (var rc = 0; rc < rcRows.length; rc++) {
+        (function (b) {
+          var fire = function () {
+            if (b.getAttribute('data-prepay') != null) prepayRowChip(b.getAttribute('data-prepay'));
+            else salaryRowChip(b.getAttribute('data-salary'));
+          };
+          b.onclick = fire;
+          b.onkeydown = function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              if (e.preventDefault) e.preventDefault();
+              fire();
+            }
+          };
+        })(rcRows[rc]);
+      }
       var mpb = body.querySelectorAll('[data-makeplan]');
       for (var j = 0; j < mpb.length; j++) {
         mpb[j].onclick = (function (b) {
@@ -3162,64 +3221,19 @@
       }
     }
     // ---- one-tap actions ----
-    // v72.41 (user: 'i wanna prepay maya cc and maribank cc separately'): one
-    // Log-prepay button PER card that is owed above its target — each opens the
-    // sheet prefilled with THAT card's amount / date / note / account, in
-    // Pay-card mode (kind card_payment, the payoff). The combined button stays
-    // only as the no-per-card-breakdown fallback (an old sheet).
+    // v73.19 (user: 'the row chips are not clickable, remove the chips in the
+    // image and move them as row chips'): the Log-prepay + Salary-in chips
+    // (this block's old residents) moved UP into the attention rows — they
+    // are the rows themselves now (the coachRows act:'prepay' / act:'salary'
+    // rows, rendered as dig-chip and wired above). The per-card breakdown
+    // (v72.41) lives on in the Money tab's prepay rows; this card carries
+    // the total. What stays here: the plans shortcut.
     var acts = byId('coachActs');
     if (acts) {
       var ah = '';
-      if (prepayActive) {
-        var pcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.prepay) || 0) > 0; });
-        pcards.sort(function (a, b) { return (Number(b.prepay) || 0) - (Number(a.prepay) || 0); });
-        if (pcards.length) {
-          pcards.slice(0, 4).forEach(function (c) {
-            ah += '<button type="button" class="cbtn" data-prepaycard="' + esc(c.name) + '">Log prepay · ' + esc(c.name) + ' · ' + money(c.prepay) + '</button>';
-          });
-        } else {
-          ah += '<button type="button" class="cbtn" id="actPrepay">Log prepay ' + money(d.prepayAmt) + '</button>';
-        }
-      }
-      // v72.45: the "Salary in" check-in — the cycle's salary is expected on
-      // the salary_day (the 15th); from two days before payday, and while it
-      // is still missing, one tap opens the Add sheet prefilled (amount = the
-      // expected salary, date = today and editable — backdate it if the money
-      // landed early, a CASH account preselected). Logging it is the
-      // confirmation: a real cash_in entry the cycle reads back.
-      var cy = d.cycle;
-      if (cy && cy.expected > 0 && !cy.received) {
-        var sdayISO = cy.month + '-' + (cy.sday < 10 ? '0' : '') + cy.sday;
-        var sIn = Math.round((parseISO(sdayISO) - parseISO(d.today)) / 86400000);
-        if (sIn <= 2) {
-          ah += '<button type="button" class="cbtn" id="actSalary">Salary in · ' + money(cy.expected) + '</button>';
-        }
-      }
       var hasPlanRow = rows.some(function (rw) { return rw.tag === 'Plan due'; });
       if (hasPlanRow) ah += '<button type="button" class="cbtn ghost" id="actPlans">See this week\'s plans</button>';
       acts.innerHTML = ah;
-      var pbtns = acts.querySelectorAll ? acts.querySelectorAll('[data-prepaycard]') : [];
-      for (var pi = 0; pi < pbtns.length; pi++) {
-        pbtns[pi].onclick = (function (b) {
-          return function () {
-            var nm = b.getAttribute('data-prepaycard');
-            var cc = null;
-            ((d.s && d.s.cards) || []).forEach(function (c) { if (c.name === nm) cc = c; });
-            if (!cc) return;
-            prefillAdd(cc.prepay, d.prepayDate, 'Card prepay (the ' + ordinal(d.prepayDay) + ') — ' + cc.name, 'CARD::' + cc.name, 'prepay');
-          };
-        })(pbtns[pi]);
-      }
-      var ap = byId('actPrepay');
-      if (ap) ap.onclick = function () { prefillAdd(d.prepayAmt, d.prepayDate, 'Card prepay (the ' + ordinal(d.prepayDay) + ')', null, 'prepay'); };
-      var asb = byId('actSalary'); // v72.45: the "Salary in" check-in
-      if (asb) asb.onclick = function () {
-        var cashAcc = 'CASH::Cash';
-        ((state.base && state.base.accounts) || []).forEach(function (a) {
-          if (a.kind === 'debit' && a.name && cashAcc === 'CASH::Cash') cashAcc = 'CASH::' + a.name;
-        });
-        prefillAdd(cy.expected, d.today, 'Salary (the ' + ordinal(cy.sday) + ')', cashAcc, 'salary');
-      };
       var aa = byId('actPlans');
       if (aa) aa.onclick = function () { setTab('money'); };
     }
@@ -3867,12 +3881,48 @@
         rows.push({ cls: 'done', tag: 'Card prepay',
           text: 'Partly handled — ' + money(Number(prepayPaid.amount) || 0) + ' logged on ' + planWhen(String(prepayPaid.date)) + ' — ' + money(d.prepayAmt) + ' still owed.',
           r: money(d.prepayAmt) + ' left' });
-      } else {
-        rows.push({ cls: d.prepayIn <= 2 ? 'bad' : 'warn', tag: 'Card prepay',
-          text: 'Set aside ' + money(d.prepayAmt) + ' for the ' + ordinal(d.prepayDay) + ' prepay — due ' + pw + '.',
-          r: money(d.prepayAmt) });
       }
+      // v73.19 (user: 'the row chips are not clickable' + 'remove the chips
+      // in the image and move them as row chips'): the per-card Log-prepay
+      // chips (the v72.41 coachActs buttons) ARE the rows now — one row per
+      // owed card (the card's own live amount, the v72.41 prefill: that
+      // card's account in Pay-card mode). NO total row: the v72.41 call was
+      // to prepay each card separately, and the image confirms it (one chip
+      // per card, no combined). The row IS the chip (dig-chip): tapping it
+      // opens the Add sheet prefilled; it no longer jumps to Money. Same
+      // gate as the v72.41 chips: prepayActive (something owed above target)
+      // — the "due in N days" text carries the timing.
+      var pcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.prepay) || 0) > 0; });
+      pcards.sort(function (a, b) { return (Number(b.prepay) || 0) - (Number(a.prepay) || 0); });
+      pcards.slice(0, 4).forEach(function (c) {
+        rows.push({ cls: d.prepayIn <= 2 ? 'bad' : 'warn', tag: 'Card prepay · ' + c.name,
+          text: money(c.prepay) + ' still owed on ' + c.name + ' — the ' + ordinal(d.prepayDay) + ' prepay is ' + pw + '.',
+          r: money(c.prepay),
+          act: 'prepay', payload: { amount: c.prepay, date: d.prepayDate, day: d.prepayDay, card: c.name } });
+      });
       alerts.push('prepay'); // v72.45: the remainder is still owed, whatever was logged
+    }
+    // v73.19: the "Salary in" check-in is a ROW CHIP (it used to be a
+    // coachActs chip) — the cycle's salary is expected on the salary_day
+    // (the 15th); from two days before payday, and while it is still
+    // missing, the row's chip opens the Add sheet prefilled (amount = the
+    // expected salary, date = today and editable — backdate it if the money
+    // landed early, a CASH account preselected). Logging it is the
+    // confirmation: a real cash_in entry the cycle reads back.
+    var cy0 = d.cycle;
+    if (cy0 && cy0.expected > 0 && !cy0.received) {
+      var sdayISO = cy0.month + '-' + (cy0.sday < 10 ? '0' : '') + cy0.sday;
+      var sIn = Math.round((parseISO(sdayISO) - parseISO(d.today)) / 86400000);
+      // v73.19: only while payday is still ahead (the old coachActs chip had
+      // the same sIn <= 2 test but its text never showed a negative count;
+      // the row text does, so a past payday gets no chip — the hero line
+      // carries the "late" state).
+      if (sIn >= 0 && sIn <= 2) {
+        rows.push({ cls: sIn <= 1 ? 'bad' : 'warn', tag: 'Salary due',
+          text: 'Salary ' + money(cy0.expected) + ' is expected on the ' + ordinal(cy0.sday) + ' — ' + (sIn === 0 ? 'today' : (sIn === 1 ? 'tomorrow' : 'in ' + sIn + ' days')) + '.',
+          r: 'Salary in · ' + money(cy0.expected),
+          act: 'salary', payload: { amount: cy0.expected, date: d.today, sday: cy0.sday } });
+      }
     }
     // v72.45: the salary-cycle burn — one deterministic finding that rides the
     // shared snapshot (coachFindings -> the coach phrases it). The pace call
@@ -6041,12 +6091,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.18, live: new Date(2026, 8, 27, 19, 49) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.19, live: new Date(2026, 8, 28, 0, 13) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.19': [
+      'The coach card\'s action chips are now the rows themselves: each owed card is its own row-chip ("Log prepay · MariBank CC · ₱X" is the row — tap it and the Add sheet opens prefilled with that card\'s amount, date and account), and the "Salary in" check-in is a row-chip too. The big button strip under the card is gone — everything you could tap there now lives where the problem is named',
+      'The "Plan due" amount chip is back on its row (the row is tappable again, and so is the chip)'
+    ],
     '73.18': [
       'The coach card\'s "Plan due" amount is now a button — tap it and the Add sheet opens prefilled (amount, due date, plan name) AND already linked to that occurrence, so the payment is the proof the moment you save it, no second tap',
       'Paid occurrences now wear a pill in the Money tab\'s Coming-up list (✓ paid when a logged payment is linked to it, a quieter "paid" when it was auto-matched) — the same proof the plan\'s edit sheet shows'
@@ -6895,6 +6949,9 @@
     planRefAlive: planRefAlive, // v73.17: does an explicit link still point at a live occurrence
     renderCoach: renderCoach, // v73.18: the coach card render (smoke reads the pay-plan chip in the HTML)
     prefillAdd: prefillAdd, // v73.18: the coach prefill (smoke verifies the chip's target state)
+    getAddMode: function () { return addMode; }, // v73.19: the Add sheet's direction (the row chips' prefill proof)
+    prepayRowChip: prepayRowChip, // v73.19: the prepay row-chip's handler body (smoke drives it without a DOM)
+    salaryRowChip: salaryRowChip, // v73.19: the salary row-chip's handler body (smoke drives it without a DOM)
     payPlanChip: function (attr) { // v73.18: the chip's handler body (smoke drives it without a DOM)
       var parts = String(attr).split('|');
       var pid = parts[0], pdate = parts[1], pname = parts[2], pamt = Number(parts[3]) || 0;

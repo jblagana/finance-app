@@ -6,6 +6,27 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-28 — "the coach card's row chips are not clickable, and remove the big chips (the image) and move them as row chips"
+Status: **done** — v73.19 shipped (commit `a7cf75c`, pushed to origin/main, SW cache `finances-pwa-v73.19`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.19 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7319Section)
+
+### Interpretation (boss-confirmed ask, from the attached screenshot)
+The screenshot showed the coach card's big button strip: `Log prepay · MariBank CC · PHP 7,695.29`, `Log prepay · Maya CC · PHP 3,737.95`, `Salary in · PHP 46,615.00`. Two asks:
+1. **"the row chips are not clickable"** — the v73.18 "Plan due" amount chip (and the attention rows generally) weren't registering taps. Root cause: the attention rows were `<button>` elements with `data-digto`, and the v73.18 plan chip was a nested `<button>` inside that — the row's own handler + the nested button's handler collided, and on the phone the row tap won (jumped to Money) while the chip did nothing.
+2. **"remove the chips in the image and move them as row chips"** — the big `coachActs` button strip (Log prepay ×N, Salary in) should be GONE; those actions live in the attention ROWS themselves, where the problem is named.
+
+### What changed
+- `app.js` `coachRows`: the per-card prepay is now **one row per owed card** (`act:'prepay'`, `payload { amount, date, day, card }` — the card's own live amount + name, the v72.41 per-card shape), and the salary check-in is its own row (`act:'salary'`, `payload { amount, date, sday }`, up while payday is 0–2 days ahead). The old combined "Set aside ₱X" row and the whole `coachActs` prepay/salary buttons are gone. The strip keeps only the "See this week's plans" shortcut.
+- `app.js` `renderCoach`: rows with `act:'prepay'`/`act:'salary'` render as a **`div.dig.dig-chip[role=button]`** (NOT a `<button>` — a button can't nest in a button, and the row IS the tap target now) with `data-prepay`/`data-salary` carrying the payload. The whole row fires the chip (no `data-digto` tab jump — the sheet opens right there). Enter/Space fire it too (keyboard).
+- `app.js`: `chipAttr(rw)` (packs the payload into the data-attr) + `prepayRowChip`/`salaryRowChip` — prepay prefills the Add sheet in Pay-card mode with **that card's account preselected** (the v72.41 prefill); salary prefills in Money-in mode with a CASH account. `getAddMode` exported for the prefill proof.
+- `index.html`: `.dig.dig-chip` CSS (the chip border wraps the row — the row's left severity stripe stays inside the border).
+- `smoke_app_v68.js` (finances root, not in git): `v7319Section` (the owed card is its own row-chip with the card in the payload; the button strip no longer carries prepay/salary chips; the salary row-chip renders + reads "Salary in · ₱X"; tapping the prepay row-chip prefills Pay-card mode with the card's account preselected; tapping the salary row-chip prefills Money-in with a CASH account; logging the salary takes the chip down; the prepay chip stays while the card is owed; cleanup). The v72.41/v72.45 sections were retargeted to read the row-chips (data-prepay) instead of the old coachActs buttons.
+
+### Notes for the next session
+- The row-chip is a **div[role=button]**, not a button — same reason as the v73.18 plan chip (a `<button>` can't nest in a `<button>`; and now the row itself is the chip, so there's no inner element to tap). The smoke can't drive a real click (DOM stub), so the tap path is verified via the exported `prepayRowChip`/`salaryRowChip` bodies (the same code the binding calls) + the rendered markup.
+- The salary row-chip is **date-dependent**: it's up only while payday is 0–2 days ahead. The smoke sets `salary_day` to today (sIn=0) so it's deterministic; on the 31st (sday caps at 28) payday is 3 days past and the chip is correctly DOWN (the hero line carries the "late" state) — the section drives the handler directly in that branch.
+- `coachActs` is now nearly empty (just the plans shortcut) — `#coachActs:empty{display:none}` still hides it when there are no plan rows.
+
 ## 2026-09-27 — "make the coach card's plan-due amount a chip that opens the add sheet + links the same way, and mark the occurrence paid in the money tab"
 Status: **done** — v73.18 shipped (commit `505abf5` + the live re-stamp `9e3c81a`, pushed to origin/main, SW cache `finances-pwa-v73.18`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.18 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7318Section)

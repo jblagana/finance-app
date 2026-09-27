@@ -928,9 +928,15 @@ def main():
           and "if (mode === 'prepay') return 'card_payment';" in js
           and "if (addMode === 'prepay' && type !== 'CARD')" in js
           and 'id="addModeSpend"' in html and 'id="addModePrepay"' in html and 'class="amrow"' in html
-          and "data-prepaycard=\"" in js
-          and "prefillAdd(cc.prepay, d.prepayDate" in js
-          and "'CARD::' + cc.name, 'prepay');" in js
+          # v73.19: the per-card chip moved UP into the coach rows (the row IS
+          # the chip — a dig-chip div whose data-<act> attr is built by
+          # chipAttr, the card riding the payload) and the prefill rides
+          # prepayRowChip's exported handler body (same v72.41 shape:
+          # that card's live amount + its own account, Pay-card mode)
+          and "dig-chip" in js
+          and "function chipAttr(rw) {" in js
+          and "function prepayRowChip(attr) {" in js
+          and "card ? 'CARD::' + card : null, 'prepay');" in js
           and "addSheetKind: addSheetKind" in js)
     check("v72.42 (the payoff bug, user: 'fix the payoff bug and keep both numbers — floor stays on raw bank cash'): a card_payment settles the debt — it is NOT the exact inverse of card_charge (the charge already spent the free cash; the credit limit isn't money). The payoff drops the RAW liquid (adj.cash +a → effective total −a) and the owed/prepay, and leaves free UNTOUCHED (tuple free: 0, freeEffect → 0): a charge+payoff cycle nets free −amt and liquid −amt with owed 0 (the expense is real, the debt is settled) instead of erasing the expense; the money-log 'p' row renders free unchanged (before = f) while its card sub-line still shows the owed dropping; cash.free and cash.total stay separate and the liquidity floor keeps running on the raw cash.total",
           "if (t.kind === 'card_payment') return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js
@@ -974,7 +980,12 @@ def main():
           and "b.salary_day = sd > 0 ? sd : (b.cutoff_day || 15);" in js
           and "cycle: cycleData()," in js
           and "Salary (the ' + ordinal(cy0.sday)" in js
-          and 'id="actSalary"' in js
+          and "act: 'salary'" in js  # v73.19: the 'Salary in' chip moved up into the coach rows (the old coachActs button is gone)
+          and "id=\"actSalary\"" not in js  # v73.19: the old coachActs salary chip is GONE (moved up into the rows)
+          and "id=\"actPrepay\"" not in js  # v73.19: the old coachActs prepay chip is GONE (per-card rows replaced it)
+          and "function prepayRowChip(attr) {" in js  # v73.19: the prepay row-chip's handler body
+          and "function salaryRowChip(attr) {" in js  # v73.19: the salary row-chip's handler body
+          and "dig.dig-chip" in html  # v73.19: the row-chip styling (the row IS the chip)
           and "insBlock('This cycle'" in js
           and "var salDelta = 0, salDate = null;" in js
           and "pts.splice(1, 0, { label: dayMonth(salDate), v: vAtSal, date: salDate });" in js
