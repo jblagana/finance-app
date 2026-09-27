@@ -6,6 +6,23 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.21 entry (prepended to INSTRUCTIONS.md)
+## 2026-09-28 — "bump the tint to 5%" (the hazy fill inside the coach row chips)
+Status: **done** — v73.21 shipped (commit TBD, pushed to origin/main, SW cache `finances-pwa-v73.21`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.21 (both check_site copies + test_chat_parser + node syntax + both smokes)
+
+### Interpretation
+The boss named the haze (a tint — the chip's own severity color at low opacity as the fill) and set it: 12% → 5%. The border + text keep full severity color, so the chip still reads red/amber/green; only the background goes barely-there.
+
+### What changed
+- `index.html`: `.rowchip` fill `rgba(55,211,155,.12)` → `.05`; `.rowchip.warn` `rgba(255,196,92,.12)` → `.05`; `.rowchip.bad` `rgba(255,107,107,.12)` → `.05`. No other tints touched (the sheet's `.verdict` / `.plchip.linked` .12 fills are a different component).
+- `app.js` SHELL_NOTES '73.21' (plain-wording note).
+- `tools/check_site.py` (+ root mirror via release.ps1 sync): NEW v73.21 check (all three variants at .05, the .12 rowchip fills gone, severity border/text intact, SHELL_NOTES entry).
+
+### Proof
+- Gates: release.ps1 v73.21 all green (both check_site copies, parser tests, node syntax, both smokes) — re-run as -GatesOnly for a clean gate summary.
+- Live: live_check_v7321.js (throwaway, finances/) after push.
+
 # v73.20 entry (prepended to INSTRUCTIONS.md)
 ## 2026-09-28 — "for card prepays in coach card, i wanted the design to be like that of the plans" + "the chips in the plans are not clickable still" (rev 2: "salary should be green its a good thing hehe, drop the 'due' in 'salary due'")
 Status: **done** — v73.20 shipped (commit `ceb7704`, pushed to origin/main, SW cache `finances-pwa-v73.20`)

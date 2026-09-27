@@ -6104,12 +6104,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.20, live: new Date(2026, 8, 28, 3, 2) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.21, live: new Date(2026, 8, 28, 5, 51) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.21': [
+      'The coach row chips are quieter: their hazy fill (the tint of their own color) drops from 12% to 5% — the border and text keep the full red/amber/green, so the chip still reads by severity but the background is barely-there'
+    ],
     '73.20': [
       'The coach card\'s prepay and salary rows now wear the PLAN-DUE design: a plain row with a pill chip on the right (prepay red, salary green — money coming in is a good thing). The "Salary due" row is just "Salary" now, and it says the money LANDS, not that it is due',
       'The chips actually work now: the chip is the only button on the row, and the row\'s tap-jump bails when your tap started on a chip — the prepay, salary and plan chips all open the Add sheet prefilled (and the plan chip still pre-links the occurrence), while tapping the row body still jumps to Money'

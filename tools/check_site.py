@@ -508,6 +508,15 @@ def main():
           and ".rowchip{" in html and ".rowchip.warn{" in html and ".rowchip.bad{" in html
           and ".dig.ok{border-left-color:var(--ok)}" in html
           and "'73.20': [" in js)
+    check("v73.21 (user: 'bump the tint to 5%' — the rowchip's hazy fill is a low-opacity tint of its own severity color; 12% read as a visible haze, 5% is barely-there): the .rowchip pill fill drops from rgba(...,.12) to rgba(...,.05) on all three severity variants (ok base, warn, bad); the border + text keep full severity color so the chip still reads red/amber/green",
+          # the three severity variants now carry the 5% tint
+          "background:rgba(55,211,155,.05);border:1px solid var(--ok)" in html
+          and ".rowchip.warn{background:rgba(255,196,92,.05)" in html
+          and ".rowchip.bad{background:rgba(255,107,107,.05)" in html
+          # the 12% rowchip fills are gone (other .12 tints in the sheet are untouched)
+          and ".rowchip.warn{background:rgba(255,196,92,.12)" not in html
+          and ".rowchip.bad{background:rgba(255,107,107,.12)" not in html
+          and "'73.21': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js
