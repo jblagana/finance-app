@@ -6,6 +6,24 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+## 2026-09-27 — "make the coach card's plan-due amount a chip that opens the add sheet + links the same way, and mark the occurrence paid in the money tab"
+Status: **done** — v73.18 shipped (commit `TBD`, pushed to origin/main, SW cache `finances-pwa-v73.18`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.18 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7318Section)
+
+### Interpretation (boss-confirmed ask)
+The coach card's "Plan due" row already shows the due amount on the right — it was plain text. Now:
+1. **The amount is a chip** — a real button nested in the row (`.plchip-inline`, stopPropagation so the row's own data-digto handler doesn't also fire). Tapping it opens the Add sheet prefilled (amount, the occurrence's date, a note naming the plan) AND **pre-links** it: `state.planLinkRef` is set from the row's payload before the sheet opens, so the saved txn carries `planRef` without a second tap on the v73.17 chip. The v73.17 chip still shows as "✓ Linked" in the sheet (the boss can unlink there if he changed his mind).
+2. **The occurrence is marked paid in the Money tab** — the Coming-up list now wears the same proof the plan edit sheet shows: a green pill on the occurrence (✓ paid = explicit link, quieter "paid" = fuzzy auto-match). One-off rows wear it on the name line (their one occurrence IS the row); recurring sub-rows wear it on the name line next to the edited pill. `RENDER_BY_KEY.txn` gained `renderPlans` so logging a payment repaints the list.
+
+### What changed
+- `app.js`: `coachRows` Plan-due row carries `act:'pay_plan'` + `payload { planId, date, name, amount }` (resolved fork-aware name/amount, same as the row text); `renderCoach` renders the nested chip + binds `payPlanChip(attr)` (the handler body, exported for the smoke — prefillAdd + set state.planLinkRef + updatePlanLinkChip); `planPaidPill(planId, date, name, amount)` (pure-ish — findPaidTxn, linked vs auto variant) used by `planHTML` (one-off name line + recurring sub-row name line); `RENDER_BY_KEY.txn` += renderPlans; exports `renderCoach`/`prefillAdd`/`payPlanChip`; SHELL_NOTES '73.18' (2 plain-word lines).
+- `index.html`: `.plchip-inline` (chip button in the dig row) + `.occ-paid`/`.occ-paid.auto` (the pill variants) CSS.
+- `smoke_app_v68.js` (finances root, not in git): `v7318Section` (row carries the payload; renderCoach renders data-payplan; attr = planId|date|name|amount; payPlanChip sets state.planLinkRef; no pill before payment; ✓ paid pill after the linked payment — a wordless-category 5×-amount txn whose ONLY proof is the link; the chip row flips to "done" after; cleanup) + wired into the section chain (the closing-brace count went 40→41 with the new wrapper — verified by node --check, not by eye).
+
+### Notes for the next session
+- The pay_plan row is rendered as a **div[role=button]**, not a button — a `<button>` nested in a `<button>` is invalid HTML5 and the parser closes the outer one early (the chip would detach). The smoke can't drive the click (DOM stub), so the chip's tap path is verified via payPlanChip (the same code the binding calls).
+- `planHTML` now calls `findPaidTxn` per occurrence — O(occ × txns); fine at this scale (a handful of plans, hundreds of txns), but if the ledger grows to thousands, batch the paid-lookups in one pass.
+
 ## 2026-09-27 — "how can we make 1 robust" → "Build the plan-link chip (v73.17)"
 Status: **done** — v73.17 shipped (commit `46b7946` + the live re-stamp `1800eef`, pushed to origin/main, SW cache `finances-pwa-v73.17`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.17 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7317Section)

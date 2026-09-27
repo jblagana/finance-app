@@ -35,7 +35,10 @@
   var RENDER_BY_KEY = {
     // v73.0: renderMood on every data key — the face is the status light
     // v73.14: renderDueStrip dropped from every key (the due strip is gone — Home slim)
-    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderRecap],
+    // v73.18: renderPlans on 'txn' — the Coming-up occurrence sub-rows now
+    // wear a paid pill (the same proof the edit sheet shows), so logging a
+    // payment must repaint the Money tab's list, not just the coach card.
+    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderRecap, renderPlans],
     plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote, renderMood],
     // v72.30: a base save can file 'Adjustment' ledger rows — the Ledger tab follows
     snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap],
@@ -3109,6 +3112,19 @@
             '<span class="dg-r">' + esc(rw.r) + '</span></button>';
           return;
         }
+        // v73.18: the Plan-due row's amount is its OWN chip — tapping it
+        // opens the Add sheet prefilled (amount + date + note) AND pre-linked
+        // (state.planLinkRef set from the payload), so the saved txn carries
+        // the planRef without a second tap. The row body still goes to Money.
+        // The OUTER row is a DIV, not a button: a <button> inside a <button>
+        // is invalid HTML5 and the parser closes the outer one early (the
+        // chip would detach from the row). role/aria keep it keyboard-tappable.
+        if (rw.act === 'pay_plan') {
+          html += '<div class="dig ' + rw.cls + '" role="button" tabindex="0" data-digto="money">' +
+            '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
+            '<span class="dg-r"><button type="button" class="plchip-inline" data-payplan="' + esc(rw.payload.planId) + '|' + rw.payload.date + '|' + esc(rw.payload.name) + '|' + rw.payload.amount + '" aria-label="Log this payment">' + esc(rw.r) + '</button></span></div>';
+          return;
+        }
         html += '<button type="button" class="dig ' + rw.cls + '" data-digto="money">' +
           '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
           '<span class="dg-r">' + esc(rw.r) + '</span></button>';
@@ -3117,6 +3133,22 @@
       var btns = body.querySelectorAll('[data-digto]');
       for (var i = 0; i < btns.length; i++) {
         btns[i].onclick = function () { setTab(this.getAttribute('data-digto')); };
+      }
+      // v73.18: the Plan-due amount chip — opens the Add sheet prefilled
+      // (amount + the occurrence's date + a note naming the plan) AND
+      // pre-LINKED: state.planLinkRef is set from the payload, so the saved
+      // txn carries the planRef without a second tap. stopPropagation keeps
+      // the row's data-digto handler from also firing (the chip is nested
+      // inside the row button). The handler body is payPlanChip (exported —
+      // the smoke drives the same code path without a DOM).
+      var ppb = body.querySelectorAll('[data-payplan]');
+      for (var k = 0; k < ppb.length; k++) {
+        ppb[k].onclick = (function (b) {
+          return function (e) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            payPlanChip(b.getAttribute('data-payplan'));
+          };
+        })(ppb[k]);
       }
       var mpb = body.querySelectorAll('[data-makeplan]');
       for (var j = 0; j < mpb.length; j++) {
@@ -3974,7 +4006,12 @@
         var ua = u.am != null ? u.am : u.p.amount;
         rows.push({ cls: u.dd <= 2 ? 'bad' : 'warn', tag: 'Plan due',
           text: (un || 'Plan') + ' is due ' + pw2 + '.',
-          r: money(ua) });
+          r: money(ua),
+          // v73.18: the amount is a CHIP — tapping it opens the Add sheet
+          // prefilled AND pre-linked (state.planLinkRef, the boss's explicit
+          // decision) so the payment is linked the moment it is saved, no
+          // second tap on the chip needed.
+          act: 'pay_plan', payload: { planId: u.p.id, date: u.date, name: un, amount: ua } });
         alerts.push('plan:' + (un || 'Plan'));
         shown++;
       }
@@ -4125,6 +4162,18 @@
   var OCC_CAP = 5;
   var planOpen = {}; // planId -> true while the series is expanded
   var planSig = '';  // the plan set the open-state was captured for
+  // v73.18: the occurrence's PAID pill (the same proof the edit sheet shows —
+  // explicit link first, fuzzy fallback). One-off rows wear it on the name
+  // line; recurring sub-rows wear it on the date line. '' when unpaid.
+  function planPaidPill(planId, dateISO, name, amount) {
+    var paid = findPaidTxn({}, { planId: planId, date: dateISO, name: name, amount: amount });
+    if (!paid) return '';
+    var linked = !!(paid.planRef && String(paid.planRef.planId) === String(planId) &&
+      String(paid.planRef.date) === String(dateISO));
+    return ' <span class="pill occ-paid' + (linked ? '' : ' auto') + '" title="' +
+      (linked ? 'Linked to a logged payment' : 'Matched to a logged payment (auto)') + '">' +
+      (linked ? '✓ paid' : 'paid') + '</span>';
+  }
   function planHTML(p, opts) {
     opts = opts || {};
     var rec = !!p.repeat;
@@ -4135,7 +4184,9 @@
       // the full date when it's not a relative window — don't double it.
       var when = planWhen(p.date);
       var subTxt = when === fmtDate(p.date) ? when : when + ' · ' + fmtDate(p.date);
-      return '<div class="plrow oneoff"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') + '</div>' +
+      // v73.18: a one-off's ONE occurrence is the row itself — its paid
+      // state rides the name line (the same proof as the sub-rows).
+      return '<div class="plrow oneoff"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') + planPaidPill(p.id, String(p.date), p.name, p.amount) + '</div>' +
         '<div class="pl-sub">' + esc(subTxt) + '</div></div>' +
         '<div class="pl-r"><div class="pl-amt">₱ ' + amt(p.amount) + '</div></div>' +
         '<button class="mini" data-delp="' + p.id + '" title="Delete plan">✕</button></div>';
@@ -4161,8 +4212,10 @@
     var sub = '<div class="occwrap">';
     shown.slice(0, OCC_CAP).forEach(function (o) {
       var nm = o.ro.name, a = o.ro.amount;
+      // v73.18: the occurrence's paid pill rides the name line (the same
+      // proof the edit sheet shows — linked = bold, fuzzy = muted).
       sub += '<div class="occ"><span class="oc-d">' + fmtDate(o.d) + '</span>' +
-        '<span class="oc-n">' + (nm !== p.name ? esc(nm) : '') + (o.ro.edited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') + '</span>' +
+        '<span class="oc-n">' + (nm !== p.name ? esc(nm) : '') + (o.ro.edited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') + planPaidPill(p.id, o.d, nm, a) + '</span>' +
         (a !== p.amount ? '<span class="oc-a">₱ ' + amt(a) + '</span>' : '') +
         '<button class="mini oc-x" data-editp="' + p.id + '" data-editd="' + o.d + '" title="Edit this occurrence">✎</button></div>';
     });
@@ -5988,12 +6041,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.17, live: new Date(2026, 8, 27, 18, 37) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.18, live: new Date(2026, 8, 27, 19, 45) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.18': [
+      'The coach card\'s "Plan due" amount is now a button — tap it and the Add sheet opens prefilled (amount, due date, plan name) AND already linked to that occurrence, so the payment is the proof the moment you save it, no second tap',
+      'Paid occurrences now wear a pill in the Money tab\'s Coming-up list (✓ paid when a logged payment is linked to it, a quieter "paid" when it was auto-matched) — the same proof the plan\'s edit sheet shows'
+    ],
     '73.17': [
       'Paying a plan is no longer a guess: when you log an entry that looks like a plan payment, the add form shows a chip ("Looks like Rent · Sep 26 — tap to link this payment"). Your tap is what links it — from then on the app KNOWS that entry paid that occurrence, no matter how you worded it or how far the amount drifts. In the plan\'s edit sheet each occurrence now shows its proof ("✓ Linked — ₱5,500 on Sep 26") with an Unlink if you linked the wrong one. Old entries without a link still use the old fuzzy match'
     ],
@@ -6836,6 +6893,15 @@
     cyclePlanDeduction: cyclePlanDeduction, // v73.16: the cycle's plan share (the smoke drives it)
     planLinkSuggestion: planLinkSuggestion, // v73.17: the fuzzy SUGGESTION (pure — the smoke drives it)
     planRefAlive: planRefAlive, // v73.17: does an explicit link still point at a live occurrence
+    renderCoach: renderCoach, // v73.18: the coach card render (smoke reads the pay-plan chip in the HTML)
+    prefillAdd: prefillAdd, // v73.18: the coach prefill (smoke verifies the chip's target state)
+    payPlanChip: function (attr) { // v73.18: the chip's handler body (smoke drives it without a DOM)
+      var parts = String(attr).split('|');
+      var pid = parts[0], pdate = parts[1], pname = parts[2], pamt = Number(parts[3]) || 0;
+      prefillAdd(pamt, pdate, pname + ' (plan payment)');
+      state.planLinkRef = { planId: pid, date: pdate, name: pname, amount: pamt };
+      updatePlanLinkChip();
+    },
     unlinkPlanTxn: unlinkPlanTxn, // v73.17: break an explicit link (the txn keeps its money)
     setPlanLinkRef: function (r) { state.planLinkRef = r; }, // v73.17: the chip's link state (smoke drives it)
     getPlanLinkRef: function () { return state.planLinkRef; },

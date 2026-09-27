@@ -407,6 +407,17 @@ padding:7px 14px;font-size:12.5px}
 .dig.warn .dg-tag{color:var(--warn)}
 .dig.bad .dg-tag{color:var(--bad)}
 .dig.done .dg-tag{color:var(--ok)}
+/* v73.18: the Plan-due amount chip — a real button nested in the row (the
+   row's own handler stopPropagation's, so tapping the chip opens the Add
+   sheet prefilled + pre-linked instead of jumping to Money) */
+.plchip-inline{cursor:pointer;font:inherit;font-weight:700;font-size:12.5px;
+ background:rgba(55,211,155,.12);border:1px solid var(--ok);color:var(--ok);
+ border-radius:999px;padding:4px 12px;white-space:nowrap}
+.plchip-inline:active{filter:brightness(1.15)}
+/* v73.18: the occurrence's paid pill (Coming-up sub-rows) — green when an
+   explicit link is the proof, muted green for the fuzzy auto-match */
+.occ-paid{background:rgba(55,211,155,.15);color:var(--ok);font-size:10px;padding:1px 8px;vertical-align:1px}
+.occ-paid.auto{opacity:.75}
 .coach-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .cbtn{cursor:pointer;background:transparent;border:1px solid var(--acc);color:var(--acc);
  border-radius:999px;padding:9px 14px;font-size:12.5px;font-weight:700;min-height:40px;font-family:inherit}
