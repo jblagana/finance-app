@@ -7,7 +7,8 @@ The instruction log for this project (crash-recovery record).
 commit is not done.
 
 ## 2026-09-27 — "how can we make 1 robust" → "Build the plan-link chip (v73.17)"
-Status: **in progress** — code + gates done (release.ps1 v73.17 all green), commit + push pending
+Status: **done** — v73.17 shipped (commit `46b7946` + the live re-stamp `1800eef`, pushed to origin/main, SW cache `finances-pwa-v73.17`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.17 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7317Section)
 
 ### Interpretation (boss-approved design)
 Paying a plan is no longer a guess. The fuzzy match (±2 days + a 4+ letter name word in the category/note + amount within 0.5×–2.5×) is demoted to a SUGGESTION; the boss's tap is the TRUTH:
