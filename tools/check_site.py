@@ -517,6 +517,15 @@ def main():
           and ".rowchip.warn{background:rgba(255,196,92,.12)" not in html
           and ".rowchip.bad{background:rgba(255,107,107,.12)" not in html
           and "'73.21': [" in js)
+    check("v73.22 (user: 'the plan rows still have unclickable chips' — the prepay/salary chips worked, the plan chips did not): v73.18 shipped the plan-chip handler ONLY as the window.FinApp export property, but the renderCoach wiring loop calls a BARE payPlanChip(...) — unresolvable in IIFE scope, so every plan-chip tap threw ReferenceError (the chip looked dead). The body now lives in scope as a real function; the export references it (the smoke's F.payPlanChip path is unchanged)",
+          # the in-scope definition (the bare call in the wiring loop resolves)
+          "function payPlanChip(attr) {" in js
+          # the export references the in-scope function (no second inline copy)
+          and "payPlanChip: payPlanChip," in js
+          and "payPlanChip: function (attr)" not in js
+          # the wiring loop still calls the bare identifier
+          and "payPlanChip(b.getAttribute('data-payplan'));" in js
+          and "'73.22': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js

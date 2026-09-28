@@ -3033,6 +3033,21 @@
     });
     prefillAdd(Number(parts[0]) || 0, parts[1], 'Salary (the ' + ordinal(Number(parts[2]) || 15) + ')', cashAcc, 'salary');
   }
+  // v73.22 (user: 'the plan rows still have unclickable chips'): the plan-chip
+  // handler body. v73.18 shipped it ONLY as the window.FinApp export property
+  // (the smoke drives it without a DOM), but the renderCoach wiring loop calls
+  // a BARE payPlanChip(...) — unresolvable in IIFE scope, so every plan-chip
+  // tap threw ReferenceError and the chip looked dead (prepay/salary were
+  // real IIFE functions, which is why only the plan chips died). The body now
+  // lives in scope; the export references it (the smoke's F.payPlanChip path
+  // is unchanged).
+  function payPlanChip(attr) {
+    var parts = String(attr).split('|');
+    var pid = parts[0], pdate = parts[1], pname = parts[2], pamt = Number(parts[3]) || 0;
+    prefillAdd(pamt, pdate, pname + ' (plan payment)');
+    state.planLinkRef = { planId: pid, date: pdate, name: pname, amount: pamt };
+    updatePlanLinkChip();
+  }
   function renderCoach() {
     var el = byId('coach'); if (!el) return;
     var d = insightsData();
@@ -6104,12 +6119,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.21, live: new Date(2026, 8, 28, 5, 51) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.22, live: new Date(2026, 8, 28, 18, 16) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.22': [
+      'The coach card\'s plan-due chips are clickable now: the handler that opens the Add sheet (prefilled AND pre-linked) was only ever an export, so tapping a plan chip threw before it could act — the prepay and salary chips were the only ones that worked. The fix puts the handler in scope, so all three chips behave the same'
+    ],
     '73.21': [
       'The coach row chips are quieter: their hazy fill (the tint of their own color) drops from 12% to 5% — the border and text keep the full red/amber/green, so the chip still reads by severity but the background is barely-there'
     ],
@@ -6972,13 +6990,7 @@
     getAddMode: function () { return addMode; }, // v73.19: the Add sheet's direction (the row chips' prefill proof)
     prepayRowChip: prepayRowChip, // v73.19: the prepay row-chip's handler body (smoke drives it without a DOM)
     salaryRowChip: salaryRowChip, // v73.19: the salary row-chip's handler body (smoke drives it without a DOM)
-    payPlanChip: function (attr) { // v73.18: the chip's handler body (smoke drives it without a DOM)
-      var parts = String(attr).split('|');
-      var pid = parts[0], pdate = parts[1], pname = parts[2], pamt = Number(parts[3]) || 0;
-      prefillAdd(pamt, pdate, pname + ' (plan payment)');
-      state.planLinkRef = { planId: pid, date: pdate, name: pname, amount: pamt };
-      updatePlanLinkChip();
-    },
+    payPlanChip: payPlanChip, // v73.18: the chip's handler body (smoke drives it without a DOM); v73.22: the in-scope function (the bare call in the wiring loop needs it)
     unlinkPlanTxn: unlinkPlanTxn, // v73.17: break an explicit link (the txn keeps its money)
     setPlanLinkRef: function (r) { state.planLinkRef = r; }, // v73.17: the chip's link state (smoke drives it)
     getPlanLinkRef: function () { return state.planLinkRef; },
