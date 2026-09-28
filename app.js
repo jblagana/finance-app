@@ -2768,6 +2768,11 @@
     pDay.setDate(prepayDay);
     if (pDay < parseISO(today)) pDay = new Date(now.getFullYear(), now.getMonth() + 1, prepayDay);
     var prepayIn = Math.round((pDay - parseISO(today)) / 86400000);
+    // v73.23: how many days PAST the previous prepay date (0 = today is that
+    // date). Drives the card-payment window (the bill shows 1-10 days after
+    // the prepay date, while the prepay rows are down).
+    var pPrev = new Date(now.getFullYear(), now.getMonth() - 1, prepayDay);
+    var prepayDaysAgo = Math.round((parseISO(today) - parseISO(localISO(pPrev))) / 86400000);
     var prepayAmt = r2(s.total_prepay || 0);
     if (prepayIn >= 0 && prepayIn <= 6 && prepayAmt > 0) {
       items.push({ d: prepayIn, date: localISO(pDay), label: 'Card prepay (the ' + ordinal(prepayDay) + ')', amt: prepayAmt });
@@ -2883,7 +2888,7 @@
       planDeduct: planDeduct, freeNet: r2(free - planDeduct),
       daily: daysLeft > 0 ? r2(Math.max(0, free - planDeduct) / daysLeft) : 0, // v73.16: net of the cycle's plan share
       todaySpend: r2(todaySpend), items: items,
-      prepayDay: prepayDay, prepayIn: prepayIn, prepayAmt: prepayAmt,
+      prepayDay: prepayDay, prepayIn: prepayIn, prepayDaysAgo: prepayDaysAgo, prepayAmt: prepayAmt,
       prepayDate: localISO(new Date(now.getFullYear(), now.getMonth(), prepayDay)),
       weekCost: weekCost, laterCount: laterCount, laterAmt: r2(laterAmt),
       monthPlans: r2(monthPlans), monthPlanCount: monthPlanCount,
@@ -3109,13 +3114,30 @@
       head = hi + 'you are on track. You can spend up to ' + money(d.daily) + ' today.';
       sub = 'Next 7 days stay covered; an eat-out (about ' + money(d.meal) + ') is safe.';
     }
-    var rec = [];
-    state.plans.forEach(function (p) { if (p.repeat) rec.push(p); }); // v73.1: weekly + annual ride the same line
-    if (rec.length) {
-      var recAmt = rec.reduce(function (s, p) { return s + (Number(p.amount) || 0); }, 0);
-      var per = rec.every(function (p) { return p.repeat === 'monthly'; }) ? 'a month'
-        : rec.every(function (p) { return p.repeat === 'weekly'; }) ? 'a week' : 'each';
-      sub += ' On repeat: ' + rec.map(function (p) { return p.name || 'plan'; }).join(', ') + ' — ' + money(recAmt) + ' ' + per + '.';
+    // v73.23 (boss: 'for the how much is owed, show only what is owed within
+    // the cycle'): the "On repeat" line is CYCLE-SCOPED — only the recurring
+    // plans with UNPAID occurrences landing in the CURRENT salary cycle
+    // count, summed (the same window + paid-exclusion as
+    // cyclePlanDeduction). No cycle (no salary) = no line.
+    var cyc = d.cycle;
+    if (cyc && cyc.expected > 0) {
+      var recNames = [], recAmt = 0;
+      state.plans.forEach(function (p) {
+        if (!p.repeat) return;
+        planOccurrences(p).forEach(function (od) {
+          if (od < cyc.start || od > cyc.end) return;
+          var ro = resolveOccurrence(p, od);
+          if (ro.skip) return;
+          var nm = ro.name || p.name;
+          var am = ro.amount != null ? ro.amount : p.amount;
+          if (findPaidTxn(d, { planId: p.id, date: od, name: nm, amount: am })) return;
+          if (recNames.indexOf(nm) < 0) recNames.push(nm);
+          recAmt += Number(am) || 0;
+        });
+      });
+      if (recNames.length) {
+        sub += ' On repeat: ' + recNames.join(', ') + ' — ' + money(r2(recAmt)) + ' owed this cycle.';
+      }
     }
     // ---- coach memory: compare with the last visit, notice what got handled ----
     var mem = state.coachMem;
@@ -3147,14 +3169,22 @@
     var body = byId('digBody');
     if (body) {
       var html = '';
-      rows.forEach(function (rw) {
+      // v73.23 (boss-approved mockup): the clutter answer — GROUPED
+      // sections. Rows carrying a `group` field render under a tappable
+      // header (the group's total + count) that folds/unfolds the body;
+      // ungrouped rows stay plain. The header total is THIS-CYCLE-ONLY
+      // (next-cycle rows are excluded so the headline never overstates).
+      // Groups open by default (the mockup's expanded view); the fold
+      // state survives re-renders in coachGroupOpen.
+      function rowHTML(rw) {
+        var nextCls = rw.nextCycle ? ' next' : '';
+        var badge = rw.nextCycle ? ' <span class="cyc-badge">next cycle</span>' : '';
         // v68 item 5: the recurring row carries a one-tap "make it a plan"
         // (v73.1: the repeat rides the payload — the detector's cadence)
         if (rw.act === 'make_plan') {
-          html += '<button type="button" class="dig warn" data-makeplan="' + esc(rw.payload.name) + '|' + rw.payload.amount + '|' + (rw.payload.repeat || 'monthly') + '">' +
+          return '<button type="button" class="dig warn" data-makeplan="' + esc(rw.payload.name) + '|' + rw.payload.amount + '|' + (rw.payload.repeat || 'monthly') + '">' +
             '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
             '<span class="dg-r">' + esc(rw.r) + '</span></button>';
-          return;
         }
         // v73.20 (user: 'for card prepays in coach card, i wanted the design
         // to be like that of the plans' + 'the chips in the plans are not
@@ -3165,12 +3195,12 @@
         // v72.41/v72.45 prefill) and the row keeps data-digto — tapping the
         // ROW jumps to Money, tapping the CHIP opens the Add sheet prefilled
         // (the row handler bails on e.target.closest('.rowchip') below, so
-        // the two taps can never collide again).
+        // the two taps can never collide again). v73.23: next-cycle rows
+        // wear the dimmed .next class + the "next cycle" badge in the tag.
         if (rw.act === 'prepay' || rw.act === 'salary') {
-          html += '<div class="dig ' + rw.cls + '" data-digto="money">' +
-            '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
+          return '<div class="dig' + nextCls + ' ' + rw.cls + '" data-digto="money">' +
+            '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + badge + '</span>' + esc(rw.text) + '</span>' +
             '<span class="dg-r"><button type="button" class="rowchip ' + rw.cls + '" data-' + rw.act + '="' + chipAttr(rw) + '" aria-label="' + esc(rw.tag) + '">' + esc(rw.r) + '</button></span></div>';
-          return;
         }
         // v73.18: the Plan-due row's amount is its OWN chip — tapping it
         // opens the Add sheet prefilled (amount + date + note) AND pre-linked
@@ -3181,16 +3211,90 @@
         // chip would detach from the row). v73.20: the chip wears the shared
         // .rowchip pill class (the prepay/salary chips' design).
         if (rw.act === 'pay_plan') {
-          html += '<div class="dig ' + rw.cls + '" data-digto="money">' +
-            '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
+          return '<div class="dig' + nextCls + ' ' + rw.cls + '" data-digto="money">' +
+            '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + badge + '</span>' + esc(rw.text) + '</span>' +
             '<span class="dg-r"><button type="button" class="rowchip ' + rw.cls + ' plchip-inline" data-payplan="' + esc(rw.payload.planId) + '|' + rw.payload.date + '|' + esc(rw.payload.name) + '|' + rw.payload.amount + '" aria-label="Log this payment">' + esc(rw.r) + '</button></span></div>';
-          return;
         }
-        html += '<button type="button" class="dig ' + rw.cls + '" data-digto="money">' +
-          '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + '</span>' + esc(rw.text) + '</span>' +
+        return '<button type="button" class="dig' + nextCls + ' ' + rw.cls + '" data-digto="money">' +
+          '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + badge + '</span>' + esc(rw.text) + '</span>' +
           '<span class="dg-r">' + esc(rw.r) + '</span></button>';
+      }
+      // ---- grouped render (v73.23) ----
+      var gMap = {}, gOrder = [];
+      rows.forEach(function (rw) {
+        if (!rw.group) return;
+        if (!gMap[rw.group]) { gMap[rw.group] = []; gOrder.push(rw.group); }
+        gMap[rw.group].push(rw);
+      });
+      var cycEnd = info.cycEnd;
+      var nextStartLbl = (function () {
+        if (!cycEnd) return '';
+        var p = String(cycEnd).split('-');
+        var nd = new Date(Number(p[0]), Number(p[1]), Number(p[2])); // day after the cycle end
+        var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return MO[nd.getMonth()] + ' ' + nd.getDate();
+      })();
+      // v73.23: the actionable GROUPS (cards, plans) lead the card (the
+      // mockup's order); the loose informational rows (salary, sinking,
+      // pace, recurring, debt) follow.
+      gOrder.forEach(function (g) {
+        var grow = gMap[g];
+        var isPlans = g === 'plans';
+        // this-cycle-only total: next-cycle rows are excluded from the
+        // headline number (the boss: the total must not overstate what is
+        // owed NOW)
+        var total = 0, nextN = 0, dueN = 0;
+        grow.forEach(function (rw) {
+          if (rw.nextCycle) { nextN++; return; }
+          total += Number(rw.amt) || 0;
+          dueN++;
+        });
+        var open = coachGroupOpen[g] !== false; // default OPEN (the mockup)
+        var sub = isPlans
+          ? dueN + ' due' + (nextN ? ' this cycle' : '') + (nextN ? ' · ' + nextN + ' next' : '')
+          : (function () {
+              var kinds = {};
+              grow.forEach(function (rw) { kinds[rw.kind] = (kinds[rw.kind] || 0) + 1; });
+              var bits = [];
+              if (kinds.prepay) bits.push(kinds.prepay + ' prepay');
+              if (kinds.cardpay) bits.push(kinds.cardpay + ' card payment' + (kinds.cardpay > 1 ? 's' : ''));
+              return bits.join(' · ') || (grow.length + ' item' + (grow.length > 1 ? 's' : ''));
+            })();
+        var gLabel = isPlans ? 'Plans' : 'Cards';
+        html += '<button type="button" class="grp' + (open ? ' open' : '') + '" data-coachgrp="' + g + '" aria-expanded="' + open + '">' +
+          '<span class="g-l"><span class="grp-tag">' + gLabel + '</span>' + sub + '<span class="chev">▾</span></span>' +
+          '<span class="g-r">' + money(r2(total)) + '</span></button>';
+        html += '<div class="grp-body' + (open ? ' open' : '') + '" data-coachgrpbody="' + g + '">';
+        var sawNext = false;
+        grow.forEach(function (rw) {
+          if (isPlans && rw.nextCycle && !sawNext) {
+            sawNext = true;
+            html += '<div class="cyc-div"><span class="lbl">Next cycle · from ' + nextStartLbl + '</span><span class="rule"></span></div>';
+          }
+          html += rowHTML(rw);
+        });
+        html += '</div>';
+      });
+      rows.forEach(function (rw) {
+        if (rw.group) return; // grouped rows rendered inside their group above
+        html += rowHTML(rw);
       });
       body.innerHTML = html;
+      // v73.23: the group headers fold/unfold their body (the mockup's
+      // tap-to-fold). Default open; the state lives in coachGroupOpen so a
+      // re-render keeps the boss's choice.
+      var grps = body.querySelectorAll('[data-coachgrp]');
+      for (var gi = 0; gi < grps.length; gi++) {
+        (function (gh) {
+          gh.onclick = function () {
+            var gk = gh.getAttribute('data-coachgrp');
+            coachGroupOpen[gk] = gh.classList.toggle('open');
+            var gb = body.querySelector('[data-coachgrpbody="' + gk + '"]');
+            if (gb) gb.classList.toggle('open', coachGroupOpen[gk]);
+            gh.setAttribute('aria-expanded', coachGroupOpen[gk] ? 'true' : 'false');
+          };
+        })(grps[gi]);
+      }
       // v73.20: the TAP FIX (the boss: 'the chips in the plans are not
       // clickable still'). The chip is the ONLY button on the row, and the
       // row handler now bails when the tap started on a chip
@@ -3893,37 +3997,50 @@
   function coachRows(d) {
     var s = d.s, rows = [], alerts = [];
     var prepayActive = d.prepayAmt > 0;
-    var prepayPaid = prepayActive ? findPaidTxn(d, 'prepay') : null;
-    if (prepayActive) {
+    var prepayPaid = prepayActive ? findPaidTxn(d, 'prepay') : null; // v72.45: the coach-memory line reads it
+    // v73.23 (boss-approved mockup): the prepay rows follow the prepay date
+    // (the 30th anchor) — up while it is still ahead (within 10 days), gone
+    // once it has passed; the CARD-PAYMENT rows (the pending bill, the
+    // card's live balance) take over for the 10 days AFTER the date. A
+    // partial prepay no longer gets its own "Partly handled" row — the
+    // per-card chip already carries the live remainder (c.prepay).
+    var prepayWindow = d.prepayAmt > 0 && d.prepayIn >= 0 && d.prepayIn <= 10;
+    var cardPayWindow = d.prepayDaysAgo >= 1 && d.prepayDaysAgo <= 10;
+    if (prepayActive && prepayWindow) {
       var pw = d.prepayIn === 0 ? 'today' : (d.prepayIn === 1 ? 'tomorrow' : 'in ' + d.prepayIn + ' days');
-      if (prepayPaid) {
-        // v72.45: a PARTIAL prepay is not "handled" — the per-card chips
-        // below stay up with the live remainder, and the 'prepay' alert stays
-        // live until the remainder is truly settled (zero).
-        rows.push({ cls: 'done', tag: 'Card prepay',
-          text: 'Partly handled — ' + money(Number(prepayPaid.amount) || 0) + ' logged on ' + planWhen(String(prepayPaid.date)) + ' — ' + money(d.prepayAmt) + ' still owed.',
-          r: money(d.prepayAmt) + ' left' });
-      }
-      // v73.19 (user: 'the row chips are not clickable' + 'remove the chips
-      // in the image and move them as row chips'): the per-card Log-prepay
-      // chips (the v72.41 coachActs buttons) ARE the rows now — one row per
-      // owed card (the card's own live amount, the v72.41 prefill: that
-      // card's account in Pay-card mode). NO total row: the v72.41 call was
-      // to prepay each card separately, and the image confirms it (one chip
-      // per card, no combined). v73.20: the row is a plain row and the chip
-      // is the pill button on its right — tapping the chip opens the Add
-      // sheet prefilled, tapping the row body jumps to Money. Same gate as
-      // the v72.41 chips: prepayActive (something owed above target) — the
-      // "due in N days" text carries the timing.
+      // v73.19: one row per owed card (the card's own live amount, the
+      // v72.41 prefill: that card's account in Pay-card mode). NO total row.
+      // v73.20: the row is a plain row and the chip is the pill button on
+      // its right — tapping the chip opens the Add sheet prefilled, tapping
+      // the row body jumps to Money. v73.23: the tag drops "Card" (the boss:
+      // 'card prepay' -> 'prepay') and the row rides the 'cards' group.
       var pcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.prepay) || 0) > 0; });
       pcards.sort(function (a, b) { return (Number(b.prepay) || 0) - (Number(a.prepay) || 0); });
       pcards.slice(0, 4).forEach(function (c) {
-        rows.push({ cls: d.prepayIn <= 2 ? 'bad' : 'warn', tag: 'Card prepay · ' + c.name,
+        rows.push({ cls: d.prepayIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'prepay', amt: c.prepay,
+          tag: 'Prepay · ' + c.name,
           text: money(c.prepay) + ' still owed on ' + c.name + ' — the ' + ordinal(d.prepayDay) + ' prepay is ' + pw + '.',
           r: money(c.prepay),
           act: 'prepay', payload: { amount: c.prepay, date: d.prepayDate, day: d.prepayDay, card: c.name } });
       });
       alerts.push('prepay'); // v72.45: the remainder is still owed, whatever was logged
+    }
+    if (cardPayWindow) {
+      // v73.23: the prepay date has passed — the pending bill shows as its
+      // own rows (the card's live balance, the boss's Q1 answer: balance,
+      // not statement). Same design as the plan-due row (short text +
+      // amount chip); the chip logs the payment (Pay-card mode, the
+      // card's own account — the v72.41 prepay prefill).
+      var bcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.balance) || 0) > 0; });
+      bcards.sort(function (a, b) { return (Number(b.balance) || 0) - (Number(a.balance) || 0); });
+      bcards.slice(0, 4).forEach(function (c) {
+        rows.push({ cls: 'warn', group: 'cards', kind: 'cardpay', amt: c.balance,
+          tag: 'Card payment · ' + c.name,
+          text: c.name + ' is at ' + money(c.balance) + ' — the bill is pending.',
+          r: money(c.balance),
+          act: 'prepay', payload: { amount: c.balance, date: d.today, day: d.prepayDay, card: c.name } });
+      });
+      if (bcards.length) alerts.push('cardpay');
     }
     // v73.19: the "Salary in" check-in is a ROW CHIP (it used to be a
     // coachActs chip) — the cycle's salary is expected on the salary_day
@@ -3952,23 +4069,9 @@
           act: 'salary', payload: { amount: cy0.expected, date: d.today, sday: cy0.sday } });
       }
     }
-    // v72.45: the salary-cycle burn — one deterministic finding that rides the
-    // shared snapshot (coachFindings -> the coach phrases it). The pace call
-    // starts once the cycle has a few days of data (day one is never a pace).
-    var cyd = d.cycle;
-    if (cyd && cyd.expected > 0 && cyd.spent > 0 && cyd.elapsed >= 7) {
-      var cPct = Math.round((cyd.spent / cyd.expected) * 100);
-      if (cyd.projectedNet < 0) {
-        rows.push({ cls: 'bad', tag: 'Salary cycle',
-          text: 'Cycle burn: ' + cPct + '% of the ' + money(cyd.expected) + ' salary after ' + cyd.elapsed + ' of ' + cyd.days + ' days — at this pace the cycle ends ' + money(-cyd.projectedNet) + ' short.',
-          r: money(-cyd.projectedNet) + ' short' });
-        alerts.push('cycle');
-      } else if ((cPct / 100) > (cyd.elapsed / cyd.days) * 1.2) {
-        rows.push({ cls: 'warn', tag: 'Salary cycle',
-          text: 'Cycle burn: ' + cPct + '% of the salary after ' + cyd.elapsed + ' of ' + cyd.days + ' days — ahead of the pace that keeps the cycle whole.',
-          r: cPct + '%' });
-      }
-    }
+    // v73.23 (boss: 'remove that salary cycle row'): the cycle-burn rows are
+    // gone — the cycle's pace now rides the hero + the This-cycle block, not
+    // the coach card's attention rows.
     var floor = Number(s.floor) || 0;
     if (floor > 0 && state.snapshot && state.snapshot.matrix && state.snapshot.matrix.base) {
       // v68 item 7: surface the LOWEST projected month — below the floor as a
@@ -4023,17 +4126,9 @@
         }
       });
     }
-    // v73.2: the due-day radar's util alert — a card between 30% and 70% of
-    // its limit gets a note (over 70% is the coach's WORRIED face, v73.0)
-    (d.s.cards || []).forEach(function (c) {
-      var u = Number(c.util_pct);
-      if (!isFinite(u) || u < 30) return;
-      if (u > 70) return; // the mood carries it
-      rows.push({ cls: 'warn', tag: 'Card · ' + c.name,
-        text: c.name + ' is at ' + Math.round(u) + '% of its limit — the 30% nudge.',
-        r: Math.round(u) + '%' });
-      alerts.push('util:' + c.name.toLowerCase());
-    });
+    // v73.23 (boss: 'remove the card nudge row'): the 30% util nudge row is
+    // gone — over 70% still carries the coach's WORRIED face (v73.0), and
+    // the prepay / card-payment rows above now own the card attention.
     // v68 item 4: per-category pace anomaly (worst one; the pace section shows up to 3)
     var pcTop = (d.catPace || [])[0];
     if (pcTop && pcTop.over >= 25) {
@@ -4058,6 +4153,13 @@
         text: g.monthsToPayoff + ' months to clear ' + money(g.balance) + ' at ' + money(g.pay) + '/month.',
         r: g.monthsToPayoff + ' mo' });
     });
+    // v73.23 (boss: 'show these rows when its within 10 days before due' +
+    // 'if there are rows in the next ten days but are part of the next
+    // cycle, make distinction clear'): the plan window widens from 7 to
+    // 10 days, and an occurrence whose due date lands in the NEXT salary
+    // cycle (past the current cycle's end) is flagged nextCycle — the
+    // render dims + badges it and the group header's total excludes it.
+    var cycEnd = (d.cycle && d.cycle.end) || null;
     var urgent = [];
     state.plans.forEach(function (p) {
       planOccurrences(p).forEach(function (od) {
@@ -4066,23 +4168,26 @@
         if (ro && ro.skip) return;
         var u2 = { p: p, date: od, dd: diffDays(d.today, od) };
         if (ro) { u2.nm = ro.name; u2.am = ro.amount; }
-        if (u2.dd >= 0 && u2.dd <= 7) urgent.push(u2);
+        if (u2.dd >= 0 && u2.dd <= 10) urgent.push(u2);
       });
     });
     urgent.sort(function (a, b) { return a.dd - b.dd; });
     var shown = 0;
-    for (var i = 0; i < urgent.length && shown < 2; i++) {
+    for (var i = 0; i < urgent.length && shown < 4; i++) {
       var u = urgent[i];
       var paid = findPaidTxn(d, { planId: u.p.id, date: u.date, name: u.p.name, amount: u.p.amount });
       var pw2 = u.dd === 0 ? 'today' : (u.dd === 1 ? 'tomorrow' : 'in ' + u.dd + ' days');
-      if (paid) rows.push({ cls: 'done', tag: 'Plan · ' + (u.p.name || 'Plan'),
+      var uNext = !!(cycEnd && u.date > cycEnd);
+      if (paid) rows.push({ cls: 'done', group: 'plans', kind: 'plan', amt: 0, nextCycle: uNext,
+        tag: 'Plan · ' + (u.p.name || 'Plan'),
         text: 'Handled — ' + money(Number(paid.amount) || 0) + ' logged on ' + planWhen(paid.date) + '.',
         r: 'done' });
       else {
         // v73.14: the row shows the RESOLVED name/amount (fork-aware)
         var un = u.nm != null ? u.nm : u.p.name;
         var ua = u.am != null ? u.am : u.p.amount;
-        rows.push({ cls: u.dd <= 2 ? 'bad' : 'warn', tag: 'Plan due',
+        rows.push({ cls: u.dd <= 2 ? 'bad' : 'warn', group: 'plans', kind: 'plan', amt: ua, nextCycle: uNext,
+          tag: 'Plan due',
           text: (un || 'Plan') + ' is due ' + pw2 + '.',
           r: money(ua),
           // v73.18: the amount is a CHIP — tapping it opens the Add sheet
@@ -4094,10 +4199,25 @@
         shown++;
       }
     }
-    var done = rows.filter(function (r) { return r.cls === 'done'; });
-    var act = rows.filter(function (r) { return r.cls !== 'done'; });
-    rows = done.slice(0, 2).concat(act.slice(0, 5 - done.slice(0, 2).length));
-    return { rows: rows, alerts: alerts, prepayActive: prepayActive, prepayPaid: !!prepayPaid, floor: floor };
+    // v73.23: the top-5 cut now keeps GROUPS whole (the boss's clutter call
+    // — a folded group is one row, so a group never gets split across the
+    // cut) and caps the UNGROUPED rows at 5 (the old flat cut kept 5 act
+    // rows total; the groups are the actionable core, so the loose
+    // informational rows — salary, sinking, pace, recurring, debt — get the
+    // same headroom they always had).
+    var groups = {}, gOrder = [];
+    rows.forEach(function (r) {
+      if (!r.group) return;
+      if (!groups[r.group]) { groups[r.group] = []; gOrder.push(r.group); }
+      groups[r.group].push(r);
+    });
+    var kept = [], loose = 0;
+    for (var gi = 0; gi < gOrder.length; gi++) kept = kept.concat(groups[gOrder[gi]]);
+    rows.forEach(function (r) {
+      if (r.group) return;
+      if (loose < 5) { kept.push(r); loose++; }
+    });
+    return { rows: kept, alerts: alerts, prepayActive: prepayActive, prepayPaid: !!prepayPaid, floor: floor, cycEnd: cycEnd };
   }
   // ---------- Phase 3: category donut + spend pace (Ledger) ----------
   var DONUT_COLORS = ['#37d39b', '#a0d1b4', '#ffc45c', '#ff6b6b', '#b48cff', '#64748b'];
@@ -4239,6 +4359,7 @@
   // keep their ✕ (it's a single date — nothing to nuke by accident).
   var OCC_CAP = 5;
   var planOpen = {}; // planId -> true while the series is expanded
+  var coachGroupOpen = {}; // v73.23: coach-card group fold state (group key -> bool, default open)
   var planSig = '';  // the plan set the open-state was captured for
   // v73.18: the occurrence's PAID pill (the same proof the edit sheet shows —
   // explicit link first, fuzzy fallback). One-off rows wear it on the name
@@ -6119,12 +6240,18 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.22, live: new Date(2026, 8, 28, 18, 16) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.23, live: new Date(2026, 8, 29, 4, 3) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.23': [
+      'The coach card is quieter: the prepay rows are now just "Prepay · <card>" (the "Card" is gone), and once the prepay date has passed they hand off to "Card payment · <card>" rows — the pending bill, at each card\'s live balance, for the 10 days after. Prepay rows only show up to 10 days before the date; plan rows up to 10 days before theirs (was 7)',
+      'The clutter answer: rows now group under tappable headers (Cards, Plans) that carry the group total and fold/unfold — the total counts only what is owed in the current cycle. A row whose due date lands in the NEXT cycle is dimmed, badged "next cycle", and set off by a divider, so it never reads as due now',
+      'The "Partly handled" prepay row, the 30% card-nudge row, and the "Salary cycle / cycle burn" rows are gone — the per-card chip already carries the live remainder, and the cycle pace lives on the hero and the This-cycle block',
+      'The "On repeat" line is now cycle-scoped: it totals only the recurring plans with unpaid occurrences landing in the current salary cycle ("owed this cycle"), not the whole monthly recurring sum'
+    ],
     '73.22': [
       'The coach card\'s plan-due chips are clickable now: the handler that opens the Add sheet (prefilled AND pre-linked) was only ever an export, so tapping a plan chip threw before it could act — the prepay and salary chips were the only ones that worked. The fix puts the handler in scope, so all three chips behave the same'
     ],

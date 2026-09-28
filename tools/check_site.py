@@ -445,7 +445,7 @@ def main():
           and "function pinLesson(month, text) {" in js
           and "function readLesson(month) {" in js
           and "recapData: recapData" in js and "pinLesson: pinLesson" in js and "readLesson: readLesson" in js
-          and "if (u > 70) return; // the mood carries it" in js
+          # v73.23: the 30% nudge guard line was removed with the nudge block — the v73.23 check asserts its absence
           # v73.14: the strip's 14-day window string left with the strip — the recap sheet pin stands in
           and "function openRecap() {" in js
           and "'73.2': [" in js)
@@ -491,8 +491,9 @@ def main():
           and 'id="pePaidBy"' in html and 'id="peUnlink"' in html
           and "'73.17': [" in js)
     check("v73.20 (user: 'for card prepays in coach card, i wanted the design to be like that of the plans' + 'the chips in the plans are not clickable still' + rev 2: 'salary should be green its a good thing hehe, drop the due in salary due'): the PLAN-DUE design for every coach action row — the row is a plain list row (a div with data-digto) and the PILL CHIP on the right is the only button (prepay = red, plan due = severity-colored, salary = green); the v73.19 full-row dig-chip look is gone; the TAP FIX is structural — the row handler bails on e.target.closest('.rowchip') so the chip's tap is the chip's and the row's tap is the row's (no stopPropagation, no button-in-button); the salary row is cls 'ok' with tag 'Salary' (no 'due') and 'lands' copy",
-          # the prepay/salary rows: plain row + the pill chip button
-          ("""'<div class="dig ' + rw.cls + '" data-digto="money">'""" in js)
+          # the prepay/salary rows: plain row + the pill chip button (v73.23 added the nextCls var for next-cycle dimming)
+          ("var nextCls = rw.nextCycle ? ' next' : '';" in js)
+          and """'<div class="dig' + nextCls + ' ' + rw.cls + '" data-digto="money">'""" in js
           and """class="rowchip ' + rw.cls + '" data-' + rw.act + '="' + chipAttr(rw)""" in js
           # the plan-due chip wears the shared pill class (the design it gave)
           and """class="rowchip ' + rw.cls + ' plchip-inline" data-payplan=""" in js
@@ -526,6 +527,36 @@ def main():
           # the wiring loop still calls the bare identifier
           and "payPlanChip(b.getAttribute('data-payplan'));" in js
           and "'73.22': [" in js)
+    check("v73.23 (boss-approved mockup: the coach card row redesign): (1) the prepay rows are renamed 'Prepay · <card>' (the 'Card' is dropped) and only show within 10 days BEFORE the prepay date (prepayWindow); (2) once the prepay date has passed, 'Card payment · <card>' rows take over for the 10 days AFTER (cardPayWindow, the card's live balance — the boss's Q1 answer: balance, not statement); (3) the plan window widens 7 -> 10 days; (4) the 30% util nudge row, the Salary-cycle/cycle-burn rows, and the 'Partly handled' prepay row are GONE (the per-card chip carries the live remainder); (5) the clutter fix = GROUPED sections — rows carry a group field and render under a tappable header (data-coachgrp) that folds/unfolds (coachGroupOpen), the header total is this-cycle-only; (6) a plan row whose due date lands in the NEXT salary cycle is flagged nextCycle -> dimmed + badged + a divider; (7) the 'On repeat' line is cycle-scoped (only recurring plans with unpaid occurrences in the current cycle, 'owed this cycle')",
+          # (1) the prepay window + the renamed tag
+          "var prepayWindow = d.prepayAmt > 0 && d.prepayIn >= 0 && d.prepayIn <= 10;" in js
+          and "tag: 'Prepay · ' + c.name" in js
+          and "Card prepay · " not in js
+          # (2) the card-payment window (1-10 days after the prepay date) + its tag
+          and "var prepayDaysAgo = Math.round((parseISO(today) - parseISO(localISO(pPrev))) / 86400000);" in js
+          and "var cardPayWindow = d.prepayDaysAgo >= 1 && d.prepayDaysAgo <= 10;" in js
+          and "tag: 'Card payment · ' + c.name" in js
+          and "prepayDaysAgo: prepayDaysAgo, prepayAmt: prepayAmt," in js
+          # (3) the plan window widens to 10 days
+          and "if (u2.dd >= 0 && u2.dd <= 10) urgent.push(u2);" in js
+          # (4) the removed rows are GONE (assert on the row-TEXT markers, not
+          # the words — the words still appear in a comment + the SHELL_NOTES
+          # copy, which is fine; the ROW code is what must be gone)
+          and "the 30% nudge" not in js
+          and "Cycle burn" not in js
+          and "Partly handled — " not in js
+          # (5) the grouped render (the clutter fix)
+          and "var coachGroupOpen = {}" in js
+          and "data-coachgrp=" in js
+          and "data-coachgrpbody=" in js
+          and ".grp{" in html and ".grp-body{" in html
+          # (6) the next-cycle distinction (dim + badge + divider)
+          and "nextCycle: uNext" in js
+          and "cyc-badge" in html and "cyc-div" in html
+          and "Next cycle · from " in js
+          # (7) the cycle-scoped 'On repeat' line
+          and "owed this cycle." in js
+          and "'73.23': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js
@@ -990,7 +1021,10 @@ def main():
           and "prepayBy: {}, mv: 2 }, // mv = the txnAdj model version (v72.43)" in js)
     check("v72.44 (user: 'the hey jan card disappered after i logged the prepay. also should we include the prepay in the ledger summary'): (1) the paid-prepay 'Handled' row of the home coach card read an undefined variable (prepaid instead of prepayPaid) — the ReferenceError was swallowed by emit's per-render try/catch AFTER the card was made visible, so the card rendered BLANK after a prepay was logged; (2) the spend aggregates (donut, pace, spent-today, pace anomalies, the coach-note snapshot) now use ONE rule — the same one the money-log 's' line has used since v72.10: card_payment is not spend (the charge already counted), cash_in nets spend down",
           "prepaid.amount" not in js
-          and "money(Number(prepayPaid.amount) || 0) + ' logged on ' + planWhen(String(prepayPaid.date))" in js
+          # v73.23: the "Partly handled — … logged on …" row is GONE (the
+          # per-card chip carries the live remainder) — the v72.44 regression
+          # is the no-throw (coachRows survives a paid prepay), asserted in
+          # the smoke; the row-text assertion is dropped with the row.
           and "function spendOf(t) {" in js
           and "if (t.kind === 'card_payment') return 0;" in js
           and "if (t.kind === 'cash_in') return 0;" in js  # v73.8: cash_in is income, not negative spend (was -a)
@@ -1028,8 +1062,9 @@ def main():
           and "var salDelta = 0, salDate = null;" in js
           and "pts.splice(1, 0, { label: dayMonth(salDate), v: vAtSal, date: salDate });" in js
           and "var prepayActive = info.prepayActive;" in js
-          and "Partly handled — ' + money(Number(prepayPaid.amount) || 0) + ' logged on '" in js
-          and "still owed." in js
+          # v73.23: the 'Partly handled — … still owed' row is GONE (the
+          # per-card chip carries the live remainder) — those two assertions
+          # are dropped with the row; the live 'prepay' alert is kept.
           and "alerts.push('prepay'); // v72.45" in js
           and "if (pLast) out = { amount: r2(pSum), date: pLast.date };" in js
           and "if (receivedId && t.id && t.id === receivedId) return;" in js
