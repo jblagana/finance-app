@@ -6,6 +6,34 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.23 entry (prepended to INSTRUCTIONS.md)
+## 2026-09-29 — "build it" (the boss-approved coach-card row redesign, mockup C:\Users\Jan\Muji\mockup_coach_rows_v7322.html)
+Status: **done** — v73.23 shipped (commit `37e79d6`, pushed to origin/main, SW cache `finances-pwa-v73.23`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.23 (both check_site copies + test_chat_parser + node syntax + both smokes)
+
+### Interpretation (boss-approved mockup: mockup_coach_rows_v7322.html)
+The coach card's attention rows get a clutter pass. The two card-bill rows (prepay, card-payment) and the plan-due rows are the actionable core; everything else (salary, sinking, pace, recurring, debt) is loose. The redesign groups the core under tappable headers and dims anything that is not owed in the current cycle.
+
+### What changed
+- `app.js` `coachRows()`:
+  - Prepay rows renamed `Card prepay · <card>` → `Prepay · <card>`; they now show only while the prepay date is still ahead and within 10 days (`prepayWindow = d.prepayIn >= 0 && d.prepayIn <= 10`).
+  - New **card-payment** rows take over for the 10 days AFTER the prepay date (`cardPayWindow = d.prepayDaysAgo >= 1 && <= 10`): `Card payment · <card>` at each card's **live balance** (the boss's Q1 answer: balance, not statement), same plan-due design (short text + amount chip, `act:'prepay'` so the chip prefills the Pay-card sheet).
+  - Plan window widened 7 → 10 days.
+  - Every core row carries a `group` field (`'cards'` / `'plans'`) and, where its due date lands past the current cycle's end, `nextCycle: true`.
+  - REMOVED: the "Partly handled" prepay row, the 30% util nudge row, and the "Salary cycle / cycle burn" rows (the per-card chip carries the live remainder; the cycle pace lives on the hero + This-cycle block).
+  - The top cut now keeps GROUPS whole (a folded group is one row, so a group is never split across the cut) and caps the ungrouped rows at 5.
+- `app.js` `renderCoach()`:
+  - Rows render under a tappable group header (`data-coachgrp`, `coachGroupOpen` fold state, default open) showing the group label + a **this-cycle-only** total + a count sub-line.
+  - Next-cycle rows are dimmed (`.dig.next`), badged "next cycle" in the tag, and set off by a `NEXT CYCLE · FROM <date>` divider inside the group.
+  - The "On repeat" sub-line is now cycle-scoped (only recurring plans with unpaid occurrences in the current cycle — "owed this cycle").
+- `index.html`: CSS for `.grp` (group header), `.grp-body`, `.dig.next` (62% opacity dim), `.cyc-badge`, `.cyc-div`.
+- `app.js` SHELL_NOTES '73.23' (plain-wording note).
+- `tools/check_site.py` (+ root mirror via release.ps1 sync): NEW v73.23 check; the v73.2/v73.20 checks updated for the removed 30% nudge guard line and the v73.23 row-class shape.
+- `smoke_app_v68.js`: the v72.44 section's "still yields findings" assertion updated for the v73.23 cut.
+
+### Proof
+- Gates: release.ps1 v73.23 all green (both check_site copies, parser tests, node syntax, both smokes) — re-run as -GatesOnly for a clean summary.
+
 # v73.22 entry (prepended to INSTRUCTIONS.md)
 ## 2026-09-28 — "the plan rows still have unclickable chips. the card prepay rows have clickable chips but the plan rows (like rent) have unclickable chips"
 Status: **done** — v73.22 shipped (commit `3fcfff4`, pushed to origin/main, SW cache `finances-pwa-v73.22`)
