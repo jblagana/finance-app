@@ -6,6 +6,24 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.22 entry (prepended to INSTRUCTIONS.md)
+## 2026-09-28 — "the plan rows still have unclickable chips. the card prepay rows have clickable chips but the plan rows (like rent) have unclickable chips"
+Status: **done** — v73.22 shipped (commit `3fcfff4`, pushed to origin/main, SW cache `finances-pwa-v73.22`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.22 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7322Section)
+
+### Root cause (tool-verified on live v73.21)
+v73.18 shipped the plan-chip handler **only** as the `window.FinApp` export property (the smoke drives it without a DOM). But the renderCoach wiring loop calls a **bare** `payPlanChip(...)` — unresolvable in IIFE scope. Every plan-chip tap threw `ReferenceError: payPlanChip is not defined` before it could act, so the plan chips (rent, etc.) looked dead. The prepay/salary chips were real IIFE functions (`function prepayRowChip` / `function salaryRowChip`), which is why only the plan chips died. The v73.20 "structural tap fix" (chip is the only button, row handler bails on `closest('.rowchip')`) was correct — it just routed the tap into a handler that threw.
+
+### What changed
+- `app.js`: the handler body now lives in scope as `function payPlanChip(attr)` (next to `prepayRowChip`/`salaryRowChip`); the export references it (`payPlanChip: payPlanChip`) — the smoke's `F.payPlanChip` path is unchanged, and the bare call in the wiring loop now resolves.
+- `app.js` SHELL_NOTES '73.22' (plain-wording note).
+- `tools/check_site.py` (+ root mirror via release.ps1 sync): NEW v73.22 check (in-scope def, export references it, no second inline copy, the bare call intact, SHELL_NOTES entry).
+- `smoke_app_v68.js`: NEW v7322Section (structural fix proven on the source; the handler body prefills the Add sheet; a ref to a non-existent plan is dropped by the v73.17 dead-ref rule; a real plan round-trips a LIVE link).
+
+### Proof
+- Gates: release.ps1 v73.22 all green (both check_site copies, parser tests, node syntax, both smokes).
+- The v7322Section drives the real `F.payPlanChip` (the same function the phone now calls) and confirms a real plan's occurrence link is alive.
+
 # v73.21 entry (prepended to INSTRUCTIONS.md)
 ## 2026-09-28 — "bump the tint to 5%" (the hazy fill inside the coach row chips)
 Status: **done** — v73.21 shipped (commit `155ba15`, pushed to origin/main, SW cache `finances-pwa-v73.21`)
