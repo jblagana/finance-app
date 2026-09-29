@@ -6,6 +6,20 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.24 entry (prepended to INSTRUCTIONS.md)
+## 2026-09-29 — "currently, the card payment dues on the 5th arent showing in the coach card rows"
+Status: **done** — v73.24 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.24`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.24
+
+### Interpretation
+v73.23 keyed the "Card payment · <card>" rows off the **prepay** date (the 30th): they only appeared 1–10 days AFTER it. So on the 5th — when the bill is actually due — the coach card showed nothing. The boss wants the pending bill visible when the **due date** (the 5th) is approaching.
+
+### What changed
+- `app.js` `coachRows()`: `cardPayWindow` now reads `!prepayWindow && cc.dueIn >= 0 && cc.dueIn <= 10` (cc = `d.ccDue`, the v73.6 due-date math — charges since the last cutoff minus prepays in that window). The prepay rows still win while the prepay date is ahead within 10 days (the mockup's "after the 30th" flip is preserved).
+- The row text now says "the bill is due today/tomorrow/in N days" (was "the bill is pending"), the row goes **red** when the due date is within 2 days (matching the prepay rows' urgency), and the chip is dated at the **due date** (`cc.dueDate`, `cc.due_day`) instead of today.
+- `tools/check_site.py`: the v73.23 check's cardPayWindow assertions moved to the new v73.24 check (the v73.23 entry kept its tag + prepayDaysAgo assertions, which still hold).
+- Bumps: SHELL_RELEASE 73.24, sw.js cache, README, root mirror, SHELL_NOTES 73.24 entry.
+
 # v73.23 entry (prepended to INSTRUCTIONS.md)
 ## 2026-09-29 — "build it" (the boss-approved coach-card row redesign, mockup C:\Users\Jan\Muji\mockup_coach_rows_v7322.html)
 Status: **done** — v73.23 shipped (commit `37e79d6`, pushed to origin/main, SW cache `finances-pwa-v73.23`)

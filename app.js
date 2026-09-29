@@ -4005,7 +4005,16 @@
     // partial prepay no longer gets its own "Partly handled" row — the
     // per-card chip already carries the live remainder (c.prepay).
     var prepayWindow = d.prepayAmt > 0 && d.prepayIn >= 0 && d.prepayIn <= 10;
-    var cardPayWindow = d.prepayDaysAgo >= 1 && d.prepayDaysAgo <= 10;
+    // v73.24 (boss: 'the card payment dues on the 5th arent showing'): the
+    // card payment rows follow the DUE date (the 5th), not the prepay date
+    // (the 30th) — the boss wants to see the pending bill when the due date
+    // is approaching, not after the prepay date.
+    var cc = d.ccDue;
+    // The handoff (the mockup's "after the 30th" flip): while the prepay
+    // rows are up (the prepay date is still ahead, within 10 days) they win;
+    // the card-payment rows take over once the prepay date has passed and
+    // the due date (the 5th) is within 10 days.
+    var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;
     if (prepayActive && prepayWindow) {
       var pw = d.prepayIn === 0 ? 'today' : (d.prepayIn === 1 ? 'tomorrow' : 'in ' + d.prepayIn + ' days');
       // v73.19: one row per owed card (the card's own live amount, the
@@ -4026,19 +4035,21 @@
       alerts.push('prepay'); // v72.45: the remainder is still owed, whatever was logged
     }
     if (cardPayWindow) {
-      // v73.23: the prepay date has passed — the pending bill shows as its
-      // own rows (the card's live balance, the boss's Q1 answer: balance,
-      // not statement). Same design as the plan-due row (short text +
-      // amount chip); the chip logs the payment (Pay-card mode, the
-      // card's own account — the v72.41 prepay prefill).
+      // v73.24: the due date (the 5th) is approaching — the pending bill
+      // shows as its own rows (the card's live balance, the boss's Q1
+      // answer: balance, not statement). Same design as the plan-due row
+      // (short text + amount chip); the chip logs the payment (Pay-card
+      // mode, the card's own account — the v72.41 prepay prefill), dated
+      // at the due date.
+      var dueTxt = cc.dueIn === 0 ? 'today' : (cc.dueIn === 1 ? 'tomorrow' : 'in ' + cc.dueIn + ' days');
       var bcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.balance) || 0) > 0; });
       bcards.sort(function (a, b) { return (Number(b.balance) || 0) - (Number(a.balance) || 0); });
       bcards.slice(0, 4).forEach(function (c) {
-        rows.push({ cls: 'warn', group: 'cards', kind: 'cardpay', amt: c.balance,
+        rows.push({ cls: cc.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay', amt: c.balance,
           tag: 'Card payment · ' + c.name,
-          text: c.name + ' is at ' + money(c.balance) + ' — the bill is pending.',
+          text: c.name + ' is at ' + money(c.balance) + ' — the bill is due ' + dueTxt + '.',
           r: money(c.balance),
-          act: 'prepay', payload: { amount: c.balance, date: d.today, day: d.prepayDay, card: c.name } });
+          act: 'prepay', payload: { amount: c.balance, date: cc.dueDate, day: cc.due_day, card: c.name } });
       });
       if (bcards.length) alerts.push('cardpay');
     }
@@ -6240,12 +6251,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.23, live: new Date(2026, 8, 29, 4, 3) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.24, live: new Date(2026, 8, 29, 13, 9) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.24': [
+      'The "Card payment" rows now follow the BILL\'s due date (the 5th), not the prepay date (the 30th): they show up to 10 days before the bill is due, go red when it is within 2 days, and the chip logs the payment dated at the due date — so the pending bill is visible when it is actually due, not after the prepay'
+    ],
     '73.23': [
       'The coach card is quieter: the prepay rows are now just "Prepay · <card>" (the "Card" is gone), and once the prepay date has passed they hand off to "Card payment · <card>" rows — the pending bill, at each card\'s live balance, for the 10 days after. Prepay rows only show up to 10 days before the date; plan rows up to 10 days before theirs (was 7)',
       'The clutter answer: rows now group under tappable headers (Cards, Plans) that carry the group total and fold/unfold — the total counts only what is owed in the current cycle. A row whose due date lands in the NEXT cycle is dimmed, badged "next cycle", and set off by a divider, so it never reads as due now',

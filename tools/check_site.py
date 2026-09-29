@@ -532,9 +532,7 @@ def main():
           "var prepayWindow = d.prepayAmt > 0 && d.prepayIn >= 0 && d.prepayIn <= 10;" in js
           and "tag: 'Prepay · ' + c.name" in js
           and "Card prepay · " not in js
-          # (2) the card-payment window (1-10 days after the prepay date) + its tag
-          and "var prepayDaysAgo = Math.round((parseISO(today) - parseISO(localISO(pPrev))) / 86400000);" in js
-          and "var cardPayWindow = d.prepayDaysAgo >= 1 && d.prepayDaysAgo <= 10;" in js
+          # (2) the card-payment tag (the window moved to the DUE date in v73.24)
           and "tag: 'Card payment · ' + c.name" in js
           and "prepayDaysAgo: prepayDaysAgo, prepayAmt: prepayAmt," in js
           # (3) the plan window widens to 10 days
@@ -557,6 +555,14 @@ def main():
           # (7) the cycle-scoped 'On repeat' line
           and "owed this cycle." in js
           and "'73.23': [" in js)
+    check("v73.24 (boss: 'the card payment dues on the 5th arent showing in the coach card rows'): the card-payment rows were keyed off the PREPAY date (the 30th) — they only appeared 1-10 days AFTER it, so on the 5th (when the bill is actually due) the coach card showed nothing. Now they follow the DUE date: cardPayWindow = cc.dueIn in [0,10], the row text says 'due <today/tomorrow/in N days>', the chip is dated at the due date, and the row is red when the due date is within 2 days (matching the prepay rows' urgency)",
+          "var cc = d.ccDue;" in js
+          and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
+          and "var dueTxt = cc.dueIn === 0 ? 'today' : (cc.dueIn === 1 ? 'tomorrow' : 'in ' + cc.dueIn + ' days');" in js
+          and "text: c.name + ' is at ' + money(c.balance) + ' — the bill is due ' + dueTxt + '.'" in js
+          and "act: 'prepay', payload: { amount: c.balance, date: cc.dueDate, day: cc.due_day, card: c.name }" in js
+          and "rows.push({ cls: cc.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay'" in js
+          and "'73.24': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js
