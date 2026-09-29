@@ -6,6 +6,19 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.25 entry (prepended to INSTRUCTIONS.md)
+## 2026-09-29 — "In the finance app, collapse the coach card rows by default"
+Status: **done** — v73.25 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.25`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.25 (both check_site copies + test_chat_parser + node syntax + both smokes)
+
+### Interpretation
+The v73.23 grouped coach-card sections (Cards, Plans) rendered **expanded** by default (the mockup's view). The boss wants them **collapsed** — the header (group label + this-cycle total + count) is what shows first; tapping it expands the rows.
+
+### What changed
+- `app.js` `renderCoach()`: the group fold default flipped — `var open = coachGroupOpen[g] === true` (was `!== false`). The header still carries the total + count, the body is hidden until the boss taps; the tap handler is unchanged, so the boss's choice still survives re-renders in `coachGroupOpen`.
+- `tools/check_site.py`: new v73.25 check asserting the `=== true` default.
+- Bumps: SHELL_RELEASE 73.25, sw.js cache finances-pwa-v73.25, README, root mirror, SHELL_NOTES 73.25 entry.
+
 # v73.24 entry (prepended to INSTRUCTIONS.md)
 ## 2026-09-29 — "currently, the card payment dues on the 5th arent showing in the coach card rows"
 Status: **done** — v73.24 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.24`)

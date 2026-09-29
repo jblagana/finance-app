@@ -3174,8 +3174,10 @@
       // header (the group's total + count) that folds/unfolds the body;
       // ungrouped rows stay plain. The header total is THIS-CYCLE-ONLY
       // (next-cycle rows are excluded so the headline never overstates).
-      // Groups open by default (the mockup's expanded view); the fold
-      // state survives re-renders in coachGroupOpen.
+      // Groups are COLLAPSED by default (v73.25, boss: 'collapse the coach
+      // card rows by default') — the header shows the total + count and the
+      // boss taps to expand; the fold state survives re-renders in
+      // coachGroupOpen.
       function rowHTML(rw) {
         var nextCls = rw.nextCycle ? ' next' : '';
         var badge = rw.nextCycle ? ' <span class="cyc-badge">next cycle</span>' : '';
@@ -3249,7 +3251,7 @@
           total += Number(rw.amt) || 0;
           dueN++;
         });
-        var open = coachGroupOpen[g] !== false; // default OPEN (the mockup)
+        var open = coachGroupOpen[g] === true; // v73.25: default CLOSED (boss: collapse by default)
         var sub = isPlans
           ? dueN + ' due' + (nextN ? ' this cycle' : '') + (nextN ? ' · ' + nextN + ' next' : '')
           : (function () {
@@ -3281,8 +3283,8 @@
       });
       body.innerHTML = html;
       // v73.23: the group headers fold/unfold their body (the mockup's
-      // tap-to-fold). Default open; the state lives in coachGroupOpen so a
-      // re-render keeps the boss's choice.
+      // tap-to-fold). v73.25: default closed; the state lives in
+      // coachGroupOpen so a re-render keeps the boss's choice.
       var grps = body.querySelectorAll('[data-coachgrp]');
       for (var gi = 0; gi < grps.length; gi++) {
         (function (gh) {
@@ -4370,7 +4372,7 @@
   // keep their ✕ (it's a single date — nothing to nuke by accident).
   var OCC_CAP = 5;
   var planOpen = {}; // planId -> true while the series is expanded
-  var coachGroupOpen = {}; // v73.23: coach-card group fold state (group key -> bool, default open)
+  var coachGroupOpen = {}; // v73.23: coach-card group fold state (group key -> bool); v73.25: default closed (coachGroupOpen[g] === true means open)
   var planSig = '';  // the plan set the open-state was captured for
   // v73.18: the occurrence's PAID pill (the same proof the edit sheet shows —
   // explicit link first, fuzzy fallback). One-off rows wear it on the name
@@ -6251,12 +6253,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.24, live: new Date(2026, 8, 29, 13, 9) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.25, live: new Date(2026, 8, 29, 21, 4) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.25': [
+      'The coach card\'s grouped sections (Cards, Plans) are collapsed by default — the header shows the total and count, tap it to expand the rows. Tap again to fold them back'
+    ],
     '73.24': [
       'The "Card payment" rows now follow the BILL\'s due date (the 5th), not the prepay date (the 30th): they show up to 10 days before the bill is due, go red when it is within 2 days, and the chip logs the payment dated at the due date — so the pending bill is visible when it is actually due, not after the prepay'
     ],
