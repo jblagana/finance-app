@@ -535,8 +535,10 @@ def main():
           # (2) the card-payment tag (the window moved to the DUE date in v73.24)
           and "tag: 'Card payment · ' + c.name" in js
           and "prepayDaysAgo: prepayDaysAgo, prepayAmt: prepayAmt," in js
-          # (3) the plan window widens to 10 days
-          and "if (u2.dd >= 0 && u2.dd <= 10) urgent.push(u2);" in js
+          # (3) the plan window widens to 10 days (v73.27: the forward window
+          # is preserved — dd >= 0 ? dd <= 10 : true — with an overdue branch
+          # added for dd < 0; see the v73.27 check)
+          and "if (u2.dd >= 0 ? u2.dd <= 10 : true) urgent.push(u2);" in js
           # (4) the removed rows are GONE (assert on the row-TEXT markers, not
           # the words — the words still appear in a comment + the SHELL_NOTES
           # copy, which is fine; the ROW code is what must be gone).
@@ -585,6 +587,25 @@ def main():
           # (5) the pill reads the linked flag
           and "var linked = !!paid.linked;" in js
           and "'73.26': [" in js)
+    check("v73.27 (boss: 'if the plan is still not paid past due date, keep it showing'): an UNPAID plan occurrence that has passed its due date no longer vanishes — it shows as a red 'Overdue' row ('N days past due') and stays until paid (then it drops out like any handled one). The forward 10-day window is unchanged (due today..+10); the new branch is the overdue one (dd < 0, nothing logged). planAllDates() exposes the whole series (past + future) so past occurrences are reachable — planOccurrences() is a forward window (first >= today) and would never yield them. A partially paid overdue occurrence still shows the 'Partly handled' row (the partial state wins over the overdue one); a fully paid one renders no row. The chip is the same pay_plan action (prefilled + pre-linked).",
+          # (1) the whole-series helper (past + future; planOccurrences is forward-only)
+          "function planAllDates(p) {" in js
+          # (2) the overdue occurrences are pulled in (dd < 0 stays, no horizon)
+          and "if (u2.dd >= 0 ? u2.dd <= 10 : true) urgent.push(u2);" in js
+          and "(p.repeat ? planAllDates(p) : [String(p.date)])" in js
+          # (3) the Overdue row (bad, 'N days past due', pay_plan chip)
+          and "tag: 'Overdue'" in js
+          and "' day' + (odays === 1 ? '' : 's') + ' past due.'" in js
+          # (3b) findPaidTxn's fuzzy window widens for OVERDUE occurrences
+          # (paid any number of days late) — the [due-2, +inf) branch
+          and "if (dd > 2) return;" in js
+          and "if (dd < -2 && String(kind.date) >= (d && d.today || todayISO())) return;" in js
+          # (3c) the cycle deduction + 'On repeat' run on the WHOLE series
+          # (planAllDates), so an overdue occurrence in the cycle still counts
+          and "planAllDates(p).forEach(function (od) {" in js
+          # (4) the forward window is unchanged (due today..+10)
+          and "var pw2 = u.dd === 0 ? 'today' : (u.dd === 1 ? 'tomorrow' : 'in ' + u.dd + ' days');" in js
+          and "'73.27': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js

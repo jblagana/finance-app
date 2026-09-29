@@ -312,6 +312,33 @@
     for (var k = 0; k < cnt; k++) out.push(shiftMonth(d, k));
     return out;
   }
+  // v73.27: every occurrence date of plan p (one-offs: [p.date]; recurring:
+  // the full series). planOccurrences() is a FORWARD window (first >= today);
+  // this is the whole series, so PAST occurrences are reachable too — the
+  // coach card's overdue rows (v73.27) need them.
+  function planAllDates(p) {
+    if (!p || !p.repeat) return [String(p.date)];
+    var d = String(p.date);
+    var cnt = Math.floor(Number(p.count));
+    var win = p.repeat === 'weekly' ? 8 : (p.repeat === 'annual' ? 2 : (p.repeat === 'daily' ? 14 : 3));
+    if (!(cnt >= 1)) cnt = win;
+    var out = [];
+    if (p.repeat === 'daily') {
+      var sd = function (x, k) { var dd = parseISO(x); dd.setDate(dd.getDate() + k); return localISO(dd); };
+      for (var kd = 0; kd < cnt; kd++) out.push(sd(d, kd));
+      return out;
+    }
+    if (p.repeat === 'weekly') {
+      for (var kw = 0; kw < cnt; kw++) out.push(shiftWeek(d, kw));
+      return out;
+    }
+    if (p.repeat === 'annual') {
+      for (var ky = 0; ky < cnt; ky++) out.push(shiftYear(d, ky));
+      return out;
+    }
+    for (var k = 0; k < cnt; k++) out.push(shiftMonth(d, k));
+    return out;
+  }
   // v73.14: per-occurrence overrides — the 3-scope model (boss-confirmed).
   // p.overrides maps dateISO -> { name?, amount?, skip?, applyFrom? }:
   //   "just this one"      -> entry keyed exactly at that date (a fork)
@@ -2491,7 +2518,11 @@
     if (!cd || !(cd.expected > 0)) return 0;
     var total = 0;
     state.plans.forEach(function (p) {
-      planOccurrences(p).forEach(function (od) {
+      // v73.27: planAllDates (the WHOLE series), not planOccurrences (the
+      // forward window) — an OVERDUE occurrence (past its due date, unpaid)
+      // that falls in the current cycle still has to be deducted: the
+      // coach card shows it (v73.27) and the free cash must agree with it.
+      planAllDates(p).forEach(function (od) {
         if (od < cd.start || od > cd.end) return;
         var ro = p.repeat ? resolveOccurrence(p, od) : null;
         if (ro && ro.skip) return;
@@ -3130,7 +3161,10 @@
       var recNames = [], recAmt = 0;
       state.plans.forEach(function (p) {
         if (!p.repeat) return;
-        planOccurrences(p).forEach(function (od) {
+        // v73.27: planAllDates (the whole series) — the same window +
+        // paid-exclusion as cyclePlanDeduction, so an overdue occurrence in
+        // the cycle counts here too (the line and the deduction agree).
+        planAllDates(p).forEach(function (od) {
           if (od < cyc.start || od > cyc.end) return;
           var ro = resolveOccurrence(p, od);
           if (ro.skip) return;
@@ -4001,7 +4035,12 @@
           String(t.planRef.date) === String(kind.date);
         if (!linked) {
           var dd = diffDays(String(t.date), kind.date);
-          if (dd < -2 || dd > 2) return;
+          // v73.27: the ±2 window is for FUTURE occurrences (paid around the
+          // due date). An OVERDUE occurrence (due date already passed) can be
+          // paid any number of days late — widen to [due−2, ∞) so a payment
+          // logged today still matches an occurrence that was due 6 days ago.
+          if (dd > 2) return;
+          if (dd < -2 && String(kind.date) >= (d && d.today || todayISO())) return;
           var words = String(kind.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 4; });
           if (!words.length || !words.some(function (w) { return hay.indexOf(w) >= 0; })) return;
         }
@@ -4192,13 +4231,20 @@
     var cycEnd = (d.cycle && d.cycle.end) || null;
     var urgent = [];
     state.plans.forEach(function (p) {
-      planOccurrences(p).forEach(function (od) {
+      // v73.27: the OVERDUE occurrences (past their due date, unpaid) are
+      // reachable only through planAllDates — planOccurrences() is a forward
+      // window (first >= today). An unpaid past occurrence stays visible:
+      // the boss wants to see what is still owed, not have it vanish once
+      // the due date has passed.
+      (p.repeat ? planAllDates(p) : [String(p.date)]).forEach(function (od) {
         // v73.14: resolved (forked name/amount show, skipped dates don't)
         var ro = p.repeat ? resolveOccurrence(p, od) : null;
         if (ro && ro.skip) return;
         var u2 = { p: p, date: od, dd: diffDays(d.today, od) };
         if (ro) { u2.nm = ro.name; u2.am = ro.amount; }
-        if (u2.dd >= 0 && u2.dd <= 10) urgent.push(u2);
+        // dd >= 0: the original 10-day forward window (due today..+10).
+        // dd < 0: v73.27 — an overdue occurrence STAYS (no horizon).
+        if (u2.dd >= 0 ? u2.dd <= 10 : true) urgent.push(u2);
       });
     });
     urgent.sort(function (a, b) { return a.dd - b.dd; });
@@ -4210,16 +4256,16 @@
       var un = u.nm != null ? u.nm : u.p.name;
       var ua = u.am != null ? u.am : u.p.amount;
       var paid = findPaidTxn(d, { planId: u.p.id, date: u.date, name: un, amount: ua });
-      var pw2 = u.dd === 0 ? 'today' : (u.dd === 1 ? 'tomorrow' : 'in ' + u.dd + ' days');
       var uNext = !!(cycEnd && u.date > cycEnd);
-      // v73.26 (boss-approved mockup): three states, not two.
-      //  1. paid sum >= 100% of the plan amount → NO ROW (the occurrence is
-      //     done — the v73.18 "Handled" row is gone; the Coming-up pill +
-      //     the edit sheet carry the proof).
-      //  2. 0 < sum < 100% → "Partly handled" row (warn border, yellow chip
-      //     showing the live remainder — tap it to log the rest, prefilled
-      //     AND pre-linked, same as the due chip).
-      //  3. no payment yet → the usual "Plan due" row (red within 2 days).
+      // v73.26 (boss-approved mockup) + v73.27 (overdue stays): four states.
+      //  1. paid sum >= 100% → NO ROW (done; the Coming-up pill + edit sheet
+      //     carry the proof).
+      //  2. 0 < sum < 100% → "Partly handled" row (warn, yellow chip = live
+      //     remainder, tap → Add sheet prefilled with the REMAINDER + link).
+      //  3. nothing logged, dd >= 0 (due today..+10) → "Plan due" row
+      //     (red within 2 days).
+      //  4. v73.27: nothing logged, dd < 0 (PAST due) → "Overdue" row
+      //     (bad, "N days past due") — it stays until paid, then state 1.
       var paidAmt = Number(paid && paid.amount) || 0;
       if (paidAmt >= Number(ua) && Number(ua) > 0) {
         // fully handled — the row disappears (the mockup's State D)
@@ -4234,7 +4280,21 @@
           act: 'pay_plan', payload: { planId: u.p.id, date: u.date, name: un, amount: rem } });
         alerts.push('plan:' + (un || 'Plan'));
         shown++;
+      } else if (u.dd < 0) {
+        // v73.27: overdue (past due, nothing logged) — stays visible.
+        var odays = -u.dd;
+        rows.push({ cls: 'bad', group: 'plans', kind: 'plan', amt: ua, nextCycle: uNext,
+          tag: 'Overdue',
+          text: (un || 'Plan') + ' is ' + odays + ' day' + (odays === 1 ? '' : 's') + ' past due.',
+          r: money(ua),
+          // v73.18: the amount is a CHIP — tapping it opens the Add sheet
+          // prefilled AND pre-linked (state.planLinkRef) so the payment is
+          // linked the moment it is saved, no second tap on the chip needed.
+          act: 'pay_plan', payload: { planId: u.p.id, date: u.date, name: un, amount: ua } });
+        alerts.push('plan:' + (un || 'Plan'));
+        shown++;
       } else {
+        var pw2 = u.dd === 0 ? 'today' : (u.dd === 1 ? 'tomorrow' : 'in ' + u.dd + ' days');
         rows.push({ cls: u.dd <= 2 ? 'bad' : 'warn', group: 'plans', kind: 'plan', amt: ua, nextCycle: uNext,
           tag: 'Plan due',
           text: (un || 'Plan') + ' is due ' + pw2 + '.',
@@ -6291,12 +6351,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.26, live: new Date(2026, 8, 30, 2, 9) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.27, live: new Date(2026, 8, 30, 5, 21) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.27': [
+      'An unpaid plan no longer disappears once its due date has passed: past-due occurrences now show as a red "Overdue" row ("N days past due") and stay until they are paid — then the row vanishes like any handled one. The chip still logs the payment, prefilled and pre-linked'
+    ],
     '73.26': [
       'Plans can be paid in parts now: instead of one entry having to cover half the plan, every payment that matches an occurrence adds up toward it. The coach card shows a "Partly handled" row with the live remainder — tap the chip to log the rest (prefilled and pre-linked) — and once the total reaches 100% the row disappears. The "On repeat" total and the free-cash deduction both shrink as you pay',
       'A linked payment (the chip on the Add form) still counts for exactly what you logged, even if it is 1 peso — the link is the truth, the amount is just the number'

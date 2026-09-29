@@ -6,6 +6,25 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.27 entry (prepended to INSTRUCTIONS.md)
+## 2026-09-30 — "In finance app, in coach card plan due rows, if the plan is still not paid past due date, keep it showing"
+Status: **done** — v73.27 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.27`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.27 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7327Section)
+
+### What changed
+An UNPAID plan occurrence that has passed its due date no longer vanishes from the coach card. Before: the plan window was `dd >= 0 && dd <= 10` (forward-only), so once the due date passed the row disappeared — the boss's unpaid plan became invisible. Now:
+- `app.js` `planAllDates(p)` (new, next to `planOccurrences`): the WHOLE series (past + future) — `planOccurrences()` is a forward window (first occurrence >= today) and can never yield a past date, so the overdue occurrences were unreachable.
+- `app.js` `coachRows` plan loop: the window is now `dd >= 0 ? dd <= 10 : true` (forward 10-day window unchanged; overdue = dd < 0 stays, no horizon). A new 4th row state: nothing logged + dd < 0 → red **"Overdue"** row ("N days past due"), same pay_plan chip (prefilled + pre-linked). State order: fully paid → no row; partial → "Partly handled" (wins over overdue); due (dd 0..10) → "Plan due"; overdue (dd < 0) → "Overdue".
+- `app.js` `findPaidTxn` plan branch: the fuzzy ±2-day window widens to [due−2, +∞) for OVERDUE occurrences (kind.date < today) — a payment logged today still matches an occurrence due 6 days ago. Future occurrences keep the exact ±2 window (no behavior change).
+- `app.js` `cyclePlanDeduction` + the "On repeat" sub-line: both run on `planAllDates` (the whole series) so an overdue occurrence inside the current cycle is still deducted from free cash and counted in the line — the coach card, the deduction, and the line all agree.
+- `tools/check_site.py`: NEW v73.27 check (planAllDates, the overdue window branch, the Overdue row, the widened fuzzy window, the planAllDates in the deduction + On-repeat).
+- `smoke_app_v68.js` (root, local-only): NEW v7327Section — a monthly plan 2 days past due (2 keeps it in the current salary cycle, default salary_day 15) shows the red Overdue row + is deducted (400); a 150 partial payment flips it to "Partly handled" (250 left); the 250 remainder clears it → no row; cleanup.
+- SHELL_NOTES '73.27'.
+
+### Proof
+- Gates: release.ps1 v73.27 all green (both check_site copies, parser tests, node syntax, both smokes — smoke_app_v68 "all checks passed" incl. v7327Section).
+- The v73.26 section still passes verbatim (the partial-payment arc is untouched; the widened fuzzy window only adds matches for past-due occurrences).
+
 # v73.26 entry (prepended to INSTRUCTIONS.md)
 ## 2026-09-30 — "whats the protocol for partial payments in plans" → "yes, provide a mockup first" → "thats good, small tweak: for fully handled payments/done, remove the row already" → "Build it (ship the partial plan payment feature)"
 Status: **done** — v73.26 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.26`)
