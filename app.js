@@ -2497,8 +2497,14 @@
         if (ro && ro.skip) return;
         var nm = ro ? ro.name : p.name;
         var am = ro ? ro.amount : p.amount;
-        if (findPaidTxn({ monthPrefix: todayISO().slice(0, 7) }, { planId: p.id, date: od, name: nm, amount: am })) return;
-        total += Number(am) || 0;
+        // v73.26: the deduction is the LIVE REMAINDER (plan amount − logged
+        // payments, the accumulation findPaidTxn returns) — a partly paid
+        // occurrence deducts only what is still owed, a fully paid one
+        // deducts nothing.
+        var pp = findPaidTxn({ monthPrefix: todayISO().slice(0, 7) }, { planId: p.id, date: od, name: nm, amount: am });
+        var rem = r2(Number(am) - (Number(pp && pp.amount) || 0));
+        if (rem <= 0) return;
+        total += rem;
       });
     });
     return r2(total);
@@ -3130,9 +3136,14 @@
           if (ro.skip) return;
           var nm = ro.name || p.name;
           var am = ro.amount != null ? ro.amount : p.amount;
-          if (findPaidTxn(d, { planId: p.id, date: od, name: nm, amount: am })) return;
+          // v73.26: the line shows the LIVE REMAINDER (plan amount − logged,
+          // the accumulation findPaidTxn now returns) — a fully paid
+          // occurrence contributes 0 and drops out of the name list.
+          var pp = findPaidTxn(d, { planId: p.id, date: od, name: nm, amount: am });
+          var rem = r2(Number(am) - (Number(pp && pp.amount) || 0));
+          if (rem <= 0) return;
           if (recNames.indexOf(nm) < 0) recNames.push(nm);
-          recAmt += Number(am) || 0;
+          recAmt += rem;
         });
       });
       if (recNames.length) {
@@ -3968,32 +3979,38 @@
   }
   // ---------- Phase 5: attention rows for the unified coach card ----------
   function findPaidTxn(d, kind) {
-    var out = null, pSum = 0, pLast = null;
+    var out = null, pSum = 0, pLast = null, pCount = 0;
     state.txns.forEach(function (t) {
       var amt = Number(t.amount) || 0;
       var hay = ((t.category || '') + ' ' + (t.note || '')).toLowerCase();
-      // v73.17: an EXPLICIT link (txn.planRef, the boss's tap on the add
-      // form's chip) is deterministic truth — it wins before any fuzzy rule,
-      // so a linked payment can never be "wrong-matched" away or missed.
-      if (kind !== 'prepay' && t.planRef &&
-          String(t.planRef.planId) === String(kind.planId) &&
-          String(t.planRef.date) === String(kind.date)) { out = t; return; }
       if (kind === 'prepay') {
         if (String(t.date).slice(0, 7) !== d.monthPrefix) return;
         if (!/prepay|card|amex|visa|master|credit/.test(hay)) return;
         if (amt <= 0) return;
-        pSum += amt; pLast = t; // v72.45: PARTIAL prepays count toward "handled so far"
+        pSum += amt; pLast = t; pCount++; // v72.45: PARTIAL prepays count toward "handled so far"
         if (amt >= 0.5 * d.prepayAmt) out = t;
       } else {
-        var dd = diffDays(String(t.date), kind.date);
-        if (dd < -2 || dd > 2) return;
-        var words = String(kind.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 4; });
-        if (!words.length || !words.some(function (w) { return hay.indexOf(w) >= 0; })) return;
-        var pa = Number(kind.amount) || 0;
-        if (amt >= 0.5 * pa && amt <= 2.5 * pa) out = t;
+        // v73.26 (boss-approved mockup): ACCUMULATION replaces the 50% single-
+        // entry threshold. All txns matching the occurrence (±2 day window +
+        // name word, OR an explicit planRef link) sum toward the plan amount.
+        // Any positive amount counts; 100% = done (the row disappears).
+        // An explicit link (planRef) is deterministic truth — it counts
+        // regardless of amount (even 1 peso), same as today.
+        var linked = t.planRef &&
+          String(t.planRef.planId) === String(kind.planId) &&
+          String(t.planRef.date) === String(kind.date);
+        if (!linked) {
+          var dd = diffDays(String(t.date), kind.date);
+          if (dd < -2 || dd > 2) return;
+          var words = String(kind.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 4; });
+          if (!words.length || !words.some(function (w) { return hay.indexOf(w) >= 0; })) return;
+        }
+        if (amt <= 0) return;
+        pSum += amt; pLast = t; pCount++;
+        if (linked && !out) out = t; // the first linked txn is the "proof" (for the pill's linked/fuzzy distinction)
       }
     });
-    if (pLast) out = { amount: r2(pSum), date: pLast.date }; // v72.45: the TOTAL logged this month — a partial payment is still a payment
+    if (pLast) out = { amount: r2(pSum), date: pLast.date, count: pCount, linked: !!(out && out.planRef) }; // v72.45 prepay / v73.26 plan: the TOTAL logged — a partial payment is still a payment
     return out;
   }
   function coachRows(d) {
@@ -4188,17 +4205,36 @@
     var shown = 0;
     for (var i = 0; i < urgent.length && shown < 4; i++) {
       var u = urgent[i];
-      var paid = findPaidTxn(d, { planId: u.p.id, date: u.date, name: u.p.name, amount: u.p.amount });
+      // v73.14: the RESOLVED name/amount (fork-aware) — used for the match
+      // AND the row, so a forked occurrence's payment counts against it.
+      var un = u.nm != null ? u.nm : u.p.name;
+      var ua = u.am != null ? u.am : u.p.amount;
+      var paid = findPaidTxn(d, { planId: u.p.id, date: u.date, name: un, amount: ua });
       var pw2 = u.dd === 0 ? 'today' : (u.dd === 1 ? 'tomorrow' : 'in ' + u.dd + ' days');
       var uNext = !!(cycEnd && u.date > cycEnd);
-      if (paid) rows.push({ cls: 'done', group: 'plans', kind: 'plan', amt: 0, nextCycle: uNext,
-        tag: 'Plan · ' + (u.p.name || 'Plan'),
-        text: 'Handled — ' + money(Number(paid.amount) || 0) + ' logged on ' + planWhen(paid.date) + '.',
-        r: 'done' });
-      else {
-        // v73.14: the row shows the RESOLVED name/amount (fork-aware)
-        var un = u.nm != null ? u.nm : u.p.name;
-        var ua = u.am != null ? u.am : u.p.amount;
+      // v73.26 (boss-approved mockup): three states, not two.
+      //  1. paid sum >= 100% of the plan amount → NO ROW (the occurrence is
+      //     done — the v73.18 "Handled" row is gone; the Coming-up pill +
+      //     the edit sheet carry the proof).
+      //  2. 0 < sum < 100% → "Partly handled" row (warn border, yellow chip
+      //     showing the live remainder — tap it to log the rest, prefilled
+      //     AND pre-linked, same as the due chip).
+      //  3. no payment yet → the usual "Plan due" row (red within 2 days).
+      var paidAmt = Number(paid && paid.amount) || 0;
+      if (paidAmt >= Number(ua) && Number(ua) > 0) {
+        // fully handled — the row disappears (the mockup's State D)
+      } else if (paidAmt > 0) {
+        var rem = r2(Number(ua) - paidAmt);
+        var cnt = Number(paid.count) || 0;
+        rows.push({ cls: 'warn', group: 'plans', kind: 'plan', amt: rem, nextCycle: uNext,
+          tag: 'Plan · ' + (u.p.name || 'Plan'),
+          text: 'Partly handled — ' + money(paidAmt) + ' logged on ' + planWhen(paid.date) +
+            (cnt > 1 ? ' (' + cnt + ' entries)' : '') + ' — ' + money(rem) + ' still owed.',
+          r: money(rem) + ' left',
+          act: 'pay_plan', payload: { planId: u.p.id, date: u.date, name: un, amount: rem } });
+        alerts.push('plan:' + (un || 'Plan'));
+        shown++;
+      } else {
         rows.push({ cls: u.dd <= 2 ? 'bad' : 'warn', group: 'plans', kind: 'plan', amt: ua, nextCycle: uNext,
           tag: 'Plan due',
           text: (un || 'Plan') + ' is due ' + pw2 + '.',
@@ -4380,8 +4416,10 @@
   function planPaidPill(planId, dateISO, name, amount) {
     var paid = findPaidTxn({}, { planId: planId, date: dateISO, name: name, amount: amount });
     if (!paid) return '';
-    var linked = !!(paid.planRef && String(paid.planRef.planId) === String(planId) &&
-      String(paid.planRef.date) === String(dateISO));
+    // v73.26: findPaidTxn now accumulates (sum + count + linked flag) — the
+    // pill's linked/fuzzy distinction reads the flag (a linked txn counts
+    // as the proof even when fuzzy entries are summed in with it).
+    var linked = !!paid.linked;
     return ' <span class="pill occ-paid' + (linked ? '' : ' auto') + '" title="' +
       (linked ? 'Linked to a logged payment' : 'Matched to a logged payment (auto)') + '">' +
       (linked ? '✓ paid' : 'paid') + '</span>';
@@ -6253,12 +6291,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.25, live: new Date(2026, 8, 29, 21, 4) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.26, live: new Date(2026, 8, 30, 2, 9) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.26': [
+      'Plans can be paid in parts now: instead of one entry having to cover half the plan, every payment that matches an occurrence adds up toward it. The coach card shows a "Partly handled" row with the live remainder — tap the chip to log the rest (prefilled and pre-linked) — and once the total reaches 100% the row disappears. The "On repeat" total and the free-cash deduction both shrink as you pay',
+      'A linked payment (the chip on the Add form) still counts for exactly what you logged, even if it is 1 peso — the link is the truth, the amount is just the number'
+    ],
     '73.25': [
       'The coach card\'s grouped sections (Cards, Plans) are collapsed by default — the header shows the total and count, tap it to expand the rows. Tap again to fold them back'
     ],

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mockup — plan partial payments</title>
+<style>
+:root{--bg:#0f1420;--card:#1a2233;--card2:#212c42;--ink:#e8edf7;--mut:#93a1bd;--line:#2c3a56;
+--ok:#37d39b;--bad:#ff6b6b;--warn:#ffc45c;--acc:#37d39b}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:15px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);
+-webkit-font-smoothing:antialiased;padding:0 0 40px}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;position:sticky;top:0;
+background:rgba(15,20,32,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:6}
+h1{margin:0;font-size:20px;letter-spacing:.2px}
+h1 span{color:var(--acc)}
+main{max-width:640px;margin:0 auto;padding:14px 16px 20px}
+.state-label{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--mut);
+margin:18px 2px 8px;display:flex;align-items:center;gap:8px}
+.state-label .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+.coach-h{font-size:15px;font-weight:700;margin:0 0 4px}
+.coach-s{color:var(--mut);font-size:13px;margin:0 0 8px}
+.dig{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+background:var(--card2);border:1px solid var(--line);border-left:3px solid var(--line);
+color:var(--ink);padding:10px 12px;border-radius:12px;margin-top:8px;font:inherit;text-align:left;cursor:pointer}
+.dig .dg-l{flex:1;min-width:0}
+.dig .dg-r{flex:0 0 auto;font-weight:700;font-size:12.5px;color:var(--mut);white-space:nowrap}
+.dig.warn{border-left-color:var(--warn)}
+.dig.bad{border-left-color:var(--bad)}
+
+.dig.partial{border-left-color:var(--warn);background:rgba(255,196,92,.06)}
+.dg-tag{display:block;font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+color:var(--mut);margin-bottom:2px}
+.dig.warn .dg-tag{color:var(--warn)}
+.dig.bad .dg-tag{color:var(--bad)}
+
+.dig.partial .dg-tag{color:var(--warn)}
+.plchip-inline{background:rgba(55,211,155,.14);border:1px solid var(--acc);color:#fff;border-radius:9px;
+padding:5px 10px;font:inherit;font-weight:700;font-size:12.5px;cursor:pointer}
+.plchip-warn{background:rgba(255,196,92,.14);border:1px solid var(--warn);color:#fff;border-radius:9px;
+padding:5px 10px;font:inherit;font-weight:700;font-size:12.5px;cursor:pointer}
+.note{color:var(--mut);font-size:12px;line-height:1.6;margin:6px 2px}
+.proto{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:14px 0}
+.proto h3{margin:0 0 6px;font-size:13px;color:var(--acc)}
+.proto table{width:100%;border-collapse:collapse;font-size:12.5px}
+.proto th{text-align:left;color:var(--mut);font-weight:600;padding:3px 8px 3px 0;border-bottom:1px solid var(--line)}
+.proto td{padding:4px 8px 4px 0;border-bottom:1px solid rgba(44,58,86,.4);vertical-align:top}
+.proto tr:last-child td{border-bottom:none}
+</style>
+</head>
+<body>
+<header><h1>Fin<span>.</span>AI — plan partial payments mockup</h1></header>
+<main>
+  <p class="note">Three visible states of a plan row in the coach card. The new "partial" state sits between "due" and "gone" — modeled after the card-prepay "Partly handled" row (v72.45). Multiple entries accumulate toward the plan occurrence; the chip shows the live remainder. Once fully paid, the row disappears.</p>
+
+  <!-- ===================== STATE A: fully unpaid ===================== -->
+  <div class="state-label"><span class="dot" style="background:var(--bad)"></span>State A — unpaid (due in 3 days)</div>
+  <section class="card">
+    <p class="coach-h">You're on track. You can spend up to ₱500 today.</p>
+    <p class="coach-s">On repeat: Rent, Maybank CC — ₱20,000.00 owed this cycle.</p>
+
+    <div class="dig bad" role="button">
+      <span class="dg-l"><span class="dg-tag">Plan due</span>Rent is due in 3 days.</span>
+      <span class="dg-r"><button class="plchip-inline">₱10,000.00</button></span>
+    </div>
+    <div class="dig warn" role="button">
+      <span class="dg-l"><span class="dg-tag">Plan due</span>Maybank CC is due in 3 days.</span>
+      <span class="dg-r"><button class="plchip-inline">₱10,000.00</button></span>
+    </div>
+  </section>
+
+  <!-- ===================== STATE B: partially paid (one entry, 60%) ===================== -->
+  <div class="state-label"><span class="dot" style="background:var(--warn)"></span>State B — partially paid (₱6,000 of ₱10,000 logged)</div>
+  <section class="card">
+    <p class="coach-h">You're on track. You can spend up to ₱500 today.</p>
+    <p class="coach-s">On repeat: Rent, Maybank CC — ₱14,000.00 still owed this cycle.</p>
+
+    <div class="dig partial" role="button">
+      <span class="dg-l"><span class="dg-tag">Plan · Rent</span>Partly handled — ₱6,000.00 logged on Sep 28 — ₱4,000.00 still owed.</span>
+      <span class="dg-r"><button class="plchip-warn">₱4,000.00 left</button></span>
+    </div>
+    <div class="dig warn" role="button">
+      <span class="dg-l"><span class="dg-tag">Plan due</span>Maybank CC is due in 3 days.</span>
+      <span class="dg-r"><button class="plchip-inline">₱10,000.00</button></span>
+    </div>
+  </section>
+
+  <!-- ===================== STATE C: partially paid (multiple entries) ===================== -->
+  <div class="state-label"><span class="dot" style="background:var(--warn)"></span>State C — multiple entries (₱3,000 + ₱2,500 of ₱10,000)</div>
+  <section class="card">
+    <p class="coach-h">You're on track. You can spend up to ₱500 today.</p>
+    <p class="coach-s">On repeat: Rent, Maybank CC — ₱14,500.00 still owed this cycle.</p>
+
+    <div class="dig partial" role="button">
+      <span class="dg-l"><span class="dg-tag">Plan · Rent</span>Partly handled — ₱5,500.00 logged (2 entries, last Sep 29) — ₱4,500.00 still owed.</span>
+      <span class="dg-r"><button class="plchip-warn">₱4,500.00 left</button></span>
+    </div>
+    <div class="dig warn" role="button">
+      <span class="dg-l"><span class="dg-tag">Plan due</span>Maybank CC is due in 3 days.</span>
+      <span class="dg-r"><button class="plchip-inline">₱10,000.00</button></span>
+    </div>
+  </section>
+
+  <!-- ===================== STATE D: fully paid → row removed ===================== -->
+  <div class="state-label"><span class="dot" style="background:var(--ok)"></span>State D — fully paid (row removed)</div>
+  <section class="card">
+    <p class="coach-h">You're on track. You can spend up to ₱500 today.</p>
+    <p class="coach-s">On repeat: Maybank CC — ₱10,000.00 owed this cycle.</p>
+
+    <!-- Rent row is GONE — fully paid plans don't render a row -->
+    <div class="dig warn" role="button">
+      <span class="dg-l"><span class="dg-tag">Plan due</span>Maybank CC is due in 3 days.</span>
+      <span class="dg-r"><button class="plchip-inline">₱10,000.00</button></span>
+    </div>
+    <p class="note" style="margin:8px 2px 0">↑ Rent row is absent — once accumulated ≥ 100%, the row simply disappears. No "done" state.</p>
+  </section>
+
+  <!-- ===================== PROTOCOL ===================== -->
+  <div class="proto">
+    <h3>Partial-payment protocol (proposed)</h3>
+    <table>
+      <tr><th>Rule</th><th>Detail</th></tr>
+      <tr><td>Accumulation</td><td>All txns matching the plan occurrence (same ±2 day window + name match, or explicit planRef link) sum toward the occurrence — same as prepay's <code>pSum</code> (v72.45)</td></tr>
+      <tr><td>Partial state</td><td>0 &lt; sum &lt; 100% of plan amount → "Partly handled" row (warn border, yellow chip showing remainder)</td></tr>
+      <tr><td>Paid state</td><td>sum ≥ 100% of plan amount → <strong>row removed</strong> (not rendered). No 50% threshold — full amount required</td></tr>
+      <tr><td>Chip</td><td>Partial: yellow chip "₱X left" (tap → Add sheet prefilled with remainder + date + plan link). Paid: no row at all</td></tr>
+      <tr><td>Multiple entries</td><td>Row shows count: "₱5,500.00 logged (2 entries, last Sep 29)"</td></tr>
+      <tr><td>Explicit link</td><td>planRef still wins — a linked txn counts regardless of amount (even 1 peso), same as today</td></tr>
+      <tr><td>Overflow</td><td>sum &gt; 100% (e.g. 120%) → still "Handled" (overpay is fine, no negative remainder shown)</td></tr>
+      <tr><td>Coach sub</td><td>"On repeat" line shows the SUM of remainders (plan amount − logged) for all unpaid/partial plans in the cycle</td></tr>
+    </table>
+  </div>
+
+  <p class="note" style="margin-top:14px">
+    Notes:<br>
+    • Fully paid plans render NO row — the row simply disappears once accumulated ≥ 100% (cleaner than a "done" state).<br>
+    • The 50% threshold is REMOVED — replaced by accumulation (any amount counts, 100% = done).<br>
+    • The ±2 day window and name-match rules stay the same for fuzzy matching.<br>
+    • The explicit planRef link (tap the chip on the Add form) still overrides everything — a linked 1-peso txn counts as that much toward the total.<br>
+    • The chip on a partial row is tappable (opens Add sheet prefilled with the REMAINDER amount + due date + plan link), same UX as the "due" chip.<br>
+    • "On repeat" in the sub-line now shows the live remaining total, not the gross plan total.
+  </p>
+</main>
+</body>
+</html>

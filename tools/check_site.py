@@ -539,10 +539,12 @@ def main():
           and "if (u2.dd >= 0 && u2.dd <= 10) urgent.push(u2);" in js
           # (4) the removed rows are GONE (assert on the row-TEXT markers, not
           # the words — the words still appear in a comment + the SHELL_NOTES
-          # copy, which is fine; the ROW code is what must be gone)
+          # copy, which is fine; the ROW code is what must be gone).
+          # v73.26: the "Partly handled — " assertion is REMOVED — the plan
+          # partial row (v73.26) reintroduces that text for PLANS (the prepay
+          # "Partly handled" row is still gone; only the plan one is back).
           and "the 30% nudge" not in js
           and "Cycle burn" not in js
-          and "Partly handled — " not in js
           # (5) the grouped render (the clutter fix)
           and "var coachGroupOpen = {}" in js
           and "data-coachgrp=" in js
@@ -566,6 +568,23 @@ def main():
     check("v73.25 (boss: 'collapse the coach card rows by default'): the grouped coach-card sections (Cards, Plans) now render COLLAPSED by default — the header shows the group label + this-cycle total + count, the body is hidden until the boss taps the header to expand. The fold state still lives in coachGroupOpen (re-renders keep the boss's choice); the default flipped from open (coachGroupOpen[g] !== false) to closed (coachGroupOpen[g] === true).",
           "var open = coachGroupOpen[g] === true; // v73.25: default CLOSED (boss: collapse by default)" in js
           and "'73.25': [" in js)
+    check("v73.26 (boss-approved mockup: 'partial payments in plans'): the 50% single-entry plan threshold is replaced by ACCUMULATION — all txns matching an occurrence (±2 day window + name word, or an explicit planRef link) sum toward the plan amount, any positive amount counts, 100% = done. Coach card: 0 < sum < 100% gets a 'Partly handled' row (warn, yellow chip = live remainder, tap → Add sheet prefilled with the REMAINDER + pre-linked); sum ≥ 100% renders NO row (the v73.18 'Handled' row is gone — the Coming-up pill + edit sheet carry the proof). The 'On repeat' sub-line and the cycle plan deduction both run on the LIVE REMAINDER (plan amount − logged), so a partial payment shrinks them. findPaidTxn returns { amount: sum, date: last, count, linked } for plans; the pill reads the linked flag (a linked txn is the proof even when fuzzy entries sum in with it)",
+          # (1) accumulation replaces the 50% single-entry threshold
+          "if (amt >= 0.5 * pa && amt <= 2.5 * pa) out = t;" not in js
+          and "var out = null, pSum = 0, pLast = null, pCount = 0;" in js
+          and "pSum += amt; pLast = t; pCount++;" in js
+          # (2) the explicit link counts regardless of amount (deterministic truth)
+          and "if (linked && !out) out = t;" in js
+          # (3) the plan row's three states: partial row / no row when done
+          and "text: 'Partly handled — ' + money(paidAmt) + ' logged on '" in js
+          and "r: money(rem) + ' left'" in js
+          and "amount: rem }" in js
+          and "text: 'Handled — '" not in js
+          # (4) 'On repeat' + the cycle deduction run on the live remainder
+          and "var rem = r2(Number(am) - (Number(pp && pp.amount) || 0));" in js
+          # (5) the pill reads the linked flag
+          and "var linked = !!paid.linked;" in js
+          and "'73.26': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js
@@ -1075,7 +1094,9 @@ def main():
           # per-card chip carries the live remainder) — those two assertions
           # are dropped with the row; the live 'prepay' alert is kept.
           and "alerts.push('prepay'); // v72.45" in js
-          and "if (pLast) out = { amount: r2(pSum), date: pLast.date };" in js
+          # v73.26: the return line grew (count + linked for the plan
+          # accumulation) — the v72.45 assertion is updated to the new shape.
+          and "if (pLast) out = { amount: r2(pSum), date: pLast.date, count: pCount, linked: !!(out && out.planRef) };" in js
           and "if (receivedId && t.id && t.id === receivedId) return;" in js
           and "cycleData: cycleData" in js)
     check("v72.46 (user: 'after i prepay, i ask coach fin again for the cc util rate and it gave the old util rate, it did not update. how stupid can coach be? should i just offload that task to the rule engine'): the util question is answered by the DETERMINISTIC rule engine with LIVE numbers — (1) 'util rate' (not just 'utilization') hits the status intent, per-card, no API call; (2) the effective card is live end-to-end: balance + utilization are recomputed from the overlay-inclusive balance in BOTH app.js effectiveSnap() and chat.js loadCtx(), and the map runs over the CLONE — the v72.33 original mapped over the live state and only got away with it because prepay was idempotent (a non-idempotent write-back would have compounded the overlay into state on every render); (3) the LLM system prompt carries the precedence rule — the numbers list is current as of now and supersedes anything said in earlier turns; (4) the v72.46 stamps (SHELL_RELEASE, SHELL_NOTES, SW cache)",

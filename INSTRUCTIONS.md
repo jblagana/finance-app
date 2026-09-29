@@ -6,6 +6,25 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.26 entry (prepended to INSTRUCTIONS.md)
+## 2026-09-30 — "whats the protocol for partial payments in plans" → "yes, provide a mockup first" → "thats good, small tweak: for fully handled payments/done, remove the row already" → "Build it (ship the partial plan payment feature)"
+Status: **done** — v73.26 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.26`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.26 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7326Section)
+
+### What changed (boss-approved mockup: `finance-app/mockup_plan_partial.html`)
+The 50% single-entry plan threshold is replaced by **ACCUMULATION** — every txn matching an occurrence (±2 day window + a 4+ letter name word, OR an explicit `planRef` link) sums toward the plan amount; any positive amount counts, 100% = done.
+- `app.js` `findPaidTxn` plan branch: no more `0.5×–2.5×` band. A linked txn (planRef) counts regardless of amount (deterministic truth — even 1 peso); fuzzy txns must still pass the date + name-word rules. Returns `{ amount: r2(sum), date: last, count, linked }` (the prepay branch keeps its shape; `linked` is false for prepays).
+- `app.js` `coachRows` plan loop: three states — (1) sum ≥ 100% → **no row** (the v73.18 "Handled" row is gone; the Coming-up pill + edit sheet carry the proof); (2) 0 < sum < 100% → "Partly handled" row (warn, "₱X logged on … (N entries) — ₱Y still owed", chip = live remainder, tap → Add sheet prefilled with the REMAINDER + pre-linked); (3) nothing logged → the usual "Plan due" row. The match + the row now both use the RESOLVED (fork-aware) name/amount.
+- `app.js` "On repeat" sub-line + `cyclePlanDeduction`: both run on the **live remainder** (plan amount − logged), so a partial payment shrinks them and a fully paid one drops out.
+- `app.js` `planPaidPill`: reads the new `linked` flag (a linked txn is the proof even when fuzzy entries sum in with it).
+- `app.js` SHELL_NOTES '73.26' (plain-wording note).
+- `tools/check_site.py` (+ root mirror via release.ps1 sync): NEW v73.26 check (accumulation, the three row states, the remainder math, the linked flag); the v73.23 "Partly handled — " absence assertion is removed (the plan partial row reintroduces that text for PLANS — the prepay one is still gone); the v72.45 return-line assertion is updated to the new `findPaidTxn` shape.
+- `smoke_app_v68.js` (root, local-only): NEW `v7326Section` — full-amount row → partial (300, below the old 50% threshold) flips to "Partly handled" with the remainder → the remainder chip pre-links → a second entry accumulates (550 logged, "2 entries", 450 left) → the cycle deduction is the live remainder (450) → the final entry (450) takes the row away + the deduction to 0 → an explicit 1-peso link starts a fresh accumulation (899 left). The v73.18 "row reads handled" assertion is updated to "the row is gone too".
+
+### Notes
+- The plan names in the smoke are "V26 Zeta" / "V26 Link" (category "Zeta") on purpose — the earlier "Part Smoke"/"Link Smoke" draft fuzzy-matched the v72.33 section's "smoke" notes (±2 day window overlap) and the deduction inflated to 0.
+- The smoke chain line's tail closes are now 44 × `});` (45 section calls, 44 function bodies — the final `v7236Section(finish)` closes with the last `});`).
+
 # v73.25 entry (prepended to INSTRUCTIONS.md)
 ## 2026-09-29 — "In the finance app, collapse the coach card rows by default"
 Status: **done** — v73.25 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.25`)
