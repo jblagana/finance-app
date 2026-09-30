@@ -6,6 +6,22 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.29 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-01 — "the maya cc due on oct 5 is fully paid but a partial 1,080.30 still shows — move that to the next cycle"; "the aribank due is 6,122.29 but the row shows more — move the rest to the next cycle"
+Status: **done** — v73.29 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.29`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.29 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7329Section)
+
+### The bug — and why the row showed the wrong number
+The card-payment row (v73.24) showed the card's **live balance** as the due. But the boss's real bills aren't derivable from the ledger: he prepays more than the logged charges (Maya: prepaid to zero, balance still 1,080.30 that belongs to next cycle; Aribank: real bill 6,122.29, balance 6,800). The auto `ccDue` math returns 0 (charges − prepays), so the balance was the only number — and it overstated the current due. The boss wanted the **current-cycle due** on the row and the **excess moved to next cycle**.
+
+### What changed
+- **`app.js` — new per-card "due this cycle" field (`a.due` on a card account).** Set in the Accounts editor (a 5th, card-only column, `data-r="due"`). Blank = auto (the row falls back to the live balance, the old behavior). It rides the snapshot card (`due: c.due != null ? Number(c.due) : null`) and the editor read-back round-trips it (blank → null, set → number).
+- **`app.js` `coachRows` cardpay block:** the row's amount is now the manual `c.due` when set, else the balance. Whatever balance sits **above** the due (`balance − due`) is the NEXT cycle's bill — it rides `nextAmt` (NOT `nextCycle`: the row is still due NOW, so it counts in the Cards total), is named in the row text ("…rolls to next cycle"), and is **excluded from the Cards group total** (the total is what is due NOW). The Cards header sub-line surfaces it (`money(nextAmt) + ' next cycle'`).
+- **`app.js` `detectRecurring`:** the 3-month window now derives from the `today` ARG (not the wall clock) — the param was previously dead, so a seeded ledger + a past "today" silently dropped the oldest month. Makes the fn pure (the smoke drives it with a fixed date); production unchanged (the caller passes `todayISO()`).
+- **`smoke_app_v68.js` (root, local-only):** NEW v7329Section — two cards (Maya due 0/balance 1,080.30; Aribank due 6,122.29/balance 6,800): the snapshot carries the manual due, the rows show the manual due (not the balance), the roll-over is named + rides nextAmt, the chip payload = the manual due, the Cards total = the dues (6,122.29, not 7,880.30), the editor renders the column, and readBaseForm round-trips it.
+- **Smoke date-drift fixes (the 4 pre-existing fails were all clock-drift, not regressions):** the machine crossed Sep 30 → Oct 1, and four fixtures used hardcoded/absolute dates that only held mid-Sep: (1) the pace-anomaly check now follows the app's `elapsed >= 3` rule (absent on the 1st/2nd); (2) the Food seed months are dynamic (`monthOff(k)`, the app's own trailing window) instead of hardcoded Sep 2026; (3) the v72.45 section now uses LOCAL today (the app's current month is local, so the override month must match it — UTC/local differ by a month on the 1st); (4) the v73.15 fork now forks the ACTUAL 2nd occurrence (via `F.planOccurrences`) instead of the `_isoAddDays(t0,30)` proxy (which only lands on the series when t0 is a month-end).
+- Gates: release.ps1 v73.29 all green (both check_site copies, parser tests, node syntax, both smokes — smoke_app_v68 "all checks passed" incl. v7329Section).
+
 # v73.28 entry (prepended to INSTRUCTIONS.md)
 ## 2026-09-30 — "Add an option to skip the plan due" (boss-confirmed scope: ONE-OFF skip — just this occurrence; row disappears, not deducted from free cash, next occurrence unaffected)
 Status: **done** — v73.28 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.28`)

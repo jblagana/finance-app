@@ -563,8 +563,14 @@ def main():
           "var cc = d.ccDue;" in js
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "var dueTxt = cc.dueIn === 0 ? 'today' : (cc.dueIn === 1 ? 'tomorrow' : 'in ' + cc.dueIn + ' days');" in js
-          and "text: c.name + ' is at ' + money(c.balance) + ' — the bill is due ' + dueTxt + '.'" in js
-          and "act: 'prepay', payload: { amount: c.balance, date: cc.dueDate, day: cc.due_day, card: c.name }" in js
+          # v73.29: the row amount is the card's manual "due this cycle"
+          # (c.due) when set, else the live balance — the string moved to a
+          # local `amt`; the roll-over text is the new hasNext branch
+          and "var manualDue = (c.due != null) ? Number(c.due) : null;" in js
+          and "var amt = (manualDue != null) ? Math.max(0, manualDue) : c.balance;" in js
+          and "c.name + ' is at ' + money(amt) + ' due ' + dueTxt + ' — ' + money(nextBal) + ' rolls to next cycle.'" in js
+          and "c.name + ' is at ' + money(amt) + ' — the bill is due ' + dueTxt + '.'" in js
+          and "act: 'prepay', payload: { amount: amt, date: cc.dueDate, day: cc.due_day, card: c.name }" in js
           and "rows.push({ cls: cc.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay'" in js
           and "'73.24': [" in js)
     check("v73.25 (boss: 'collapse the coach card rows by default'): the grouped coach-card sections (Cards, Plans) now render COLLAPSED by default — the header shows the group label + this-cycle total + count, the body is hidden until the boss taps the header to expand. The fold state still lives in coachGroupOpen (re-renders keep the boss's choice); the default flipped from open (coachGroupOpen[g] !== false) to closed (coachGroupOpen[g] === true).",
@@ -624,6 +630,23 @@ def main():
           # (7) the .dg-r becomes a flex row (pay chip + skip chip side by side)
           and ".dig .dg-r{flex:0 0 auto;font-weight:700;font-size:12.5px;color:var(--mut);white-space:nowrap;display:flex;align-items:center;gap:8px}" in html
           and "'73.28': [" in js)
+    check("v73.29 (boss: 'the maya cc due on oct 5 is fully paid but a partial 1,080.30 still shows — move that to the next cycle'; 'the aribank due is 6,122.29 but the row shows more'): the card-payment row's amount is now the card's OWN manual 'due this cycle' (base account field `due`, set in the Accounts editor — a 5th card-only column) when it is set, else the live balance. The ledger can't derive the due (a prepay can exceed the logged charges, so the auto ccDue math returns 0), so the manual amount is the source of truth. Whatever balance sits ABOVE the due is the NEXT CYCLE's bill: it rides nextAmt (the row is still DUE NOW — it counts in the Cards total), is named in the row text, and the header sub-line surfaces it (money + ' next cycle').",
+          # (1) the manual due field rides the snapshot card (null = auto)
+          "due: c.due != null ? Number(c.due) : null" in js
+          # (2) the row amount = the manual due when set, else the balance;
+          # the roll-over (balance − due) is the next-cycle amount
+          and "var manualDue = (c.due != null) ? Number(c.due) : null;" in js
+          and "var amt = (manualDue != null) ? Math.max(0, manualDue) : c.balance;" in js
+          and "var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - manualDue)) : 0;" in js
+          # (3) the roll-over rides nextAmt + the roll-over text
+          and "nextAmt: nextBal" in js
+          and "rolls to next cycle.'" in js
+          # (4) the Cards header sub-line surfaces the next-cycle roll-over
+          and "bits.push(money(nextAmt) + ' next cycle');" in js
+          # (5) the editor: the 5th card-only column + its read-back
+          and "data-r=\"due\"" in js
+          and "due: (kind === 'card' && di && String(di.value || '').trim() !== '') ? numVal(di, true) : null" in js
+          and "'73.29': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js

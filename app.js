@@ -686,7 +686,8 @@
         balance: balance, limit: limit,
         util_pct: limit ? r2(balance / limit * 100) : null,
         prepay: prepayAmount(balance, limit, target),
-        target_balance: r2(limit * target)
+        target_balance: r2(limit * target),
+        due: c.due != null ? Number(c.due) : null // v73.29: the manual "due this cycle" (null = auto from balance)
       };
       per[c.name] = d;
       total += d.prepay;
@@ -778,7 +779,7 @@
     var cards = [];
     Object.keys(pp.per).forEach(function (name) {
       var d = pp.per[name];
-      cards.push({ name: name, balance: d.balance, limit: d.limit, util_pct: d.util_pct, prepay: d.prepay, target_balance: d.target_balance });
+      cards.push({ name: name, balance: d.balance, limit: d.limit, util_pct: d.util_pct, prepay: d.prepay, target_balance: d.target_balance, due: d.due }); // v73.29: the manual "due this cycle"
     });
     var cashAccounts = (b.accounts || []).filter(function (a) { return a.kind === 'debit'; }) // v65
       .map(function (a) { return { name: a.name, value: Number(a.value) || 0 }; });
@@ -1894,10 +1895,17 @@
       : '') + kinds.map(function (k) {
       return '<option value="' + k + '"' + (a.kind === k ? ' selected' : '') + '>' + (k === 'card' ? 'Credit' : 'Debit') + '</option>';
     }).join('');
+    // v73.29: the card row gains a 5th column, "due this cycle" — the
+    // manual statement amount the coach card's Card-payment row shows.
+    // Blank = auto (the row falls back to the card's live balance). It is
+    // the roll-over control: set it to the real bill and whatever balance
+    // sits above it is carried as the NEXT cycle (dimmed + badged).
     return brow(dragH() + '<input class="grow" data-r="name" value="' + esc(a.name || '') + '" autocomplete="off">' +
       '<select data-r="kind">' + kindOpts + '</select>' +
       '<input data-r="value" type="text" value="' + (a.value != null ? a.value : '') + '">' +
       '<input data-r="limit" type="text" value="' + (a.limit ? a.limit : '') + '"' + (a.kind === 'card' ? '' : ' disabled') + '>' +
+      '<input data-r="due" type="text" value="' + (a.due != null ? a.due : '') + '"' + (a.kind === 'card' ? '' : ' disabled') +
+        ' title="due this cycle (blank = the live balance); the balance above it rolls to next cycle">' +
       delBtn('Remove account')) + detChips(a.kind + ':' + a.name);
   }
   function debtBlock(d) {
@@ -1981,7 +1989,7 @@
     // a save that moves it files the difference in the Ledger under
     // 'Adjustment' (saveBase → accountBalanceDiffs)
     h += bsec('Accounts (debit, credit)') +
-      '<p class="note" style="margin:0 0 6px">name · kind · <b>current balance</b> · limit — set a balance to what it really is; the difference is filed in the Ledger under <b>Adjustment</b></p>' +
+      '<p class="note" style="margin:0 0 6px">name · kind · <b>current balance</b> · limit · <b>due this cycle</b> (cards) — set a balance to what it really is (the difference is filed in the Ledger under <b>Adjustment</b>); set a card&#39;s due to its real bill — the balance above it is shown as next cycle on the coach card</p>' +
       '<div id="rowsAcc">' + accRows + '</div>' +
       '<button type="button" class="addrow" data-add="acc">+ account</button>';
     var budRows = '';
@@ -2084,11 +2092,16 @@
     bb.querySelectorAll('#rowsAcc .brow').forEach(function (row) {
       var ni = row.querySelector('[data-r="name"]'); var ki = row.querySelector('[data-r="kind"]');
       var vi = row.querySelector('[data-r="value"]'); var li = row.querySelector('[data-r="limit"]');
+      var di = row.querySelector('[data-r="due"]'); // v73.29: the manual "due this cycle"
       var name = ni ? ni.value.trim() : '';
       var kind = ki ? ki.value : 'debit'; // v65
       var value = numVal(vi, true);
       if (!name && !value) return;
-      b.accounts.push({ name: name || '(unnamed)', kind: kind, value: value, limit: kind === 'card' ? numVal(li, true) : 0, note: '' });
+      // v73.29: due is null (auto) when blank; a negative entry is clamped
+      // to 0 at render, but keep what was typed here (the editor is the
+      // source of truth).
+      b.accounts.push({ name: name || '(unnamed)', kind: kind, value: value, limit: kind === 'card' ? numVal(li, true) : 0,
+        due: (kind === 'card' && di && String(di.value || '').trim() !== '') ? numVal(di, true) : null, note: '' });
     });
     bb.querySelectorAll('#rowsBud .brow').forEach(function (row) {
       var ni = row.querySelector('[data-r="name"]'); var ai = row.querySelector('[data-r="a"]');
@@ -2720,12 +2733,20 @@
     var out = [];
     if (!txns || !txns.length) return out;
     var today = String(todayISOStr || todayISO());
-    var now = new Date();
+    // v73.29: the window is derived from the `today` ARG (not the wall clock) —
+    // the param was previously dead (the window always used new Date()), so a
+    // seeded ledger + a past "today" silently dropped the oldest month and the
+    // 3-month detector read 2. Deriving from the arg makes the fn pure (the
+    // smoke drives it with a fixed date) and leaves production unchanged (the
+    // caller passes todayISO()).
     function pk(n) { return (n < 10 ? '0' : '') + n; }
+    var tp = today.split('-'), ty = Number(tp[0]), tm = Number(tp[1]);
     var mKeys = [];
     for (var q = 1; q <= 3; q++) {
-      var dm = new Date(now.getFullYear(), now.getMonth() - q, 1);
-      mKeys.push(dm.getFullYear() + '-' + pk(dm.getMonth() + 1));
+      var mIdx = (tm - 1 - q); // may go negative (Jan - 1)
+      var y = ty + Math.floor(mIdx / 12);
+      var m = ((mIdx % 12) + 12) % 12 + 1;
+      mKeys.push(y + '-' + pk(m));
     }
     var winFrom = mKeys[2];
     var byMer = {};
@@ -3322,13 +3343,18 @@
         var isPlans = g === 'plans';
         // this-cycle-only total: next-cycle rows are excluded from the
         // headline number (the boss: the total must not overstate what is
-        // owed NOW)
-        var total = 0, nextN = 0, dueN = 0;
+        // owed NOW). v73.29: the card ROLL-OVER (rw.nextAmt, the balance
+        // above the manual due) is a separate thing — the row's amt is
+        // still due now (it counts in the total), only the roll-over is
+        // next cycle.
+        var total = 0, nextN = 0, dueN = 0, nextAmt = 0;
         grow.forEach(function (rw) {
           if (rw.nextCycle) { nextN++; return; }
           total += Number(rw.amt) || 0;
           dueN++;
+          nextAmt += Number(rw.nextAmt) || 0; // v73.29: the roll-over (cards)
         });
+        nextAmt = r2(nextAmt);
         var open = coachGroupOpen[g] === true; // v73.25: default CLOSED (boss: collapse by default)
         var sub = isPlans
           ? dueN + ' due' + (nextN ? ' this cycle' : '') + (nextN ? ' · ' + nextN + ' next' : '')
@@ -3338,6 +3364,10 @@
               var bits = [];
               if (kinds.prepay) bits.push(kinds.prepay + ' prepay');
               if (kinds.cardpay) bits.push(kinds.cardpay + ' card payment' + (kinds.cardpay > 1 ? 's' : ''));
+              // v73.29: the next-cycle roll-over is surfaced in the header
+              // too — it is excluded from the total but the boss should see
+              // it without opening the group.
+              if (nextAmt > 0.004) bits.push(money(nextAmt) + ' next cycle');
               return bits.join(' · ') || (grow.length + ' item' + (grow.length > 1 ? 's' : ''));
             })();
         var gLabel = isPlans ? 'Plans' : 'Cards';
@@ -4138,20 +4168,40 @@
     }
     if (cardPayWindow) {
       // v73.24: the due date (the 5th) is approaching — the pending bill
-      // shows as its own rows (the card's live balance, the boss's Q1
-      // answer: balance, not statement). Same design as the plan-due row
-      // (short text + amount chip); the chip logs the payment (Pay-card
-      // mode, the card's own account — the v72.41 prepay prefill), dated
-      // at the due date.
+      // shows as its own rows. Same design as the plan-due row (short text
+      // + amount chip); the chip logs the payment (Pay-card mode, the
+      // card's own account — the v72.41 prepay prefill), dated at the due
+      // date.
+      // v73.29 (boss: 'the maya cc due on oct 5 is fully paid but a partial
+      // 1,080.30 still shows — move that to the next cycle'; 'the aribank
+      // due is 6,122.29 but the row shows more'): the row's amount is the
+      // CARD'S OWN "due this cycle" (c.due) when it is set — the manual
+      // statement amount, because the ledger can't derive it (a prepay can
+      // exceed the logged charges, so the auto ccDue math returns 0). The
+      // balance above the due is the NEXT CYCLE's bill — it is carried on
+      // the row (nextCycle) and rendered dimmed + badged, and is EXCLUDED
+      // from the Cards group total (the total is what is due NOW).
       var dueTxt = cc.dueIn === 0 ? 'today' : (cc.dueIn === 1 ? 'tomorrow' : 'in ' + cc.dueIn + ' days');
       var bcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.balance) || 0) > 0; });
       bcards.sort(function (a, b) { return (Number(b.balance) || 0) - (Number(a.balance) || 0); });
       bcards.slice(0, 4).forEach(function (c) {
-        rows.push({ cls: cc.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay', amt: c.balance,
+        var manualDue = (c.due != null) ? Number(c.due) : null;
+        var amt = (manualDue != null) ? Math.max(0, manualDue) : c.balance;
+        // the roll-over (balance − due) is the NEXT cycle's bill. It is NOT
+        // the row's nextCycle flag: the row is still DUE NOW (the due is the
+        // actionable amount, it counts in the Cards total). The roll-over
+        // rides nextAmt — the header's "N next cycle" count + the row text
+        // surface it, and it is excluded from the total.
+        var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - manualDue)) : 0;
+        var hasNext = nextBal > 0.004;
+        var text = hasNext
+          ? c.name + ' is at ' + money(amt) + ' due ' + dueTxt + ' — ' + money(nextBal) + ' rolls to next cycle.'
+          : c.name + ' is at ' + money(amt) + ' — the bill is due ' + dueTxt + '.';
+        rows.push({ cls: cc.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay', amt: amt, nextAmt: nextBal,
           tag: 'Card payment · ' + c.name,
-          text: c.name + ' is at ' + money(c.balance) + ' — the bill is due ' + dueTxt + '.',
-          r: money(c.balance),
-          act: 'prepay', payload: { amount: c.balance, date: cc.dueDate, day: cc.due_day, card: c.name } });
+          text: text,
+          r: money(amt),
+          act: 'prepay', payload: { amount: amt, date: cc.dueDate, day: cc.due_day, card: c.name } });
       });
       if (bcards.length) alerts.push('cardpay');
     }
@@ -6395,12 +6445,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.28, live: new Date(2026, 8, 30, 9, 0) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.29, live: new Date(2026, 9, 1, 7, 21) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.29': [
+      'The card-payment row now shows the card\'s own "due this cycle" when you set it (Your numbers → Accounts → the new card column) — the balance above it rolls to next cycle: it is dimmed, badged, named in the row, and kept out of the Cards total. Blank = the live balance, as before'
+    ],
     '73.28': [
       'Every plan row in the coach card now has a "Skip" chip next to the pay chip: skip just that occurrence (the row disappears, the free-cash deduction drops it, the next one still comes). Undo it from the toast if you change your mind'
     ],
@@ -7309,6 +7362,7 @@
     deleteAdjustment: deleteAdjustment, // v72.31: the undo itself (row out + the Settings value reversed, no new filing)
     saveBase: saveBase, // v72.31: a base save (smoke: remove the account for the gone-account path)
     renderBaseEditor: renderBaseEditor, // v73.6: the base editor render (smoke: the cc due day input)
+    readBaseForm: readBaseForm, // v73.29: the base form read-back (smoke: the card due column)
     delOwedEntry: delOwedEntry,
     delOwedPerson: delOwedPerson,
     effectiveSnap: effectiveSnap,
