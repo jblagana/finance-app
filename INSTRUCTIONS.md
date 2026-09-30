@@ -6,6 +6,28 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.28 entry (prepended to INSTRUCTIONS.md)
+## 2026-09-30 — "Add an option to skip the plan due" (boss-confirmed scope: ONE-OFF skip — just this occurrence; row disappears, not deducted from free cash, next occurrence unaffected)
+Status: **done** — v73.28 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.28`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.28 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7328Section)
+
+### What changed
+A **Skip** chip on every plan row in the coach card (Plan due / Partly handled / Overdue), next to the pay chip:
+- `app.js` `skipPlanChip(attr)` (new, next to `payPlanChip`): parses `planId|date`, writes the SAME exact-date skip-override the edit sheet's "Skip this occurrence" button writes (`ov[date] = { skip: true }`), saves, emits, and offers **Undo from the snack** (the override is deleted, the row returns). Because it is the same override shape, every existing consumer agrees for free: the coach row vanishes (coachRows already skips `ro.skip`), the cycle deduction + "On repeat" line drop it (both already skip `ro.skip`), the Coming-up list hides it, and the next occurrence is untouched.
+- `app.js` `rowHTML` pay_plan branch: the row now carries TWO chips — the amount chip (pay, unchanged) and a quiet neutral "Skip" chip (`data-skipplan="planId|date"`, class `rowchip skipchip`). Both are real `<button>`s inside the `.dg-r` span; the row stays a DIV (a `<button>` inside a `<button>` is invalid HTML5 — the v73.18 rule).
+- `app.js` renderCoach wiring: a `[data-skipplan]` loop calls the bare `skipPlanChip(...)` (the v73.22 in-scope pattern — the export references the in-scope function, so the smoke's `F.skipPlanChip` path works too).
+- `index.html`: `.dig .dg-r` becomes a flex row (`display:flex;align-items:center;gap:8px`) so the two chips sit side by side; new `.skipchip` CSS (quiet neutral pill — the pay chip stays the primary action, Skip is the escape hatch).
+- `tools/check_site.py` (+ root mirror via release.ps1 sync): NEW v73.28 check (in-scope handler, export, wiring call, chip render, the override shape, the CSS, the flex `.dg-r`).
+- `smoke_app_v68.js` (root, local-only): NEW v7328Section — a monthly plan due TODAY shows the due row + is deducted (300); `F.skipPlanChip` → the row disappears, the deduction drops to 0, the override is exactly `{ [today]: { skip: true } }`, and the NEXT occurrence resolves clean (name/amount intact, not skipped); cleanup.
+- SHELL_NOTES '73.28'.
+
+### Proof
+- Gates: release.ps1 v73.28 all green (both check_site copies, parser tests, node syntax, both smokes — smoke_app_v68 "all checks passed" incl. v7328Section).
+- The v73.26 + v73.27 sections still pass verbatim (the skip only adds a chip; the row states and the accumulation math are untouched).
+
+### Note (incident, fixed)
+A PowerShell `Get-Content`/`Set-Content` round-trip on the local-only `smoke_app_v68.js` double-encoded it (UTF-8 read as CP1252, re-written as UTF-8 — every em-dash became mojibake), which broke 13 smoke assertions on string matches. Repaired by reversing the double-encoding per line (char→cp1252 byte→UTF-8; no UTF-8 char spans a newline) and making the new section pure ASCII. Lesson: edit that file with tools that preserve bytes (edit_file / python), never a PowerShell content round-trip.
+
 # v73.27 entry (prepended to INSTRUCTIONS.md)
 ## 2026-09-30 — "In finance app, in coach card plan due rows, if the plan is still not paid past due date, keep it showing"
 Status: **done** — v73.27 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.27`)

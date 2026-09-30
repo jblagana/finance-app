@@ -3090,6 +3090,32 @@
     state.planLinkRef = { planId: pid, date: pdate, name: pname, amount: pamt };
     updatePlanLinkChip();
   }
+  // v73.28 (boss: 'add an option to skip the plan due'): the coach row's
+  // SKIP chip — one-off skip, boss-confirmed: just this occurrence. It
+  // writes the SAME skip-override the edit sheet's "Skip this occurrence"
+  // button writes (exact-date { skip: true }), so every existing consumer
+  // agrees for free: the coach row vanishes, the free-cash deduction and
+  // the "On repeat" line drop it (both already skip ro.skip), the
+  // Coming-up list hides it, and the next occurrence is untouched.
+  // Undoable from the snack (the override is deleted, the row returns).
+  function skipPlanChip(attr) {
+    var parts = String(attr).split('|');
+    var pid = parts[0], pdate = parts[1];
+    var p = null;
+    for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === pid) p = state.plans[i];
+    if (!p || !pdate) return;
+    var ov = p.overrides || {};
+    ov[pdate] = { skip: true };
+    p.overrides = ov;
+    closeSheets();
+    return idbPut(STORE_PLANS, p).then(function () {
+      emit('plan');
+      snack('Skipped ' + esc(p.name || 'plan') + ' · ' + fmtDate(pdate), function () {
+        delete ov[pdate];
+        idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
+      });
+    });
+  }
   function renderCoach() {
     var el = byId('coach'); if (!el) return;
     var d = insightsData();
@@ -3258,9 +3284,16 @@
         // chip would detach from the row). v73.20: the chip wears the shared
         // .rowchip pill class (the prepay/salary chips' design).
         if (rw.act === 'pay_plan') {
+          // v73.28: the row now carries TWO chips — the amount chip (pay,
+          // as before) and a quiet "Skip" chip (one-off skip, boss-confirmed).
+          // Both are real <button>s inside the .dg-r span (a <button> inside
+          // a <button> is invalid HTML5 — the row stays a DIV, v73.18 rule).
           return '<div class="dig' + nextCls + ' ' + rw.cls + '" data-digto="money">' +
             '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + badge + '</span>' + esc(rw.text) + '</span>' +
-            '<span class="dg-r"><button type="button" class="rowchip ' + rw.cls + ' plchip-inline" data-payplan="' + esc(rw.payload.planId) + '|' + rw.payload.date + '|' + esc(rw.payload.name) + '|' + rw.payload.amount + '" aria-label="Log this payment">' + esc(rw.r) + '</button></span></div>';
+            '<span class="dg-r">' +
+              '<button type="button" class="rowchip ' + rw.cls + ' plchip-inline" data-payplan="' + esc(rw.payload.planId) + '|' + rw.payload.date + '|' + esc(rw.payload.name) + '|' + rw.payload.amount + '" aria-label="Log this payment">' + esc(rw.r) + '</button>' +
+              '<button type="button" class="rowchip skipchip" data-skipplan="' + esc(rw.payload.planId) + '|' + rw.payload.date + '" aria-label="Skip this occurrence" title="Skip this occurrence (one-off — the next one still comes)">Skip</button>' +
+            '</span></div>';
         }
         return '<button type="button" class="dig' + nextCls + ' ' + rw.cls + '" data-digto="money">' +
           '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + badge + '</span>' + esc(rw.text) + '</span>' +
@@ -3369,6 +3402,17 @@
             payPlanChip(b.getAttribute('data-payplan'));
           };
         })(ppb[k]);
+      }
+      // v73.28: the Skip chip — the handler body is skipPlanChip (exported
+      // — the smoke drives the same code path without a DOM, same pattern
+      // as payPlanChip).
+      var spb = body.querySelectorAll('[data-skipplan]');
+      for (var ks = 0; ks < spb.length; ks++) {
+        spb[ks].onclick = (function (b) {
+          return function () {
+            skipPlanChip(b.getAttribute('data-skipplan'));
+          };
+        })(spb[ks]);
       }
       // v73.20: the prepay + salary row chips (v73.19: they were the whole
       // row; now they are the pill on the right). Real <button>s — Enter/
@@ -6351,12 +6395,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.27, live: new Date(2026, 8, 30, 5, 21) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.28, live: new Date(2026, 8, 30, 9, 0) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.28': [
+      'Every plan row in the coach card now has a "Skip" chip next to the pay chip: skip just that occurrence (the row disappears, the free-cash deduction drops it, the next one still comes). Undo it from the toast if you change your mind'
+    ],
     '73.27': [
       'An unpaid plan no longer disappears once its due date has passed: past-due occurrences now show as a red "Overdue" row ("N days past due") and stay until they are paid — then the row vanishes like any handled one. The chip still logs the payment, prefilled and pre-linked'
     ],
@@ -7242,6 +7289,7 @@
     prepayRowChip: prepayRowChip, // v73.19: the prepay row-chip's handler body (smoke drives it without a DOM)
     salaryRowChip: salaryRowChip, // v73.19: the salary row-chip's handler body (smoke drives it without a DOM)
     payPlanChip: payPlanChip, // v73.18: the chip's handler body (smoke drives it without a DOM); v73.22: the in-scope function (the bare call in the wiring loop needs it)
+    skipPlanChip: skipPlanChip, // v73.28: the coach row's Skip chip (one-off skip-override; smoke drives it without a DOM)
     unlinkPlanTxn: unlinkPlanTxn, // v73.17: break an explicit link (the txn keeps its money)
     setPlanLinkRef: function (r) { state.planLinkRef = r; }, // v73.17: the chip's link state (smoke drives it)
     getPlanLinkRef: function () { return state.planLinkRef; },

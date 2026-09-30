@@ -606,6 +606,24 @@ def main():
           # (4) the forward window is unchanged (due today..+10)
           and "var pw2 = u.dd === 0 ? 'today' : (u.dd === 1 ? 'tomorrow' : 'in ' + u.dd + ' days');" in js
           and "'73.27': [" in js)
+    check("v73.28 (boss: 'add an option to skip the plan due'): a SKIP chip on every plan-due / partly-handled / overdue row — a ONE-OFF skip (boss-confirmed): it writes the same exact-date skip-override the edit sheet's 'Skip this occurrence' button writes, so every existing consumer agrees for free (the coach row vanishes, the cycle deduction + 'On repeat' line drop it, the Coming-up list hides it, the next occurrence is untouched). Undoable from the snack (the override is deleted, the row returns). The chip is a real <button> inside the row's .dg-r span (the row stays a DIV — a <button> inside a <button> is invalid HTML5, the v73.18 rule).",
+          # (1) the in-scope handler (the wiring loop calls the bare identifier)
+          "function skipPlanChip(attr) {" in js
+          # (2) the export references the in-scope function (no second inline copy)
+          and "skipPlanChip: skipPlanChip," in js
+          and "skipPlanChip: function (attr)" not in js
+          # (3) the wiring loop calls the bare identifier
+          and "skipPlanChip(b.getAttribute('data-skipplan'));" in js
+          # (4) the chip renders on the pay_plan row (next to the pay chip)
+          and "data-skipplan=" in js
+          and "class=\"rowchip skipchip\"" in js
+          # (5) the skip writes the SAME override shape the edit sheet uses
+          and "ov[pdate] = { skip: true };" in js
+          # (6) the CSS (the quiet neutral pill)
+          and ".skipchip{" in html
+          # (7) the .dg-r becomes a flex row (pay chip + skip chip side by side)
+          and ".dig .dg-r{flex:0 0 auto;font-weight:700;font-size:12.5px;color:var(--mut);white-space:nowrap;display:flex;align-items:center;gap:8px}" in html
+          and "'73.28': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js
