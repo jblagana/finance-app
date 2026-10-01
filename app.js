@@ -4184,9 +4184,16 @@
       var dueTxt = cc.dueIn === 0 ? 'today' : (cc.dueIn === 1 ? 'tomorrow' : 'in ' + cc.dueIn + ' days');
       var bcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.balance) || 0) > 0; });
       bcards.sort(function (a, b) { return (Number(b.balance) || 0) - (Number(a.balance) || 0); });
+      var cardpayShown = 0; // v73.30: count the rows actually pushed (a due=0 card pushes none)
       bcards.slice(0, 4).forEach(function (c) {
         var manualDue = (c.due != null) ? Number(c.due) : null;
         var amt = (manualDue != null) ? Math.max(0, manualDue) : c.balance;
+        // v73.30 (boss: 'maya cc is 0 this card cycle so it has to disappear'):
+        // a card with NOTHING due this cycle (manual due = 0) gets NO row —
+        // the balance is the NEXT cycle's bill and it must not surface now.
+        // The auto case (due unset, amt = balance) is always > 0 here (bcards
+        // filters balance > 0), so only an explicit 0-due drops the row.
+        if (amt <= 0.004) return;
         // the roll-over (balance − due) is the NEXT cycle's bill. It is NOT
         // the row's nextCycle flag: the row is still DUE NOW (the due is the
         // actionable amount, it counts in the Cards total). The roll-over
@@ -4202,8 +4209,9 @@
           text: text,
           r: money(amt),
           act: 'prepay', payload: { amount: amt, date: cc.dueDate, day: cc.due_day, card: c.name } });
+        cardpayShown++;
       });
-      if (bcards.length) alerts.push('cardpay');
+      if (cardpayShown) alerts.push('cardpay');
     }
     // v73.19: the "Salary in" check-in is a ROW CHIP (it used to be a
     // coachActs chip) — the cycle's salary is expected on the salary_day
@@ -6445,12 +6453,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.29, live: new Date(2026, 9, 1, 7, 21) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.30, live: new Date(2026, 9, 2, 1, 26) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.30': [
+      'A card with nothing due this cycle (due set to 0) no longer shows a row in the coach card — its balance is the next cycle\'s bill, so it stays out of the way until the cycle turns'
+    ],
     '73.29': [
       'The card-payment row now shows the card\'s own "due this cycle" when you set it (Your numbers → Accounts → the new card column) — the balance above it rolls to next cycle: it is dimmed, badged, named in the row, and kept out of the Cards total. Blank = the live balance, as before'
     ],
