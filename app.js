@@ -4182,24 +4182,56 @@
       // the row (nextCycle) and rendered dimmed + badged, and is EXCLUDED
       // from the Cards group total (the total is what is due NOW).
       var dueTxt = cc.dueIn === 0 ? 'today' : (cc.dueIn === 1 ? 'tomorrow' : 'in ' + cc.dueIn + ' days');
+      // v73.31 (boss: 'when i pay for the due only, the remaining 4k+ shows
+      // immediately in the row as if its also due in oct 5'): the manual due
+      // is a STATIC target — paying it did not move it, so the row kept
+      // showing the full due AND the roll-over (balance − due) jumped in as
+      // if it were due now. Fix: net the card's OWN payment logged in the
+      // statement window (the same window ccDueData uses for the auto due)
+      // off the manual due. Paying the due drops the row; the roll-over
+      // (next cycle's bill) becomes the row again — correct, it is the
+      // balance left on the card.
+      // v73.31: the payment window is AFTER the cutoff (cc.windowEnd) — the
+      // cutoff is when the statement is generated, so any payment after it is
+      // paying THIS cycle's bill (on the due date, a day late, or any time
+      // after the statement exists). A payment BEFORE the cutoff is a prepay
+      // (already reflected in the manual due the boss set to the actual bill).
+      var payAfter = cc.windowEnd;
+      var paidBy = {};
+      (state.txns || []).forEach(function (t) {
+        if (t.kind !== 'card_payment') return;
+        var dd = String(t.date || '');
+        if (dd <= payAfter) return; // before the cutoff = prepay (in the manual due)
+        var a = Number(t.amount) || 0;
+        if (a <= 0) return;
+        var nm = t.account;
+        paidBy[nm] = r2((paidBy[nm] || 0) + a);
+      });
       var bcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.balance) || 0) > 0; });
       bcards.sort(function (a, b) { return (Number(b.balance) || 0) - (Number(a.balance) || 0); });
       var cardpayShown = 0; // v73.30: count the rows actually pushed (a due=0 card pushes none)
       bcards.slice(0, 4).forEach(function (c) {
         var manualDue = (c.due != null) ? Number(c.due) : null;
-        var amt = (manualDue != null) ? Math.max(0, manualDue) : c.balance;
+        // v73.31: the amount due NOW = the manual due MINUS what was already
+        // paid in this cycle's window (auto case = the balance, unchanged).
+        var paid = (manualDue != null) ? r2(paidBy[c.name] || 0) : 0;
+        var amt = (manualDue != null) ? Math.max(0, manualDue - paid) : c.balance;
         // v73.30 (boss: 'maya cc is 0 this card cycle so it has to disappear'):
-        // a card with NOTHING due this cycle (manual due = 0) gets NO row —
-        // the balance is the NEXT cycle's bill and it must not surface now.
-        // The auto case (due unset, amt = balance) is always > 0 here (bcards
-        // filters balance > 0), so only an explicit 0-due drops the row.
+        // a card with NOTHING due this cycle (manual due = 0, or the due was
+        // fully paid in the window) gets NO row — the balance is the NEXT
+        // cycle's bill and it must not surface now. The auto case (due unset,
+        // amt = balance) is always > 0 here (bcards filters balance > 0), so
+        // only a 0-due / fully-paid card drops the row.
         if (amt <= 0.004) return;
-        // the roll-over (balance − due) is the NEXT cycle's bill. It is NOT
+        // the roll-over (balance − amt) is the NEXT cycle's bill. It is NOT
         // the row's nextCycle flag: the row is still DUE NOW (the due is the
         // actionable amount, it counts in the Cards total). The roll-over
         // rides nextAmt — the header's "N next cycle" count + the row text
         // surface it, and it is excluded from the total.
-        var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - manualDue)) : 0;
+        // v73.31: balance − amt (NOT balance − manualDue) — paying the due
+        // drops the balance, so the whole remainder is next cycle's bill.
+        // Before any payment amt = manualDue, so this equals the old formula.
+        var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - amt)) : 0;
         var hasNext = nextBal > 0.004;
         var text = hasNext
           ? c.name + ' is at ' + money(amt) + ' due ' + dueTxt + ' — ' + money(nextBal) + ' rolls to next cycle.'
@@ -6453,12 +6485,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.30, live: new Date(2026, 9, 2, 1, 26) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.31, live: new Date(2026, 9, 2, 3, 18) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.31': [
+      'Paying the card due now drops the row (and the "rolls to next cycle" line): the amount due is the manual due MINUS what you already paid this cycle, so a fully-paid bill disappears and a partial payment shows only the remainder — the balance left on the card is next cycle\'s bill, not this one'
+    ],
     '73.30': [
       'A card with nothing due this cycle (due set to 0) no longer shows a row in the coach card — its balance is the next cycle\'s bill, so it stays out of the way until the cycle turns'
     ],

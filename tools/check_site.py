@@ -565,9 +565,12 @@ def main():
           and "var dueTxt = cc.dueIn === 0 ? 'today' : (cc.dueIn === 1 ? 'tomorrow' : 'in ' + cc.dueIn + ' days');" in js
           # v73.29: the row amount is the card's manual "due this cycle"
           # (c.due) when set, else the live balance — the string moved to a
-          # local `amt`; the roll-over text is the new hasNext branch
+          # local `amt`; the roll-over text is the new hasNext branch.
+          # v73.31: `amt` is the manual due MINUS the card's own payment
+          # logged after the cutoff (the statement window) — paying the due
+          # drops the row; the roll-over (balance − amt) is next cycle.
           and "var manualDue = (c.due != null) ? Number(c.due) : null;" in js
-          and "var amt = (manualDue != null) ? Math.max(0, manualDue) : c.balance;" in js
+          and "var amt = (manualDue != null) ? Math.max(0, manualDue - paid) : c.balance;" in js
           and "c.name + ' is at ' + money(amt) + ' due ' + dueTxt + ' — ' + money(nextBal) + ' rolls to next cycle.'" in js
           and "c.name + ' is at ' + money(amt) + ' — the bill is due ' + dueTxt + '.'" in js
           and "act: 'prepay', payload: { amount: amt, date: cc.dueDate, day: cc.due_day, card: c.name }" in js
@@ -634,10 +637,12 @@ def main():
           # (1) the manual due field rides the snapshot card (null = auto)
           "due: c.due != null ? Number(c.due) : null" in js
           # (2) the row amount = the manual due when set, else the balance;
-          # the roll-over (balance − due) is the next-cycle amount
+          # the roll-over (balance − amt) is the next-cycle amount.
+          # v73.31: amt nets the card's own payment after the cutoff, so the
+          # roll-over is balance − amt (before any payment amt = manualDue).
           and "var manualDue = (c.due != null) ? Number(c.due) : null;" in js
-          and "var amt = (manualDue != null) ? Math.max(0, manualDue) : c.balance;" in js
-          and "var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - manualDue)) : 0;" in js
+          and "var amt = (manualDue != null) ? Math.max(0, manualDue - paid) : c.balance;" in js
+          and "var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - amt)) : 0;" in js
           # (3) the roll-over rides nextAmt + the roll-over text
           and "nextAmt: nextBal" in js
           and "rolls to next cycle.'" in js
@@ -647,6 +652,18 @@ def main():
           and "data-r=\"due\"" in js
           and "due: (kind === 'card' && di && String(di.value || '').trim() !== '') ? numVal(di, true) : null" in js
           and "'73.29': [" in js)
+    check("v73.31 (boss: 'when i pay for the due only, the remaining 4k+ shows immediately in the row as if its also due in oct 5'): the manual 'due this cycle' was a STATIC target — paying it did not move it, so the row kept showing the full due AND the roll-over (balance − due) jumped in as if it were due now. Fix: net the card's OWN payment logged after the cutoff (the statement window — a payment after the cutoff pays THIS cycle's bill; a payment before it is a prepay already reflected in the manual due) off the manual due. Paying the due drops the row (amt = 0); a partial payment shows only the remainder. The roll-over becomes balance − amt (before any payment amt = manualDue, so the old formula holds).",
+          # (1) the payment window: after the cutoff (cc.windowEnd)
+          "var payAfter = cc.windowEnd;" in js
+          # (2) the per-card payment sum (card_payment only, after the cutoff)
+          and "if (dd <= payAfter) return; // before the cutoff = prepay (in the manual due)" in js
+          and "paidBy[nm] = r2((paidBy[nm] || 0) + a);" in js
+          # (3) the row amount = the manual due MINUS the paid amount
+          and "var paid = (manualDue != null) ? r2(paidBy[c.name] || 0) : 0;" in js
+          and "var amt = (manualDue != null) ? Math.max(0, manualDue - paid) : c.balance;" in js
+          # (4) the roll-over = balance − amt (NOT balance − manualDue)
+          and "var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - amt)) : 0;" in js
+          and "'73.31': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js
