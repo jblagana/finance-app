@@ -8,7 +8,7 @@ commit is not done.
 
 # v73.33 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-10 — "remove the recap card on home, remove the salary statement in the free/unallocated card"
-Status: **done** — v73.33 shipped (commit <BUILD>, live re-stamp <RE-STAMP>, pushed to origin/main, SW cache `finances-pwa-v73.33`)
+Status: **done** — v73.33 shipped (commit 7e9b9b7, live re-stamp 93637a0, pushed to origin/main, SW cache `finances-pwa-v73.33`)
 Progress: 100% — GATES all green via tools/release.ps1 v73.33 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7333Section)
 
 ### What changed
