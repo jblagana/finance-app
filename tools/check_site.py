@@ -417,7 +417,10 @@ def main():
           and "h.style.display = m === 'happy' ? '' : 'none'" in js
           and "if (readUtilMax() > 70) return 'worried';" in js
           and "if (c && c.projectedNet < 0) return 'worried';" in js
-          and js.count("renderMood, render") == 4  # txn, snap, adj, ui — every data key (the pulse rides after it; the export line is renderMood: renderMood,; v73.14: the plan key's due strip left the list)
+          # v73.33: renderRecap left every key, so the "renderMood, render*"
+          # count is now 1 (txn: …renderMood, renderPlans]) and renderMood is
+          # the LAST fn on the other three keys (snap/adj/ui end "renderMood]")
+          and js.count("renderMood, renderPlans]") == 1 and js.count("renderMood]") == 4  # txn + plan/snap/adj/ui — every data key (the export line is renderMood: renderMood,; v73.14: the plan key's due strip left the list; v73.33: the pulse left the list)
           and "if (!editId && (kind === 'cash_in' || kind === 'card_payment')) happyMoodFlash(1800);" in js
           and 'class="spark-today"' in js
           and "'73.0': [" in js)
@@ -436,7 +439,10 @@ def main():
           and "repeat: parts[2] || 'monthly'" in js
           and "'73.1': [" in js)
     check("v73.2 (user: 'do all them' — the major upgrade, release 3 of 4): the MONEY PULSE — Home opens with last month in one card (in vs out split bar, top-3 spends, the coach's deterministic one-liner, the pinned lesson) and tapping it opens the full recap sheet (#recapSheet) where a LESSON can be pinned for next month (localStorage, keyed by month — readLesson/pinLesson); the DUE-DAY RADAR: a 'coming due' strip on Home shows the next 14 days of plan occurrences + the card prepay (renderDueStrip), and a card between 30% and 70% of its limit gets a coach nudge (over 70% is the v73.0 worried face); recapData is a PURE exported fn (the smoke drives it with a seeded ledger — in = cash_in, out = spend per the v72.44 rule, card_payment is not spend)",
-          'id="recap"' in html and 'id="recapBody"' in html and 'id="recapOpen"' in html
+          # v73.33: the HOME recap card is GONE (boss: 'remove the recap card
+          # on home') — the sheet + lesson pin stand alone, so the card's ids
+          # are asserted absent now
+          'id="recap"' not in html and 'id="recapBody"' not in html and 'id="recapOpen"' not in html
           and 'id="recapSheet"' in html and 'id="recapLesson"' in html and 'id="recapPin"' in html
           and "function recapData(txns, month, plans) {" in js
           and "function renderRecap() {" in js
@@ -880,8 +886,8 @@ def main():
     check("add-sheet options = base budget names; Unsorted default when none",
           "Object.keys((state.base && state.base.budgets) || {})" in js
           and "'>Unsorted</option>" in js and "selected>Unsorted</option>" in html)
-    check("re-seeded automatically when the base changes (snap render list; v72.30: renderMoneyLog follows — a base save can file 'Adjustment' rows; v73.0: renderMood rides the same key; v73.2: the money pulse; v73.14: the due strip left the list)",
-          "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap]" in js)
+    check("re-seeded automatically when the base changes (snap render list; v72.30: renderMoneyLog follows — a base save can file 'Adjustment' rows; v73.0: renderMood rides the same key; v73.2: the money pulse; v73.14: the due strip left the list; v73.33: renderRecap left — the Home recap card is gone)",
+          "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood]" in js)
     check("chat matches only stored budget names: no hint list, no 'Other' fallback",
           "function mentionedBudget(t, ctx)" in chatjs
           and "cat: mentionedBudget(t, ctx)" in chatjs
@@ -1175,7 +1181,9 @@ def main():
           and 'id="b_sday"' in js
           and "b.salary_day = sd > 0 ? sd : (b.cutoff_day || 15);" in js
           and "cycle: cycleData()," in js
-          and "Salary (the ' + ordinal(cy0.sday)" in js
+          # v73.33: the hero-sub salary string left with the hero block — the
+          # surviving 'Salary (the' is the salary row-chip's prefill note
+          and "'Salary (the ' + ordinal(Number(parts[2]) || 15) + ')'" in js
           and "act: 'salary'" in js  # v73.19: the 'Salary in' chip moved up into the coach rows (the old coachActs button is gone)
           and "id=\"actSalary\"" not in js  # v73.19: the old coachActs salary chip is GONE (moved up into the rows)
           and "id=\"actPrepay\"" not in js  # v73.19: the old coachActs prepay chip is GONE (per-card rows replaced it)
@@ -1240,7 +1248,7 @@ def main():
           and "mlShownCount = Math.max(5, mlShownCount - 5);" in js
           and "names.push('Owed')" not in js
           and "prevTxn.category || 'Unsorted'" in js
-          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap]" in js)  # v73.0: renderMood + v73.2: the pulse ride the snap key; v73.14: the due strip left the list
+          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood]" in js)  # v73.0: renderMood + v73.2: the pulse ride the snap key; v73.14: the due strip left the list; v73.33: the pulse (renderRecap) left the list
     check("v72.31 (user: 'add x button in ledger for adjustment, it undoes the record in settings'): an Adjustment row (k='a') carries its own ✕ (data-adj-del = the row's moneyLog index) — it confirms, removes the audit record, and reverses the balance change it filed: the account's Settings value moves by the NEGATIVE of the row's signed diff through the base save with Adjustment-filing SUPPRESSED (deleting an audit record must not file a new one); the account gone from Settings → the row is simply deleted; the toast Undo restores row + value",
           "function findAdjAccount(name)" in js
           and "function askDeleteAdjustment(idx)" in js

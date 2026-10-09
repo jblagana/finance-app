@@ -38,13 +38,15 @@
     // v73.18: renderPlans on 'txn' — the Coming-up occurrence sub-rows now
     // wear a paid pill (the same proof the edit sheet shows), so logging a
     // payment must repaint the Money tab's list, not just the coach card.
-    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderRecap, renderPlans],
+    // v73.33: renderRecap left every key — the Home recap card is gone (the
+    // recap sheet stands alone; the coach note carries the month story)
+    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderPlans],
     plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote, renderMood],
     // v72.30: a base save can file 'Adjustment' ledger rows — the Ledger tab follows
-    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, renderRecap],
-    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote, renderMood, renderRecap],
+    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood],
+    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote, renderMood],
     owed: [renderOwed],
-    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood, renderRecap]
+    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -3973,18 +3975,10 @@
       var pw = d.prepayIn <= 0 ? 'Prepay due today' : 'Prepay in ' + d.prepayIn + ' day' + (d.prepayIn === 1 ? '' : 's');
       sub.push(pw + ' <b>' + money(d.prepayAmt) + '</b>');
     }
-    // v72.45: the salary (the 15th) — due / in, on the same line as the rest
-    if (d && d.cycle && d.cycle.expected > 0) {
-      var cy0 = d.cycle;
-      if (cy0.received) {
-        sub.push('Salary in · ' + dayMonth(cy0.received.date) + ' <b>' + money(cy0.received.amount) + '</b>');
-      } else {
-        var payday0 = cy0.month + '-' + (cy0.sday < 10 ? '0' : '') + cy0.sday;
-        var dt0 = Math.round((parseISO(payday0) - parseISO(d.today)) / 86400000);
-        sub.push('Salary (the ' + ordinal(cy0.sday) + ') <b>' + money(cy0.expected) + '</b> · ' +
-          (dt0 === 0 ? 'due today' : dt0 > 0 ? 'in ' + dt0 + ' day' + (dt0 === 1 ? '' : 's') : Math.abs(dt0) + ' day' + (Math.abs(dt0) === 1 ? '' : 's') + ' late'));
-      }
-    }
+    // v73.33: the salary statement LEFT the Free/unallocated line (boss:
+    // 'remove the salary statement in the free/unallocated card') — the
+    // salary lives in the coach card's green row (v73.32) and the
+    // This-cycle block, not in the hero's sub line.
     var hs = byId('heroSub');
     if (hs) hs.innerHTML = sub.join(' · ');
     renderSpark();
@@ -6506,12 +6500,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.32, live: new Date(2026, 9, 10, 2, 43) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.33, live: new Date(2026, 9, 10, 3, 40) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.33': [
+      'Home is quieter: the recap (Money Pulse) card is gone from Home, and the salary line left the Free / unallocated card — the salary still lives in the coach card\'s green row and the This-cycle block'
+    ],
     '73.32': [
       'The Salary row in the coach card now shows up to 10 days before the NEXT payday (for a 15th payday, from the 5th) — it was only appearing on payday day itself before, so it looked dead the rest of the month. Same green row + chip, and the amount follows the target cycle\'s salary'
     ],

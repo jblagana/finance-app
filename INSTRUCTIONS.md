@@ -6,6 +6,24 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.33 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-10 — "remove the recap card on home, remove the salary statement in the free/unallocated card"
+Status: **done** — v73.33 shipped (commit <BUILD>, live re-stamp <RE-STAMP>, pushed to origin/main, SW cache `finances-pwa-v73.33`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.33 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7333Section)
+
+### What changed
+- **The Money Pulse (recap) HOME CARD is gone** — `#recap` / `#recapBody` / `#recapOpen` removed from index.html; `renderRecap` dropped from every `RENDER_BY_KEY` key (txn/snap/adj/ui). The **full recap sheet** (`#recapSheet` + the lesson pin) still exists and still works — it's just no longer reachable from a Home card; the coach's note carries the month story on Home now.
+- **The salary statement left the Free / unallocated hero sub** — the whole `Salary (the 15th) … due today / in N days / late` and `Salary in · …` block was cut from `renderHero`'s sub line. The salary now lives in exactly two places: the coach card's **green row** (v73.32, "Salary ₱X lands on the 15th — in N days") and the **This-cycle** block.
+- **SHELL_NOTES '73.33'** added (What's new).
+
+### Gate updates (the removals' ripple)
+- check_site v73.2: the Home card's ids are now asserted **absent** (the sheet + pin ids stay asserted present).
+- check_site v73.0 mood check: `js.count("renderMood, render") == 4` was keyed to the pulse riding after renderMood on every key — now `renderMood, renderPlans] == 1` (txn) + `renderMood] == 4` (plan/snap/adj/ui end on it).
+- check_site v72.45: the hero salary string assertion moved to the surviving `Salary (the` — the salary **row-chip's prefill note** (`'Salary (the ' + ordinal(Number(parts[2]) || 15) + ')'`), which is a different feature and stays.
+- check_site v72.30 + v72.29 render-list pins: `…, renderMood, renderRecap]` → `…, renderMood]`.
+- smoke v72.45 section: "hero line carries the expected salary" flipped to "hero sub NO LONGER carries the salary line".
+- **New `v7333Section`** (smoke_app_v68, wired before v72.36): hero sub salary-free (with the liquid/cards/prepay lines still present), the salary row still UP in the coach card, `renderMood, renderRecap` absent from app.js source, and the 73.33 SHELL_NOTES entry present.
+
 # v73.32 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-10 — "the salary row in coach card is not showing even if its within 10 days already, it should show up as early as the 5th since the salary is every 15th. the same look as the other rows there"
 Status: **done** — v73.32 shipped (commit c73ecf4, live re-stamp c94ec83, pushed to origin/main, SW cache `finances-pwa-v73.32`)
