@@ -4247,29 +4247,50 @@
     }
     // v73.19: the "Salary in" check-in is a ROW CHIP (it used to be a
     // coachActs chip) — the cycle's salary is expected on the salary_day
-    // (the 15th); from two days before payday, and while it is still
-    // missing, the row's chip opens the Add sheet prefilled (amount = the
-    // expected salary, date = today and editable — backdate it if the money
-    // landed early, a CASH account preselected). Logging it is the
-    // confirmation: a real cash_in entry the cycle reads back.
+    // (the 15th). v73.32: the row targets the NEXT upcoming payday, shown
+    // from 10 days out (the 5th for a 15th payday — the boss: 'it should
+    // show up as early as the 5th'); while it is still missing, the row's
+    // chip opens the Add sheet prefilled (amount = the expected salary,
+    // date = today and editable — backdate it if the money landed early,
+    // a CASH account preselected). Logging it is the confirmation: a real
+    // cash_in entry the cycle reads back.
     var cy0 = d.cycle;
-    if (cy0 && cy0.expected > 0 && !cy0.received) {
+    if (cy0 && cy0.expected > 0) {
       var sdayISO = cy0.month + '-' + (cy0.sday < 10 ? '0' : '') + cy0.sday;
       var sIn = Math.round((parseISO(sdayISO) - parseISO(d.today)) / 86400000);
-      // v73.19: only while payday is still ahead (the old coachActs chip had
-      // the same sIn <= 2 test but its text never showed a negative count;
-      // the row text does, so a past payday gets no chip — the hero line
-      // carries the "late" state).
-      if (sIn >= 0 && sIn <= 2) {
+      // v73.32 (boss: 'the salary row is not showing even if its within
+      // 10 days already, it should show up as early as the 5th since the
+      // salary is every 15th'): a cycle STARTS on its payday, so the
+      // current cycle's payday is always on or before today — the old
+      // sIn <= 2 window could only ever fire on payday itself, and the
+      // NEXT payday (the one the check-in is actually for) was invisible
+      // until the cycle flipped. The row now targets the next upcoming
+      // payday, shown from 10 days out (the 5th for a 15th payday).
+      var salT = null;
+      if (sIn === 0 && !cy0.received) {
+        salT = { amt: cy0.expected, sIn: 0, sday: cy0.sday };
+      } else {
+        var sp = parseISO(sdayISO);
+        var nd = new Date(sp.getFullYear(), sp.getMonth() + 1, cy0.sday);
+        var nextISO = localISO(nd);
+        var sInN = Math.round((parseISO(nextISO) - parseISO(d.today)) / 86400000);
+        if (sInN >= 1 && sInN <= 10) {
+          var cyN = cycleDataFor(nextISO.slice(0, 7), state.base);
+          if (cyN && cyN.expected > 0 && !cyN.received) {
+            salT = { amt: cyN.expected, sIn: sInN, sday: cyN.sday };
+          }
+        }
+      }
+      if (salT) {
         // v73.20 (user: 'salary should be green its a good thing hehe, drop
         // the "due" in "salary due"'): the row is GREEN (money coming in),
         // the tag is just "Salary" (a payday is not a bill — "due" was the
         // wrong word), the copy says the salary LANDS, and the chip text is
         // the amount only (the tag carries the "salary" part).
         rows.push({ cls: 'ok', tag: 'Salary',
-          text: 'Salary ' + money(cy0.expected) + ' lands on the ' + ordinal(cy0.sday) + ' — ' + (sIn === 0 ? 'today' : (sIn === 1 ? 'tomorrow' : 'in ' + sIn + ' days')) + '.',
-          r: money(cy0.expected),
-          act: 'salary', payload: { amount: cy0.expected, date: d.today, sday: cy0.sday } });
+          text: 'Salary ' + money(salT.amt) + ' lands on the ' + ordinal(salT.sday) + ' — ' + (salT.sIn === 0 ? 'today' : (salT.sIn === 1 ? 'tomorrow' : 'in ' + salT.sIn + ' days')) + '.',
+          r: money(salT.amt),
+          act: 'salary', payload: { amount: salT.amt, date: d.today, sday: salT.sday } });
       }
     }
     // v73.23 (boss: 'remove that salary cycle row'): the cycle-burn rows are
@@ -6485,12 +6506,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.31, live: new Date(2026, 9, 2, 3, 18) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.32, live: new Date(2026, 9, 10, 2, 41) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.32': [
+      'The Salary row in the coach card now shows up to 10 days before the NEXT payday (for a 15th payday, from the 5th) — it was only appearing on payday day itself before, so it looked dead the rest of the month. Same green row + chip, and the amount follows the target cycle\'s salary'
+    ],
     '73.31': [
       'Paying the card due now drops the row (and the "rolls to next cycle" line): the amount due is the manual due MINUS what you already paid this cycle, so a fully-paid bill disappears and a partial payment shows only the remainder — the balance left on the card is next cycle\'s bill, not this one'
     ],

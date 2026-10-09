@@ -503,7 +503,9 @@ def main():
           and "dig-chip" not in js and "dig.dig-chip" not in html
           # the salary row: green, tag "Salary", "lands" copy
           and "rows.push({ cls: 'ok', tag: 'Salary'," in js
-          and "'Salary ' + money(cy0.expected) + ' lands on the '" in js
+          # v73.32: the amount is the TARGET cycle's (salT — today's or the
+          # next payday's), not the current cycle's cy0.expected
+          and "'Salary ' + money(salT.amt) + ' lands on the '" in js
           and "tag: 'Salary due'" not in js
           # the pill styling (severity variants)
           and ".rowchip{" in html and ".rowchip.warn{" in html and ".rowchip.bad{" in html
@@ -664,6 +666,21 @@ def main():
           # (4) the roll-over = balance − amt (NOT balance − manualDue)
           and "var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - amt)) : 0;" in js
           and "'73.31': [" in js)
+    check("v73.32 (boss: 'the salary row in coach card is not showing even if its within 10 days already, it should show up as early as the 5th since the salary is every 15th'): the row now targets the NEXT upcoming payday — a cycle STARTS on its payday, so the current cycle's payday is always on/before today and the old sIn <= 2 window could only ever fire on payday itself — and shows from 10 days out (the 5th for a 15th payday); same green row + chip look, the amount comes from the target cycle (its overrides apply)",
+          # the old 2-day window is gone (it could only ever fire on payday itself)
+          "sIn >= 0 && sIn <= 2" not in js
+          # payday-today (unreceived) still shows immediately
+          and "if (sIn === 0 && !cy0.received) {" in js
+          # the next payday is computed from the current one + 1 month
+          and "var nd = new Date(sp.getFullYear(), sp.getMonth() + 1, cy0.sday);" in js
+          # the widened window: 1..10 days out
+          and "if (sInN >= 1 && sInN <= 10) {" in js
+          # the target cycle's own data (expected salary + received check)
+          and "var cyN = cycleDataFor(nextISO.slice(0, 7), state.base);" in js
+          and "if (cyN && cyN.expected > 0 && !cyN.received) {" in js
+          # the row itself is unchanged (green, tag Salary, lands copy)
+          and "rows.push({ cls: 'ok', tag: 'Salary'," in js
+          and "'73.32': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js
