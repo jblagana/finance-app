@@ -6,6 +6,21 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.32 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-10 — "the salary row in coach card is not showing even if its within 10 days already, it should show up as early as the 5th since the salary is every 15th. the same look as the other rows there"
+Status: **done** — v73.32 shipped (commit c73ecf4, live re-stamp c94ec83, pushed to origin/main, SW cache `finances-pwa-v73.32`)
+Progress: 100% — GATES all green via tools/release.ps1 v73.32 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7332Section)
+
+### The bug — and why the row looked dead all month
+The row's window was `sIn >= 0 && sIn <= 2` where sIn = days until the **current cycle's** payday. But a cycle STARTS on its payday, so the current cycle's payday is always on or before today — sIn was 0 on payday and negative the rest of the month. The window could only ever fire on payday day itself; the NEXT payday (the one the check-in is actually for) was invisible until the cycle flipped. Widening the window alone (the first attempt, `sIn <= 10`) proved nothing in the smoke: the smoke's own setup (sday = today's day) always yields sIn = 0, so both old and new windows pass.
+
+### What changed
+- **`app.js` `coachRows` salary block:** the row now targets the **next upcoming payday**: payday-today unreceived shows immediately (sIn = 0); otherwise the next payday = current + 1 month, shown when 1–10 days out (the 5th for a 15th payday). The amount follows the TARGET cycle's `expectedSalaryFor` (its overrides apply) via `cycleDataFor(nextMonth, base)`, and the target cycle's `received` check suppresses the row when that payday is already logged. Same green row + chip look (v73.20 design untouched).
+- **`smoke_app_v68.js` (root, local-only):** NEW v7332Section — the 5-day case (the boss's exact 5th-for-15th, row UP with "in 5 days" copy), the 10-day boundary (UP, inclusive), and the 11-day case (DOWN). Targets are derived from today via `sdayFor(N)` (unachievable when today+N's day > 28 — salary_day caps at 28 — the section asserts expressibility first).
+- **Clock-drift smoke fixes (the Oct 10 run exposed two):** v73.29 + v73.31 failed because the prepay window (prepayIn in [0,10]) wins the handoff and SUPPRESSES the cardpay rows — on Oct 10 the default prepay_day 14 is 4 days out, so both sections' rows vanished. Both sections now push prepay_day 11 days out (wrapped past 28) to keep the prepay window closed, and restore 14 in cleanup.
+- **`tools/check_site.py`:** the v73.20 check's salary-copy assertion updated (`salT.amt` — the amount is the target cycle's, not cy0.expected's); the new v73.32 check pins the next-payday math (the old 2-day test gone, `sInN >= 1 && sInN <= 10`, the target-cycle data fetch).
+- Gates: release.ps1 v73.32 all green (both check_site copies, parser tests, node syntax, both smokes — smoke_app_v68 "all checks passed" incl. v7332Section).
+
 # v73.29 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-01 — "the maya cc due on oct 5 is fully paid but a partial 1,080.30 still shows — move that to the next cycle"; "the aribank due is 6,122.29 but the row shows more — move the rest to the next cycle"
 Status: **done** — v73.29 shipped (commit below, pushed to origin/main, SW cache `finances-pwa-v73.29`)
