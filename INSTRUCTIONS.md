@@ -6,6 +6,26 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.34 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-11 - "add an ability to peek on the next cycles numbers, using current free cash (with ability to see the numbers with and without salary in)" + "current cycle should be shown by default, peek only shows if i want to"
+Status: **done** - v73.34 shipped (commit <BUILD>, live re-stamp <LIVE>, pushed to origin/main, SW cache `finances-pwa-v73.34`)
+Progress: 100% - GATES all green via tools/release.ps1 v73.34 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7334Section)
+
+### What changed
+- **The hero's CYCLE BLOCK** (index.html `#cycleBlock` inside `#hero`, painted by the new `renderCycleBlock` on every hero repaint): **This cycle by default** - tap **Next cycle** to peek. The block shows the window, the salary row, the plans line, the card-dues line, and **Free at end of cycle** (the net).
+- **Salary honesty rule:** the snapshot's free is as-of-today, so a RECEIVED salary shows as "in your free cash" (informational, 0 effect); an EXPECTED one shows "+ amount". **This cycle is ALWAYS with-salary** (the boss's rev-3 mockup) - the **With / Without salary toggle renders only on the Next-cycle peek** (the "what if the 15th slips" survival check). `state.cycleMode` (default 'this') + `state.peekMode` (default 'with'), in-memory only.
+- **`cycleProjection(mode, salMode)`** (pure + display-only, the v73.16 discipline - the snapshot is never written, so the rebase sig is untouched): free + salaryEffect - plans - dues. Plans use the v73.16 resolver (forks count, skips don't, paid occurrences deduct their live remainder).
+- **Card dues are WINDOW-AWARE** (`cardDuesInWindow(cd, mode)`, the boss's Oct-5 scenario): THIS cycle = the manual due netted of post-cutoff payments (the v73.29/31 math); NEXT cycle = the balance MINUS the manual due (the v73.29 roll-over). The same money is never due in both windows.
+- **The "- P X plans this cycle" line LEFT the hero sub** - the block carries it as an auditable line item (the Free tile's own note is a different string and stays).
+- SHELL_NOTES '73.34' added (What's new).
+
+### Gate updates
+- smoke DOM_STUBS: `cycleBlock` + the two seg wrappers added to the innerHTML-capture whitelist.
+- smoke v73.16 section: the hero-sub deduction-line assertion flipped to "gone from the sub, present in the cycle block" (the line moved, the math is unchanged - freeNet still asserted).
+- **New `v7334Section`** (wired before v72.36): default This-cycle state (peek content + salary toggle ABSENT), plans line item, card-dues line item (expected total recomputed from the snapshot - other sections' cards contribute), the pure net math, the real cbSegCycle onclick flipping to the peek, the peek's toggle present, Without subtracting the expected salary, the clean hero sub, and the window-aware dues (this = manual dues, next = roll-over).
+- check_site v73.34 check added (block in html, the pure fns, the defaults, the withSal/salInFree/salEffect rules, the peek-only toggle, the window-aware dues formula, the exact hero-sub line gone, the exports, the notes).
+- One app fix found by the first smoke run: `cycleProjection`'s paid-occurrence match passed `{monthPrefix}` without `today` to `findPaidTxn` (which reads `o.today` for its -2d backdate band) - now passed explicitly.
+
 # v73.33 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-10 — "remove the recap card on home, remove the salary statement in the free/unallocated card"
 Status: **done** — v73.33 shipped (commit 7e9b9b7, live re-stamp 93637a0, pushed to origin/main, SW cache `finances-pwa-v73.33`)

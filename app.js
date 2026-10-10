@@ -28,7 +28,9 @@
     adjLoaded: false,
     coachMem: null,
     moneyLog: [],
-    owed: { people: [] }
+    owed: { people: [] },
+    cycleMode: 'this', // v73.34: the hero's cycle block — This cycle by default, Next cycle only on tap
+    peekMode: 'with'   // v73.34: the Next-cycle salary toggle (With salary / Without)
   };
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
@@ -2519,6 +2521,106 @@
     if (!state.base) return null;
     return cycleDataFor(currentCycleMonth(state.base, todayISO()), state.base);
   }
+  // v73.34 (boss: 'add an ability to peek on the next cycles numbers, using
+  // current free cash (with ability to see the numbers with and without
+  // salary in)' + 'current cycle should be shown by default, peek only shows
+  // if i want to'): the projection of the free cash to the END of a cycle —
+  // this one (default) or the next (the peek). Pure + display-only, the
+  // v73.16 discipline: it reads the snapshot's free but NEVER writes it, so
+  // the overlay/rebase sig is untouched.
+  //
+  // The salary row's honesty rule: the snapshot's free is AS-OF TODAY, so a
+  // salary received before today is ALREADY inside the free (the row is
+  // informational only); a salary still expected is added in (that is what
+  // "with salary" means — and it is the only mode that exists for THIS
+  // cycle, per the boss's rev-3 mockup: the Without toggle is a NEXT-cycle
+  // question, "what if the 15th slips").
+  function cycleProjection(mode, salMode) {
+    var b = state.base;
+    if (!b) return null;
+    var nowM = currentCycleMonth(b, todayISO());
+    var m = (mode === 'next') ? (function () {
+      var p = String(nowM).split('-');
+      var t = new Date(Number(p[0]), Number(p[1]), 1); // day 1 of the next cycle month (sday <= 28, no overflow)
+      t.setMonth(t.getMonth() + 1);
+      return t.getFullYear() + '-' + (t.getMonth() < 9 ? '0' : '') + (t.getMonth() + 1);
+    })() : nowM;
+    var cd = cycleDataFor(m, b);
+    var free = (state.snapshot && state.snapshot.cash) ? Number(state.snapshot.cash.free) || 0 : 0;
+    // the salary: expected for the TARGET cycle (override-aware)
+    var salExpected = cd.expected;
+    var salReceived = !!(cd.received && cd.received.amount > 0);
+    var salInFree = (mode === 'this') && salReceived; // already inside the as-of-today free
+    var withSal = (mode === 'this') ? true : (salMode !== 'without');
+    // the salary's EFFECT on the net: an expected-not-received salary is
+    // ADDED (with mode only); a received one is already IN the free — "with"
+    // leaves it (0 effect), "without" SUBTRACTS it (the survival check)
+    var salEffect = salInFree ? (withSal ? 0 : -salExpected) : (withSal ? salExpected : 0);
+    // the plans landing in the window (the v73.16 resolver: forks count,
+    // skips don't, paid occurrences deduct their live remainder)
+    var planTotal = 0, planCount = 0;
+    (state.plans || []).forEach(function (p) {
+      planAllDates(p).forEach(function (od) {
+        if (od < cd.start || od > cd.end) return;
+        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        if (ro && ro.skip) return;
+        var nm = ro ? ro.name : p.name;
+        var am = ro ? ro.amount : p.amount;
+        var pp = findPaidTxn({ monthPrefix: todayISO().slice(0, 7), today: todayISO() }, { planId: p.id, date: od, name: nm, amount: am });
+        var rem = r2(Number(am) - (Number(pp && pp.amount) || 0));
+        if (rem <= 0) return;
+        planTotal += rem; planCount++;
+      });
+    });
+    var dues = cardDuesInWindow(cd, mode);
+    var salAdded = withSal && !salInFree ? salExpected : 0;
+    return {
+      mode: mode, month: m, start: cd.start, end: cd.end, sday: cd.sday,
+      free: r2(free),
+      salary: r2(salExpected), salaryReceived: salReceived, salaryInFree: salInFree,
+      withSalary: withSal, salaryAdded: r2(salAdded),
+      plans: r2(planTotal), planCount: planCount,
+      dues: r2(dues),
+      net: r2(free + salAdded - planTotal - dues)
+    };
+  }
+  // v73.34: the cards' due for a cycle window — the same math as the coach
+  // card's cardpay rows (v73.29/30/31): the manual "due this cycle" (c.due)
+  // when set, else the live balance, NETTED of card payments logged after
+  // the window's cutoff (a payment after the cutoff pays that cycle's bill;
+  // before it is a prepay already baked into the manual due). WINDOW-AWARE
+  // (the boss's Oct-5 scenario): for THIS cycle the manual due IS the bill
+  // (netted of post-cutoff payments); for NEXT cycle the bill is the
+  // balance MINUS the manual due (the v73.29 'rolls to next cycle' number) —
+  // the same money is never due in both windows.
+  function cardDuesInWindow(cd, mode) {
+    var total = 0;
+    ((state.snapshot && state.snapshot.cards) || []).forEach(function (c) {
+      var bal = Number(c.balance) || 0;
+      if (bal <= 0) return;
+      var manualDue = (c.due != null) ? Number(c.due) : null;
+      var amt;
+      if (mode === 'next') {
+        amt = (manualDue != null) ? Math.max(0, bal - manualDue) : bal;
+      } else {
+        var paid = (manualDue != null) ? (function () {
+          var s = 0;
+          (state.txns || []).forEach(function (t) {
+            if (t.kind !== 'card_payment') return;
+            var dd = String(t.date || '');
+            if (dd <= cd.end) return; // before the cutoff = prepay (in the manual due)
+            var a = Number(t.amount) || 0;
+            if (a <= 0) return;
+            if (t.account === c.name) s += a;
+          });
+          return r2(s);
+        })() : 0;
+        amt = (manualDue != null) ? Math.max(0, manualDue - paid) : bal;
+      }
+      if (amt > 0.004) total += amt;
+    });
+    return r2(total);
+  }
   // v73.16 (user: 'if the instance falls within the cycle, deduct them from
   // the free cash'): the CURRENT cycle's share of the plans — every
   // occurrence (resolved: forked amounts count, skipped ones don't) whose
@@ -2547,7 +2649,7 @@
         // payments, the accumulation findPaidTxn returns) — a partly paid
         // occurrence deducts only what is still owed, a fully paid one
         // deducts nothing.
-        var pp = findPaidTxn({ monthPrefix: todayISO().slice(0, 7) }, { planId: p.id, date: od, name: nm, amount: am });
+        var pp = findPaidTxn({ monthPrefix: todayISO().slice(0, 7), today: todayISO() }, { planId: p.id, date: od, name: nm, amount: am });
         var rem = r2(Number(am) - (Number(pp && pp.amount) || 0));
         if (rem <= 0) return;
         total += rem;
@@ -3967,9 +4069,9 @@
     heroVal = free;
     var sub = [];
     sub.push('Liquid <b>' + money(s.cash ? s.cash.total : 0) + '</b>');
-    if (d && d.planDeduct > 0) {
-      sub.push('− ' + money(d.planDeduct) + ' plans this cycle');
-    }
+    // v73.34: the '− ₱X plans this cycle' line LEFT the hero sub — the
+    // cycle block below now carries it as an auditable line item (the
+    // approved mockup's freesub: liquid · cards · prepay, nothing else).
     sub.push('Cards owed <b>' + money(s.card_owed) + '</b>');
     if (d && d.prepayAmt > 0) {
       var pw = d.prepayIn <= 0 ? 'Prepay due today' : 'Prepay in ' + d.prepayIn + ' day' + (d.prepayIn === 1 ? '' : 's');
@@ -3981,7 +4083,81 @@
     // This-cycle block, not in the hero's sub line.
     var hs = byId('heroSub');
     if (hs) hs.innerHTML = sub.join(' · ');
+    // v73.34: the cycle block (This cycle default / Next cycle peek) renders
+    // INSIDE the hero — it is the free cash's projection, so it lives where
+    // the free cash lives. It repaints on every hero repaint (the emit keys
+    // already carry renderHero for txn/plan/snap/adj/ui).
+    renderCycleBlock();
     renderSpark();
+  }
+  // v73.34 (boss: 'peek on the next cycles numbers ... current cycle should
+  // be shown by default, peek only shows if i want to'): the hero's cycle
+  // block. This cycle = always-with-salary (the Without toggle is a
+  // NEXT-cycle question — rev 3 of the approved mockup). The salary row is
+  // honest about where the money is: RECEIVED = "in your free cash"
+  // (informational, 0 effect); EXPECTED = "+ amount" (with mode only).
+  function renderCycleBlock() {
+    var el = byId('cycleBlock');
+    if (!el) return;
+    var b = state.base;
+    if (!b || !(Number(b.salary) || 0) > 0) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = '';
+    var mode = state.cycleMode === 'next' ? 'next' : 'this';
+    var salMode = state.peekMode === 'without' ? 'without' : 'with';
+    var p = cycleProjection(mode, salMode);
+    if (!p) { el.style.display = 'none'; return; }
+    var tag = mode === 'next' ? 'NEXT CYCLE' : 'THIS CYCLE';
+    var tagCls = mode === 'next' ? 'next' : 'this';
+    var win = dayMonth(p.start) + ' → ' + dayMonth(p.end);
+    var seg = function (on) { return '<button type="button" class="' + (on ? 'on' : '') + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + on + '</button>'; };
+    var rows = '';
+    if (p.salary > 0) {
+      if (p.salaryInFree) {
+        rows += '<div class="cbrow"><div class="lab">Salary<small>the ' + ordinal(p.sday) + ' — in your free cash</small></div><div class="amt">in</div></div>';
+      } else if (p.withSalary) {
+        rows += '<div class="cbrow"><div class="lab">Salary<small>the ' + ordinal(p.sday) + '</small></div><div class="amt plus">+ ' + money(p.salary) + '</div></div>';
+      }
+    }
+    if (p.plans > 0.004) {
+      rows += '<div class="cbrow"><div class="lab">Plans<small>' + p.planCount + ' due in window</small></div><div class="amt minus">− ' + money(p.plans) + '</div></div>';
+    }
+    if (p.dues > 0.004) {
+      rows += '<div class="cbrow"><div class="lab">Card dues<small>due in window</small></div><div class="amt minus">− ' + money(p.dues) + '</div></div>';
+    }
+    if (!rows) rows = '<div class="cbrow mut"><div class="lab">Nothing due in this window</div></div>';
+    var netCls = p.net >= 0 ? 'pos' : 'neg';
+    var netTxt = (p.net < 0 ? '− ' : '') + money(p.net);
+    el.innerHTML =
+      '<div class="cbhead">' +
+        '<div class="cbtitle"><span class="cbtag ' + tagCls + '">' + tag + '</span><span class="win">' + win + '</span></div>' +
+        '<div class="cbseg" id="cbSegCycle" role="group" aria-label="Cycle">' +
+          '<button type="button" data-m="this" class="' + (mode === 'this' ? 'on' : '') + '" aria-pressed="' + (mode === 'this' ? 'true' : 'false') + '">This cycle</button>' +
+          '<button type="button" data-m="next" class="' + (mode === 'next' ? 'on' : '') + '" aria-pressed="' + (mode === 'next' ? 'true' : 'false') + '">Next cycle</button>' +
+        '</div>' +
+      '</div>' +
+      (mode === 'next' ? '<div class="cbsegwrap" id="cbSegSalaryWrap"><div class="cbseg small" id="cbSegSalary" role="group" aria-label="Salary">' +
+        '<button type="button" data-m="with" class="' + (salMode === 'with' ? 'on' : '') + '" aria-pressed="' + (salMode === 'with' ? 'true' : 'false') + '">With salary</button>' +
+        '<button type="button" data-m="without" class="' + (salMode === 'without' ? 'on' : '') + '" aria-pressed="' + (salMode === 'without' ? 'true' : 'false') + '">Without</button>' +
+      '</div></div>' : '') +
+      '<div class="cbrows">' + rows + '</div>' +
+      '<div class="cbnet"><span class="nl">Free at end of ' + (mode === 'next' ? 'next' : 'this') + ' cycle</span><span class="nv ' + netCls + '">' + netTxt + '</span></div>' +
+      '<p class="cbnote">Estimate — pace &amp; one-offs excluded. Salary follows the target cycle\'s amount.</p>';
+    // re-wire the switches (innerHTML wiped the old listeners — the v73.20
+    // chip pattern: the element is rebuilt, so the handler must be re-bound)
+    var segC = byId('cbSegCycle');
+    if (segC) segC.onclick = function (e) {
+      var btn = e.target && e.target.closest ? e.target.closest('button[data-m]') : null;
+      if (!btn) return;
+      state.cycleMode = btn.getAttribute('data-m') === 'next' ? 'next' : 'this';
+      renderCycleBlock();
+    };
+    var segS = byId('cbSegSalary');
+    if (segS) segS.onclick = function (e) {
+      var btn = e.target && e.target.closest ? e.target.closest('button[data-m]') : null;
+      if (!btn) return;
+      state.peekMode = btn.getAttribute('data-m') === 'without' ? 'without' : 'with';
+      renderCycleBlock();
+    };
   }
   function sparkData() {
     var s = state.snapshot;
@@ -6500,12 +6676,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.33, live: new Date(2026, 9, 10, 3, 43) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.34, live: new Date(2026, 9, 11, 6, 15) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.34': [
+      'The Free / unallocated card now shows where the money goes: a cycle block (This cycle by default — tap Next cycle to peek) with the salary, plans and card dues as line items and the net at the end of the cycle. The Next-cycle peek has the With / Without salary toggle (the survival check). The "− ₱X plans this cycle" line left the card\'s sub — the block carries it now'
+    ],
     '73.33': [
       'Home is quieter: the recap (Money Pulse) card is gone from Home, and the salary line left the Free / unallocated card — the salary still lives in the coach card\'s green row and the This-cycle block'
     ],
@@ -7489,7 +7668,9 @@
     STORE_CHAT: STORE_CHAT,
     STORE_PLANS: STORE_PLANS,
     STORE_TX: STORE_TX,
-    STORE_META: STORE_META
+    STORE_META: STORE_META,
+    state: state, // v73.34: the smoke reads state.cycleMode after the switch handler
+    cycleProjection: cycleProjection // v73.34: the pure cycle math (smoke: the peek's with/without salary)
   };
 
   // ---------- v72.53: the boot splash (design C — Coach Fin + status ticker) ----------

@@ -385,6 +385,34 @@ padding:7px 14px;font-size:12.5px}
 .hero-v.bad{color:var(--bad)}
 .hero-sub{color:var(--mut);font-size:12.5px;margin-top:6px;line-height:1.5}
 .hero-sub b{color:var(--ink)}
+/* v73.34: the cycle block (This/Next cycle + the With/Without salary
+   toggle on the peek) — the free cash's projection, inside the hero */
+.cycleblock{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+.cbhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.cbtitle{display:flex;align-items:center;gap:7px;min-width:0}
+.cbtag{font-size:10px;font-weight:700;letter-spacing:.05em;padding:2px 7px;border-radius:6px;white-space:nowrap}
+.cbtag.this{background:rgba(55,211,155,.05);color:var(--ok);border:1px solid rgba(55,211,155,.3)}
+.cbtag.next{background:rgba(255,196,92,.08);color:var(--warn);border:1px solid rgba(255,196,92,.3)}
+.cbtitle .win{color:var(--mut);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cbseg{display:inline-flex;background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:2px;gap:2px;flex:none}
+.cbseg button{border:0;background:transparent;color:var(--mut);font:inherit;font-size:12px;font-weight:600;
+  padding:5px 11px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.cbseg button.on{background:var(--ink);color:var(--bg)}
+.cbseg.small button{font-size:11.5px;padding:4px 9px}
+.cbsegwrap{margin-bottom:10px}
+.cbrow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px}
+.cbrow .lab{color:var(--ink)}
+.cbrow .lab small{display:block;color:var(--mut);font-size:11px;font-weight:400}
+.cbrow.mut .lab{color:var(--mut)}
+.cbrow .amt{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cbrow .amt.plus{color:var(--ok)}
+.cbrow .amt.minus{color:var(--bad)}
+.cbnet{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.cbnet .nl{color:var(--mut);font-size:12.5px}
+.cbnet .nv{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+.cbnet .nv.pos{color:var(--ok)}
+.cbnet .nv.neg{color:var(--bad)}
+.cbnote{color:var(--mut);font-size:11px;margin:6px 0 0}
 /* ---- v51: home welcome (greeting + date) ---- */
 .greet{padding:12px 18px 14px}
 .greet-h{margin:0;font-size:18px;font-weight:800;letter-spacing:.2px}
@@ -641,6 +669,10 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       <div class="hero-k">Free / unallocated</div>
       <div class="hero-v" id="heroFree">—</div>
       <div class="hero-sub" id="heroSub"></div>
+      <!-- v73.34: the cycle block — This cycle by default, tap Next cycle
+           to peek (the With/Without salary toggle appears only there).
+           Painted by renderCycleBlock (a display-only projection). -->
+      <div class="cycleblock" id="cycleBlock" style="display:none"></div>
       <div class="spark" id="sparkBox"></div>
     </section>
 

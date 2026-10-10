@@ -687,6 +687,29 @@ def main():
           # the row itself is unchanged (green, tag Salary, lands copy)
           and "rows.push({ cls: 'ok', tag: 'Salary'," in js
           and "'73.32': [" in js)
+    check("v73.34 (boss: 'peek on the next cycles numbers, using current free cash (with and without salary in)' + 'current cycle shown by default, peek only shows if i want to'): the hero's CYCLE BLOCK — This cycle by default (salary always in: received = 'in your free cash', expected = '+ amount'), tap Next cycle for the peek where the With/Without salary toggle appears (the survival check). cycleProjection is PURE + display-only (the v73.16 discipline — the snapshot is never written, so the rebase sig is untouched). Card dues are WINDOW-AWARE (the boss's Oct-5 scenario): this cycle = the manual due netted of post-cutoff payments, next cycle = the balance minus the manual due (the roll-over) — the same money is never due in both windows. The '− ₱X plans this cycle' line left the hero sub (the block carries it as an auditable line item)",
+          # the block lives in the hero (index) + the pure math (app)
+          'id="cycleBlock"' in html and "renderCycleBlock();" in js
+          and "function cycleProjection(mode, salMode) {" in js
+          and "function cardDuesInWindow(cd, mode) {" in js
+          # the default: This cycle, no peek content, no salary toggle
+          and "cycleMode: 'this'" in js and "peekMode: 'with'" in js
+          and "mode === 'next' ? 'next' : 'this'" in js
+          # This cycle is ALWAYS with-salary (the Without mode is next-only)
+          and "var withSal = (mode === 'this') ? true : (salMode !== 'without');" in js
+          # the salary honesty rule: received = in the free (informational)
+          and "var salInFree = (mode === 'this') && salReceived;" in js
+          and "var salEffect = salInFree ? (withSal ? 0 : -salExpected) : (withSal ? salExpected : 0);" in js
+          # the peek's toggle renders only in next mode
+          and "(mode === 'next' ? '<div class=\"cbsegwrap\" id=\"cbSegSalaryWrap\"><div class=\"cbseg small\" id=\"cbSegSalary\"" in js
+          # the window-aware dues (Oct-5 scenario: never both windows)
+          and "amt = (manualDue != null) ? Math.max(0, bal - manualDue) : bal;" in js
+          # the hero sub is clean (the deduction line moved to the block) —
+          # the EXACT old line is gone (the Free tile's own note is a
+          # different string and stays)
+          and "sub.push('− ' + money(d.planDeduct) + ' plans this cycle');" not in js
+          and "cycleProjection: cycleProjection" in js
+          and "'73.34': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js
