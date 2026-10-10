@@ -8,7 +8,7 @@ commit is not done.
 
 # v73.34 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-11 - "add an ability to peek on the next cycles numbers, using current free cash (with ability to see the numbers with and without salary in)" + "current cycle should be shown by default, peek only shows if i want to"
-Status: **done** - v73.34 shipped (commit <BUILD>, live re-stamp <LIVE>, pushed to origin/main, SW cache `finances-pwa-v73.34`)
+Status: **done** - v73.34 shipped (commit 362b75c, live re-stamp in the release commit, pushed to origin/main, SW cache `finances-pwa-v73.34`)
 Progress: 100% - GATES all green via tools/release.ps1 v73.34 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v7334Section)
 
 ### What changed
