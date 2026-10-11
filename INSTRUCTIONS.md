@@ -6,6 +6,20 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.38 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-11 - "ur hero card next peek row is advanced to nov15-dec14, it should be oct 15-nov14"
+Status: **done** - v73.38 shipped (SW cache `finances-pwa-v73.38`)
+Progress: 100% - GATES all green via tools/release.ps1 v73.38 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v73.38 contiguity assertion)
+
+### What changed
+- **The peek window was two cycles ahead, not one.** `cycleProjection('next')` built the next cycle month as `new Date(y, m, 1)` from nowM='2026-09' — month INDEX 9 is already October (the next calendar month) — then `setMonth(+1)` bumped it a SECOND time to November. On Oct 11 the peek therefore showed Nov 15 – Dec 14 instead of Oct 15 – Nov 14. Fixed: `new Date(y, m-1, 1)` (day 1 of nowM's own month, Sep) + one `setMonth(+1)` → Oct.
+- **Verified at the source, not vibes:** ran the REAL extracted helpers with today pinned to 2026-10-11 → this = 2026-09-15→2026-10-14, next = 2026-10-15→2026-11-14 (gap 1 day, contiguous); edge cases: on the 15th itself (this 2026-10, next 2026-11) and the year boundary (this 2026-12, next 2027-01).
+- **Smoke:** new v73.38 assertion in v7334Section — `cycleProjection('next').start` must be exactly 1 day after `cycleProjection('this').end` (contiguous windows) and the next window 28–31 days long; renders "15 Oct → 14 Nov".
+- **SHELL_NOTES '73.38'** (the What's-new note the gate requires for the running version).
+
+### Files
+app.js (cycleProjection next-month fix + SHELL_NOTES + stamp), smoke_app_v68.js (root mirror: v73.38 contiguity assertion), tools/check_site.py + sw.js + README.md (stamps via release.ps1).
+
 # v73.37 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-11 - "remove the plan due row in hero card for this cycle. keep it for the next cycle peek, and expandable to the specific plan dues" (mockup approved: mockup_cycle_block_v2.html)
 Status: **done** - v73.37 shipped (SW cache `finances-pwa-v73.37`)

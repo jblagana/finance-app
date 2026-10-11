@@ -2569,7 +2569,13 @@
     var nowM = currentCycleMonth(b, todayISO());
     var m = (mode === 'next') ? (function () {
       var p = String(nowM).split('-');
-      var t = new Date(Number(p[0]), Number(p[1]), 1); // day 1 of the next cycle month (sday <= 28, no overflow)
+      // v73.38 (boss: 'the peek shows Nov 15–Dec 14, it should be Oct 15–Nov 14'):
+      // nowM='2026-09' is the cycle STARTING Sep 15; the next cycle starts the
+      // NEXT 15th, i.e. cycle month 2026-10. The old code built
+      // new Date(y, m, 1) — month index m is ALREADY the next calendar month —
+      // then setMonth(+1) bumped it a second time: the peek landed two cycles
+      // ahead. One bump only: day 1 of nowM's own month, +1 month.
+      var t = new Date(Number(p[0]), Number(p[1]) - 1, 1);
       t.setMonth(t.getMonth() + 1);
       return t.getFullYear() + '-' + (t.getMonth() < 9 ? '0' : '') + (t.getMonth() + 1);
     })() : nowM;
@@ -6721,12 +6727,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.37, live: new Date(2026, 9, 11, 19, 5) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.38, live: new Date(2026, 9, 11, 23, 19) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.38': [
+      'The Next-cycle peek window was jumping two cycles ahead (showing Nov 15 – Dec 14 on Oct 11) — it now shows exactly the next cycle (Oct 15 – Nov 14), contiguous with this one'
+    ],
     '73.37': [
       'The This-cycle block is just your free cash now (the plans line left it — the number is the old hero number). The Next-cycle peek keeps the plans line, and you can tap it to see the specific plan dues (forked amounts show their forked value; paid or skipped ones never appear)'
     ],
