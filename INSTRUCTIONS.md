@@ -6,6 +6,20 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.40 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-11 - "i added new entries in ledger, it updated the hero card free cash but not the one for 'free at the end of this cycle' it remained the old one unchanged"
+Status: **done** - v73.40 shipped (SW cache `finances-pwa-v73.40`)
+Progress: 100% - GATES all green via tools/release.ps1 v73.40 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v73.40 overlay-follow assertions)
+
+### What changed
+- **The cycle block was reading the STALE free.** `cycleProjection` computed its base from the RAW snapshot's `cash.free` — but the logged ledger entries live in the overlay (`state.adj`), which is applied only in `effectiveSnap()`. The hero (via `insightsData` → `effectiveSnap`) saw every ledger move; the block (and thus "Free at end of this cycle", the carry, and the peek) did not. Fixed: `cycleProjection` now reads `effectiveSnap().cash.free` — the same source as the hero. One overlay, two views, no drift.
+- **Smoke:** new `v7340Section` (wired after v7334Section, before v7236Section) — sets a minimal snapshot if the env has none, asserts the baseline projection reads the effective free, then applies an overlay move (+3250 out, the same path a real addTxn takes) and asserts the projection free, the net, AND the rendered block all carry the new number (old number asserted absent).
+- **check_site.py:** new v73.40 check pins the effectiveSnap read in `cycleProjection`, the old raw-snapshot read gone, and the SHELL_NOTES entry.
+- **SHELL_NOTES '73.40'** (the What's-new note the gate requires for the running version).
+
+### Files
+app.js (cycleProjection reads effectiveSnap + SHELL_NOTES + stamp), smoke_app_v68.js (root mirror: v7340Section + wiring), tools/check_site.py (v73.40 check), sw.js + README.md (stamps via release.ps1).
+
 # v73.39 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-11 - "in the expanded plan dues, make the +x more... also expandable"
 Status: **done** - v73.39 shipped (SW cache `finances-pwa-v73.39`)

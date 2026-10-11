@@ -748,6 +748,12 @@ def main():
           # the single-quoted pin avoids the escaped-quote soup
           and '<div class="cbsub mut"><span class="sl">+' not in js
           and "'73.39': [" in js)
+    check("v73.40 (boss: 'added new entries in ledger, hero free cash updated but Free at end of this cycle stayed old'): the cycle block's projection now reads the EFFECTIVE free (effectiveSnap — snapshot + the logged-ledger overlay) instead of the raw snapshot's cash.free, so 'Free at end of this cycle' moves the moment a ledger entry lands (the hero already did via insightsData → effectiveSnap; the block was the one straggler reading the stale base)",
+          "var es = effectiveSnap();" in js
+          and "var free = (es && es.cash) ? Number(es.cash.free) || 0 : 0;" in js
+          # the old raw-snapshot read is gone
+          and "var free = (state.snapshot && state.snapshot.cash) ? Number(state.snapshot.cash.free) || 0 : 0;" not in js
+          and "'73.40': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js

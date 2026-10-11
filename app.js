@@ -2581,7 +2581,14 @@
       return t.getFullYear() + '-' + (t.getMonth() < 9 ? '0' : '') + (t.getMonth() + 1);
     })() : nowM;
     var cd = cycleDataFor(m, b);
-    var free = (state.snapshot && state.snapshot.cash) ? Number(state.snapshot.cash.free) || 0 : 0;
+    // v73.40 (boss: 'added new entries in ledger, hero free cash updated but
+    // Free at end of this cycle stayed old'): the old line read the RAW
+    // snapshot's cash.free — the overlay (state.adj, the logged ledger
+    // entries) is applied in effectiveSnap(), so the block never saw ledger
+    // moves while the hero (insightsData → effectiveSnap) did. Same source
+    // as the hero now: one overlay, two views, no drift.
+    var es = effectiveSnap();
+    var free = (es && es.cash) ? Number(es.cash.free) || 0 : 0;
     // the salary: expected for the TARGET cycle (override-aware)
     var salExpected = cd.expected;
     var salReceived = !!(cd.received && cd.received.amount > 0);
@@ -6741,12 +6748,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.39, live: new Date(2026, 9, 11, 23, 43) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.40, live: new Date(2026, 9, 12, 0, 14) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.40': [
+      'Fixed: logging new entries updated the free cash but "Free at end of this cycle" stayed on the old number — the cycle block now reads the same live free cash as the hero, so it moves the moment you log anything'
+    ],
     '73.39': [
       'In the Next-cycle peek, when the plan dues list is longer than 5 the "+N more…" line is now tappable — tap it to see the full list, tap again to go back to the first 5'
     ],
