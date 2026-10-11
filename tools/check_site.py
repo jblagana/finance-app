@@ -687,14 +687,16 @@ def main():
           # the row itself is unchanged (green, tag Salary, lands copy)
           and "rows.push({ cls: 'ok', tag: 'Salary'," in js
           and "'73.32': [" in js)
-    check("v73.36 (boss: 'that 55k should CARRY OVER to the Next-cycle peek, and the next-cycle peek should then be deducted by THAT next cycle's plan dues' — the With/Without salary toggle KEPT as the survival check; v73.35's card-dues removal stands): the hero's CYCLE BLOCK now CARRIES this cycle's displayed free cash into the peek — this cycle: net = free − plans (no dues, NO salary row: it is already inside the free cash); next cycle: net = carry + salary (With/Without) − next window's plans, where carry = this cycle's net (this cycle's plans are already netted, never deducted twice). cardDuesInWindow stays gone; the coach card's cardpay rows keep their own manual-due math (v73.29/30/31)",
+    check("v73.37 (boss: 'remove the plan due row in hero card for this cycle. keep it for the next cycle peek, and expandable to the specific plan dues'): the hero's CYCLE BLOCK — THIS cycle is now just the window + net (the old hero number: the Plans row is NOT rendered, the math still nets it out); the NEXT cycle peek KEEPS the Plans row and it is now a TAP TARGET that expands the specific plan dues as sub-rows (resolved amounts: a fork shows its forked value, paid/skipped never appear), capped at 5 with '+N more…'. The v73.36 carry-over math + the With/Without salary survival toggle stand; v73.35's card-dues removal stands; the coach card's cardpay rows keep their own manual-due math (v73.29/30/31)",
           # the block still lives in the hero (index) + the pure math (app)
           'id="cycleBlock"' in html and "renderCycleBlock();" in js
           and "function cycleProjection(mode, salMode) {" in js
           # the v73.34 window-aware dues helper is GONE (double-count removed)
           and "function cardDuesInWindow(cd, mode) {" not in js
-          # the default: This cycle, no peek content, no salary toggle
+          # the defaults: This cycle, no peek content, no salary toggle,
+          # the plans expansion closed
           and "cycleMode: 'this'" in js and "peekMode: 'with'" in js
+          and "cbPlansOpen: false" in js
           and "mode === 'next' ? 'next' : 'this'" in js
           # This cycle is ALWAYS with-salary (the Without mode is next-only)
           and "var withSal = (mode === 'this') ? true : (salMode !== 'without');" in js
@@ -704,9 +706,12 @@ def main():
           and "var thisNet = r2(free - planWindowTotal(thisCd).total);" in js
           and "var carry = (mode === 'next') ? thisNet : 0;" in js
           and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal);" in js
-          # ONE helper computes both windows' plan totals (the carry and the
-          # peek's deduction can't drift apart)
+          # ONE helper computes both windows' plan totals + the breakdown
+          # (the carry, the peek's deduction, and the expanded sub-rows all
+          # come from the same items — no drift)
           and "function planWindowTotal(cd) {" in js
+          and "items.push({ name: nm, date: od, amount: rem, edited: !!(ro && ro.edited) });" in js
+          and "planItems: pw.items," in js
           # the OLD v73.35 next-cycle math (free + salary − plans, no carry)
           # is gone
           and "var net = (mode === 'this') ? r2(free - planTotal) : r2(free + salAdded - planTotal);" not in js
@@ -716,6 +721,15 @@ def main():
           and "Carried over<small>from this cycle" in js
           and "if (mode === 'next') {" in js
           and "the ' + ordinal(p.sday) + ' — in your free cash" not in js
+          # v73.37: the THIS-cycle Plans row is GONE from the render (the
+          # old non-expandable row markup — plain cbrow + 'Plans<small' —
+          # is no longer emitted anywhere; the peek's row is cbplans)
+          and "<div class=\"cbrow\"><div class=\"lab\">Plans<small>" not in js
+          # v73.37: the peek's Plans row is the expandable tap target
+          and 'id="cbPlansRow" role="button"' in js
+          and "state.cbPlansOpen = !state.cbPlansOpen;" in js
+          and "(p.planItems || []).slice(0, 5).forEach(function (it) {" in js
+          and "' more…</span></div>';" in js
           # the dues line item is gone from the block render
           and "Card dues<small>due in window</small>" not in js
           # the peek's toggle renders only in next mode
@@ -725,7 +739,7 @@ def main():
           # different string and stays)
           and "sub.push('− ' + money(d.planDeduct) + ' plans this cycle');" not in js
           and "cycleProjection: cycleProjection" in js
-          and "'73.36': [" in js)
+          and "'73.37': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js

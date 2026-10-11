@@ -407,6 +407,17 @@ padding:7px 14px;font-size:12.5px}
 .cbrow .amt{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .cbrow .amt.plus{color:var(--ok)}
 .cbrow .amt.minus{color:var(--bad)}
+/* v73.37: the peek's expandable Plans row — the row is the tap target
+   (div[role=button], the v73.20 chip pattern), the sub-rows are quiet */
+.cbrow.cbplans{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.cbrow.cbplans .chev{display:inline-block;font-size:10px;color:var(--mut);margin-right:5px;
+  transition:transform .15s ease;transform:rotate(0deg)}
+.cbrow.cbplans .chev.open{transform:rotate(90deg)}
+.cbsubwrap{margin:2px 0 4px 15px}
+.cbsub{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:3px 0;font-size:12px}
+.cbsub .sl{color:var(--mut);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cbsub .sv{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cbsub.mut .sl{color:var(--mut)}
 .cbnet{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
 .cbnet .nl{color:var(--mut);font-size:12.5px}
 .cbnet .nv{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}

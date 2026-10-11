@@ -6,6 +6,22 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.37 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-11 - "remove the plan due row in hero card for this cycle. keep it for the next cycle peek, and expandable to the specific plan dues" (mockup approved: mockup_cycle_block_v2.html)
+Status: **done** - v73.37 shipped (SW cache `finances-pwa-v73.37`)
+Progress: 100% - GATES all green via tools/release.ps1 v73.37 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the re-pinned v7334Section + the new v73.37 expansion assertions)
+
+### What changed
+- **`planWindowTotal(cd)` gains `items`** — the per-occurrence breakdown behind the total (same resolver: forks count, skips don't, paid deduct their live remainder), date-sorted; `cycleProjection` returns it as `planItems`. One helper feeds the carry, the peek's deduction, AND the expanded sub-rows — no drift.
+- **`renderCycleBlock`:** the THIS-cycle Plans row is no longer rendered (this mode = window + net, the old hero number; the math still nets the plans — net = free − plans). The NEXT-cycle peek's Plans row becomes a tap target (`#cbPlansRow`, a `div[role=button]` — the v73.20 chip pattern, no button-in-button) with a ▸ chevron; tapping toggles `state.cbPlansOpen` (in-memory, defaults closed) and the specific dues render as sub-rows (name + edited pill + date + amount, capped at 5 with "+N more…").
+- **`index.html`:** `.cbrow.cbplans` / `.chev` (rotates open) / `.cbsub*` CSS (quiet, 15px-indented sub-rows).
+- **Smoke:** v7334Section re-pinned (this-mode asserts the plans row ABSENT) + new v73.37 assertions drive the real `cbPlansRow.onclick` (expand shows the V34 Gym 777.00 sub-row, collapse hides it) + `planItems` math (items sum = plans total); the v73.16 block-row pin flipped to assert the row gone (the freeNet math pin stands).
+- **check_site.py:** the v73.36 check becomes v73.37 (old plain-Plans-row markup gone-pin; cbPlansRow + planItems + cbPlansOpen present-pins).
+- **Stamps:** SHELL_RELEASE v73.37, sw.js CACHE `finances-pwa-v73.37`, README + check_site version asserts, SHELL_NOTES '73.37'.
+
+### Files
+app.js (planWindowTotal items + planItems + renderCycleBlock expand + cbPlansOpen + SHELL_NOTES + stamp), index.html (cbplans/cbsub CSS), tools/check_site.py (v73.37 check), smoke_app_v68.js (root mirror: v7334Section re-pin + v73.37 assertions + cbPlansRow stub), README.md + sw.js (stamps).
+
 # v73.36 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-11 - "the hero card for 'this cycle' should only display the currently displayed free cash ... that 55k should CARRY OVER to the Next-cycle peek, and the next-cycle peek should then be deducted by THAT next cycle's plan dues" + boss decision: KEEP the salary toggle on the Next-cycle peek as the survival check
 Status: **done** - v73.36 shipped (commit 3520614, pushed to origin/main, SW cache `finances-pwa-v73.36`)

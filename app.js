@@ -30,7 +30,8 @@
     moneyLog: [],
     owed: { people: [] },
     cycleMode: 'this', // v73.34: the hero's cycle block — This cycle by default, Next cycle only on tap
-    peekMode: 'with'   // v73.34: the Next-cycle salary toggle (With salary / Without)
+    peekMode: 'with',  // v73.34: the Next-cycle salary toggle (With salary / Without)
+    cbPlansOpen: false // v73.37: the peek's Plans row expansion (in-memory, defaults closed)
   };
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
@@ -2541,7 +2542,7 @@
   // this window's total, the peek deducts the NEXT window's total, so the
   // two must come from one helper or they could drift apart.
   function planWindowTotal(cd) {
-    var total = 0, count = 0;
+    var total = 0, count = 0, items = [];
     (state.plans || []).forEach(function (p) {
       planAllDates(p).forEach(function (od) {
         if (od < cd.start || od > cd.end) return;
@@ -2553,9 +2554,14 @@
         var rem = r2(Number(am) - (Number(pp && pp.amount) || 0));
         if (rem <= 0) return;
         total += rem; count++;
+        // v73.37: the per-occurrence breakdown behind the total — the peek's
+        // expandable Plans row renders these (resolved names/amounts, so a
+        // fork shows its forked value; paid/skipped never appear).
+        items.push({ name: nm, date: od, amount: rem, edited: !!(ro && ro.edited) });
       });
     });
-    return { total: r2(total), count: count };
+    items.sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+    return { total: r2(total), count: count, items: items };
   }
   function cycleProjection(mode, salMode) {
     var b = state.base;
@@ -2611,6 +2617,8 @@
       salary: r2(salExpected), salaryReceived: salReceived, salaryInFree: salInFree,
       withSalary: withSal, salaryAdded: r2(salAdded),
       plans: r2(planTotal), planCount: planCount,
+      // v73.37: the peek's expandable breakdown (the specific plan dues)
+      planItems: pw.items,
       net: net
     };
   }
@@ -4117,6 +4125,23 @@
       // in the this-cycle block (the boss's Oct-11 point: the salary is
       // already inside the displayed free cash, so the row was misleading).
       rows += '<div class="cbrow"><div class="lab">Carried over<small>from this cycle — plans &amp; prepayments already netted</small></div><div class="amt' + (p.carry < 0 ? ' minus' : '') + '">' + money(p.carry) + '</div></div>';
+      // v73.37 (boss: 'keep it for the next cycle peek, and expandable to
+      // the specific plan dues'): the Plans row is a tap target — the
+      // specific dues drop in as sub-rows (resolved amounts: a fork shows
+      // its forked value, paid/skipped never appear), capped at 5 with
+      // "+N more…" (the Money tab's series cap, same pattern).
+      if (p.plans > 0.004) {
+        var open = !!state.cbPlansOpen;
+        rows += '<div class="cbrow cbplans" id="cbPlansRow" role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (open ? ' open' : '') + '">▸</span>Plans due<small>' + p.planCount + ' due in window</small></div><div class="amt minus">− ' + money(p.plans) + '</div></div>';
+        if (open) {
+          var subs = '';
+          (p.planItems || []).slice(0, 5).forEach(function (it) {
+            subs += '<div class="cbsub"><span class="sl">' + esc(it.name) + (it.edited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') + ' · ' + dayMonth(it.date) + '</span><span class="sv">' + money(it.amount) + '</span></div>';
+          });
+          if ((p.planItems || []).length > 5) subs += '<div class="cbsub mut"><span class="sl">+' + ((p.planItems || []).length - 5) + ' more…</span></div>';
+          rows += '<div class="cbsubwrap">' + subs + '</div>';
+        }
+      }
       if (p.salary > 0) {
         if (p.withSalary) {
           rows += '<div class="cbrow"><div class="lab">Salary<small>the ' + ordinal(p.sday) + '</small></div><div class="amt plus">+ ' + money(p.salary) + '</div></div>';
@@ -4125,14 +4150,16 @@
         }
       }
     }
-    if (p.plans > 0.004) {
-      rows += '<div class="cbrow"><div class="lab">Plans<small>' + p.planCount + ' due in window</small></div><div class="amt minus">− ' + money(p.plans) + '</div></div>';
-    }
     // v73.35: the card-dues line is GONE — the card balance is part of
     // 'owed' and therefore already inside the free cash the block starts
     // from (the boss's Oct-5 point: it is accounted for in this cycle's
     // displayed free cash, so the peek must not deduct it again).
-    if (!rows) rows = '<div class="cbrow mut"><div class="lab">Nothing due in this window</div></div>';
+    // v73.37: the THIS-cycle Plans row is gone too (boss: 'remove the plan
+    // due row in hero card for this cycle') — this mode is just the window
+    // + net, the old hero number (no placeholder row either — the mockup
+    // rev 3 shape). The plans total still lives in the math (the net is
+    // free − plans); the row simply is not rendered.
+    if (!rows && mode === 'next') rows = '<div class="cbrow mut"><div class="lab">Nothing due in this window</div></div>';
     var netCls = p.net >= 0 ? 'pos' : 'neg';
     // v73.36: money() already renders the sign for negatives — the old
     // '− ' prefix produced "− PHP -12,461.00" (a double sign)
@@ -4166,6 +4193,14 @@
       var btn = e.target && e.target.closest ? e.target.closest('button[data-m]') : null;
       if (!btn) return;
       state.peekMode = btn.getAttribute('data-m') === 'without' ? 'without' : 'with';
+      renderCycleBlock();
+    };
+    // v73.37: the peek's Plans row expands the specific dues (in-memory
+    // flag, defaults closed; the row is a div[role=button] — the v73.20
+    // chip pattern, no button-in-button).
+    var plansRow = byId('cbPlansRow');
+    if (plansRow) plansRow.onclick = function () {
+      state.cbPlansOpen = !state.cbPlansOpen;
       renderCycleBlock();
     };
   }
@@ -6686,12 +6721,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.36, live: new Date(2026, 9, 11, 18, 30) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.37, live: new Date(2026, 9, 11, 19, 5) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.37': [
+      'The This-cycle block is just your free cash now (the plans line left it — the number is the old hero number). The Next-cycle peek keeps the plans line, and you can tap it to see the specific plan dues (forked amounts show their forked value; paid or skipped ones never appear)'
+    ],
     '73.36': [
       'The Next-cycle peek now starts from your CURRENT free cash: the This-cycle number (plans &amp; prepayments already netted out) carries over as a row, then next cycle\'s plans are deducted — the With / Without salary toggle stays as the survival check. The This-cycle block no longer shows the salary row (it is already inside your free cash)'
     ],
