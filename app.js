@@ -2552,10 +2552,6 @@
     var salReceived = !!(cd.received && cd.received.amount > 0);
     var salInFree = (mode === 'this') && salReceived; // already inside the as-of-today free
     var withSal = (mode === 'this') ? true : (salMode !== 'without');
-    // the salary's EFFECT on the net: an expected-not-received salary is
-    // ADDED (with mode only); a received one is already IN the free — "with"
-    // leaves it (0 effect), "without" SUBTRACTS it (the survival check)
-    var salEffect = salInFree ? (withSal ? 0 : -salExpected) : (withSal ? salExpected : 0);
     // the plans landing in the window (the v73.16 resolver: forks count,
     // skips don't, paid occurrences deduct their live remainder)
     var planTotal = 0, planCount = 0;
@@ -2572,55 +2568,31 @@
         planTotal += rem; planCount++;
       });
     });
-    var dues = cardDuesInWindow(cd, mode);
-    var salAdded = withSal && !salInFree ? salExpected : 0;
+    // v73.35 (boss: 'this cycle should only display the currently displayed
+    // free cash (no dues) ... next cycle shows that next cycle's plan dues
+    // only (not the card dues anymore since it has been accounted for already
+    // in this cycle's displayed free cash)'): CARD DUES are NO LONGER in the
+    // projection. The card balance is part of 'owed', so it is already inside
+    // the hero's free cash — displaying it again would double-count.
+    //   this cycle: net = free − this window's plans  (= the hero's freeNet,
+    //              the "currently displayed free cash" — no dues, no salary)
+    //   next cycle: net = free + salary (with/without) − next window's plans
+    var salAdded = (mode === 'next') ? (withSal && !salInFree ? salExpected : 0) : 0;
+    var net = (mode === 'this') ? r2(free - planTotal) : r2(free + salAdded - planTotal);
     return {
       mode: mode, month: m, start: cd.start, end: cd.end, sday: cd.sday,
       free: r2(free),
       salary: r2(salExpected), salaryReceived: salReceived, salaryInFree: salInFree,
       withSalary: withSal, salaryAdded: r2(salAdded),
       plans: r2(planTotal), planCount: planCount,
-      dues: r2(dues),
-      net: r2(free + salAdded - planTotal - dues)
+      net: net
     };
   }
-  // v73.34: the cards' due for a cycle window — the same math as the coach
-  // card's cardpay rows (v73.29/30/31): the manual "due this cycle" (c.due)
-  // when set, else the live balance, NETTED of card payments logged after
-  // the window's cutoff (a payment after the cutoff pays that cycle's bill;
-  // before it is a prepay already baked into the manual due). WINDOW-AWARE
-  // (the boss's Oct-5 scenario): for THIS cycle the manual due IS the bill
-  // (netted of post-cutoff payments); for NEXT cycle the bill is the
-  // balance MINUS the manual due (the v73.29 'rolls to next cycle' number) —
-  // the same money is never due in both windows.
-  function cardDuesInWindow(cd, mode) {
-    var total = 0;
-    ((state.snapshot && state.snapshot.cards) || []).forEach(function (c) {
-      var bal = Number(c.balance) || 0;
-      if (bal <= 0) return;
-      var manualDue = (c.due != null) ? Number(c.due) : null;
-      var amt;
-      if (mode === 'next') {
-        amt = (manualDue != null) ? Math.max(0, bal - manualDue) : bal;
-      } else {
-        var paid = (manualDue != null) ? (function () {
-          var s = 0;
-          (state.txns || []).forEach(function (t) {
-            if (t.kind !== 'card_payment') return;
-            var dd = String(t.date || '');
-            if (dd <= cd.end) return; // before the cutoff = prepay (in the manual due)
-            var a = Number(t.amount) || 0;
-            if (a <= 0) return;
-            if (t.account === c.name) s += a;
-          });
-          return r2(s);
-        })() : 0;
-        amt = (manualDue != null) ? Math.max(0, manualDue - paid) : bal;
-      }
-      if (amt > 0.004) total += amt;
-    });
-    return r2(total);
-  }
+  // v73.35: cardDuesInWindow is GONE — the card balance is part of 'owed',
+  // so it is already inside the hero's free cash; the block must not deduct
+  // it again (the boss's Oct-5 point). The coach card's cardpay rows
+  // (v73.29/30/31) keep their own manual-due math; only the hero block
+  // dropped the line.
   // v73.16 (user: 'if the instance falls within the cycle, deduct them from
   // the free cash'): the CURRENT cycle's share of the plans — every
   // occurrence (resolved: forked amounts count, skipped ones don't) whose
@@ -4121,9 +4093,10 @@
     if (p.plans > 0.004) {
       rows += '<div class="cbrow"><div class="lab">Plans<small>' + p.planCount + ' due in window</small></div><div class="amt minus">− ' + money(p.plans) + '</div></div>';
     }
-    if (p.dues > 0.004) {
-      rows += '<div class="cbrow"><div class="lab">Card dues<small>due in window</small></div><div class="amt minus">− ' + money(p.dues) + '</div></div>';
-    }
+    // v73.35: the card-dues line is GONE — the card balance is part of
+    // 'owed' and therefore already inside the free cash the block starts
+    // from (the boss's Oct-5 point: it is accounted for in this cycle's
+    // displayed free cash, so the peek must not deduct it again).
     if (!rows) rows = '<div class="cbrow mut"><div class="lab">Nothing due in this window</div></div>';
     var netCls = p.net >= 0 ? 'pos' : 'neg';
     var netTxt = (p.net < 0 ? '− ' : '') + money(p.net);
@@ -6676,12 +6649,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.34, live: new Date(2026, 9, 11, 6, 19) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.35, live: new Date(2026, 9, 11, 15, 49) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.35': [
+      'The cycle block in the Free / unallocated card no longer deducts card dues — the card balance is already part of what is owed, so it is inside the free cash the block starts from (deducting it again was double-counting). This cycle now shows just your displayed free cash minus the plans due in the window; the Next-cycle peek shows that cycle\'s plans (plus the With / Without salary toggle) — card dues stay where they belong, the coach card'
+    ],
     '73.34': [
       'The Free / unallocated card now shows where the money goes: a cycle block (This cycle by default — tap Next cycle to peek) with the salary, plans and card dues as line items and the net at the end of the cycle. The Next-cycle peek has the With / Without salary toggle (the survival check). The "− ₱X plans this cycle" line left the card\'s sub — the block carries it now'
     ],
