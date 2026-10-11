@@ -728,8 +728,6 @@ def main():
           # v73.37: the peek's Plans row is the expandable tap target
           and 'id="cbPlansRow" role="button"' in js
           and "state.cbPlansOpen = !state.cbPlansOpen;" in js
-          and "(p.planItems || []).slice(0, 5).forEach(function (it) {" in js
-          and "' more…</span></div>';" in js
           # the dues line item is gone from the block render
           and "Card dues<small>due in window</small>" not in js
           # the peek's toggle renders only in next mode
@@ -740,6 +738,16 @@ def main():
           and "sub.push('− ' + money(d.planDeduct) + ' plans this cycle');" not in js
           and "cycleProjection: cycleProjection" in js
           and "'73.37': [" in js)
+    check("v73.39 (boss: 'for the expanded plan dues, make the +x more... also expandable'): the peek's expanded Plans list — the '+N more…' row is now a TAP TARGET (cbPlansMoreRow, div[role=button], its own in-memory flag state.cbPlansMore defaulting collapsed): collapsed = first 5 items + the more-row; tapped = the FULL list (no cap, no more-row); tapped again = back to the 5-cap. The 5-cap slice now runs off a shown var (moreOpen ? items : items.slice(0,5)) and the old non-expandable more-row markup is gone",
+          'id="cbPlansMoreRow" role="button"' in js
+          and "state.cbPlansMore = !state.cbPlansMore;" in js
+          and "cbPlansMore: false" in js
+          and "var shown = moreOpen ? items : items.slice(0, 5);" in js
+          and "shown.forEach(function (it) {" in js
+          # the old static more-row (no id, not a tap target) is gone —
+          # the single-quoted pin avoids the escaped-quote soup
+          and '<div class="cbsub mut"><span class="sl">+' not in js
+          and "'73.39': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js

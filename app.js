@@ -31,7 +31,8 @@
     owed: { people: [] },
     cycleMode: 'this', // v73.34: the hero's cycle block — This cycle by default, Next cycle only on tap
     peekMode: 'with',  // v73.34: the Next-cycle salary toggle (With salary / Without)
-    cbPlansOpen: false // v73.37: the peek's Plans row expansion (in-memory, defaults closed)
+    cbPlansOpen: false, // v73.37: the peek's Plans row expansion (in-memory, defaults closed)
+ cbPlansMore: false // v73.39: the peek's "+N more…" second-level expansion (in-memory, defaults collapsed)
   };
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
@@ -4140,11 +4141,17 @@
         var open = !!state.cbPlansOpen;
         rows += '<div class="cbrow cbplans" id="cbPlansRow" role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (open ? ' open' : '') + '">▸</span>Plans due<small>' + p.planCount + ' due in window</small></div><div class="amt minus">− ' + money(p.plans) + '</div></div>';
         if (open) {
+          var items = p.planItems || [];
+          // v73.39: the "+N more…" row is itself a tap target (second
+          // in-memory flag, defaults collapsed) — tap it and the full
+          // list renders instead of the 5-cap.
+          var moreOpen = !!state.cbPlansMore;
+          var shown = moreOpen ? items : items.slice(0, 5);
           var subs = '';
-          (p.planItems || []).slice(0, 5).forEach(function (it) {
+          shown.forEach(function (it) {
             subs += '<div class="cbsub"><span class="sl">' + esc(it.name) + (it.edited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') + ' · ' + dayMonth(it.date) + '</span><span class="sv">' + money(it.amount) + '</span></div>';
           });
-          if ((p.planItems || []).length > 5) subs += '<div class="cbsub mut"><span class="sl">+' + ((p.planItems || []).length - 5) + ' more…</span></div>';
+          if (!moreOpen && items.length > 5) subs += '<div class="cbsub mut" id="cbPlansMoreRow" role="button" tabindex="0"><span class="sl">+' + (items.length - 5) + ' more…</span></div>';
           rows += '<div class="cbsubwrap">' + subs + '</div>';
         }
       }
@@ -4207,6 +4214,13 @@
     var plansRow = byId('cbPlansRow');
     if (plansRow) plansRow.onclick = function () {
       state.cbPlansOpen = !state.cbPlansOpen;
+      renderCycleBlock();
+    };
+    // v73.39: the "+N more…" sub-row expands the full list (it's a
+    // sibling of the Plans row, not nested in it — no chip collision).
+    var moreRow = byId('cbPlansMoreRow');
+    if (moreRow) moreRow.onclick = function () {
+      state.cbPlansMore = !state.cbPlansMore;
       renderCycleBlock();
     };
   }
@@ -6727,12 +6741,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.38, live: new Date(2026, 9, 11, 23, 19) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.39, live: new Date(2026, 9, 11, 23, 43) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.39': [
+      'In the Next-cycle peek, when the plan dues list is longer than 5 the "+N more…" line is now tappable — tap it to see the full list, tap again to go back to the first 5'
+    ],
     '73.38': [
       'The Next-cycle peek window was jumping two cycles ahead (showing Nov 15 – Dec 14 on Oct 11) — it now shows exactly the next cycle (Oct 15 – Nov 14), contiguous with this one'
     ],

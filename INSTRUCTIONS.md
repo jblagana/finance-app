@@ -6,6 +6,20 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.39 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-11 - "in the expanded plan dues, make the +x more... also expandable"
+Status: **done** - v73.39 shipped (SW cache `finances-pwa-v73.39`)
+Progress: 100% - GATES all green via tools/release.ps1 v73.39 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v73.39 "+N more…" assertions)
+
+### What changed
+- **The peek's "+N more…" row is now a tap target** (`#cbPlansMoreRow`, a `div[role=button]` — same pattern as the Plans row, no button-in-button): collapsed = first 5 items + the more-row; tap = the FULL list (no cap, no more-row); tap again = back to the 5-cap. Own in-memory flag `state.cbPlansMore` (defaults collapsed); the 5-cap slice now runs off `shown = moreOpen ? items : items.slice(0, 5)`.
+- **Smoke:** v7334Section gains a `V34 Daily` plan (daily × 40 from today → ~31 occurrences in the next window, "32 due in window" with V34 Gym) + 3 new assertions driving the REAL `cbPlansMoreRow.onclick`: the more-row renders past the cap, tapping expands the full list (32 sub-rows, no more-row), tapping again collapses back to the cap. cbPlansMoreRow DOM stub + cleanup/self-heal cover the new plan.
+- **check_site.py:** the v73.37 check drops its two old more-row markup pins (the static row is gone); new v73.39 check pins the tap-target markup, the flag, the `shown` slice, and the old static more-row gone-pin (single-quoted — the escaped-quote double-quoted version was a Python syntax error caught by the gate's first run).
+- **SHELL_NOTES '73.39'** (the What's-new note the gate requires for the running version).
+
+### Files
+app.js (cbPlansMore flag + renderCycleBlock shown-slice + more-row tap target + handler + SHELL_NOTES + stamp), smoke_app_v68.js (root mirror: cbPlansMoreRow stub + V34 Daily plan + 3 assertions + cleanup), tools/check_site.py (v73.37 re-pin + v73.39 check), sw.js + README.md (stamps via release.ps1).
+
 # v73.38 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-11 - "ur hero card next peek row is advanced to nov15-dec14, it should be oct 15-nov14"
 Status: **done** - v73.38 shipped (SW cache `finances-pwa-v73.38`)
