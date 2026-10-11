@@ -754,6 +754,17 @@ def main():
           # the old raw-snapshot read is gone
           and "var free = (state.snapshot && state.snapshot.cash) ? Number(state.snapshot.cash.free) || 0 : 0;" not in js
           and "'73.40': [" in js)
+    check("v73.41 (boss: 'the plans in the money tab: the dates are not editable'): the occurrence edit sheet's date field is now WIRed — savePlanOccurrence reads pe_date and the scope decides how far the change reaches (this = move only that occurrence, following = shift the tail by the same days, all = re-anchor the series); the series is split into a raw template GRID (planGridDates) + a date-override resolver (planDateAt: move / accumulating shiftFrom-shiftDays), so a moved date lands where it belongs in the deduped+sorted list; a collision onto another occurrence's date is refused; a COUNTED series is now finite (N dates from the anchor, not N future dates forever); resolveOccurrence maps resolved dates back to grid-keyed overrides",
+          "function planGridDates(p) {" in js
+          and "function planDateAt(p, gridDateISO) {" in js
+          and "var newDate = byId('pe_date').value || dateISO;" in js
+          and "entry.move = newDate;" in js
+          and "entry.shiftFrom = gridDate;" in js
+          and "if (others[newDate]) {" in js
+          and "planGridDates: planGridDates" in js and "planDateAt: planDateAt" in js
+          and "todayISO: todayISO" in js
+          and "savePlanOccurrence: savePlanOccurrence" in js
+          and "'73.41': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js

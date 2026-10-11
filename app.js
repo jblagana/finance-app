@@ -286,36 +286,75 @@
   // annual 2; daily defaults to 14), so pre-v73.14 data renders identically.
   function planOccurrences(p) {
     if (!p || !p.repeat) return [String(p.date)];
-    var today = todayISO();
-    var d = String(p.date), guard = 0;
-    var win = p.repeat === 'weekly' ? 8 : (p.repeat === 'annual' ? 2 : (p.repeat === 'daily' ? 14 : 3));
-    var cnt = Math.floor(Number(p.count));
-    if (!(cnt >= 1)) cnt = win;
-    if (p.repeat === 'daily') {
-      var sd = function (x, k) { var dd = parseISO(x); dd.setDate(dd.getDate() + k); return localISO(dd); };
-      while (d < today && guard < 730) { d = sd(d, 1); guard++; }
-      var do2 = [];
-      for (var kd = 0; kd < cnt; kd++) do2.push(sd(d, kd));
-      return do2;
-    }
-    if (p.repeat === 'weekly') {
-      var sh = function (x, k) { return shiftWeek(x, k); };
-      while (d < today && guard < 104) { d = sh(d, 1); guard++; }
-      var wo = [];
-      for (var kw = 0; kw < cnt; kw++) wo.push(sh(d, kw));
-      return wo;
-    }
-    if (p.repeat === 'annual') {
-      var sy = function (x, k) { return shiftYear(x, k); };
-      while (d < today && guard < 12) { d = sy(d, 1); guard++; }
-      var yo = [];
-      for (var ky = 0; ky < cnt; ky++) yo.push(sy(d, ky));
-      return yo;
-    }
-    // monthly (the original path, unchanged)
-    while (d < today && guard < 36) { d = shiftMonth(d, 1); guard++; }
+    // v73.41: grid + the date-override resolver (dedupe + sort). A plan with
+    // no date overrides resolves to exactly the old forward window — the
+    // resolver is a no-op for pre-v73.41 data, so old plans render
+    // identically.
     var out = [];
-    for (var k = 0; k < cnt; k++) out.push(shiftMonth(d, k));
+    planGridDates(p).forEach(function (g) {
+      var r = planDateAt(p, g);
+      if (out.indexOf(r) < 0) out.push(r);
+    });
+    out.sort();
+    var today = todayISO();
+    return out.filter(function (d) { return d >= today; });
+  }
+  // v73.41: the date-edit model. The series GRID is the pure template
+  // (planDateAt's input) — date overrides live on top of it:
+  //   move:  { move: <newISO> }  — "this" scope: just this occurrence jumps
+  //   shift: { shiftFrom: <gridISO>, shiftDays: n } — "this+after" (tail)
+  //           and "all" (written at the first grid date). Shifts ACCUMULATE
+  //           (two "following" edits = the sum); a move wins for its own
+  //           grid date. planOccurrences/planAllDates dedupe + sort the
+  //   resolved dates, so a moved date lands where it belongs in the list.
+  function planDateAt(p, gridDateISO) {
+    var ov = p.overrides;
+    if (!ov) return gridDateISO;
+    var shift = 0, moved = null;
+    Object.keys(ov).forEach(function (k) {
+      var e = ov[k];
+      if (!e) return;
+      if (e.shiftFrom && e.shiftFrom <= gridDateISO && e.shiftDays) shift += e.shiftDays;
+      if (k === gridDateISO && e.move) moved = e.move;
+    });
+    if (moved) return String(moved);
+    if (!shift) return gridDateISO;
+    var dd = parseISO(gridDateISO);
+    dd.setDate(dd.getDate() + shift);
+    return localISO(dd);
+  }
+  // v73.41: the raw template grid (no date overrides) — the anchor the
+  // resolver walks. Two shapes, matching the pre-v73.41 behavior exactly:
+  //   no count  -> the SLIDING window: `win` dates from the first grid date
+  //                >= today (the old planOccurrences forward window — old
+  //                plans render identically; the window slides forward as
+  //                today advances, and shift-rules keep applying because
+  //                every future grid date is >= their shiftFrom)
+  //   count N   -> the FINITE series: exactly N dates from the anchor
+  //                (the boss's "count, not infinite" intent — a 12x series
+  //                ends after its 12th occurrence, even if the anchor is
+  //                months old; pre-v73.41 this showed N future dates
+  //                forever, which was the perpetual-window bug)
+  function planGridDates(p) {
+    if (!p || !p.repeat) return [String(p.date)];
+    var d = String(p.date);
+    var cnt = Math.floor(Number(p.count));
+    var win = p.repeat === 'weekly' ? 8 : (p.repeat === 'annual' ? 2 : (p.repeat === 'daily' ? 14 : 3));
+    var hasCount = cnt >= 1;
+    var n = hasCount ? cnt : win;
+    var step = function (x, k) {
+      if (p.repeat === 'daily') { var dd = parseISO(x); dd.setDate(dd.getDate() + k); return localISO(dd); }
+      if (p.repeat === 'weekly') return shiftWeek(x, k);
+      if (p.repeat === 'annual') return shiftYear(x, k);
+      return shiftMonth(x, k);
+    };
+    var start = d, guard = 0;
+    if (!hasCount) {
+      var today = todayISO();
+      while (start < today && guard < 730) { start = step(start, 1); guard++; }
+    }
+    var out = [];
+    for (var k = 0; k < n; k++) out.push(step(start, k));
     return out;
   }
   // v73.27: every occurrence date of plan p (one-offs: [p.date]; recurring:
@@ -324,25 +363,15 @@
   // coach card's overdue rows (v73.27) need them.
   function planAllDates(p) {
     if (!p || !p.repeat) return [String(p.date)];
-    var d = String(p.date);
-    var cnt = Math.floor(Number(p.count));
-    var win = p.repeat === 'weekly' ? 8 : (p.repeat === 'annual' ? 2 : (p.repeat === 'daily' ? 14 : 3));
-    if (!(cnt >= 1)) cnt = win;
+    // v73.41: same grid + resolver as planOccurrences, but WITHOUT the
+    // forward filter — past occurrences stay reachable (the coach's
+    // overdue rows need them).
     var out = [];
-    if (p.repeat === 'daily') {
-      var sd = function (x, k) { var dd = parseISO(x); dd.setDate(dd.getDate() + k); return localISO(dd); };
-      for (var kd = 0; kd < cnt; kd++) out.push(sd(d, kd));
-      return out;
-    }
-    if (p.repeat === 'weekly') {
-      for (var kw = 0; kw < cnt; kw++) out.push(shiftWeek(d, kw));
-      return out;
-    }
-    if (p.repeat === 'annual') {
-      for (var ky = 0; ky < cnt; ky++) out.push(shiftYear(d, ky));
-      return out;
-    }
-    for (var k = 0; k < cnt; k++) out.push(shiftMonth(d, k));
+    planGridDates(p).forEach(function (g) {
+      var r = planDateAt(p, g);
+      if (out.indexOf(r) < 0) out.push(r);
+    });
+    out.sort();
     return out;
   }
   // v73.14: per-occurrence overrides — the 3-scope model (boss-confirmed).
@@ -357,6 +386,15 @@
     var ov = p.overrides;
     if (!ov) return res;
     var exact = ov[dateISO];
+    // v73.41: the override is keyed by GRID date, but callers pass the
+    // RESOLVED date — after a move/shift they differ. Map back: find the
+    // grid date that resolves to this one and read its entry.
+    if (!exact) {
+      planGridDates(p).forEach(function (g) {
+        if (exact) return;
+        if (planDateAt(p, g) === dateISO) exact = ov[g];
+      });
+    }
     var best = null, bestKey = '';
     Object.keys(ov).forEach(function (k) {
       var e = ov[k];
@@ -5002,7 +5040,10 @@
     if (dt) dt.value = dateISO;
     if (sc) sc.value = 'this';
     if (h) {
-      h.textContent = 'Editing ' + fmtDate(dateISO) + ' of ' + esc(p.name || 'plan') + ' — the rest of the series keeps the plan as-is unless you say otherwise.';
+      // v73.41: the date is now editable — the hint says what each scope does
+      // to it (this = move this one, following = shift the tail by the same
+      // days, all = re-anchor the whole series)
+      h.textContent = 'Editing ' + fmtDate(dateISO) + ' of ' + esc(p.name || 'plan') + ' — change the date and pick how far it reaches: just this one moves it, this+after shifts the tail by the same days, all re-anchors the series.';
       h.style.display = '';
     }
     // v73.17: the "paid by" proof — the explicit link wins, the fuzzy
@@ -5056,23 +5097,86 @@
     if (!name) { alert('Give the plan a name.'); return; }
     if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
     var scope = byId('pe_scope').value;
-    var occ = planOccurrences(p);
-    var first = occ.length ? occ[0] : dateISO;
+    var ov = p.overrides || {};
+    // v73.41: the override is keyed by GRID date — map the (possibly
+    // already-moved) occurrence back to the grid date it came from.
+    var gridDate = dateISO;
+    planGridDates(p).forEach(function (g) { if (gridDate === dateISO && planDateAt(p, g) === dateISO) gridDate = g; });
+    // the old entry at that grid date (may hold a prior move/shift + name/amount)
+    var old = ov[gridDate] || {};
     var entry = {};
     if (name !== p.name) entry.name = name;
     if (amount !== p.amount) entry.amount = amount;
-    // no change at all -> clear any prior override for this date (back to template)
-    var ov = p.overrides || {};
-    if (scope === 'all') {
-      // the series-wide rule rides applyFrom at the FIRST occurrence; an
-      // exact-date entry there would only cover that one date
-      delete ov[first];
-      if (Object.keys(entry).length) ov[first] = { name: entry.name != null ? entry.name : p.name, amount: entry.amount != null ? entry.amount : p.amount, applyFrom: first };
-    } else if (scope === 'following') {
-      delete ov[dateISO]; // an exact entry at this date would shadow the rule
-      if (Object.keys(entry).length) ov[dateISO] = { name: entry.name != null ? entry.name : p.name, amount: entry.amount != null ? entry.amount : p.amount, applyFrom: dateISO };
+    // --- the DATE (v73.41: it is now editable; the old code ignored it) ---
+    var newDate = byId('pe_date').value || dateISO;
+    var dateChanged = newDate !== dateISO;
+    if (dateChanged) {
+      // collision: another occurrence (after this edit) would land on the
+      // same date — the lists dedupe, so the boss would lose a row
+      var others = {};
+      planGridDates(p).forEach(function (g) {
+        if (g === gridDate) return;
+        var e = ov[g] || {};
+        if (e.skip) return;
+        var r = e.move ? String(e.move) : planDateAt(p, g);
+        others[r] = true;
+      });
+      if (others[newDate]) {
+        alert('Another occurrence of this plan already falls on ' + fmtDate(newDate) + ' — pick a different date.');
+        return;
+      }
+      if (scope === 'this') {
+        entry.move = newDate; // just this occurrence jumps; the old grid date reverts to the template
+      } else if (scope === 'following') {
+        var days = diffDays(dateISO, newDate);
+        delete entry.move;
+        // accumulate with any prior tail-shift at this grid date
+        entry.shiftFrom = gridDate;
+        entry.shiftDays = (Number(old.shiftDays) || 0) + days;
+      } else { // all — re-anchor the whole series
+        var daysAll = diffDays(dateISO, newDate);
+        delete entry.move;
+        var firstGrid = planGridDates(p)[0];
+        entry.shiftFrom = firstGrid;
+        entry.shiftDays = (Number((ov[firstGrid] || {}).shiftDays) || 0) + daysAll;
+      }
     } else {
-      if (Object.keys(entry).length) ov[dateISO] = entry; else delete ov[dateISO];
+      // date unchanged: drop any prior move/shift on this grid date
+      delete entry.move; delete entry.shiftFrom; delete entry.shiftDays;
+    }
+    // --- name/amount keep the 3-scope model (v73.14) ---
+    if (!dateChanged) {
+      if (scope === 'all') {
+        var first = planOccurrences(p)[0] || dateISO;
+        delete ov[first];
+        if (Object.keys(entry).length) ov[first] = { name: entry.name != null ? entry.name : p.name, amount: entry.amount != null ? entry.amount : p.amount, applyFrom: first };
+      } else if (scope === 'following') {
+        delete ov[dateISO]; // an exact entry at this date would shadow the rule
+        if (Object.keys(entry).length) ov[dateISO] = { name: entry.name != null ? entry.name : p.name, amount: entry.amount != null ? entry.amount : p.amount, applyFrom: dateISO };
+      } else {
+        if (Object.keys(entry).length) ov[dateISO] = entry; else delete ov[dateISO];
+      }
+    } else {
+      // date edit: the scope decides how far the change reaches
+      if (scope === 'this') {
+        // move + (any) name/amount on this occurrence only
+        if (Object.keys(entry).length) ov[gridDate] = entry; else delete ov[gridDate];
+      } else if (scope === 'following') {
+        // tail shift + name/amount ride applyFrom at this grid date
+        var eF = { shiftFrom: gridDate, shiftDays: (Number(old.shiftDays) || 0) + days, applyFrom: gridDate };
+        if (name !== p.name) eF.name = name;
+        if (amount !== p.amount) eF.amount = amount;
+        ov[gridDate] = eF;
+      } else { // all — re-anchor the series; name/amount apply to the whole
+        var fg = planGridDates(p)[0];
+        var eAll = ov[fg] || {};
+        eAll.shiftFrom = fg;
+        eAll.shiftDays = (Number(eAll.shiftDays) || 0) + daysAll;
+        if (name !== p.name) eAll.name = name;
+        if (amount !== p.amount) eAll.amount = amount;
+        eAll.applyFrom = fg;
+        ov[fg] = eAll;
+      }
     }
     p.overrides = ov;
     closeSheets();
@@ -6748,12 +6852,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.40, live: new Date(2026, 9, 12, 0, 14) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.41, live: new Date(2026, 9, 12, 3, 40) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.41': [
+      'Plan dates are editable now: in the Money tab, tap a recurring occurrence\'s pencil and change the date — "just this one" moves only that occurrence, "this one and after" shifts the rest of the series by the same days, "all" re-anchors the whole series. The sheet warns if the new date would land on another occurrence, and a counted series (12×, 24×…) now ends after its Nth occurrence instead of rolling forward forever'
+    ],
     '73.40': [
       'Fixed: logging new entries updated the free cash but "Free at end of this cycle" stayed on the old number — the cycle block now reads the same live free cash as the hero, so it moves the moment you log anything'
     ],
@@ -7667,8 +7774,16 @@
     render: render, // v73.0: the full re-render (the smoke reads the sparkline after)
     detectRecurring: detectRecurring, // v73.1: the recurring detector (pure — the smoke drives it)
     planHTML: planHTML, // v73.15: the series-grouped row render (pure-ish — the smoke drives it)
-    planOccurrences: planOccurrences, // v73.1: the occurrence math (weekly/annual; v73.14: daily + count)
-    resolveOccurrence: resolveOccurrence, // v73.14: the 3-scope override resolver (pure — the smoke drives it)
+    todayISO: todayISO, // v73.41: the local date string (the smoke seeds plans at today ± offsets)
+    parseISO: parseISO, // v73.41: ISO -> local Date (the smoke's date math)
+    localISO: localISO, // v73.41: local Date -> ISO (the smoke's date math)
+    shiftMonth: shiftMonth, // v73.41: the monthly grid step (the smoke's grid-date math)
+    planOccurrences: planOccurrences, // v73.1: the occurrence math (weekly/annual; v73.14: daily + count; v73.41: grid + date-override resolver)
+    planGridDates: planGridDates, // v73.41: the raw template grid (the resolver's anchor — the smoke drives it)
+    planDateAt: planDateAt, // v73.41: grid date -> resolved date (move/shift overrides)
+    resolveOccurrence: resolveOccurrence, // v73.14: the 3-scope override resolver (pure — the smoke drives it); v73.41: maps resolved dates back to grid overrides
+    savePlanOccurrence: savePlanOccurrence, // v73.41: the edit sheet's save (the smoke drives the real date-edit path)
+    setPlanEditCtx: function (c) { planEditCtx = c; }, // v73.41: the smoke seeds the edit context
     cyclePlanDeduction: cyclePlanDeduction, // v73.16: the cycle's plan share (the smoke drives it)
     planLinkSuggestion: planLinkSuggestion, // v73.17: the fuzzy SUGGESTION (pure — the smoke drives it)
     planRefAlive: planRefAlive, // v73.17: does an explicit link still point at a live occurrence

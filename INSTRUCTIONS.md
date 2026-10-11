@@ -6,6 +6,23 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.41 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-11 - "the plans in the money tab: the dates are not editable. i tried changing it but nothing happened"
+Status: **done** - v73.41 shipped (SW cache `finances-pwa-v73.41`)
+Progress: 100% - GATES all green via tools/release.ps1 v73.41 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v73.41 date-edit assertions)
+
+### What changed
+- **The date field was dead — the old save ignored `pe_date`.** The edit sheet rendered the date and even a hint, but `savePlanOccurrence` only wrote name/amount overrides. Now it reads `pe_date` and the scope decides how far the change reaches: **this** = `move` (only that occurrence jumps; the old grid date reverts to the template), **this+after** = `shiftFrom/shiftDays` (the tail shifts by the same days, shifts ACCUMULATE across edits), **all** = the shift written at the series' first grid date (whole series re-anchors).
+- **The series model split into GRID + resolver** so moved/shifted dates stay coherent: `planGridDates(p)` is the raw template (no date overrides — the anchor), `planDateAt(p, gridISO)` resolves a grid date through the overrides (a move wins for its own grid date; shifts accumulate; no overrides = identity, so pre-v73.41 plans resolve identically). `planOccurrences`/`planAllDates` dedupe + sort the resolved dates, so a moved date lands where it belongs in the list. `resolveOccurrence` maps a RESOLVED date back to its grid-keyed override (the edited flag survives a move).
+- **Collision guard:** moving an occurrence onto another occurrence's resolved date is refused (the lists dedupe — the boss would lose a row).
+- **Counted series are now FINITE:** a plan with `count` N yields exactly N dates from the anchor (the boss's "count, not infinite" intent). Pre-v73.41, a counted series showed N *future* dates forever — the window slid forward every month, so a 12× series never ended. The no-count sliding windows are unchanged (old plans render identically).
+- **Smoke:** new `v7341Section` (wired after v7340Section) drives the REAL `savePlanOccurrence` path via `setPlanEditCtx` + the pe_* DOM stubs: "this" moves the 2nd occurrence +2d (lands sorted, old date gone, siblings untouched, resolver maps the moved date back), "following" shifts the tail +3d (3rd+ all moved, originals gone), "all" re-anchors the whole series, the collision alert fires with no write, and a no-override plan renders exactly the old forward window.
+- **check_site.py:** new v73.41 check pins planGridDates/planDateAt, the pe_date read, the move/shift writes, the collision guard, the exports, and the SHELL_NOTES entry.
+- **SHELL_NOTES '73.41'** (the What's-new note the gate requires for the running version).
+
+### Files
+app.js (planGridDates + planDateAt + planOccurrences/planAllDates resolver + savePlanOccurrence date path + resolveOccurrence grid mapping + exports + SHELL_NOTES + stamp), smoke_app_v68.js (root mirror: v7341Section + wiring + pe_* stubs), tools/check_site.py (v73.41 check), sw.js + README.md (stamps via release.ps1).
+
 # v73.40 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-11 - "i added new entries in ledger, it updated the hero card free cash but not the one for 'free at the end of this cycle' it remained the old one unchanged"
 Status: **done** - v73.40 shipped (SW cache `finances-pwa-v73.40`)
