@@ -6,6 +6,22 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.35 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-11 - "the hero card for 'this cycle' should only display the currently displayed free cash (like the old version of the app, no dues), and when i toggle to 'next cycle', it shows that next cycle's plan dues only (not the card dues anymore since it has been accounted for already in 'this cycle's displayed free cash"
+Status: **done** - v73.35 shipped (commit b919a3e, pushed to origin/main, SW cache `finances-pwa-v73.35`)
+Progress: 100% - GATES all green via tools/release.ps1 v73.35 (both check_site copies + test_chat_parser + node syntax + both smokes)
+
+### What changed
+- **`cycleProjection` net math (v73.35):** the card-dues term is OUT of the projection entirely. The card balance is part of 'owed', so it is already inside the hero's free cash — deducting it again was double-counting. THIS cycle: net = free − plans (the hero's freeNet, the "currently displayed free cash" — no dues, no salary row effect). NEXT cycle: net = free + salary (With/Without toggle) − next window's plans.
+- **`cardDuesInWindow` deleted** — the v73.34 window-aware dues helper had no remaining callers once the projection dropped the term. The coach card's cardpay rows (v73.29/30/31) keep their own manual-due math; only the hero block lost the line.
+- **The "Card dues" line item left the block render**; the dead `salEffect` local is gone too (net math now derives `salAdded` directly).
+- SHELL_NOTES '73.35' added (What's new).
+
+### Gate updates
+- smoke v7334Section: the dues line item is now asserted ABSENT from the block; the two net assertions re-pinned without dues (this = free − plans with salaryAdded 0; peek = free + salary − plans, Without drops the salary). The old window-aware-dues assertion (8) replaced by the no-dues peek assertion.
+- check_site v73.34 check replaced by v73.35: `cardDuesInWindow` pin flipped to `not in js`, the new net-math line pinned, the "Card dues" line-item string pinned absent, notes pin '73.35'.
+- Stamps: SHELL_RELEASE v73.35, sw cache finances-pwa-v73.35, README reference.
+
 # v73.34 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-11 - "add an ability to peek on the next cycles numbers, using current free cash (with ability to see the numbers with and without salary in)" + "current cycle should be shown by default, peek only shows if i want to"
 Status: **done** - v73.34 shipped (commit 362b75c, live re-stamp in the release commit, pushed to origin/main, SW cache `finances-pwa-v73.34`)
