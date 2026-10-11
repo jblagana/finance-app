@@ -6,6 +6,23 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.36 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-11 - "the hero card for 'this cycle' should only display the currently displayed free cash ... that 55k should CARRY OVER to the Next-cycle peek, and the next-cycle peek should then be deducted by THAT next cycle's plan dues" + boss decision: KEEP the salary toggle on the Next-cycle peek as the survival check
+Status: **done** - v73.36 shipped (commit 3520614, pushed to origin/main, SW cache `finances-pwa-v73.36`)
+Progress: 100% - GATES all green via tools/release.ps1 v73.36 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the re-pinned v7334Section + the new carry assertions)
+
+### What changed
+- **`cycleProjection` carry-over math (v73.36):** the peek now starts from the CARRY (= this cycle's net: free − THIS window's plans — this cycle's plans are already netted out of it, so they are never deducted twice), then deducts NEXT window's plans. The With/Without salary toggle is KEPT (the boss's survival check): With adds the target cycle's salary, Without leaves the survival number. This cycle: net = free − plans (unchanged from v73.35), and the salary ROW is gone from the This-cycle block (the salary is already inside the displayed free cash — the boss's Oct-11 point).
+- **`planWindowTotal(cd)`** — one helper computes both windows' plan totals (the v73.16 resolver: forks count, skips don't, paid occurrences deduct their live remainder). The carry and the peek's deduction come from the same helper so they can't drift apart.
+- **Render:** the peek gains a 'Carried over' row (the carried amount, red when negative) above the salary row; Without renders the salary as 'not counted · 0'. The This-cycle block is just the plans line + net now.
+- **Latent double-sign bug fixed:** the net line read '− PHP -12,461.00' (the old '− ' prefix on top of money()'s own sign) — money() now carries the sign alone.
+- SHELL_NOTES '73.36' added (What's new).
+
+### Gate updates
+- smoke v7334Section: (3b) NEW — this cycle has no salary row, no carry-over row; (8) re-pinned to the carry math (carry = this cycle's net; peek net = carry + salary − plans / carry − plans, Without salaryAdded 0); (9) NEW — the rendered peek shows the carry-over row with the carried amount (money()'s exact 'PHP -x' form) + the salary row, and Without swaps it for 'not counted'.
+- check_site: the v73.35 check replaced by v73.36 — the OLD next-cycle net line pinned ABSENT, the carry math + planWindowTotal pinned, the 'Carried over' row + this-cycle salary-row absence pinned, notes pin '73.36'.
+- Stamps: SHELL_RELEASE v73.36, sw cache finances-pwa-v73.36, README ref.
+
 # v73.35 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-11 - "the hero card for 'this cycle' should only display the currently displayed free cash (like the old version of the app, no dues), and when i toggle to 'next cycle', it shows that next cycle's plan dues only (not the card dues anymore since it has been accounted for already in 'this cycle's displayed free cash"
 Status: **done** - v73.35 shipped (commit b919a3e, pushed to origin/main, SW cache `finances-pwa-v73.35`)
