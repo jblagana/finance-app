@@ -8,7 +8,7 @@ commit is not done.
 
 # v73.41 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-11 - "the plans in the money tab: the dates are not editable. i tried changing it but nothing happened"
-Status: **done** - v73.41 shipped (SW cache `finances-pwa-v73.41`)
+Status: **done** - v73.41 shipped (SW cache `finances-pwa-v73.41`; commits `f46cf77` build + `f855847` live re-stamp, pushed to origin/main)
 Progress: 100% - GATES all green via tools/release.ps1 v73.41 (both check_site copies + test_chat_parser + node syntax + both smokes, incl. the new v73.41 date-edit assertions)
 
 ### What changed
