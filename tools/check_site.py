@@ -687,7 +687,7 @@ def main():
           # the row itself is unchanged (green, tag Salary, lands copy)
           and "rows.push({ cls: 'ok', tag: 'Salary'," in js
           and "'73.32': [" in js)
-    check("v73.35 (boss: 'this cycle should only display the currently displayed free cash (no dues) ... next cycle shows that next cycle's plan dues only (not the card dues anymore since it has been accounted for already in this cycle's displayed free cash)'): the hero's CYCLE BLOCK drops the card-dues line — the card balance is part of 'owed' and therefore ALREADY inside the free cash, so deducting it again was double-counting. This cycle: net = free − plans (the hero's freeNet — the 'currently displayed free cash'); Next cycle: net = free + salary (With/Without toggle) − next window's plans. cardDuesInWindow is gone; the coach card's cardpay rows keep their own manual-due math (v73.29/30/31)",
+    check("v73.36 (boss: 'that 55k should CARRY OVER to the Next-cycle peek, and the next-cycle peek should then be deducted by THAT next cycle's plan dues' — the With/Without salary toggle KEPT as the survival check; v73.35's card-dues removal stands): the hero's CYCLE BLOCK now CARRIES this cycle's displayed free cash into the peek — this cycle: net = free − plans (no dues, NO salary row: it is already inside the free cash); next cycle: net = carry + salary (With/Without) − next window's plans, where carry = this cycle's net (this cycle's plans are already netted, never deducted twice). cardDuesInWindow stays gone; the coach card's cardpay rows keep their own manual-due math (v73.29/30/31)",
           # the block still lives in the hero (index) + the pure math (app)
           'id="cycleBlock"' in html and "renderCycleBlock();" in js
           and "function cycleProjection(mode, salMode) {" in js
@@ -698,9 +698,24 @@ def main():
           and "mode === 'next' ? 'next' : 'this'" in js
           # This cycle is ALWAYS with-salary (the Without mode is next-only)
           and "var withSal = (mode === 'this') ? true : (salMode !== 'without');" in js
-          # the v73.35 net math: this = free − plans (no dues, no salary);
-          # next = free + salary (with/without) − plans (no dues)
-          and "var net = (mode === 'this') ? r2(free - planTotal) : r2(free + salAdded - planTotal);" in js
+          # the v73.36 carry-over math: carry = this cycle's net (free − this
+          # window's plans); this net = carry; next net = carry + salary
+          # (with/without) − next window's plans
+          and "var thisNet = r2(free - planWindowTotal(thisCd).total);" in js
+          and "var carry = (mode === 'next') ? thisNet : 0;" in js
+          and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal);" in js
+          # ONE helper computes both windows' plan totals (the carry and the
+          # peek's deduction can't drift apart)
+          and "function planWindowTotal(cd) {" in js
+          # the OLD v73.35 next-cycle math (free + salary − plans, no carry)
+          # is gone
+          and "var net = (mode === 'this') ? r2(free - planTotal) : r2(free + salAdded - planTotal);" not in js
+          # the render: the carry-over row is peek-only; the salary row is
+          # GONE from the this-cycle block (only rendered inside the
+          # mode === 'next' branch)
+          and "Carried over<small>from this cycle" in js
+          and "if (mode === 'next') {" in js
+          and "the ' + ordinal(p.sday) + ' — in your free cash" not in js
           # the dues line item is gone from the block render
           and "Card dues<small>due in window</small>" not in js
           # the peek's toggle renders only in next mode
@@ -710,7 +725,7 @@ def main():
           # different string and stays)
           and "sub.push('− ' + money(d.planDeduct) + ' plans this cycle');" not in js
           and "cycleProjection: cycleProjection" in js
-          and "'73.35': [" in js)
+          and "'73.36': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           and "function ringSVG(pct) {" in js

@@ -2535,6 +2535,28 @@
   // "with salary" means — and it is the only mode that exists for THIS
   // cycle, per the boss's rev-3 mockup: the Without toggle is a NEXT-cycle
   // question, "what if the 15th slips").
+  // v73.36: the plans landing in a cycle window (the v73.16 resolver:
+  // forks count, skips don't, paid occurrences deduct their live
+  // remainder). Shared by BOTH windows of the projection — the carry is
+  // this window's total, the peek deducts the NEXT window's total, so the
+  // two must come from one helper or they could drift apart.
+  function planWindowTotal(cd) {
+    var total = 0, count = 0;
+    (state.plans || []).forEach(function (p) {
+      planAllDates(p).forEach(function (od) {
+        if (od < cd.start || od > cd.end) return;
+        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        if (ro && ro.skip) return;
+        var nm = ro ? ro.name : p.name;
+        var am = ro ? ro.amount : p.amount;
+        var pp = findPaidTxn({ monthPrefix: todayISO().slice(0, 7), today: todayISO() }, { planId: p.id, date: od, name: nm, amount: am });
+        var rem = r2(Number(am) - (Number(pp && pp.amount) || 0));
+        if (rem <= 0) return;
+        total += rem; count++;
+      });
+    });
+    return { total: r2(total), count: count };
+  }
   function cycleProjection(mode, salMode) {
     var b = state.base;
     if (!b) return null;
@@ -2554,34 +2576,38 @@
     var withSal = (mode === 'this') ? true : (salMode !== 'without');
     // the plans landing in the window (the v73.16 resolver: forks count,
     // skips don't, paid occurrences deduct their live remainder)
-    var planTotal = 0, planCount = 0;
-    (state.plans || []).forEach(function (p) {
-      planAllDates(p).forEach(function (od) {
-        if (od < cd.start || od > cd.end) return;
-        var ro = p.repeat ? resolveOccurrence(p, od) : null;
-        if (ro && ro.skip) return;
-        var nm = ro ? ro.name : p.name;
-        var am = ro ? ro.amount : p.amount;
-        var pp = findPaidTxn({ monthPrefix: todayISO().slice(0, 7), today: todayISO() }, { planId: p.id, date: od, name: nm, amount: am });
-        var rem = r2(Number(am) - (Number(pp && pp.amount) || 0));
-        if (rem <= 0) return;
-        planTotal += rem; planCount++;
-      });
-    });
+    var pw = planWindowTotal(cd);
+    var planTotal = pw.total, planCount = pw.count;
     // v73.35 (boss: 'this cycle should only display the currently displayed
     // free cash (no dues) ... next cycle shows that next cycle's plan dues
     // only (not the card dues anymore since it has been accounted for already
     // in this cycle's displayed free cash)'): CARD DUES are NO LONGER in the
     // projection. The card balance is part of 'owed', so it is already inside
     // the hero's free cash — displaying it again would double-count.
+    // v73.36 (boss: 'that 55k should CARRY OVER to the Next-cycle peek, and
+    // the next-cycle peek should then be deducted by THAT next cycle's plan
+    // dues'; the With/Without salary toggle is KEPT as the survival check):
     //   this cycle: net = free − this window's plans  (= the hero's freeNet,
-    //              the "currently displayed free cash" — no dues, no salary)
-    //   next cycle: net = free + salary (with/without) − next window's plans
-    var salAdded = (mode === 'next') ? (withSal && !salInFree ? salExpected : 0) : 0;
-    var net = (mode === 'this') ? r2(free - planTotal) : r2(free + salAdded - planTotal);
+    //              the "currently displayed free cash" — no dues, no salary
+    //              row: the salary is already inside the free cash)
+    //   next cycle: starts from the CARRY (= this cycle's net — this cycle's
+    //              plans are already netted out of it, so they are never
+    //              deducted twice), then − next window's plans, and the
+    //              salary toggle adds the target cycle's salary (With) or
+    //              leaves the survival number (Without).
+    // v73.36: the CARRY is this cycle's net (free − THIS window's plans —
+    // this cycle's plans are already netted out of it, so they are never
+    // deducted twice), computed with the SAME helper as the window being
+    // projected (one source, no drift between the two windows).
+    var thisCd = cycleDataFor(currentCycleMonth(b, todayISO()), b);
+    var thisNet = r2(free - planWindowTotal(thisCd).total);
+    var carry = (mode === 'next') ? thisNet : 0;
+    var salAdded = (mode === 'next') ? (withSal ? salExpected : 0) : 0;
+    var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal);
     return {
       mode: mode, month: m, start: cd.start, end: cd.end, sday: cd.sday,
       free: r2(free),
+      carry: r2(carry),
       salary: r2(salExpected), salaryReceived: salReceived, salaryInFree: salInFree,
       withSalary: withSal, salaryAdded: r2(salAdded),
       plans: r2(planTotal), planCount: planCount,
@@ -4083,11 +4109,20 @@
     var win = dayMonth(p.start) + ' → ' + dayMonth(p.end);
     var seg = function (on) { return '<button type="button" class="' + (on ? 'on' : '') + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + on + '</button>'; };
     var rows = '';
-    if (p.salary > 0) {
-      if (p.salaryInFree) {
-        rows += '<div class="cbrow"><div class="lab">Salary<small>the ' + ordinal(p.sday) + ' — in your free cash</small></div><div class="amt">in</div></div>';
-      } else if (p.withSalary) {
-        rows += '<div class="cbrow"><div class="lab">Salary<small>the ' + ordinal(p.sday) + '</small></div><div class="amt plus">+ ' + money(p.salary) + '</div></div>';
+    if (mode === 'next') {
+      // v73.36 (boss: 'that 55k should CARRY OVER to the Next-cycle peek'):
+      // the peek starts from THIS cycle's displayed free cash — this
+      // cycle's plans + card prepayments are already netted out of it —
+      // shown as a row so the starting number is auditable. NO salary row
+      // in the this-cycle block (the boss's Oct-11 point: the salary is
+      // already inside the displayed free cash, so the row was misleading).
+      rows += '<div class="cbrow"><div class="lab">Carried over<small>from this cycle — plans &amp; prepayments already netted</small></div><div class="amt' + (p.carry < 0 ? ' minus' : '') + '">' + money(p.carry) + '</div></div>';
+      if (p.salary > 0) {
+        if (p.withSalary) {
+          rows += '<div class="cbrow"><div class="lab">Salary<small>the ' + ordinal(p.sday) + '</small></div><div class="amt plus">+ ' + money(p.salary) + '</div></div>';
+        } else {
+          rows += '<div class="cbrow mut"><div class="lab">Salary<small>the ' + ordinal(p.sday) + ' — not counted</small></div><div class="amt">0</div></div>';
+        }
       }
     }
     if (p.plans > 0.004) {
@@ -4099,7 +4134,9 @@
     // displayed free cash, so the peek must not deduct it again).
     if (!rows) rows = '<div class="cbrow mut"><div class="lab">Nothing due in this window</div></div>';
     var netCls = p.net >= 0 ? 'pos' : 'neg';
-    var netTxt = (p.net < 0 ? '− ' : '') + money(p.net);
+    // v73.36: money() already renders the sign for negatives — the old
+    // '− ' prefix produced "− PHP -12,461.00" (a double sign)
+    var netTxt = money(p.net);
     el.innerHTML =
       '<div class="cbhead">' +
         '<div class="cbtitle"><span class="cbtag ' + tagCls + '">' + tag + '</span><span class="win">' + win + '</span></div>' +
@@ -6649,12 +6686,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.35, live: new Date(2026, 9, 11, 15, 58) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.36, live: new Date(2026, 9, 11, 18, 27) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.36': [
+      'The Next-cycle peek now starts from your CURRENT free cash: the This-cycle number (plans &amp; prepayments already netted out) carries over as a row, then next cycle\'s plans are deducted — the With / Without salary toggle stays as the survival check. The This-cycle block no longer shows the salary row (it is already inside your free cash)'
+    ],
     '73.35': [
       'The cycle block in the Free / unallocated card no longer deducts card dues — the card balance is already part of what is owed, so it is inside the free cash the block starts from (deducting it again was double-counting). This cycle now shows just your displayed free cash minus the plans due in the window; the Next-cycle peek shows that cycle\'s plans (plus the With / Without salary toggle) — card dues stay where they belong, the coach card'
     ],
