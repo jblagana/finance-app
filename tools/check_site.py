@@ -161,8 +161,8 @@ def main():
     for i in ["tab-home", "tab-money", "tab-ledger", "tab-owed", "bottombar", "tabs",
               "homeGreet", "greetHello", "greetDate",
               "coachOv", "coachFab", "botFace",
-              "obligations", "obBody", "sinking", "sinkBody", "addEmpty",
-              "summary", "projection", "projBody",
+              "addEmpty",
+              "projection", "projBody", "projAdj",
               "addForm", "planForm", "plans", "coach", "insights", "foot", "setFoot",
               "f_amount", "f_dateLabel", "p_dateLabel",
               "f_category", "f_account", "f_date", "f_note", "chargeHint",
@@ -765,10 +765,25 @@ def main():
           and "todayISO: todayISO" in js
           and "savePlanOccurrence: savePlanOccurrence" in js
           and "'73.41': [" in js)
+    check("v73.42 (boss: 'in money tab, reorder to: projection then coming up, remove the rest'): the Money tab is just the Projection card + Coming up — the summary tiles, Obligations card, and Sinking card are GONE (renderSummary/tile/renderObligations/renderSinking/ringSVG deleted, .tiles CSS cut); the overlay 'reset to my numbers' bar moved into the projection card (#projAdj, painted by renderProjection); the obligations/sinking DATA is intact (snapshot + coach still read it)",
+          'id="projAdj"' in html
+          and 'id="summary"' not in html
+          and 'id="obligations"' not in html
+          and 'id="sinking"' not in html
+          and "function renderSummary" not in js
+          and "function renderObligations" not in js
+          and "function renderSinking" not in js
+          and "function tile(" not in js
+          and "function ringSVG(" not in js
+          and 'class="tiles"' not in js
+          and "pa.innerHTML = adjBar();" in js
+          and "snap: [renderCoach, renderInsights, renderProjection, seedAccounts, renderAddEmpty" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
-          and "function ringSVG(pct) {" in js
-          and 'class="sink-ring"' in js
+          # v73.42: ringSVG + the sink-ring markup are GONE with the Sinking
+          # card (Money tab cut) — goalPace (pure) is what v73.3 keeps.
+          and "function ringSVG(pct) {" not in js
+          and 'class="sink-ring"' not in js
           and "function syncEncrypt(obj, passphrase) {" in js
           and "function syncDecrypt(env, passphrase) {" in js
           and "function syncMerge(local, remote) {" in js
@@ -790,9 +805,11 @@ def main():
           and "due_day: Number(b.due_day) || 5" in js
           # v73.14: the due-strip row ('CC due' label) was removed with the strip — the ccDue math + mood stay
           and "du.dueIn >= 0 && du.dueIn <= 7 && du.due > 0" in js
-          and "cutoff ' + (s.cutoff_day || 15) + ' · due ' + (s.due_day || 5)" in js
           and "du.due > f0) return 'worried';" in js
           and "cc due on the ' + ordinal(du6.due_day)" in chatjs
+          # v73.42: the 'cutoff 15 · due 5' pin was the summary prepay tile's
+          # note — that tile was cut from the Money tab, so the pin is gone
+          # with it. The ccDue math + mood + chat line above still stand.
           and "'73.6': [" in js)
     check("v73.7 (user: 'fix that salary changing the month spent' + 'reduce its boot screen time from 3 to 2 seconds'): the money-log MONTH-SPENT line no longer swings by the full salary when the 'Salary in' check-in lands — the cycle's own salary cash_in (>= 90% of the month's expected salary, dated 1st..payday+2, the same identity rule as cycleDataFor's received) is income, not negative spend, so monthEffect returns 0 for it (logMoney's s sum + the edit rebase both route through it) while other inflows (refunds) still net; the boot floor is 2s (BOOT_MIN_MS 2000)",
           "function salaryTxnIdInMonth(month) {" in js
@@ -984,7 +1001,7 @@ def main():
           and "Pick…" not in html and "Pick…" not in js)
     check("options = base card+debit accounts; re-seeded on base change (snap list)",
           "a.kind === 'card' || a.kind === 'debit'" in js
-          and "renderSinking, seedAccounts, renderAddEmpty" in js)
+          and "seedAccounts, renderAddEmpty" in js)
     check("submit maps an empty pick to the Cash default",
           "byId('f_account').value || 'CASH::Cash'" in js)
 

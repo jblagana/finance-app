@@ -44,13 +44,15 @@
     // payment must repaint the Money tab's list, not just the coach card.
     // v73.33: renderRecap left every key — the Home recap card is gone (the
     // recap sheet stands alone; the coach note carries the month story)
-    txn: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderPlans],
+    txn: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderPlans],
     plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote, renderMood],
     // v72.30: a base save can file 'Adjustment' ledger rows — the Ledger tab follows
-    snap: [renderSummary, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood],
-    adj: [renderSummary, renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote, renderMood],
+    // v73.42: renderSummary/renderObligations/renderSinking are GONE (their
+    // cards were cut from the Money tab) — the repaint lists drop them.
+    snap: [renderCoach, renderInsights, renderProjection, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood],
+    adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote, renderMood],
     owed: [renderOwed],
-    ui: [renderSummary, seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderObligations, renderSinking, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood]
+    ui: [seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -2387,36 +2389,10 @@
     el.innerHTML = bits.join(' · ');
   }
   // ---- render ----
-  function tile(k, v, n, cls) {
-    return '<div class="tile ' + (cls || '') + '"><div class="k">' + esc(k) + '</div><div class="v">' + v + '</div><div class="n">' + esc(n) + '</div></div>';
-  }
-  function renderSummary() {
-    var el = byId('summary'); if (!el) return;
-    var s = effectiveSnap();
-    if (!s) {
-      el.innerHTML = '<div class="card"><p class="note" style="margin:2px 0">' +
-        'No numbers yet — add your accounts, salary and debts in <b>Settings (⚙) → Your numbers</b>. You can already log expenses with the + button; they save on this phone.' +
-        '</p></div>';
-      return;
-    }
-    var free = s.cash ? s.cash.free : 0;
-    var belowFloor = !!(s.cash && s.floor && s.cash.total < s.floor);
-    // v73.16 (boss-confirmed: everywhere): the Free tile shows the NET free —
-    // the raw snapshot minus the current cycle's plan share (occurrences
-    // inside the cycle window, resolved, unpaid ones).
-    var dSum = insightsData();
-    var freeNet = dSum && dSum.freeNet != null ? dSum.freeNet : free;
-    var html = '';
-    html += tile('Liquid cash', money(s.cash ? s.cash.total : 0), 'floor ' + money(s.floor || 0), belowFloor ? 'bad' : '');
-    var liveMark = adjActive() ? ' · live' : '';
-    var freeNote = 'card backing' + liveMark + (dSum && dSum.planDeduct > 0 ? ' · − ' + money(dSum.planDeduct) + ' plans this cycle' : '');
-    html += tile('Free / unallocated', money(freeNet), freeNote, freeNet < 0 ? 'bad' : 'good');
-    html += tile('Cards owed', money(s.card_owed), (s.cards || []).length + ' card(s)' + liveMark);
-    html += tile(ordinal(s.prepay_day || 14) + ' prepay', money(s.total_prepay), 'cutoff ' + (s.cutoff_day || 15) + ' · due ' + (s.due_day || 5) + liveMark, 'accent');
-    el.innerHTML = '<div class="tiles">' + html + '</div>' + adjBar();
-    var rb = byId('resetAdj');
-    if (rb) rb.onclick = resetAdj;
-  }
+  // v73.42 (boss: 'in money tab, reorder to: projection then coming up,
+  // remove the rest'): renderSummary (the tiles) + tile() are GONE — the
+  // Money tab is just the Projection card + Coming up. adjBar() now rides
+  // the projection card (see renderProjection).
   function adjBar() {
     if (!adjActive()) return '';
     return '<div class="adjbar"><span class="note">live view: includes ' + money(state.adj.free) + ' recorded in this app</span>' +
@@ -3747,60 +3723,24 @@
     var wrap = byId('projection'), body = byId('projBody');
     if (!wrap || !body) return;
     var d = insightsData();
-    if (!d) { wrap.style.display = 'none'; return; }
+    if (!d) { wrap.style.display = 'none'; var pa = byId('projAdj'); if (pa) pa.innerHTML = ''; return; }
     wrap.style.display = '';
     body.innerHTML = '<h2 style="margin-top:0">Projection · ' + esc(monthLabel(d.s.month)) + '</h2>' + monthBlock(d);
+    // v73.42: the overlay "reset to my numbers" bar moved here — it used to
+    // live in the (now removed) summary tiles, so the projection card carries
+    // it. renderProjection runs on every txn/snap/adj/ui repaint, same cadence.
+    var pa = byId('projAdj');
+    if (pa) {
+      pa.innerHTML = adjBar();
+      var rb = byId('resetAdj');
+      if (rb) rb.onclick = resetAdj;
+    }
   }
   function fmtNum(v) { return Math.round(Number(v) || 0).toLocaleString('en-US'); }
-  function renderObligations() {
-    var wrap = byId('obligations'), body = byId('obBody');
-    if (!wrap || !body) return;
-    var s = state.snapshot;
-    var ob = s && s.obligations;
-    if (!ob) { wrap.style.display = 'none'; return; }
-    wrap.style.display = '';
-    var month = ob.month || s.month || '';
-    var html = '<h2 style="margin-top:0">Obligations · ' + esc(monthLabel(month)) + '</h2>';
-    var lines = ob.budget || [];
-    if (lines.length) {
-      html += '<div class="ins-t" style="margin-top:10px">Monthly fixed</div>';
-      lines.forEach(function (l) {
-        var amt = Number(l.amount) || 0;
-        var tag = l.overridden ? ' · adjusted' : (amt === 0 ? ' · off' : '');
-        var norm = Number(l.normal) || 0;
-        if (norm > 0 && Math.abs(norm - amt) > 0.004) tag += ' <span style="font-weight:400">(normally ' + money(norm) + ')</span>';
-        html += '<div class="kv"><span class="k">' + esc(l.name) + tag + '</span><b>' + money(amt) + '</b></div>';
-      });
-      html += '<div class="kv" style="font-weight:700"><span class="k">Total · ' + esc(monthLabel(month)) + '</span><b>' + money(ob.budget_total || 0) + '</b></div>';
-    }
-    var debts = ob.debts || [];
-    if (debts.length) {
-      html += '<div class="ins-t" style="margin-top:12px">Debt</div>';
-      debts.forEach(function (d) {
-        var bal = d.balance != null ? ' · ' + fmtNum(d.balance) + ' left' : '';
-        var val = Number(d.this_month) > 0 ? money(d.this_month) : '—';
-        html += '<div class="kv"><span class="k">' + esc(d.name) + bal + '</span><b>' + val + '</b></div>';
-        var parts = [];
-        (d.schedule || []).forEach(function (p) { if (p.month > month) parts.push(monthLabel(p.month) + ' ' + fmtNum(p.amount)); });
-        if (parts.length) html += '<div class="note" style="margin:0 0 6px;font-size:11.5px">then ' + esc(parts.join(' · ')) + '</div>';
-      });
-    }
-    var oneOffs = (ob.one_offs || []).slice().sort(function (a, b) { return String(a.month) < String(b.month) ? -1 : 1; });
-    if (oneOffs.length) {
-      html += '<div class="ins-t" style="margin-top:12px">One-offs coming up</div>';
-      oneOffs.forEach(function (o) {
-        html += '<div class="kv"><span class="k">' + esc(monthLabel(o.month)) + ' · ' + esc(o.name) + '</span><b>' + money(o.amount || 0) + '</b></div>';
-      });
-    }
-    var loans = ob.loans || [];
-    if (loans.length) {
-      html += '<div class="ins-t" style="margin-top:12px">Loans</div>';
-      loans.forEach(function (l) {
-        html += '<div class="kv"><span class="k">' + esc(l.name) + (l.note ? ' · ' + esc(l.note) : '') + '</span><b>' + (Number(l.value) > 0 ? money(l.value) : 'cleared') + '</b></div>';
-      });
-    }
-    body.innerHTML = html;
-  }
+  // v73.42: renderObligations is GONE (the Obligations card was removed from
+  // the Money tab — boss: 'remove the rest'). The obligations DATA is intact:
+  // the snapshot still builds it and the coach/insights still read it; only
+  // this tab's card was cut.
   // ---------- v73.3: gist sync — the crypto + merge, as PURE exported fns ----------
   // The data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256
   // (passphrase, random salt, 150k iters)) before it touches the network;
@@ -3933,45 +3873,12 @@
     if (rate >= needed - 0.004) return { status: 'on pace', needed: needed, rate: rate, monthsLeft: monthsLeft };
     return { status: 'behind', needed: needed, rate: rate, monthsLeft: monthsLeft, shortfall: r2(needed - rate) };
   }
-  function ringSVG(pct) {
-    // v73.3: the progress RING (replaces the flat bar) — 44px, 4px stroke
-    var R = 16, C = 2 * Math.PI * R;
-    var off = C * (1 - Math.min(100, Math.max(0, pct)) / 100);
-    return '<svg class="sink-ring" width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">' +
-      '<circle cx="22" cy="22" r="' + R + '" fill="none" stroke="var(--line)" stroke-width="4"/>' +
-      '<circle cx="22" cy="22" r="' + R + '" fill="none" stroke="#37d39b" stroke-width="4" stroke-linecap="round" ' +
-      'stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + off.toFixed(1) + '" transform="rotate(-90 22 22)"/>' +
-      '<text x="22" y="26" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">' + pct + '%</text></svg>';
-  }
-  function renderSinking() {
-    var wrap = byId('sinking'), body = byId('sinkBody');
-    if (!wrap || !body) return;
-    var s = state.snapshot;
-    var funds = s && s.sinking;
-    if (!funds || !funds.length) { wrap.style.display = 'none'; return; }
-    wrap.style.display = '';
-    var month = s.month || '';
-    var html = '<h2 style="margin-top:0">Sinking funds</h2>';
-    funds.forEach(function (f) {
-      var pct = Number(f.goal) > 0 ? Math.min(100, Math.round((Number(f.funded) || 0) / Number(f.goal) * 100)) : 0;
-      var pace = goalPace(f, month); // v73.3: on pace / behind by ₱X
-      var paceLine = '';
-      if (pace.status === 'on pace') paceLine = '<div class="kv"><span class="k">on pace</span><b style="color:#37d39b">' + money(pace.rate) + '/mo clears it in ' + pace.monthsLeft + ' mo</b></div>';
-      else if (pace.status === 'behind') paceLine = '<div class="kv"><span class="k">behind</span><b style="color:var(--bad)">' + money(pace.shortfall) + '/mo short of ' + money(pace.needed) + '</b></div>';
-      html += '<div class="ins-block sink-row" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><div class="sink-flex">' +
-        ringSVG(pct) +
-        '<div style="flex:1;min-width:0"><div class="ins-t">' + esc(f.name) +
-        ' <span style="color:var(--mut);font-weight:400">· by ' + esc(f.deadline ? fmtDate(f.deadline) : '—') + '</span></div>' +
-        '<div class="kv" style="border-top:0"><span class="k">funded ' + pct + '%</span><b>' + money(f.funded || 0) + ' of ' + money(f.goal || 0) + '</b></div>' +
-        paceLine + '</div></div>';
-      if (Number(f.this_month) > 0) html += '<div class="kv"><span class="k">this month</span><b>' + money(f.this_month) + '</b></div>';
-      var parts = [];
-      (f.payments || []).forEach(function (p) { parts.push(monthLabel(p.month) + ' ' + fmtNum(p.amount)); });
-      if (parts.length) html += '<div class="kv"><span class="k">plan</span><b style="font-weight:600">' + esc(parts.join(' · ')) + '</b></div>';
-      html += '</div>';
-    });
-    body.innerHTML = html;
-  }
+  // v73.42: ringSVG is GONE with renderSinking (the Sinking funds card was
+  // removed from the Money tab). goalPace stays — it's a pure export the
+  // smoke drives and the coach's goal math reads.
+  // v73.42: renderSinking is GONE (the Sinking funds card was removed from
+  // the Money tab). The sinking DATA is intact — the snapshot still builds
+  // it and the coach's goal rows (v73.3) still read it.
   // ---------- Phase 3: hero free-cash card + SVG cash sparkline ----------
   var heroVal = null;
   // ---------- v55: the Coach's note (Home Overview) ----------
@@ -6852,12 +6759,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.41, live: new Date(2026, 9, 12, 3, 41) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.42, live: new Date(2026, 9, 12, 23, 58) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.42': [
+      'The Money tab is leaner: just the Projection card (with the cycle block) then Coming up — the summary tiles, the Obligations card, and the Sinking card are gone (the "reset to my numbers" bar moved into the Projection card). The obligations and sinking data is intact — the coach still reads it'
+    ],
     '73.41': [
       'Plan dates are editable now: in the Money tab, tap a recurring occurrence\'s pencil and change the date — "just this one" moves only that occurrence, "this one and after" shifts the rest of the series by the same days, "all" re-anchors the whole series. The sheet warns if the new date would land on another occurrence, and a counted series (12×, 24×…) now ends after its Nth occurrence instead of rolling forward forever'
     ],
@@ -7799,6 +7709,8 @@
     getPlanLinkRef: function () { return state.planLinkRef; },
     coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut)
     insightsData: insightsData, // v73.2: the insight math (coachRows' input)
+    renderProjection: renderProjection, // v73.42: the Money tab's projection card (smoke drives it; it now carries the adj bar)
+    adjActive: adjActive, // v73.42: is the overlay live (the adj bar's gate)
     goalPace: goalPace, // v73.3: the goal pace (pure — the smoke drives it)
     syncEncrypt: syncEncrypt, // v73.3: the envelope (the smoke round-trips it)
     syncDecrypt: syncDecrypt, // v73.3: decrypt the envelope (the smoke round-trips it)

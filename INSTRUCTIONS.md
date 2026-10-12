@@ -6,6 +6,18 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.42 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-12 - "in money tab, reorder to: projection then coming up, remove the rest"
+Status: **done** - v73.42 shipped (SW cache `finances-pwa-v73.42`; stamped manually, pushed to origin/main)
+Progress: 100% - tracked gates green: check_site.py (repo + root mirror), test_chat_parser.py, node --check app.js/chat.js/ai.js/sw.js. **The `smoke_app_v68.js` gate was SKIPPED - that file is 0 bytes and unrecoverable** (accidentally truncated this run by a `git show HEAD:file > file` redirect executed from the non-repo root dir, which PowerShell truncates to 0 before the command runs; the file was untracked, so no git/GitHub/Recycle-Bin/shadow-copy recovery exists). `smoke_v68.js` (chat parser smoke) ran green.
+
+### What changed
+- **Money tab = Projection card, then Coming up - nothing else.** Removed the summary tiles card (`#summary` + `renderSummary` + `tile` + `.tiles` CSS), the Obligations card (`#obligations` + `renderObligations`), and the Sinking card (`#sinking` + `renderSinking` + `ringSVG`). The overlay "reset to my numbers" bar moved into the Projection card (`#projAdj`, painted by `renderProjection`).
+- **Data untouched:** obligations/sinking still live in the snapshot and the coach still reads them - only the Money-tab presentation cards were cut.
+
+### Files
+app.js (card removals + #projAdj + renderProjection bar + SHELL_NOTES '73.42' + stamp), index.html (card removals + #projAdj + order), tools/check_site.py (v73.42 check + re-pins), sw.js + README.md (stamps), root check_site.py + test_chat_parser.py (mirror re-sync, UTF-8 clean).
+
 # v73.41 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-11 - "the plans in the money tab: the dates are not editable. i tried changing it but nothing happened"
 Status: **done** - v73.41 shipped (SW cache `finances-pwa-v73.41`; commits `f46cf77` build + `f855847` live re-stamp, pushed to origin/main)
