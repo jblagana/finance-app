@@ -6,6 +6,18 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.49 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-14 - "i tried resetting live numbers, confirm and toast are there. but it didnt write in ledger"
+Status: **done** - v73.49 shipped (SW cache `finances-pwa-v73.49`; ONE commit pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (SW cache v73.49, SHELL_RELEASE v73.49, the adj-repaint pin present).
+Progress: 100% - tracked gates green (release.ps1 73.49 full run: check_site repo + root mirror, test_chat_parser, node --check x4, smoke_v68, smoke_app_v68 40 assertions).
+
+### What changed
+- **The reset's audit rows now show in the Ledger immediately** (app.js RENDER_BY_KEY): the confirmed reset files its k='r' rows into state.moneyLog, but the 'adj' emit key never repainted renderMoneyLog — the rows existed in state yet the card stayed stale until the next unrelated emit (a tap elsewhere). renderMoneyLog is now on the 'adj' repaint list.
+- **The smoke harness's DOM stub was lying** (tools/smoke/smoke_app_v68.js): `byIdStub` created a FRESH stub per call, so the app wrote `byId('mlBody').innerHTML` to a throwaway element while the probe read a different one — the "renders in the ledger" assertion tested an empty string and passed. Now one instance per id (elMap pre-seeded), and the assertion no longer calls F.renderMoneyLog() by hand — it verifies the AUTOMATIC repaint (the wiring, not the render). Mutation-tested both directions: with the app.js fix reverted the new assertion FAILS; with the old stub it can't pass at all.
+- **Harness paths were broken for the repo layout** (tools/smoke/smoke_app_v68.js): the v73.48 re-root left the repo copy pointing at the old loose finances/ layout (MODULE_NOT_FOUND from the repo — the harness had never actually run from its tracked location). Dual-layout path resolution now (repo shape first, old loose shape as fallback); runs green from the repo and the Muji mirror.
+- check_site.py: new v73.49 pin (the adj repaint list + the SHELL_NOTES entry). SHELL_NOTES 73.49.
+- **Deployment fact (verified 2026-10-14):** the live app is `jblagana.github.io/finance-app/` (the worker's ALLOWED_ORIGIN says the same). `jblagana.github.io/finances/` is a GitHub Pages 404 — the "live-verified on jblagana.github.io" claims in the v73.45/47 entries were fetched from the wrong URL (they hit the 404 page; the /finances/app.js 404 body was misread as the app). The boss's phone runs the SW-cached v73.47 from the real URL, which is why the confirm/toast worked but the audit rows didn't appear.
+
 # v73.47 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-14 - "fix this first: clicking to edit a plan, the x button doesnt work" (+ "do all 4 of them" — the release-speed batch: rebuild the smoke harness, single-commit release, batch small fixes, sweep scratch)
 Status: **done** - v73.47 shipped (SW cache `finances-pwa-v73.47`; ONE commit pushed to origin/main — the single-commit discipline this release itself established). Live-verified on jblagana.github.io (SW cache v73.47, SHELL_RELEASE v73.47, the peClose pin present in the live app.js).

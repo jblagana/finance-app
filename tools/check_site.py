@@ -814,6 +814,9 @@ def main():
           and "var peClose = byId('peClose');" in js
           and "byId('planEditClose')" not in js
           and "'73.47': [" in js)
+    check("v73.49 (boss: 'i tried resetting live numbers, confirm and toast are there. but it didnt write in ledger'): the reset files its k='r' audit rows into state.moneyLog, but the 'adj' emit key never repainted renderMoneyLog — the rows existed in state yet the Ledger card stayed stale until an unrelated emit. renderMoneyLog is now on the 'adj' repaint list, so the audit rows show immediately on confirm (the smoke gate's old 'renders in the ledger' assertion called F.renderMoneyLog() BY HAND, which is why this wiring hole passed every gate)",
+          "adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderMoneyLog, renderCoachNote, renderMood]," in js
+          and "'73.49': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]

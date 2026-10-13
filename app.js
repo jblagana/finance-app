@@ -50,7 +50,11 @@
     // v73.42: renderSummary/renderObligations/renderSinking are GONE (their
     // cards were cut from the Money tab) — the repaint lists drop them.
     snap: [renderCoach, renderInsights, renderProjection, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood],
-    adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCoachNote, renderMood],
+    // v73.49: renderMoneyLog on 'adj' — a reset files its audit rows (k='r')
+    // into the money log, but 'adj' never repainted the Ledger tab, so the
+    // rows existed in state.moneyLog yet the card stayed stale until the next
+    // unrelated emit.
+    adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderMoneyLog, renderCoachNote, renderMood],
     owed: [renderOwed],
     ui: [seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood]
   };
@@ -6880,12 +6884,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.47, live: new Date(2026, 9, 14, 1, 14) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.49, live: new Date(2026, 9, 14, 1, 54) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.49': [
+      'Fixed: after "Reset to my numbers", the Adjustment rows were filed to the Ledger but the card never repainted until you tapped something else — the reset now redraws the Ledger immediately, so the audit rows show up right away'
+    ],
     '73.47': [
       'Fixed: the ✕ on the "Edit this occurrence" sheet did nothing — the handler was bound to a button id that does not exist in the sheet (the sheet\'s button has a different id), so only tapping outside the sheet closed it. The ✕ works again'
     ],

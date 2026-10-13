@@ -12,9 +12,20 @@
 // finances/ that the v73.42 incident destroyed once already)
 var fs = require('fs');
 var path = require('path');
+// v73.49: dual-layout paths — the harness is repo-tracked (tools\smoke\,
+// seed beside it, app.js two levels up) AND mirrored at
+// C:\Users\Jan\Muji\finance-app\tools\smoke\ (same shape). The v73.48
+// re-root left the repo copy pointing at the OLD loose finances/ layout
+// (seed at ROOT, app at ROOT/../../app.js), so it MODULE_NOT_FOUND'd from
+// the repo. Try the repo layout first, fall back to the old one.
 var ROOT = __dirname;
-var seed = JSON.parse(fs.readFileSync(path.join(ROOT, 'smoke_seed.json'), 'utf8'));
-var APP = path.join(ROOT, '..', '..', 'app.js');
+var seedPath = fs.existsSync(path.join(ROOT, 'smoke_seed.json'))
+  ? path.join(ROOT, 'smoke_seed.json')
+  : path.join(ROOT, '..', '..', 'smoke_seed.json');
+var seed = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+var APP = fs.existsSync(path.join(ROOT, '..', '..', 'app.js'))
+  ? path.join(ROOT, '..', '..', 'app.js')
+  : path.join(ROOT, 'app.js');
 
 // ---- forgiving DOM stubs (harness from the v73.45 probe, which ran green) --
 function makeStub() {
@@ -41,20 +52,26 @@ function makeStub() {
     set: function (t, k, v) { t[k] = v; return true; }
   });
 }
-var elMap = {};
+// pre-seed the elements the probe reads back (confirm dialog + date label +
+// ledger body). syncDateLabel finds the label via `input.id + 'Label'` — the
+// stub needs a real `id` string or the Proxy returns a function for the key.
+var elMap = {
+  confirmMsg: makeStub(),
+  pe_date: makeStub(),
+  pe_dateLabel: makeStub(),
+  mlBody: makeStub(),
+  planEditClose: makeStub() // the v73.47 dead id — must stay UNBOUND
+};
+elMap['pe_date'].id = 'pe_date';
+// v73.49: byIdStub must return the SAME instance every time (the app's
+// byId('mlBody').innerHTML write and the probe's read of elMap['mlBody']
+// must hit one object). The pre-v73.49 version created a fresh stub per
+// call, so the app wrote to a throwaway element and the "renders in the
+// ledger" assertion tested an empty string — green gates, broken UI.
 function byIdStub(id) {
   if (!elMap[id]) elMap[id] = makeStub();
   return elMap[id];
 }
-// pre-seed the elements the probe reads back (confirm dialog + date label +
-// ledger body). syncDateLabel finds the label via `input.id + 'Label'` — the
-// stub needs a real `id` string or the Proxy returns a function for the key.
-elMap['confirmMsg'] = makeStub();
-elMap['pe_date'] = makeStub();
-elMap['pe_date'].id = 'pe_date';
-elMap['pe_dateLabel'] = makeStub();
-elMap['mlBody'] = makeStub();
-elMap['planEditClose'] = makeStub(); // the v73.47 dead id — must stay UNBOUND
 global.window = global;
 global.addEventListener = function () {};
 global.removeEventListener = function () {};
@@ -186,11 +203,12 @@ waitReady().then(async function (F) {
     ok(close(aCard.n, 8402.43), 'audit: cards row n = +8,402.43 (got ' + aCard.n + ')');
   }
 
-  // the audit rows render in the ledger
-  F.renderMoneyLog();
+  // v73.49: the ledger repaint must be AUTOMATIC — the reset's emit('adj')
+  // is the only repaint path. (The old gate called F.renderMoneyLog() by
+  // hand, so it would pass even with the wiring broken — that's how the
+  // boss's "rows never appear" slipped through.)
   await sleep(30);
-  var ml = String(elMap['mlBody'].innerHTML);
-  ok(/reset to my numbers/i.test(ml), 'audit: renders in the ledger');
+  ok(/reset to my numbers/i.test(String(elMap['mlBody'].innerHTML)), 'audit: renders in the ledger WITHOUT a manual render call');
 
   // delete the 1k txn — the OLD code created a phantom −1,000 here
   await F.deleteTxn(id1);
