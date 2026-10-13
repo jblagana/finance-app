@@ -28,8 +28,11 @@ session). Rules to keep them from clobbering each other:
   `main` until the user hands over duty.
 - **The release counter is a critical section.** These four move together,
   **only at push time, never at edit time**:
-  1. `SHELL_RELEASE` in `app.js` — v + `live` timestamp, set immediately
-     before `git push` so `live` is the actual release time;
+  1. `SHELL_RELEASE` in `app.js` — v + `live` timestamp, set by
+     `tools/release.ps1` immediately before `git push` (the live stamp is
+     always the current time; `check_site.py` enforces freshness ≤30 min —
+     v73.47 dropped the HH:MM parameter and the "live re-stamp" second
+     commit: **one commit per release**);
   2. the `finances-pwa-vNN` cache in `sw.js`;
   3. the version assertions in the structural gate (`check_site.py`);
   4. the version reference in `README.md`.
@@ -63,13 +66,18 @@ User mandate (2026-09-12): these apply to every batch in this repo.
    first, regardless of estimated time.
 3. **Always via `tools/release.ps1`** — no manual stamp edits, no ad-hoc
    gate runs, ever:
-   - `tools\release.ps1 vN.M "HH:MM"` — sets `SHELL_RELEASE` (v + `live`)
-     in `app.js`, the `sw.js` cache, the `README.md` reference, and the
-     `check_site.py` version assertions; re-syncs the root mirror
-     (`../check_site.py`); runs the FULL gate suite in one pass
-     (check_site repo + mirror, `test_chat_parser.py`, `node --check` on
-     all JS, both smokes). Invoke it as the final step right before
-     commit, so `live` is set at the last possible moment.
+   - `tools\release.ps1 vN.M` — sets `SHELL_RELEASE` (v + `live`, always
+     the current time — v73.47 dropped the HH:MM parameter and the
+     "live re-stamp" second commit: **one commit per release**), the
+     `sw.js` cache, the `README.md` reference, and the `check_site.py`
+     version assertions; re-syncs the root mirror (`../check_site.py`);
+     runs the FULL gate suite in one pass (check_site repo + mirror,
+     `test_chat_parser.py`, `node --check` on all JS, both smokes —
+     `smoke_app_v68.js` rebuilt as a permanent 39-assertion gate in
+     v73.47, seeded by `../data/smoke_seed.json`). Invoke it as the
+     final step right before commit; the live-stamp freshness check
+     (≤30 min) fails if it sat unpushed — re-run it right before
+     committing.
    - `tools\release.ps1 -GatesOnly` — re-run the gates without
      re-stamping.
    - Commit + push only on green; on red, fix and re-run — never push

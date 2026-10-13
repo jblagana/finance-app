@@ -6,6 +6,20 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.47 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-14 - "fix this first: clicking to edit a plan, the x button doesnt work" (+ "do all 4 of them" — the release-speed batch: rebuild the smoke harness, single-commit release, batch small fixes, sweep scratch)
+Status: **done** - v73.47 shipped (SW cache `finances-pwa-v73.47`; ONE commit pushed to origin/main — the single-commit discipline this release itself established). Live-verified on jblagana.github.io (SW cache v73.47, SHELL_RELEASE v73.47, the peClose pin present in the live app.js).
+Progress: 100% - tracked gates green INCLUDING the rebuilt `smoke_app_v68.js` (39 assertions, real app.js in Node on the boss's Oct 13 seed — the v73.45 1k scenario end-to-end, the v73.46 date label, and the v73.47 peClose binding), check_site.py (repo + root mirror, incl. the new v73.47 pin + the live-stamp freshness gate), node --check x4, smoke_v68.js.
+
+### What changed
+- **The edit sheet's ✕ works again** (app.js: ~8114): the handler was bound to `#planEditClose` — an id that does not exist in index.html (the button is `#peClose`) — so since v73.14 only a scrim tap closed the sheet. `byId('peClose')` now; the dead id is gone from app.js (check_site pin).
+- **`smoke_app_v68.js` rebuilt as a permanent gate** (finances/ root, 39 assertions): the original was lost in the v73.42 incident and left 0-byte, so every release since re-built verification from scratch. The rebuild carries the v73.45 1k-reset scenario end-to-end (log 1k → confirm names the measured ₱2,930 move → confirm zeroes the overlay + files both audit rows → delete the 1k creates NO phantom → Undo restores the overlay and removes only this reset's rows), direction-aware wording, the edit-txn no-op on an empty overlay, the v73.46 date label, and the v73.47 peClose binding. Seed: `data/smoke_seed.json` (the boss's Oct 13 export; baseline effective free 58,631.36 / base free 60,561.36).
+- **One commit per release** (tools/release.ps1 + AGENTS.md + check_site.py): the HH:MM parameter and the "live re-stamp" second commit are dead — `live` is always the current time at gate-run, and a new check_site gate enforces freshness ≤30 min (a stale stamp = sat unpushed; re-run release.ps1 right before commit). The post-push live fetch still verifies the dot is serving.
+- **Scratch sweep**: the 61 untracked probe/log/mockup files in finance-app/ were deleted (the tracked tree was already clean — the "40 tracked scratch files" claim from the speed analysis was wrong; they were untracked).
+
+### Files
+app.js (peClose binding + SHELL_NOTES '73.47' + SHELL_RELEASE stamp + planEditCtx export), tools/check_site.py (v73.47 pin + live-stamp freshness gate), tools/release.ps1 (one-commit release: HH:MM param + re-stamp ritual dropped), AGENTS.md (release-counter item 1 updated), INSTRUCTIONS.md (this entry), sw.js + README.md (stamps), + the new finances/smoke_app_v68.js + finances/data/smoke_seed.json (outside the repo — the root is not a git repo; the gate runs from there).
+
 # v73.45 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-13 - "Build v73.45 — reset undo + confirm + audit row" (+ "the date field in plans is invisible, i just click with faith that its there" → v73.46)
 Status: **done** - v73.45 shipped (SW cache `finances-pwa-v73.45`; commits `fb13db7` build + `90644a4` live re-stamp, pushed to origin/main, tree clean). The v73.46 date-label fix rode the same release (one stamp, two features). Live-verified on jblagana.github.io (SW cache v73.45, SHELL_RELEASE v73.45, the resetAdj confirm + adjEmpty + pe_dateLabel pins all present in the live app.js/index.html).

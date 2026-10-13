@@ -808,6 +808,12 @@ def main():
           and "e.k === 'a' || e.k === 'r') m.k = e.k;" in js
           and "adjEmpty: adjEmpty," in js and "resetAdj: resetAdj," in js
           and "'73.45': [" in js)
+    check("v73.47 (boss: 'clicking to edit a plan, the x button doesnt work'): the edit sheet's ✕ handler was bound to #planEditClose — an id that does not exist in index.html (the button is #peClose) — so since v73.14 only a scrim tap closed the sheet; the binding now targets #peClose and the dead id is gone from app.js",
+          'id="peClose"' in html
+          and 'id="planEditClose"' not in html
+          and "var peClose = byId('peClose');" in js
+          and "byId('planEditClose')" not in js
+          and "'73.47': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]
@@ -1251,6 +1257,20 @@ def main():
     _run_v = _rel.group(1) if _rel else None
     check("SHELL_NOTES has a note for the RUNNING version (v72.38 gate: every release must ship its What's-new note — the running dot is read from app.js, so no stamp can drift)",
           _run_v is not None and ("'" + _run_v + "':") in js)
+    # v73.47: the live stamp must be fresh — the release is ONE commit
+    # (the "live re-stamp" second commit is dead), so `live` must be within
+    # 30 min of the gate run (release.ps1 runs the gates right before
+    # commit+push). A stale stamp means the release was stamped long ago
+    # and sat unpushed — run release.ps1 again right before committing.
+    _live = re.search(r"var SHELL_RELEASE = \{ v: [\d.]+, live: new Date\((\d+), (\d+), (\d+), (\d+), (\d+)\)", js)
+    _fresh = False
+    if _live:
+        import datetime as _dt
+        _stamp = _dt.datetime(int(_live.group(1)), int(_live.group(2)) + 1, int(_live.group(3)), int(_live.group(4)), int(_live.group(5)))
+        _age = _dt.datetime.now() - _stamp
+        _fresh = _age.total_seconds() <= 30 * 60
+    check("live stamp is fresh (v73.47: one commit per release — `live` must be within 30 min of the gate run; re-run release.ps1 right before commit if this fails)",
+          _fresh)
     check("v72.41 (user: 'write the x axis ticks as end of month, e.g. 30 Sep, 31 Oct, etc' + 'i wanna prepay maya cc and maribank cc separately'): (1) EVERY x-axis tick is a date — the month points sit on the last day of their month (the plotted value is that month-end projection), so the axis reads '6 Sep · 30 Sep · 31 Oct · … · 28 Feb'; the v72.37 start/middle/end special-case is gone (the compact month name stays only as the no-date fallback); (2) the Add sheet gains a direction — Spend (the old rules) vs Pay card (kind card_payment, the payoff that settles the owed balance — v72.42 corrected it to leave free untouched; a payoff must land on a CARD account, the first card is preselected, the title/button follow the mode, the deficit hint is off in payoff mode); (3) the coach's prepay action is ONE BUTTON PER card owed above its target (that card's live amount + account prefilled, Pay-card mode) — the combined button survives only as the no-per-card-breakdown fallback",
           "var lab = p.date ? dayMonth(p.date) : p.label;" in js
           and "function addSheetKind(mode, type, editingKind)" in js

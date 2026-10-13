@@ -6880,12 +6880,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.45, live: new Date(2026, 9, 14, 0, 42) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.47, live: new Date(2026, 9, 14, 1, 14) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.47': [
+      'Fixed: the ✕ on the "Edit this occurrence" sheet did nothing — the handler was bound to a button id that does not exist in the sheet (the sheet\'s button has a different id), so only tapping outside the sheet closed it. The ✕ works again'
+    ],
     '73.45': [
       '"Reset to my numbers" is no longer a one-way door: it now asks first (naming the exact amount leaving the live view), files an Adjustment row in the Ledger so the change is always on the record, and the toast carries an Undo that restores your app-recorded entries. Also fixed: deleting or editing a ledger entry after a reset could create a phantom amount in your free cash — the reversal now no-ops when the overlay is already empty'
     ],
@@ -7846,6 +7849,7 @@
     openPlanEdit: openPlanEdit, // v73.46: the probe drives the sheet fill (the date label)
     confirmYes: confirmYes, // v73.45: the probe drives the confirm dialog's yes path
     getResetUndoState: function () { return resetUndoState; }, // v73.45: the pending Undo (probe reads it)
+    planEditCtx: function () { return planEditCtx; }, // v73.47: the smoke checks the ✕ cleared the edit context
     renderMoneyLog: renderMoneyLog, // v73.45: the probe reads the ledger render (audit row)
     goalPace: goalPace, // v73.3: the goal pace (pure — the smoke drives it)
     syncEncrypt: syncEncrypt, // v73.3: the envelope (the smoke round-trips it)
@@ -8111,7 +8115,10 @@
       };
     }
     // v73.14: the per-occurrence edit sheet
-    var peClose = byId('planEditClose');
+    // v73.47: the close button is #peClose in index.html — the handler was
+    // bound to the nonexistent #planEditClose since v73.14, so ✕ did nothing
+    // (only a scrim tap closed the sheet)
+    var peClose = byId('peClose');
     if (peClose) peClose.onclick = function () { closeSheets(); planEditCtx = null; };
     var peSave = byId('peSave');
     if (peSave) peSave.onclick = function () { savePlanOccurrence(); };

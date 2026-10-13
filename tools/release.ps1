@@ -5,7 +5,7 @@
   discipline").
 
 .DESCRIPTION
-  tools\release.ps1 vN.M ["HH:MM"]
+  tools\release.ps1 vN.M
     STAMPS, then runs the FULL gate suite, in one pass:
       STAMP  app.js            SHELL_RELEASE { v: N.M, live: new Date(...) }
       STAMP  sw.js             CACHE = 'finances-pwa-vN.M'
@@ -18,22 +18,24 @@
              python tools\test_chat_parser.py
              node --check app.js chat.js ai.js sw.js
              node smoke_v68.js + smoke_app_v68.js   (root; local-only)
-    "HH:MM" (24h) is the live stamp, dated today. Omit it and the current
-    time is used. Invoke right before commit so `live` is set at the last
-    possible moment. Stamping is idempotent (re-running the same dot is
-    safe). Exit 0 = green (safe to commit + push); 1 = red (fix and
-    re-run; never push past a red gate); 2 = usage/stamp error.
+    The live stamp is ALWAYS the current time (the HH:MM parameter and the
+    "live re-stamp" second commit were dropped in v73.47 — the release is
+    ONE commit: run this script right before commit+push so `live` is
+    minutes-old at push time; check_site.py's freshness check enforces
+    that, and a post-push live fetch verifies the dot is serving).
+    Stamping is idempotent (re-running the same dot is safe). Exit 0 =
+    green (safe to commit + push); 1 = red (fix and re-run; never push
+    past a red gate); 2 = usage/stamp error.
 
   tools\release.ps1 -GatesOnly
     Re-run the gate suite without touching any stamp.
 
 .EXAMPLE
-  tools\release.ps1 v72.1 "00:55"
+  tools\release.ps1 v72.1
   tools\release.ps1 -GatesOnly
 #>
 param(
   [string]$Version = "",
-  [string]$Live = "",
   [switch]$GatesOnly
 )
 
@@ -69,13 +71,10 @@ if (-not $GatesOnly) {
   $maj = [int](($v -split "\.")[0])
   $prev = $maj - 1
 
+  # v73.47: the live stamp is always now — the HH:MM parameter is gone
+  # (the "live re-stamp" second commit is dead; one commit per release).
   $now = Get-Date
-  if ($Live) {
-    if ($Live -notmatch "^([01]?\d|2[0-3]):([0-5]\d)$") {
-      Bad "live stamp must be HH:MM 24h (got '$Live')"
-    }
-    $H = [int]$Matches[1]; $M = [int]$Matches[2]
-  } else { $H = $now.Hour; $M = $now.Minute }
+  $H = $now.Hour; $M = $now.Minute
   $dateArg = "$($now.Year), $($now.Month - 1), $($now.Day), $H, $M"
 
   # 1. app.js - SHELL_RELEASE (v + live)
