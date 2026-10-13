@@ -8,7 +8,7 @@ commit is not done.
 
 # v73.45 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-13 - "Build v73.45 — reset undo + confirm + audit row" (+ "the date field in plans is invisible, i just click with faith that its there" → v73.46)
-Status: **done** - v73.45 shipped (SW cache `finances-pwa-v73.45`; commit below, pushed to origin/main). The v73.46 date-label fix rode the same release (one stamp, two features).
+Status: **done** - v73.45 shipped (SW cache `finances-pwa-v73.45`; commits `fb13db7` build + `90644a4` live re-stamp, pushed to origin/main, tree clean). The v73.46 date-label fix rode the same release (one stamp, two features). Live-verified on jblagana.github.io (SW cache v73.45, SHELL_RELEASE v73.45, the resetAdj confirm + adjEmpty + pe_dateLabel pins all present in the live app.js/index.html).
 Progress: 100% - tracked gates green: check_site.py (repo + root mirror, incl. the new v73.45 + v73.46 pins), node --check app.js/chat.js/ai.js/sw.js, smoke_v68.js (chat parser). The `smoke_app_v68.js` gate stays SKIPPED (0-byte/unrecoverable since the v73.42 incident). **Behavioral verification via a fresh probe** (`C:\Users\Jan\Muji\_probe_v7345.js`, kept in the Muji scratch dir): the real app.js IIFE runs in Node with the boss's Oct 13 export seeded (base + 94 txns + 9 plans + the recovered overlay) — 32/32 assertions pass, incl. the boss's exact 1k scenario end-to-end (log 1k → reset opens the confirm naming the measured move → confirm zeroes the overlay + files the audit rows → deleting the 1k creates NO phantom → the toast's Undo restores the overlay and removes only THIS reset's audit rows).
 
 ### What changed
