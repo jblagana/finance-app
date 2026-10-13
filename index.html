@@ -384,11 +384,13 @@ padding:7px 14px;font-size:12.5px}
    toggle on the peek) — the free cash's projection, inside the hero */
 .cycleblock{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
 .cbhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
-.cbtitle{display:flex;align-items:center;gap:7px;min-width:0}
+/* v73.43: the window label sits BELOW the tag (column, not row) — on a
+   360px hero the toggle was squeezing it into ellipsis */
+.cbtitle{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0}
 .cbtag{font-size:10px;font-weight:700;letter-spacing:.05em;padding:2px 7px;border-radius:6px;white-space:nowrap}
 .cbtag.this{background:rgba(55,211,155,.05);color:var(--ok);border:1px solid rgba(55,211,155,.3)}
 .cbtag.next{background:rgba(255,196,92,.08);color:var(--warn);border:1px solid rgba(255,196,92,.3)}
-.cbtitle .win{color:var(--mut);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cbtitle .win{color:var(--mut);font-size:12px;white-space:nowrap}
 .cbseg{display:inline-flex;background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:2px;gap:2px;flex:none}
 .cbseg button{border:0;background:transparent;color:var(--mut);font:inherit;font-size:12px;font-weight:600;
   padding:5px 11px;border-radius:999px;cursor:pointer;white-space:nowrap}

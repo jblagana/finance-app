@@ -6,6 +6,19 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.43 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-13 - "in hero card, move the oct15->nov14 below the this cycle, the date is not hidden by the toggle"
+Status: **done** - v73.43 shipped (SW cache `finances-pwa-v73.43`; stamped manually, pushed to origin/main)
+Progress: 100% - tracked gates green: check_site.py (repo + root mirror, incl. the new v73.43 pin), test_chat_parser.py, node --check app.js/sw.js. The `smoke_app_v68.js` gate stays SKIPPED (0-byte/unrecoverable since the v73.42 incident — this change is CSS-only, no app logic touched, so the hollow gate costs nothing here).
+
+### What changed
+- **The cycle window label moved BELOW the tag** (`.cbtitle` is now `flex-direction:column;align-items:flex-start;gap:2px`) and `.win` lost its `overflow:hidden;text-overflow:ellipsis` — on a narrow hero the This/Next toggle was squeezing the "15 Sep → 14 Oct" label into an ellipsis.
+- CSS-only: `renderCycleBlock` markup is byte-identical (the v73.43 check_site pin asserts the span + concat are still there).
+- NOTE: the reset undo + confirm + audit-row feature (the v73.43 plan from the 1k-reset incident) is PARKED and will ship as v73.44 — this layout fix took the number.
+
+### Files
+index.html (.cbtitle column + .win ellipsis removed), app.js (SHELL_NOTES '73.43' + SHELL_RELEASE stamp), tools/check_site.py (v73.43 pin) + root check_site.py (mirror re-sync, only the SITE line differs), sw.js + README.md (stamps).
+
 # v73.42 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-12 - "in money tab, reorder to: projection then coming up, remove the rest"
 Status: **done** - v73.42 shipped (SW cache `finances-pwa-v73.42`; stamped manually, pushed to origin/main)

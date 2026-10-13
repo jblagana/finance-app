@@ -6759,12 +6759,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.42, live: new Date(2026, 9, 12, 23, 58) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.43, live: new Date(2026, 9, 13, 0, 20) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.43': [
+      'In the Free / unallocated card, the cycle window ("Oct 15 → Nov 14") now sits BELOW the This cycle / Next cycle tag instead of beside it — on a narrow hero the toggle was squeezing the dates into an ellipsis'
+    ],
     '73.42': [
       'The Money tab is leaner: just the Projection card (with the cycle block) then Coming up — the summary tiles, the Obligations card, and the Sinking card are gone (the "reset to my numbers" bar moved into the Projection card). The obligations and sinking data is intact — the coach still reads it'
     ],
