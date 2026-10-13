@@ -71,10 +71,12 @@ User mandate (2026-09-12): these apply to every batch in this repo.
      "live re-stamp" second commit: **one commit per release**), the
      `sw.js` cache, the `README.md` reference, and the `check_site.py`
      version assertions; re-syncs the root mirror (`../check_site.py`);
-     runs the FULL gate suite in one pass (check_site repo + mirror,
+     runs a preflight (all gate dependencies present — v73.48), then the
+     FULL gate suite in one pass (check_site repo + mirror,
      `test_chat_parser.py`, `node --check` on all JS, both smokes —
-     `smoke_app_v68.js` rebuilt as a permanent 39-assertion gate in
-     v73.47, seeded by `../data/smoke_seed.json`). Invoke it as the
+     `tools\smoke\smoke_app_v68.js`, a permanent 39-assertion gate
+     rebuilt in v73.47, seeded by `tools\smoke\smoke_seed.json`).
+     Invoke it as the
      final step right before commit; the live-stamp freshness check
      (≤30 min) fails if it sat unpushed — re-run it right before
      committing.
@@ -82,3 +84,12 @@ User mandate (2026-09-12): these apply to every batch in this repo.
      re-stamping.
    - Commit + push only on green; on red, fix and re-run — never push
      past a failing gate.
+4. **The smoke harness is repo-tracked (v73.48, after the v73.42 incident
+   destroyed the loose copy).** `tools\smoke\` holds `smoke_v68.js`,
+   `smoke_app_v68.js`, and `smoke_seed.json` — the canonical, committed
+   copies. The old loose files in `finances/` (root + `data\`) are DEAD;
+   never create loose copies again. `release.ps1` runs a **preflight
+   gate** before any gate: any missing gate dependency fails the run at
+   the top, naming the file. If a smoke file is ever missing:
+   `git checkout origin/main -- tools/smoke/` (or restore from the
+   read-only mirror at `C:\Users\Jan\Muji\finance-app\tools\smoke\`).
