@@ -6,6 +6,20 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.45 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-13 - "Build v73.45 — reset undo + confirm + audit row" (+ "the date field in plans is invisible, i just click with faith that its there" → v73.46)
+Status: **done** - v73.45 shipped (SW cache `finances-pwa-v73.45`; commit below, pushed to origin/main). The v73.46 date-label fix rode the same release (one stamp, two features).
+Progress: 100% - tracked gates green: check_site.py (repo + root mirror, incl. the new v73.45 + v73.46 pins), node --check app.js/chat.js/ai.js/sw.js, smoke_v68.js (chat parser). The `smoke_app_v68.js` gate stays SKIPPED (0-byte/unrecoverable since the v73.42 incident). **Behavioral verification via a fresh probe** (`C:\Users\Jan\Muji\_probe_v7345.js`, kept in the Muji scratch dir): the real app.js IIFE runs in Node with the boss's Oct 13 export seeded (base + 94 txns + 9 plans + the recovered overlay) — 32/32 assertions pass, incl. the boss's exact 1k scenario end-to-end (log 1k → reset opens the confirm naming the measured move → confirm zeroes the overlay + files the audit rows → deleting the 1k creates NO phantom → the toast's Undo restores the overlay and removes only THIS reset's audit rows).
+
+### What changed
+- **`resetAdj` is no longer a one-way door** (app.js:588): (1) it opens `confirmAsk` naming the **measured** free-cash move — the overlay is zeroed in a preview, `effectiveSnap()` read, then the overlay restored; the dialog says "your free cash rise/drop by ₱X" (direction-aware) + the cards-owed move when non-zero. The move is MEASURED, not derived from `adj.free` — the overlay's net effect on free is a formula (`base + adj.cash − adj.free − …`), and the boss's pain was "it jumped by idk how much"; (2) the confirmed reset files **audit rows** (`k='r'`, category Adjustment, note "reset to my numbers") in the money log — one per moved dimension, `n` = the actual move, `f`/`o` = the AFTER values (the render derives before = f − n / o − n); (3) the toast carries an **Undo** (`snackUndo`) that restores the pre-reset overlay AND removes this reset's audit rows (by identity — an undone reset never happened).
+- **The audit row renders in the ledger** like an 'a' row (`isAdj = e.k === 'a' || e.k === 'r'`), with a ✕ whose confirm is scoped: removing a reset record just drops the row (there's no Settings override behind it to revert — `askDeleteAdjustment`/`deleteAdjustment` accept 'r' and skip the override-revert).
+- **The 1k-phantom root fix:** `deleteTxn`/`saveTxnEdit` now no-op their overlay reversal when `adjEmpty()` (a reset already wiped the overlay → reversing the txn's effect creates a phantom delta out of nothing — the boss's exact 1k: log → reset → delete → −1,000 reappears).
+- **The 'r' flavor survives imports** (normalizeTxn allow-list) and the v73.46 fix: the plan-edit sheet's date input (opacity:0 by design) now has a visible `.dlabel` span (`#pe_dateLabel`) + the sheet fill and input binding call `syncDateLabel`, so the label shows the real date instead of the "Pick a date" placeholder.
+
+### Files
+app.js (resetAdj rewrite + adjEmpty + delete/saveTxnEdit guards + isAdj 'r' + askDeleteAdjustment/deleteAdjustment 'r' + normalizeTxn 'r' + SHELL_NOTES '73.45' + SHELL_RELEASE stamp + openPlanEdit/adjEmpty/resetAdj/renderMoneyLog exports), index.html (#pe_dateLabel span), tools/check_site.py (v73.45 + v73.46 pins + the v72.30 sanitizer pin updated for 'r' + the v72.30 ledger pin's isAdj updated) + root check_site.py (mirror re-sync), sw.js + README.md (stamps).
+
 # v73.44 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-13 - "add the cards owed row and plan dues in this cycle hero card — informational only: liquid deducted by the plans due and cards owed, then finally the free cash which should display the same amount as the big hero card number"
 Status: **done** - v73.44 shipped (SW cache `finances-pwa-v73.44`; commit pending below, pushed to origin/main)

@@ -890,6 +890,9 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
         <label for="pe_date">Date</label>
         <div class="dfield">
           <input id="pe_date" type="date">
+          <!-- v73.46: the visible date label (the input is opacity:0 by design —
+               without this span the field was invisible and untappable-with-faith) -->
+          <span class="dlabel" id="pe_dateLabel" aria-hidden="true">Pick a date</span>
         </div>
       </div>
     </div>

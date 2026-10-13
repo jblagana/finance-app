@@ -793,6 +793,28 @@ def main():
           and "mode === 'next' ? '<div class=\"cbnet\"><span class=\"nl\">Free at end of next cycle</span>" in js
           and ".cbrow.cbfree{margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}" in html
           and "'73.44': [" in js)
+    check("v73.45 (boss: 'build v73.45 — reset undo + confirm + audit row'): 'Reset to my numbers' is no longer a one-way door — (1) it opens confirmAsk naming the MEASURED free-cash move (rises/drops by ₱X, direction-aware — the move is measured by previewing the zeroed effectiveSnap, not derived from adj.free, because the overlay's net effect on free is a formula); (2) the confirmed reset files audit rows (k='r', category Adjustment, note 'reset to my numbers') in the money log — one per moved dimension, signed actual delta; (3) the toast carries an Undo that restores the pre-reset overlay AND removes the audit rows; (4) the root 1k-phantom fix: deleteTxn/saveTxnEdit no-op their overlay reversal when adjEmpty() (a reset already wiped it → no phantom delta); (5) the 'r' flavor survives imports (normalizeTxn) and its ✕ just drops the record (no override behind it to revert)",
+          "var resetUndoState = null;" in js
+          and "function resetAdj() {" in js and "confirmAsk('This makes ' + freeTxt + cardTxt" in js
+          and "your free cash <b>rise by ' + money(dFree)" in js
+          and "var preview = effectiveSnap();" in js and "state.adj = prev; // restore — the reset only happens on confirm" in js
+          and "k: 'r'" in js and "reset to my numbers" in js
+          and "var isAdj = e.k === 'a' || e.k === 'r';" in js
+          and "if (!e || (e.k !== 'a' && e.k !== 'r')) return;" in js
+          and "snackUndo" in js and "resetUndoState.rows.indexOf(x) < 0" in js
+          and "function adjEmpty() {" in js
+          and "if (!adjEmpty()) addAdj(txnAdj(t), -1);" in js
+          and "if (!adjEmpty()) { addAdj(txnAdj(t), 1); addAdj(txnAdj(o), -1); }" in js
+          and "e.k === 'a' || e.k === 'r') m.k = e.k;" in js
+          and "adjEmpty: adjEmpty," in js and "resetAdj: resetAdj," in js
+          and "'73.45': [" in js)
+    check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
+          'id="pe_dateLabel"' in html
+          and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]
+          and "if (dt) { dt.value = dateISO; syncDateLabel(dt); }" in js
+          and "var pedateEl = byId('pe_date');" in js
+          and "pedateEl.addEventListener('input', function () { syncDateLabel(pedateEl); })" in js
+          and "openPlanEdit: openPlanEdit," in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           # v73.42: ringSVG + the sink-ring markup are GONE with the Sinking
@@ -1121,8 +1143,8 @@ def main():
           and "sanitizeChatRows(data.chat)" in js
           and "sanitizeMoneyLogRows(data.moneyLog)" in js
           and "if (!data.adj) computeAdjFromTxns()" in js)
-    check("import sanitizer keeps every row flavor (v72.14, v72.30): the k allow-list covers c/x/p/i/a — the v72.8 list (c/x only) silently stripped the v72.10 card_payment/cash_in flavors on import, rendering them as spends with inverted before/after; v72.30 adds 'a' (the Adjustment override row)",
-          "if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i' || e.k === 'a') m.k = e.k" in js)
+    check("import sanitizer keeps every row flavor (v72.14, v72.30, v73.45): the k allow-list covers c/x/p/i/a/r — the v72.8 list (c/x only) silently stripped the v72.10 card_payment/cash_in flavors on import, rendering them as spends with inverted before/after; v72.30 adds 'a' (the Adjustment override row); v73.45 adds 'r' (the reset audit row)",
+          "if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i' || e.k === 'a' || e.k === 'r') m.k = e.k" in js)
     check("the Backup section lets the user choose what goes into the JSON export (v72.23, user: 'a backup section in settings where u can choose which data u wanna export etc e.g. owed tab entries only'): six checkboxes in Settings (base/txns/plans/owed/log/chat), the choice persists (fin.bkSel.v1, default = everything), the export holds ONLY the ticked sections and lists them in `sections`, and the import restores only what the file holds (hasSec) — unlisted sections stay as the phone's own data",
           'id="bkBase"' in html and 'id="bkTxns"' in html and 'id="bkPlans"' in html
           and 'id="bkOwed"' in html and 'id="bkLog"' in html and 'id="bkChat"' in html
@@ -1348,7 +1370,7 @@ def main():
           and "l: 'Adjustment', c: 'Adjustment'" in js
           and "n: r2(diff), k: 'a'" in js
           and "set a balance to what it really is" in js
-          and "var isAdj = e.k === 'a';" in js
+          and "var isAdj = e.k === 'a' || e.k === 'r';" in js  # v73.45: 'r' (reset audit row) joins the Adjustment render family
           and "if (cardRow) freeTxt = ''" in js
           and "data-ow-edit-cancel=\"1\"" in js
           and "var lessE = t.getAttribute && t.getAttribute('data-ow-less');" in js

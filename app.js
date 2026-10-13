@@ -580,6 +580,19 @@
     return p.length === 4 ? [p[0], p[2], p[3]].join('|') : sig;
   }
   function adjActive() { return !!(state.adj.cash || state.adj.free || state.adj.card); }
+  // v73.45 (the 1k-phantom root cause): is the overlay FULLY empty? A delete
+  // reverses the txn's overlay effect — but if the overlay is empty (nothing
+  // tracked, OR a reset already wiped it), reversing creates a phantom delta
+  // out of nothing (the boss's 1k: log → reset → delete → −1,000 reappears).
+  // When empty, the delete's reversal is a no-op.
+  function adjEmpty() {
+    var a = state.adj;
+    if (!a) return true;
+    if (a.cash || a.free || a.card || a.prepay) return false;
+    var pb = a.prepayBy || {};
+    for (var k in pb) if (pb[k]) return false;
+    return true;
+  }
   function setServerSnapshot(snap) {
     if (!snap) return;
     state.snapshot = snap;
@@ -588,10 +601,72 @@
     if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
     state.adjSig = sig;
   }
+  // v73.45 (the 1k-reset incident): the old reset was ONE tap, no confirm, no
+  // backup — it zeroed the whole overlay and the free cash silently jumped to
+  // the raw base ("by how much did it change?" was unanswerable). Now:
+  //  1) two-tap confirm that NAMES the exact amount leaving the live view;
+  //  2) the reset files an audit row (k='r', category Adjustment) in the
+  //     money log — the signed deltas, so the change is always on the record;
+  //  3) the toast carries an Undo that restores the pre-reset overlay
+  //     (and removes the audit row — an undone reset never happened).
+  var resetUndoState = null;
   function resetAdj() {
+    if (!adjActive()) { snack('Nothing to reset — your numbers are already the live ones.'); return; }
+    var prev = JSON.parse(JSON.stringify(state.adj));
+    // MEASURE the move, don't derive it: the overlay's net effect on free is
+    // a formula (base + adj.cash − adj.free − …), not adj.free alone — so the
+    // dialog and the audit row use the ACTUAL before/after effective values.
+    // Preview the zeroed state, read it, restore — effectiveSnap is pure.
+    var before = effectiveSnap();
+    var freeBefore = before && before.cash ? before.cash.free : 0;
+    var cardBefore = before ? (before.card_owed || 0) : 0;
     state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
-    state.adjSig = snapSig(state.snapshot);
-    saveAdj().then(function () { emit('adj'); });
+    var preview = effectiveSnap();
+    state.adj = prev; // restore — the reset only happens on confirm
+    var freeAfter = preview && preview.cash ? preview.cash.free : 0;
+    var cardAfter = preview ? (preview.card_owed || 0) : 0;
+    var dFree = r2(freeAfter - freeBefore);  // how much free MOVED (the boss's "by how much")
+    var dCard = r2(cardAfter - cardBefore);  // how much cards-owed moved
+    var freeTxt = Math.abs(dFree) > 0.004
+      ? (dFree > 0 ? 'your free cash <b>rise by ' + money(dFree) + '</b> — the app-recorded entries leave the live view'
+                   : 'your free cash <b>drop by ' + money(-dFree) + '</b> — the app-recorded entries leave the live view')
+      : 'your app-recorded entries leave the live view';
+    var cardTxt = Math.abs(dCard) > 0.004
+      ? (dCard > 0 ? ' and cards owed rises by <b>' + money(dCard) + '</b>'
+                   : ' and cards owed drops by <b>' + money(-dCard) + '</b>')
+      : '';
+    confirmAsk('This makes ' + freeTxt + cardTxt +
+      ' — the live view jumps back to your Settings numbers. You can undo right after.',
+      'Reset', function () {
+      state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
+      state.adjSig = snapSig(state.snapshot);
+      // the audit rows — same family as 'a' (one delta per row): n is the
+      // actual move (after − before), f/o are the AFTER values; the render
+      // derives before = f − n / o − n.
+      var rows = [];
+      if (Math.abs(dFree) > 0.004) {
+        rows.push({ at: Date.now(), a: 'add', l: 'Adjustment', c: 'Adjustment', nt: 'reset to my numbers', m: '', n: dFree, k: 'r', f: r2(freeAfter) });
+      }
+      if (Math.abs(dCard) > 0.004) {
+        rows.push({ at: Date.now(), a: 'add', l: 'Adjustment', c: 'Adjustment', nt: 'reset to my numbers', m: '', n: dCard, k: 'r', o: r2(cardAfter) });
+      }
+      rows.forEach(function (e) { state.moneyLog.push(e); });
+      if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
+      idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
+      resetUndoState = { prev: prev, rows: rows };
+      saveAdj().then(function () {
+        emit('adj');
+        snack('Reset to your numbers — free cash ' + (dFree > 0 ? 'rises' : dFree < 0 ? 'drops' : 'is unchanged') + (Math.abs(dFree) > 0.004 ? ' by ' + money(Math.abs(dFree)) : ''), function () {
+          if (!resetUndoState) return;
+          state.adj = JSON.parse(JSON.stringify(resetUndoState.prev));
+          // remove the audit rows (by identity — the list may have shifted)
+          state.moneyLog = state.moneyLog.filter(function (x) { return resetUndoState.rows.indexOf(x) < 0; });
+          idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
+          resetUndoState = null;
+          saveAdj().then(function () { emit('adj'); });
+        });
+      });
+    });
   }
   function effectiveSnap() {
     var s = state.snapshot;
@@ -1016,18 +1091,20 @@
   }
   function askDeleteAdjustment(idx) {
     var e = (state.moneyLog || [])[idx];
-    if (!e || e.k !== 'a') return;
+    if (!e || (e.k !== 'a' && e.k !== 'r')) return;
     var acc = findAdjAccount(e.m);
     var amt = money(Math.abs(Number(e.n) || 0));
-    confirmAsk(acc
-      ? 'Undo this balance override? The <b>Adjustment</b> record is removed and <b>' + esc(e.m || 'the account') + '</b> goes back by <b>' + amt + '</b> — you can undo right after.'
-      : 'Remove this <b>Adjustment</b> record? ' + esc(e.m || 'The account') + ' is no longer in Your numbers, so only the ledger row is removed — you can undo right after.',
+    confirmAsk(e.k === 'r'
+      ? 'Remove this <b>reset record</b>? Only the ledger row is removed — your live numbers are untouched — you can undo right after.'
+      : acc
+        ? 'Undo this balance override? The <b>Adjustment</b> record is removed and <b>' + esc(e.m || 'the account') + '</b> goes back by <b>' + amt + '</b> — you can undo right after.'
+        : 'Remove this <b>Adjustment</b> record? ' + esc(e.m || 'The account') + ' is no longer in Your numbers, so only the ledger row is removed — you can undo right after.',
       'Remove', function () { deleteAdjustment(idx); });
   }
   function deleteAdjustment(idx) {
     var log = state.moneyLog || [];
     var e = log[idx];
-    if (!e || e.k !== 'a') return;
+    if (!e || (e.k !== 'a' && e.k !== 'r')) return;
     var acc = findAdjAccount(e.m);
     var oldVal = acc ? r2(Number(acc.value) || 0) : null;
     state.moneyLog = log.filter(function (x) { return x !== e; });
@@ -1192,7 +1269,7 @@
     for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === id) t = state.txns[i];
     if (!t) return Promise.resolve();
     state.txns = state.txns.filter(function (x) { return x.id !== id; });
-    addAdj(txnAdj(t), -1);
+    if (!adjEmpty()) addAdj(txnAdj(t), -1); // v73.45: no-op on an empty overlay (no phantom)
     logMoney('del', t);
     syncTombAdd('t', id); // v73.3: the deletion syncs (tombstone; Undo clears it)
     return Promise.all([idbDel(STORE_TX, id), saveAdj()]).then(function () {
@@ -1231,7 +1308,7 @@
     if (!t && !removed.length) return null;
     if (t) {
       state.txns = state.txns.filter(function (x) { return x.id !== tid; });
-      addAdj(txnAdj(t), -1);
+      if (!adjEmpty()) addAdj(txnAdj(t), -1); // v73.45: no-op on an empty overlay (no phantom)
       // v73.3: the deletion syncs (Undo clears the tombstone). keepInStore =
       // the EDIT path (the row is re-logged under the same id) — not a delete.
       if (!keepInStore) syncTombAdd('t', tid);
@@ -1370,8 +1447,11 @@
     // link, unlink, or keep the link just like a fresh add.
     if (data.planRef) t.planRef = data.planRef;
     state.txns[oIdx] = t; // in place — position preserved
-    addAdj(txnAdj(t), 1);
-    addAdj(txnAdj(o), -1);
+    // v73.45: the add+remove pair nets to the edit's delta — but on an EMPTY
+    // overlay (a reset already wiped it) the pair's +new leg would create a
+    // phantom (the old effect is gone, so only the new one lands). Skip both
+    // legs: nothing tracked → nothing to replace.
+    if (!adjEmpty()) { addAdj(txnAdj(t), 1); addAdj(txnAdj(o), -1); }
     var oldAmt = Number(o.amount) || 0, newAmt = Number(t.amount) || 0;
     // effect delta (new − old) across free / card / month-spent
     var dFree = freeEffect(t.kind, newAmt) - freeEffect(o.kind, oldAmt);
@@ -1642,7 +1722,12 @@
         // under v73.12 the FULL balance is committed in the base); the payoff
         // only settles the debt (raw cash + owed drop), so free before == after
         // (the card sub-line still shows owed drop).
-        var isAdj = e.k === 'a';
+        // v73.45: 'r' = a reset-to-my-numbers audit row — same rendering
+        // family as 'a' (signed n, before = f − n / o − n), same ✕ (removing
+        // the record just drops the audit line — there's no Settings override
+        // behind it to reverse, so askDeleteAdjustment's override-revert is a
+        // no-op for it).
+        var isAdj = e.k === 'a' || e.k === 'r';
         var inflow = e.k === 'i' || e.k === 'p';
         var before = (e.k === 'p') ? r2(e.f)
           : r2(e.f + (add ? (inflow ? -e.n : e.n) : (inflow ? e.n : -e.n)));
@@ -4980,7 +5065,7 @@
     var n = byId('pe_name'), a = byId('pe_amount'), dt = byId('pe_date'), sc = byId('pe_scope'), h = byId('peHint');
     if (n) n.value = ro.name || '';
     if (a) a.value = String(ro.amount != null ? ro.amount : '');
-    if (dt) dt.value = dateISO;
+    if (dt) { dt.value = dateISO; syncDateLabel(dt); } // v73.46: show the real date, not "Pick a date"
     if (sc) sc.value = 'this';
     if (h) {
       // v73.41: the date is now editable — the hint says what each scope does
@@ -6387,7 +6472,7 @@
       if (typeof e.nt === 'string') m.nt = e.nt.slice(0, 120);
       if (typeof e.m === 'string') m.m = e.m.slice(0, 60);
       if (typeof e.n === 'number' && isFinite(e.n)) m.n = e.n;
-      if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i' || e.k === 'a') m.k = e.k; // v72.14: the v72.10 p/i flavors must survive an import too; v72.30: 'a' (the Adjustment override row)
+      if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i' || e.k === 'a' || e.k === 'r') m.k = e.k; // v72.14: the v72.10 p/i flavors must survive an import too; v72.30: 'a' (the Adjustment override row); v73.45: 'r' (the reset audit row)
       if (typeof e.f === 'number' && isFinite(e.f)) m.f = e.f;
       if (typeof e.o === 'number' && isFinite(e.o)) m.o = e.o;
       if (typeof e.s === 'number' && isFinite(e.s)) m.s = e.s;
@@ -6795,12 +6880,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.44, live: new Date(2026, 9, 13, 14, 30) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.45, live: new Date(2026, 9, 14, 0, 36) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.45': [
+      '"Reset to my numbers" is no longer a one-way door: it now asks first (naming the exact amount leaving the live view), files an Adjustment row in the Ledger so the change is always on the record, and the toast carries an Undo that restores your app-recorded entries. Also fixed: deleting or editing a ledger entry after a reset could create a phantom amount in your free cash — the reversal now no-ops when the overlay is already empty'
+    ],
     '73.44': [
       'The Free / unallocated card now shows where your money is: the This cycle block lists Liquid, Cards owed, Other outflows (budgets, debts, sinking, one-offs) and Plan dues — each one deducted from the last — ending in a Free cash row that is the same number as the big hero figure (informational only, nothing changes the math)'
     ],
@@ -7753,6 +7841,12 @@
     insightsData: insightsData, // v73.2: the insight math (coachRows' input)
     renderProjection: renderProjection, // v73.42: the Money tab's projection card (smoke drives it; it now carries the adj bar)
     adjActive: adjActive, // v73.42: is the overlay live (the adj bar's gate)
+    adjEmpty: adjEmpty, // v73.45: is the overlay fully empty (the delete/edit no-op guard)
+    resetAdj: resetAdj, // v73.45: the two-tap reset (confirm + audit row + toast Undo)
+    openPlanEdit: openPlanEdit, // v73.46: the probe drives the sheet fill (the date label)
+    confirmYes: confirmYes, // v73.45: the probe drives the confirm dialog's yes path
+    getResetUndoState: function () { return resetUndoState; }, // v73.45: the pending Undo (probe reads it)
+    renderMoneyLog: renderMoneyLog, // v73.45: the probe reads the ledger render (audit row)
     goalPace: goalPace, // v73.3: the goal pace (pure — the smoke drives it)
     syncEncrypt: syncEncrypt, // v73.3: the envelope (the smoke round-trips it)
     syncDecrypt: syncDecrypt, // v73.3: decrypt the envelope (the smoke round-trips it)
@@ -7907,6 +8001,10 @@
     var pdateEl = byId('p_date');
     if (pdateEl && !pdateEl.value) pdateEl.value = todayISO();
     if (pdateEl) { pdateEl.addEventListener('input', function () { syncDateLabel(pdateEl); }); syncDateLabel(pdateEl); }
+    // v73.46: the plan-edit sheet's date input gets the same label sync (it
+    // was the only date input without one — the label never followed picks)
+    var pedateEl = byId('pe_date');
+    if (pedateEl) { pedateEl.addEventListener('input', function () { syncDateLabel(pedateEl); }); }
 
     var tabBtns = document.querySelectorAll('.tab');
     for (var i = 0; i < tabBtns.length; i++) {
