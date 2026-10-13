@@ -8,7 +8,7 @@ commit is not done.
 
 # v73.43 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-13 - "in hero card, move the oct15->nov14 below the this cycle, the date is not hidden by the toggle"
-Status: **done** - v73.43 shipped (SW cache `finances-pwa-v73.43`; stamped manually, pushed to origin/main)
+Status: **done** - v73.43 shipped (SW cache `finances-pwa-v73.43`; commits `187b8bf` build + re-stamp, pushed to origin/main)
 Progress: 100% - tracked gates green: check_site.py (repo + root mirror, incl. the new v73.43 pin), test_chat_parser.py, node --check app.js/sw.js. The `smoke_app_v68.js` gate stays SKIPPED (0-byte/unrecoverable since the v73.42 incident — this change is CSS-only, no app logic touched, so the hollow gate costs nothing here).
 
 ### What changed
