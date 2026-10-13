@@ -6,6 +6,17 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.50 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-14 - "make the toast persist until swiped"
+Status: **done** - v73.50 shipped (SW cache `finances-pwa-v73.50`; ONE commit pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (SW cache v73.50, SHELL_RELEASE v73.50, the persistence pin present).
+Progress: 100% - tracked gates green (release.ps1 v73.50 full run + a -GatesOnly re-run after the two gate fixes below: check_site repo + root mirror, test_chat_parser, node --check x4, smoke_v68, smoke_app_v68 42 assertions ALL PASS).
+
+### What changed
+- **The snack banner no longer auto-hides after 7s** (app.js snack()): the `setTimeout(hideSnack, ms || 7000)` is gone — the banner lives until the swipe-up release (the v72.32 pointerup path, unchanged), Undo, or a newer toast replaces it. The `ms` parameter stays for call-compat but is ignored (no caller passed one). SHELL_NOTES 73.50.
+- **check_site.py**: new v73.50 pin (snackTimer = null + the old 7s line gone + the swipe path intact + the hideSnack export + SHELL_NOTES); the v72.32 pin's `setTimeout(hideSnack, ms || 7000)` assertion was REMOVED (that line no longer exists by design — the swipe wiring it also pins is still asserted).
+- **smoke_app_v68.js**: PART 7 — spies on global.setTimeout during the snack() call and asserts ZERO timers scheduled (the real persistence claim), plus the hideSnack (swipe-release) path and the newer-toast replacement path. New export: hideSnack.
+- **Two gate bugs this run caught (the gates earned their keep):** (1) the first v73.50 gate run FAILED on the stale v72.32 pin — fixed by removing the dead assertion; (2) my PART 7 spy was broken in a sneaky way — assigning `snEl.classList.add = fn` on the Proxy element stored it as a property of the ELEMENT, not the classList object the app calls, so the spy never fired (the "replacement path" assertion failed on an empty log). Fixed by patching the classList object itself.
+
 # v73.49 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-14 - "i tried resetting live numbers, confirm and toast are there. but it didnt write in ledger"
 Status: **done** - v73.49 shipped (SW cache `finances-pwa-v73.49`; ONE commit pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (SW cache v73.49, SHELL_RELEASE v73.49, the adj-repaint pin present).

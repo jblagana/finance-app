@@ -817,6 +817,12 @@ def main():
     check("v73.49 (boss: 'i tried resetting live numbers, confirm and toast are there. but it didnt write in ledger'): the reset files its k='r' audit rows into state.moneyLog, but the 'adj' emit key never repainted renderMoneyLog — the rows existed in state yet the Ledger card stayed stale until an unrelated emit. renderMoneyLog is now on the 'adj' repaint list, so the audit rows show immediately on confirm (the smoke gate's old 'renders in the ledger' assertion called F.renderMoneyLog() BY HAND, which is why this wiring hole passed every gate)",
           "adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderMoneyLog, renderCoachNote, renderMood]," in js
           and "'73.49': [" in js)
+    check("v73.50 (boss: 'make the toast persist until swiped'): the snack banner's 7s auto-hide is gone — snack() no longer schedules setTimeout(hideSnack, 7000); the banner lives until the swipe-up release (the pointerup path calls hideSnack), Undo, or a newer toast replaces it. The `ms` parameter stays for call-compat but is ignored",
+          "snackTimer = null;" in js
+          and "setTimeout(hideSnack, ms || 7000)" not in js
+          and "if (released <= thr) { clearTimeout(snackTimer); hideSnack(); }" in js
+          and "hideSnack: hideSnack, // v73.50: the swipe-dismiss path (smoke drives it)" in js
+          and "'73.50': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]
@@ -1094,7 +1100,8 @@ def main():
           "top:calc(10px + env(safe-area-inset-top))" in snack_rule
           and "touch-action:none" in snack_rule
           and "#snack.dragging{transition:none}" in html
-          and "snackTimer = setTimeout(hideSnack, ms || 7000)" in js
+          # v73.50: the 7s auto-hide is gone (the toast persists until
+          # swiped) — the swipe-wiring this check pins is what survives.
           and "function wireSnackSwipe()" in js
           and "snackDragStart = ev.clientY" in js
           and "ev.target.id === 'snackUndo'" in js

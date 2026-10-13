@@ -1926,8 +1926,13 @@
       if (b) b.onclick = function () { hideSnack(); undoFn(); };
     }
     el.classList.add('show');
+    // v73.50 (user: 'make the toast persist until swiped'): the 7s auto-hide
+    // is gone — the banner lives until you swipe it up (the v72.32 drag
+    // dismiss, unchanged), tap Undo, or a newer toast replaces it. The
+    // `ms` parameter is kept for call-compat but ignored (no caller passes
+    // one anyway).
     clearTimeout(snackTimer);
-    snackTimer = setTimeout(hideSnack, ms || 7000); // v72.32: the banner lives 7s
+    snackTimer = null;
   }
 
   // ---------- v34: confirm dialog (destructive deletes ask first) ----------
@@ -6884,12 +6889,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.49, live: new Date(2026, 9, 14, 1, 54) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.50, live: new Date(2026, 9, 14, 2, 16) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.50': [
+      'Toasts now stay until you swipe them away — no more 7-second auto-hide (Undo and a newer toast still close them the same way)'
+    ],
     '73.49': [
       'Fixed: after "Reset to my numbers", the Adjustment rows were filed to the Ledger but the card never repainted until you tapped something else — the reset now redraws the Ledger immediately, so the audit rows show up right away'
     ],
@@ -7856,6 +7864,7 @@
     openPlanEdit: openPlanEdit, // v73.46: the probe drives the sheet fill (the date label)
     confirmYes: confirmYes, // v73.45: the probe drives the confirm dialog's yes path
     getResetUndoState: function () { return resetUndoState; }, // v73.45: the pending Undo (probe reads it)
+    hideSnack: hideSnack, // v73.50: the swipe-dismiss path (smoke drives it)
     planEditCtx: function () { return planEditCtx; }, // v73.47: the smoke checks the ✕ cleared the edit context
     renderMoneyLog: renderMoneyLog, // v73.45: the probe reads the ledger render (audit row)
     goalPace: goalPace, // v73.3: the goal pace (pure — the smoke drives it)
