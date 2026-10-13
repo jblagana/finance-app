@@ -6,6 +6,20 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.44 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-13 - "add the cards owed row and plan dues in this cycle hero card — informational only: liquid deducted by the plans due and cards owed, then finally the free cash which should display the same amount as the big hero card number"
+Status: **done** - v73.44 shipped (SW cache `finances-pwa-v73.44`; commit pending below, pushed to origin/main)
+Progress: 100% - tracked gates green: check_site.py (repo + root mirror, incl. the new v73.44 pin), node --check app.js/chat.js/ai.js/sw.js, smoke_v68.js (chat parser). The `smoke_app_v68.js` gate stays SKIPPED (0-byte/unrecoverable since the v73.42 incident). **Behavioral verification via a fresh probe** (`C:\Users\Jan\Muji\_probe_v7344.js`, kept in the Muji scratch dir): the real app.js IIFE runs in Node with the boss's Oct 13 export seeded (base + 94 txns + 9 plans + the recovered overlay) — 25/25 assertions pass, incl. the BRIDGE identity (liquid − cards owed − other outflows − plan dues == the hero's freeNet, one source each) and both render modes.
+
+### What changed
+- **The THIS-cycle block now shows the bridge rows** (informational only, nothing changes the math): Liquid → Cards owed (all cards) → Other outflows (budgets · debts · sinking · one-offs — hidden at 0) → Plan dues (N due in window) → **Free cash** ("same as the hero number"), styled as a result row (top border + heavier weight, `.cbrow.cbfree`).
+- **The bridge sums to the hero by construction:** the rows come from the EFFECTIVE snapshot (overlay-applied — the same source the hero's freeNet uses, v73.40); planShare = `cyclePlanDeduction()` (the hero's own deduction, one source); otherOut is the **exact residual** `liquid − cardOwed − free` (the overlay shifts free and liquid by different amounts — a card_charge moves free not liquid — so a stored "committed" number would not close the bridge).
+- The separate "Free at end of this cycle" net line renders **only for the peek** now (in this mode it would repeat the Free cash row). The peek is unchanged: carry = this cycle's net, salary toggle intact.
+- `cycleProjection` returns `liquid/cardOwed/otherOut/planShare` for both modes (pure, display-only — the rebase guard never sees it).
+
+### Files
+app.js (cycleProjection rows + renderCycleBlock this-mode block + net-line gate + SHELL_NOTES '73.44' + SHELL_RELEASE stamp), index.html (.cbrow.cbfree CSS), tools/check_site.py (v73.44 pin) + root check_site.py (mirror re-sync), sw.js + README.md (stamps).
+
 # v73.43 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-13 - "in hero card, move the oct15->nov14 below the this cycle, the date is not hidden by the toggle"
 Status: **done** - v73.43 shipped (SW cache `finances-pwa-v73.43`; commits `187b8bf` build + re-stamp, pushed to origin/main)

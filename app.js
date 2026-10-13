@@ -2603,6 +2603,15 @@
     // as the hero now: one overlay, two views, no drift.
     var es = effectiveSnap();
     var free = (es && es.cash) ? Number(es.cash.free) || 0 : 0;
+    // v73.44 (boss: 'add the cards owed row and plan dues in this cycle,
+    // informational only, showing liquid deducted by the plans due and cards
+    // owed, then finally the free cash which should display the same amount
+    // as the big hero card number'): the rows must sum to the HERO, so they
+    // all come from the EFFECTIVE snapshot (the overlay-applied one — the
+    // same source the hero's freeNet uses, v73.40): liquid, cards owed, and
+    // the plan share (cyclePlanDeduction = the hero's planDeduct).
+    var liquid = (es && es.cash) ? Number(es.cash.total) || 0 : 0;
+    var cardOwed = (es && es.card_owed != null) ? Number(es.card_owed) || 0 : 0;
     // the salary: expected for the TARGET cycle (override-aware)
     var salExpected = cd.expected;
     var salReceived = !!(cd.received && cd.received.amount > 0);
@@ -2638,10 +2647,23 @@
     var carry = (mode === 'next') ? thisNet : 0;
     var salAdded = (mode === 'next') ? (withSal ? salExpected : 0) : 0;
     var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal);
+    // v73.44: the THIS-cycle informational rows (liquid / cards owed / other
+    // outflows / plan dues) must SUM EXACTLY to the hero. The hero =
+    // effectiveFree − planShare (planShare = cyclePlanDeduction = the hero's
+    // own deduction, one source). The overlay shifts free and liquid by
+    // DIFFERENT amounts (card_charge moves free not liquid; card_payment the
+    // reverse), so the "other outflows" line is the EXACT RESIDUAL
+    // (liquid − cardOwed − free) — budgets + debts + sinking + one-offs + the
+    // overlay's net card effect — which makes the bridge hold by construction:
+    // liquid − cardOwed − otherOut − planShare = free − planShare = hero.
+    var planShare = r2(cyclePlanDeduction());
+    var otherOut = r2(liquid - cardOwed - free);
     return {
       mode: mode, month: m, start: cd.start, end: cd.end, sday: cd.sday,
       free: r2(free),
       carry: r2(carry),
+      liquid: r2(liquid), cardOwed: r2(cardOwed), otherOut: r2(otherOut),
+      planShare: planShare,
       salary: r2(salExpected), salaryReceived: salReceived, salaryInFree: salInFree,
       withSalary: withSal, salaryAdded: r2(salAdded),
       plans: r2(planTotal), planCount: planCount,
@@ -4076,6 +4098,22 @@
     var win = dayMonth(p.start) + ' → ' + dayMonth(p.end);
     var seg = function (on) { return '<button type="button" class="' + (on ? 'on' : '') + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + on + '</button>'; };
     var rows = '';
+    if (mode === 'this') {
+      // v73.44 (boss: 'add the cards owed row and plan dues in this cycle,
+      // informational only — liquid deducted by the plans due and cards owed,
+      // then finally the free cash which should display the SAME amount as the
+      // big hero card number'): the rows are a bridge from liquid to the
+      // hero. The snapshot's free = liquid − outflows (outflows = card owed +
+      // budgets + debts + sinking + one-offs, baseToSnapshot), and the hero
+      // = free − planShare (cyclePlanDeduction, the hero's own deduction) —
+      // so the rows sum EXACTLY to the hero: Liquid − (Cards owed + Other
+      // outflows) − Plan dues = Free cash. All display-only, one source each.
+      rows += '<div class="cbrow"><div class="lab">Liquid</div><div class="amt">' + money(p.liquid) + '</div></div>';
+      rows += '<div class="cbrow"><div class="lab">Cards owed<small>all cards</small></div><div class="amt minus">− ' + money(p.cardOwed) + '</div></div>';
+      if (p.otherOut > 0.004) rows += '<div class="cbrow mut"><div class="lab">Other outflows<small>budgets · debts · sinking · one-offs</small></div><div class="amt minus">− ' + money(p.otherOut) + '</div></div>';
+      if (p.planShare > 0.004) rows += '<div class="cbrow"><div class="lab">Plan dues<small>' + p.planCount + ' due in window</small></div><div class="amt minus">− ' + money(p.planShare) + '</div></div>';
+      rows += '<div class="cbrow cbfree"><div class="lab">Free cash<small>same as the hero number</small></div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
+    }
     if (mode === 'next') {
       // v73.36 (boss: 'that 55k should CARRY OVER to the Next-cycle peek'):
       // the peek starts from THIS cycle's displayed free cash — this
@@ -4119,11 +4157,9 @@
     // 'owed' and therefore already inside the free cash the block starts
     // from (the boss's Oct-5 point: it is accounted for in this cycle's
     // displayed free cash, so the peek must not deduct it again).
-    // v73.37: the THIS-cycle Plans row is gone too (boss: 'remove the plan
-    // due row in hero card for this cycle') — this mode is just the window
-    // + net, the old hero number (no placeholder row either — the mockup
-    // rev 3 shape). The plans total still lives in the math (the net is
-    // free − plans); the row simply is not rendered.
+    // v73.44: the THIS-cycle block's rows END with the Free cash row (the
+    // hero's number, same source) — the separate "Free at end of this cycle"
+    // net line would repeat it, so it renders only for the peek.
     if (!rows && mode === 'next') rows = '<div class="cbrow mut"><div class="lab">Nothing due in this window</div></div>';
     var netCls = p.net >= 0 ? 'pos' : 'neg';
     // v73.36: money() already renders the sign for negatives — the old
@@ -4142,7 +4178,7 @@
         '<button type="button" data-m="without" class="' + (salMode === 'without' ? 'on' : '') + '" aria-pressed="' + (salMode === 'without' ? 'true' : 'false') + '">Without</button>' +
       '</div></div>' : '') +
       '<div class="cbrows">' + rows + '</div>' +
-      '<div class="cbnet"><span class="nl">Free at end of ' + (mode === 'next' ? 'next' : 'this') + ' cycle</span><span class="nv ' + netCls + '">' + netTxt + '</span></div>' +
+      (mode === 'next' ? '<div class="cbnet"><span class="nl">Free at end of next cycle</span><span class="nv ' + netCls + '">' + netTxt + '</span></div>' : '') +
       '<p class="cbnote">Estimate — pace &amp; one-offs excluded. Salary follows the target cycle\'s amount.</p>';
     // re-wire the switches (innerHTML wiped the old listeners — the v73.20
     // chip pattern: the element is rebuilt, so the handler must be re-bound)
@@ -6759,12 +6795,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.43, live: new Date(2026, 9, 13, 13, 25) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.44, live: new Date(2026, 9, 13, 14, 28) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.44': [
+      'The Free / unallocated card now shows where your money is: the This cycle block lists Liquid, Cards owed, Other outflows (budgets, debts, sinking, one-offs) and Plan dues — each one deducted from the last — ending in a Free cash row that is the same number as the big hero figure (informational only, nothing changes the math)'
+    ],
     '73.43': [
       'In the Free / unallocated card, the cycle window ("Oct 15 → Nov 14") now sits BELOW the This cycle / Next cycle tag instead of beside it — on a narrow hero the toggle was squeezing the dates into an ellipsis'
     ],
@@ -7790,7 +7829,9 @@
     STORE_TX: STORE_TX,
     STORE_META: STORE_META,
     state: state, // v73.34: the smoke reads state.cycleMode after the switch handler
-    cycleProjection: cycleProjection // v73.34: the pure cycle math (smoke: the peek's with/without salary)
+    cycleProjection: cycleProjection, // v73.34: the pure cycle math (smoke: the peek's with/without salary)
+    insightsData: insightsData, // v73.44: the hero's data (the bridge's freeNet source — the probe reads it)
+    renderCycleBlock: renderCycleBlock // v73.44: the block's render (the probe drives both modes)
   };
 
   // ---------- v72.53: the boot splash (design C — Coach Fin + status ticker) ----------

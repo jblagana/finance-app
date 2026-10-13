@@ -778,12 +778,21 @@ def main():
           and 'class="tiles"' not in js
           and "pa.innerHTML = adjBar();" in js
           and "snap: [renderCoach, renderInsights, renderProjection, seedAccounts, renderAddEmpty" in js)
-    check("v73.43 (boss: 'move the oct15->nov14 below the this cycle, the date is not hidden by the toggle'): the cycle block's window label now sits BELOW the This/Next tag — .cbtitle is a column (flex-direction:column, align-items:flex-start) and .win lost its ellipsis, so on a narrow hero the toggle can no longer squeeze the dates",
+    check("v73.44 (boss: 'move the oct15->nov14 below the this cycle, the date is not hidden by the toggle'): the cycle block's window label now sits BELOW the This/Next tag — .cbtitle is a column (flex-direction:column, align-items:flex-start) and .win lost its ellipsis, so on a narrow hero the toggle can no longer squeeze the dates",
           ".cbtitle{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0}" in html
           and ".cbtitle .win{color:var(--mut);font-size:12px;white-space:nowrap}" in html
           and "text-overflow:ellipsis" not in html.split(".cbtitle .win")[1].split("}")[0]
           and '<span class="win">' in js and "win + '</span></div>" in js
           and "'73.43': [" in js)
+    check("v73.44 (boss: 'add the cards owed row and plan dues in this cycle, informational only — liquid deducted by the plans due and cards owed, then finally the free cash which should display the same amount as the big hero card number'): the THIS-cycle block renders the bridge rows Liquid / Cards owed / Other outflows / Plan dues / Free cash — the Free cash row is the hero's number (net = free − planShare, planShare = cyclePlanDeduction, one source), and Other outflows is the EXACT RESIDUAL (liquid − cardOwed − free) so the rows sum to the hero by construction (the overlay shifts free and liquid differently — card_charge moves free not liquid); the separate 'Free at end of this cycle' net line renders only for the peek now",
+          'class="cbrow cbfree"' in js
+          and "same as the hero number" in js
+          and "var otherOut = r2(liquid - cardOwed - free);" in js
+          and "var planShare = r2(cyclePlanDeduction());" in js
+          and "planShare: planShare," in js and "otherOut: r2(otherOut)," in js
+          and "mode === 'next' ? '<div class=\"cbnet\"><span class=\"nl\">Free at end of next cycle</span>" in js
+          and ".cbrow.cbfree{margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}" in html
+          and "'73.44': [" in js)
     check("v73.3 (user: 'do all them' — the major upgrade, release 4 of 4): GOAL PROGRESS + GIST SYNC — sinking funds get a progress RING (ringSVG) + a pace line (goalPace, pure: 'on pace' when the monthly plan clears the goal by the deadline, 'behind by ₱X/mo' otherwise); Settings gains a Sync section (gist URL + token + passphrase) — the data is encrypted ON THIS PHONE (AES-256-GCM, key = PBKDF2-SHA256/passphrase/150k) before it touches the network (syncEncrypt/syncDecrypt — GitHub only ever sees the ciphertext file); push uploads, pull downloads + syncMerge (pure: per record newest timestamp wins, a TIE keeps LOCAL, remote-only records are added, the other side's removedTxn/removedPlan tombstones drop records — deletions sync, nothing silently overwritten); deletions file tombstones (deleteTxn/deletePlan/removeTxnRow) that Undo clears; the passphrase is never stored (only url+token in localStorage)",
           "function goalPace(f, month) {" in js
           # v73.42: ringSVG + the sink-ring markup are GONE with the Sinking
