@@ -294,12 +294,13 @@ waitReady().then(async function (F) {
     ok(F.planEditCtx() === null, 'v73.47: tapping ✕ clears the edit context (sheet closed)');
   }
 
-  // ============ PART 7: v73.50 — the toast persists until swiped ============
-  // The 7s auto-hide is gone: the real claim is that snack() schedules NO
-  // hide timer (the old code did setTimeout(hideSnack, 7000) on every show).
-  // Spy on global.setTimeout for the duration of the call, then verify the
-  // swipe-dismiss path (hideSnack — what the pointerup release calls) still
-  // closes the banner.
+  // ============ PART 7: v73.50/v73.51 — toast lifetime by kind ============
+  // v73.50: the 7s auto-hide is gone. v73.51 (user: 'delete toasts swipe to
+  // hide, add toasts hide after 10s unless swiped'): kind === 'add' → a
+  // 10s hide timer IS scheduled; default (delete/nudge/error) → NO timer,
+  // it lives until swiped. Spy on global.setTimeout for the duration of
+  // each call; the swipe-dismiss path (hideSnack — what the pointerup
+  // release calls) still closes the banner.
   var snEl = byIdStub('snack');
   // Patch classList.add on the classList OBJECT itself (the Proxy's set trap
   // would store `snEl.classList.add = ...` as a property of the element,
@@ -309,19 +310,23 @@ waitReady().then(async function (F) {
   snEl.classList.add = function (c) { snAdds.push(c); return origAdd(c); };
   var scheduled = [];
   var realSetTimeout = global.setTimeout;
-  global.setTimeout = function (fn, ms) { scheduled.push({ fn: fn, ms: ms }); return realSetTimeout(function () {}, 0); };
-  F.snack('probe: I should stay until swiped', null);
-  global.setTimeout = realSetTimeout;
-  ok(snAdds.indexOf('show') >= 0, 'v73.50: snack shows');
-  ok(scheduled.length === 0, 'v73.50: NO auto-hide timer scheduled (the 7s is gone) — got ' + scheduled.length + ' timer(s)');
+  function snackWithSpy(msg, kind) {
+    scheduled = [];
+    global.setTimeout = function (fn, ms) { scheduled.push({ fn: fn, ms: ms }); return realSetTimeout(function () {}, 0); };
+    F.snack(msg, null, kind);
+    global.setTimeout = realSetTimeout;
+  }
+  snackWithSpy('probe: delete toast — I stay until swiped');
+  ok(snAdds.indexOf('show') >= 0, 'v73.51: snack shows');
+  ok(scheduled.length === 0, 'v73.51: default (delete) toast schedules NO auto-hide — got ' + scheduled.length + ' timer(s)');
   F.hideSnack(); // the swipe-up release path
-  snEl.classList.add = origAdd;
   snAdds = [];
-  snEl.classList.add = function (c) { snAdds.push(c); return origAdd(c); };
-  F.snack('probe: second toast', null);
-  ok(snAdds.indexOf('show') >= 0, 'v73.50: a newer toast still shows (replacement path intact)');
-  snEl.classList.add = origAdd;
+  snackWithSpy('probe: add toast — I hide after 10s', 'add');
+  ok(snAdds.indexOf('show') >= 0, 'v73.51: an add toast shows');
+  ok(scheduled.length === 1 && scheduled[0].ms === 10000,
+    'v73.51: add toast schedules exactly one 10s auto-hide — got ' + JSON.stringify(scheduled.map(function (s) { return s.ms; })));
   F.hideSnack();
+  snEl.classList.add = origAdd;
 
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');

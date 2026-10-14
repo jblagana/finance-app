@@ -823,6 +823,12 @@ def main():
           and "if (released <= thr) { clearTimeout(snackTimer); hideSnack(); }" in js
           and "hideSnack: hideSnack, // v73.50: the swipe-dismiss path (smoke drives it)" in js
           and "'73.50': [" in js)
+    check("v73.51 (boss: 'if theyre delete toast, swipe to hide. if theyre add toasts, hide after 10s (unless swiped)'): snack() takes a kind — kind === 'add' schedules exactly one 10s auto-hide (swipe/Undo still beat the clock: the pointerup path clears snackTimer, and Undo's onclick does too); the default kind (delete/nudge/error) schedules NO timer and persists until swiped. The add toasts tagged 'add': new ledger entry, new plan, new owed",
+          "function snack(msg, undoFn, kind) {" in js
+          and "if (kind === 'add') snackTimer = setTimeout(hideSnack, 10000);" in js
+          and "b.onclick = function () { clearTimeout(snackTimer); hideSnack(); undoFn(); };" in js
+          and "}, 'add');" in js
+          and "'73.51': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]

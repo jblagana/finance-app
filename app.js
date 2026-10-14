@@ -1263,7 +1263,7 @@
         // of add).
         snack('Added ' + money(t.amount) + ' · ' + esc(t.category || t.account), function () {
           removeTxnQuiet(t.id);
-        });
+        }, 'add');
       }
       return Promise.resolve();
     }).then(function () { return id; });
@@ -1916,23 +1916,23 @@
     el.addEventListener('pointerup', snackDragEnd);
     el.addEventListener('pointercancel', snackDragEnd);
   }
-  function snack(msg, undoFn, ms) {
+  function snack(msg, undoFn, kind) {
     var el = byId('snack'); if (!el) return;
     snackDragReset(); // v72.32: a fresh show starts un-dragged
     el.innerHTML = '<span class="snack-msg">' + msg + '</span>' +
       (undoFn ? '<button type="button" id="snackUndo">Undo</button>' : '');
     if (undoFn) {
       var b = byId('snackUndo');
-      if (b) b.onclick = function () { hideSnack(); undoFn(); };
+      if (b) b.onclick = function () { clearTimeout(snackTimer); hideSnack(); undoFn(); };
     }
     el.classList.add('show');
-    // v73.50 (user: 'make the toast persist until swiped'): the 7s auto-hide
-    // is gone — the banner lives until you swipe it up (the v72.32 drag
-    // dismiss, unchanged), tap Undo, or a newer toast replaces it. The
-    // `ms` parameter is kept for call-compat but ignored (no caller passes
-    // one anyway).
+    // v73.51 (user: 'delete toasts swipe to hide, add toasts hide after 10s
+    // unless swiped'): kind === 'add' → the banner auto-hides after 10s
+    // (a swipe or Undo still beats the clock); anything else (default,
+    // 'delete', nudge/error) persists until swiped — the v73.50 behavior.
     clearTimeout(snackTimer);
     snackTimer = null;
+    if (kind === 'add') snackTimer = setTimeout(hideSnack, 10000);
   }
 
   // ---------- v34: confirm dialog (destructive deletes ask first) ----------
@@ -5055,7 +5055,7 @@
       snack('Planned ' + esc(p.name) + ' · ' + money(p.amount) + (p.repeat ? ' · every ' + perTxt + cntTxt : ''), function () {
         state.plans = state.plans.filter(function (x) { return x.id !== id; });
         idbDel(STORE_PLANS, id).then(function () { emit('plan'); });
-      });
+      }, 'add');
       return id;
     });
   }
@@ -5747,7 +5747,7 @@
         var u = e.txnId ? removeTxnQuiet(e.txnId) : Promise.resolve();
         e.txnId = null;
         u.then(function () { saveOwed().then(emitOwed); });
-      });
+      }, 'add');
     });
   }
   function delOwedEntry(pid, eid) {
@@ -6889,12 +6889,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.50, live: new Date(2026, 9, 14, 2, 16) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.51, live: new Date(2026, 9, 14, 20, 32) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.51': [
+      'Toasts now behave by kind: delete toasts stay until you swipe them away, while add toasts (new entry, new plan, new owed) hide themselves after 10 seconds — unless you swipe first'
+    ],
     '73.50': [
       'Toasts now stay until you swipe them away — no more 7-second auto-hide (Undo and a newer toast still close them the same way)'
     ],
