@@ -74,9 +74,11 @@ User mandate (2026-09-12): these apply to every batch in this repo.
      runs a preflight (all gate dependencies present — v73.48), then the
      FULL gate suite in one pass (check_site repo + mirror,
      `test_chat_parser.py`, `node --check` on all JS, both smokes —
-     `tools\smoke\smoke_app_v68.js`, a permanent 43-assertion gate
-     rebuilt in v73.47 (43 as of v73.51: PART 7 = toast lifetime by kind
-     — delete persists until swiped, add auto-hides at 10s),
+     `tools\smoke\smoke_app_v68.js`, a permanent 54-assertion gate
+     rebuilt in v73.47 (54 as of v73.52: PART 7 = toast lifetime by kind
+     — delete persists until swiped, add auto-hides at 10s; PART 8 =
+     Money-in on a CC = payoff — the kind decision + the Paid-with list
+     + the owed/free/raw math),
      seeded by `tools\smoke\smoke_seed.json`).
      Invoke it as the
      final step right before commit; the live-stamp freshness check

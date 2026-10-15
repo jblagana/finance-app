@@ -6,6 +6,19 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.52 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-14 - "when i log money in entry, i should be able to choose my cc accounts and that subtracts from my owed in that cc"
+Status: **done** - v73.52 shipped (SW cache `finances-pwa-v73.52`; ONE commit pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/`.
+Progress: 100% - tracked gates green (release.ps1 v73.52 full run: check_site repo + root mirror, test_chat_parser, node --check x4, smoke_v68, smoke_app_v68 54 assertions ALL PASS).
+
+### What changed
+- **Money in on a CARD = a payoff** (app.js `addSheetKind`): `moneyin`/`salary` mode + a `CARD::` account now logs `card_payment` — owed − amt, free UNTOUCHED, raw liquid − amt (the exact inverse of a card charge). On a cash account it is still `cash_in` (a salary logged without touching the account stays a cash_in — Cash is the default pick, never a card).
+- **Paid-with list is mode-specific in its LABELS only** (app.js `seedAccounts`): the option VALUES are identical in every mode (Spend charges the cards, Pay card pays them, Money in prepays them), so a pick survives a mode switch; in Money in the cards wear a "· CC" tag so the payoff is legible. `setAddMode` re-seeds the list on every switch (the old Money-in CASH-only preselect loop is gone — the list is the same, only the labels change).
+- **The old "Money in lands in a cash account" submit guard is gone** (app.js addForm onsubmit) — that guard is exactly what this instruction removes.
+- **The deficit hint hides for a Money-in card pick** (app.js `updateChargeHint`) — free is untouched by a payoff, so the "free would drop" line would be a lie; the card's owed number is the story there.
+- **Gates**: check_site.py — the v73.8 + v72.45 pins retargeted to the new `addSheetKind` line (the CASH-only guard assertion is gone), new v73.52 pin block; smoke_app_v68.js PART 8 (11 assertions: kind decision matrix, the "· CC" labels in Money in vs Spend, and the payoff math — owed −500, free untouched, raw −500 on a real card_payment txn); AGENTS.md assertion count 43→54.
+- **Boss clarification (2026-10-14)**: when asked how picking a CC in Money in should behave, the boss answered "why would it affect the purchase logging if its on the money in tab which are +" — Money in is ALL plus-direction; picking a CC there is unambiguously a payoff, never a purchase. No switch needed.
+
 # v73.50 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-14 - "make the toast persist until swiped"
 Status: **done** - v73.50 shipped (SW cache `finances-pwa-v73.50`; ONE commit pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (SW cache v73.50, SHELL_RELEASE v73.50, the persistence pin present).

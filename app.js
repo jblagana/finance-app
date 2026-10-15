@@ -3235,8 +3235,12 @@
     if (mode === 'prepay') return 'card_payment';
     // v72.45: the "Salary in" check-in is a real cash inflow — v73.8: the
     // visible "Money in" tab (salary / refunds / any inflow) uses the same
-    // direction
-    if (mode === 'salary' || mode === 'moneyin') return 'cash_in';
+    // direction. v73.52 (user: 'when i log money in entry, i should be able
+    // to choose my cc accounts and that subtracts from my owed in that cc'):
+    // Money in on a CARD account is a PAYOFF — card_payment (owed − amt,
+    // free untouched, raw liquid − amt), the exact inverse of the card
+    // charge. Money in on a cash account is still cash_in.
+    if (mode === 'salary' || mode === 'moneyin') return type === 'CARD' ? 'card_payment' : 'cash_in';
     return type === 'CARD'
       ? (editingKind === 'card_payment' ? 'card_payment' : 'card_charge')
       : (editingKind === 'cash_in' ? 'cash_in' : 'cash_out');
@@ -3250,16 +3254,16 @@
     var ttl = byId('addSheetTitle'), sub = byId('addSubmit');
     if (ttl) ttl.textContent = addMode === 'prepay' ? 'Card prepay' : (addMode === 'moneyin' ? 'Money in' : 'Add expense');
     if (sub) sub.textContent = addMode === 'prepay' ? 'Add payment' : (addMode === 'moneyin' ? 'Add money in' : 'Add expense');
+    // v73.52: the account list is MODE-SPECIFIC in its labels — re-seed it
+    // on every mode switch (Money in's cards wear "· CC"), keeping the
+    // current pick when it is still in the list.
+    seedAccounts();
     var as = byId('f_account');
     if (addMode === 'prepay' && as) {
       // the payoff has to land on a CARD account — preselect the first one
+      // (AFTER the re-seed, so the options are the current mode's)
       for (var i = 0; i < as.options.length; i++) {
         if (as.options[i].value.indexOf('CARD::') === 0) { as.value = as.options[i].value; break; }
-      }
-    } else if (addMode === 'moneyin' && as) {
-      // v72.45 / v73.8: money in lands in a CASH account — preselect the first one
-      for (var j2 = 0; j2 < as.options.length; j2++) {
-        if (as.options[j2].value.indexOf('CASH::') === 0) { as.value = as.options[j2].value; break; }
       }
     }
     updateChargeHint();
@@ -4921,11 +4925,18 @@
       .filter(function (a) { return a.kind === 'card' || a.kind === 'debit'; })
       .map(function (a) { return { name: a.name, type: a.kind === 'card' ? 'card' : 'debit' }; });
     var prev = sel.value;
+    // v73.52 (user: 'when i log money in entry, i should be able to choose my
+    // cc accounts and that subtracts from my owed in that cc'): the option
+    // VALUES are the same in every mode (Spend charges the cards, Pay card
+    // pays them, Money in now PREPAYS them — card_payment: owed − amt, free
+    // untouched, raw liquid − amt). The only mode-specific thing is the
+    // LABEL: in Money in the cards wear "· CC" so the payoff is legible.
+    var moneyin = addMode === 'moneyin';
     var html = '<option value="CASH::Cash" selected>Cash</option>';
     accounts.forEach(function (a) {
       if (a.type === 'debit' && a.name === 'Cash') return; // the default option is already it
       var v = (a.type === 'card' ? 'CARD' : 'CASH') + '::' + a.name;
-      html += '<option value="' + esc(v) + '">' + esc(a.name) + '</option>';
+      html += '<option value="' + esc(v) + '">' + esc(a.name + (a.type === 'card' && moneyin ? ' · CC' : '')) + '</option>';
     });
     sel.innerHTML = html;
     if (prev) sel.value = prev;
@@ -5270,6 +5281,13 @@
     // v72.41: the deficit hint is for spends — in Pay-card mode the prepay was
     // already priced into the projection (free − amt would double-count it)
     if (addMode === 'prepay') { el.style.display = 'none'; return; }
+    // v73.52: Money in on a CARD is a payoff — free is untouched, so the
+    // deficit hint (free − amt) would be a lie. Hide it; the card's own owed
+    // number is the story there.
+    if (addMode === 'moneyin') {
+      var rawAcc = byId('f_account').value || '';
+      if (rawAcc.indexOf('CARD::') === 0) { el.style.display = 'none'; return; }
+    }
     var amtEl = byId('f_amount');
     var amt = amtEl ? evalExpr(amtEl.value) : null;
     if (amt === null) amt = NaN;
@@ -6889,12 +6907,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.51, live: new Date(2026, 9, 14, 20, 32) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.52, live: new Date(2026, 9, 16, 0, 27) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.52': [
+      'Money in now takes your credit cards: pick a CC in the Paid-with list (it wears a "· CC" tag) and the entry pays it down — that card\'s owed drops by the amount, your free cash is untouched, and the raw liquid drops. Picking a cash account works exactly as before'
+    ],
     '73.51': [
       'Toasts now behave by kind: delete toasts stay until you swipe them away, while add toasts (new entry, new plan, new owed) hide themselves after 10 seconds — unless you swipe first'
     ],
@@ -7821,6 +7842,8 @@
     owedSplit: owedSplit, // v72.49: the mine/theirs/total split (smoke drives the table)
     shellNotesFor: shellNotesFor, // v72.29: the What's-new notes for a version (smoke drives it)
     addSheetKind: addSheetKind, // v72.41: the Add-sheet kind decision (smoke drives it — the submit is DOM-bound)
+    seedAccounts: seedAccounts, // v73.52: the Paid-with options (smoke drives the Money-in card list)
+    setAddMode: setAddMode, // v73.52: the direction toggle (smoke drives the mode switch)
     // v72.38: the running shell dot (smoke drives the What's-new fallback
     // check). v73.0: the dot SURVIVES — 73.0 is a whole number, so String()
     // prints "73" while the SHELL_NOTES key is "73.0"; re-append a dropped
@@ -8055,10 +8078,8 @@
         alert('Pick the card you paid — Pay card logs a payment to a credit card.');
         return;
       }
-      if (addMode === 'moneyin' && type === 'CARD') {
-        alert('Money in lands in a cash account — pick the account it entered.'); // v72.45 / v73.8
-        return;
-      }
+      // v73.52: the old "Money in lands in a cash account" guard is gone —
+      // Money in on a CARD account is a payoff (card_payment), by design.
       var kind = addSheetKind(addMode, type, editingTxn ? editingTxn.kind : null);
       var payload = {
         date: byId('f_date').value || todayISO(),

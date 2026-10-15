@@ -829,6 +829,16 @@ def main():
           and "b.onclick = function () { clearTimeout(snackTimer); hideSnack(); undoFn(); };" in js
           and "}, 'add');" in js
           and "'73.51': [" in js)
+    check("v73.52 (boss: 'when i log money in entry, i should be able to choose my cc accounts and that subtracts from my owed in that cc'): Money in on a CARD account is a PAYOFF — addSheetKind('moneyin'|'salary', 'CARD') = card_payment (owed − amt, free untouched, raw liquid − amt); on a cash account it is still cash_in. The Paid-with list is the SAME values in every mode (the pick survives a mode switch) — only the LABEL is mode-specific: in Money in the cards wear '· CC' so the payoff is legible. setAddMode re-seeds the list on every switch; the old 'Money in lands in a cash account' submit guard is gone; the deficit hint hides for a Money-in card pick (free is untouched — the hint would be a lie)",
+          "if (mode === 'salary' || mode === 'moneyin') return type === 'CARD' ? 'card_payment' : 'cash_in';" in js
+          and "var moneyin = addMode === 'moneyin';" in js
+          and "esc(a.name + (a.type === 'card' && moneyin ? ' · CC' : ''))" in js
+          and "seedAccounts();" in js.split("function setAddMode")[1].split("function prefillAdd")[0]
+          and "seedAccounts: seedAccounts, // v73.52" in js
+          and "setAddMode: setAddMode, // v73.52" in js
+          and "if (rawAcc.indexOf('CARD::') === 0) { el.style.display = 'none'; return; }" in js
+          and "alert('Money in lands in a cash account" not in js
+          and "'73.52': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]
@@ -882,9 +892,8 @@ def main():
           and "? 0 : -amt;" in js  # monthEffect: the salary returns 0, a non-salary cash_in (refund) still nets (the narrower audit rule)
           and "var BOOT_MIN_MS = 1500;" in js  # v73.8: 2000 -> 1500
           and 'id="addModeMoneyin"' in html and ">Money in</button>" in html
-          and "if (mode === 'salary' || mode === 'moneyin') return 'cash_in';" in js
+          and "if (mode === 'salary' || mode === 'moneyin') return type === 'CARD' ? 'card_payment' : 'cash_in';" in js  # v73.52: the pin moved — Money in on a CARD is a payoff
           and "addMode = m === 'prepay' ? 'prepay' : (m === 'salary' || m === 'moneyin' ? 'moneyin' : 'spend');" in js
-          and "if (addMode === 'moneyin' && type === 'CARD')" in js
           and "if (amM) amM.onclick = function () { setAddMode('moneyin'); };" in js
           and "'Money in' : 'Add expense'" in js
           and "'73.8': [" in js)
@@ -1344,8 +1353,7 @@ def main():
           and "function expectedSalaryFor(month, b) {" in js
           and "function cycleDataFor(month, b) {" in js
           and "function cycleData() {" in js
-          and "if (mode === 'salary' || mode === 'moneyin') return 'cash_in';" in js  # v73.8: the pin moved — the salary mode now shares the visible 'moneyin' tab
-          and "if (addMode === 'moneyin' && type === 'CARD')" in js  # v73.8: same retarget
+          and "if (mode === 'salary' || mode === 'moneyin') return type === 'CARD' ? 'card_payment' : 'cash_in';" in js  # v73.52: the pin moved again — Money in on a CARD is a payoff (the v73.8 CASH-only guard is gone)
           and 'id="b_sday"' in js
           and "b.salary_day = sd > 0 ? sd : (b.cutoff_day || 15);" in js
           and "cycle: cycleData()," in js

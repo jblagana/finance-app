@@ -328,6 +328,45 @@ waitReady().then(async function (F) {
   F.hideSnack();
   snEl.classList.add = origAdd;
 
+  // ============ PART 8: v73.52 — Money in on a CC = a payoff ============
+  // (user: 'when i log money in entry, i should be able to choose my cc
+  // accounts and that subtracts from my owed in that cc'). The kind decision
+  // is pure (addSheetKind); the payoff math is the existing card_payment
+  // overlay rule (owed − amt, free untouched, raw liquid − amt).
+  ok(F.addSheetKind('moneyin', 'CASH', null) === 'cash_in', 'v73.52: Money in on a cash account is still cash_in');
+  ok(F.addSheetKind('salary', 'CASH', null) === 'cash_in', 'v73.52: the salary chip (salary mode) on cash is still cash_in');
+  ok(F.addSheetKind('moneyin', 'CARD', null) === 'card_payment', 'v73.52: Money in on a CARD account is a payoff (card_payment)');
+  ok(F.addSheetKind('salary', 'CARD', null) === 'card_payment', 'v73.52: the salary chip on a card is a payoff too');
+  ok(F.addSheetKind('spend', 'CARD', null) === 'card_charge', 'v73.52: Spend on a card is still a charge (untouched)');
+  ok(F.addSheetKind('prepay', 'CARD', null) === 'card_payment', 'v73.52: Pay card mode is still a payoff (untouched)');
+  // the Paid-with list in Money in offers the cards, labeled "· CC"
+  var accSel = byIdStub('f_account');
+  F.setAddMode('moneyin');
+  await sleep(20);
+  var miOpts = (accSel.innerHTML || '').split('<option');
+  ok(miOpts.some(function (o) { return o.indexOf('CARD::Maya CC') >= 0 && o.indexOf('· CC') >= 0; }),
+    'v73.52: Money in offers Maya CC in Paid with, labeled "· CC"');
+  ok(miOpts.some(function (o) { return o.indexOf('CARD::MariBank CC') >= 0 && o.indexOf('· CC') >= 0; }),
+    'v73.52: Money in offers MariBank CC in Paid with, labeled "· CC"');
+  ok(miOpts.some(function (o) { return o.indexOf('value="CASH::Cash"') >= 0; }),
+    'v73.52: Money in keeps Cash as the default option');
+  F.setAddMode('spend');
+  await sleep(20);
+  var spOpts = (accSel.innerHTML || '').split('<option');
+  ok(spOpts.some(function (o) { return o.indexOf('CARD::Maya CC') >= 0 && o.indexOf('· CC') < 0; }),
+    'v73.52: Spend still lists the cards (unlabeled) for charges');
+  // the payoff itself: owed drops, free untouched, raw liquid drops
+  var owedBefore = F.effectiveSnap().card_owed;
+  var freeBeforePay = F.effectiveSnap().cash.free;
+  var rawBeforePay = F.effectiveSnap().cash.total;
+  var id4 = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'probe moneyin-cc payoff', date: '2026-10-14' }, { quiet: true });
+  await sleep(60);
+  ok(close(F.effectiveSnap().card_owed, owedBefore - 500), 'v73.52: the payoff drops owed by 500 (' + F.effectiveSnap().card_owed.toFixed(2) + ')');
+  ok(close(F.effectiveSnap().cash.free, freeBeforePay), 'v73.52: the payoff leaves free UNTOUCHED (' + F.effectiveSnap().cash.free.toFixed(2) + ')');
+  ok(close(F.effectiveSnap().cash.total, rawBeforePay - 500), 'v73.52: the payoff drops raw liquid by 500');
+  await F.deleteTxn(id4);
+  await sleep(40);
+
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
   process.exit(fails === 0 ? 0 : 1);
