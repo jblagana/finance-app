@@ -367,6 +367,67 @@ waitReady().then(async function (F) {
   await F.deleteTxn(id4);
   await sleep(40);
 
+  // ============ PART 9: v73.53 — cashback payoff = NEW money ============
+  // (user: 'the cc payoff i make using the money in tab doesnt charge to my
+  // liquid because its from a cashback'). A cashback payoff (t.cashback)
+  // drops owed and the card balance, RISES free by the full amount, and
+  // leaves raw liquid untouched. The plain payoff (PART 8) keeps its rule.
+  var owedCb = F.effectiveSnap().card_owed;
+  var freeCb = F.effectiveSnap().cash.free;
+  var rawCb = F.effectiveSnap().cash.total;
+  var mayaBal = null;
+  F.effectiveSnap().cards.forEach(function (c) { if (c.name === 'Maya CC') mayaBal = c.balance; });
+  var id5 = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'probe cashback', date: '2026-10-14', cashback: true }, { quiet: true });
+  await sleep(60);
+  var es5 = F.effectiveSnap();
+  ok(close(es5.card_owed, owedCb - 500), 'v73.53: the cashback payoff drops owed by 500 (' + es5.card_owed.toFixed(2) + ')');
+  ok(close(es5.cash.free, freeCb + 500), 'v73.53: the cashback payoff RAISES free by 500 (' + es5.cash.free.toFixed(2) + ')');
+  ok(close(es5.cash.total, rawCb), 'v73.53: the cashback payoff leaves raw liquid UNTOUCHED (' + es5.cash.total.toFixed(2) + ')');
+  ok(close(es5.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance, mayaBal - 500), 'v73.53: the cashback payoff drops Maya CC balance by 500 (utilization follows)');
+  // the flag rides the ledger row (undo's record) and the row renders its
+  // free line (a plain payoff hides it — v72.44)
+  var row5 = null;
+  F.state.moneyLog.forEach(function (e) { if (e.tid === id5) row5 = e; });
+  ok(!!row5 && row5.cb === true, 'v73.53: the cashback flag rides the ledger row');
+  var seg5 = (byIdStub('mlBody').innerHTML || '').slice((byIdStub('mlBody').innerHTML || '').indexOf('probe cashback'));
+  ok(seg5.indexOf('ml-f') >= 0, 'v73.53: the cashback row shows its free line (new money)');
+  // delete + undo restore the exact pre-payoff state (no phantom, no stuck flag)
+  await F.deleteTxn(id5);
+  await sleep(40);
+  var es6 = F.effectiveSnap();
+  ok(close(es6.cash.free, freeCb) && close(es6.card_owed, owedCb) && close(es6.cash.total, rawCb),
+    'v73.53: deleting the cashback payoff restores free/owed/liquid exactly');
+  // editing: the flag can be set, kept, and CLEARED on a card_payment
+  var id6 = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 200, note: 'probe edit flag', date: '2026-10-14' }, { quiet: true });
+  await sleep(40);
+  var freeE0 = F.effectiveSnap().cash.free;
+  await F.saveTxnEdit(id6, { kind: 'card_payment', category: '', account: 'Maya CC', amount: 200, note: 'probe edit flag', date: '2026-10-14', cashback: true });
+  await sleep(40);
+  ok(close(F.effectiveSnap().cash.free, freeE0 + 200), 'v73.53: editing a payoff TO cashback raises free by the amount');
+  await F.saveTxnEdit(id6, { kind: 'card_payment', category: '', account: 'Maya CC', amount: 200, note: 'probe edit flag', date: '2026-10-14' });
+  await sleep(40);
+  ok(close(F.effectiveSnap().cash.free, freeE0), 'v73.53: editing a cashback payoff back to plain restores free');
+  await F.deleteTxn(id6);
+  await sleep(40);
+  // the cashback row's visibility: Money in + card = visible, anything else hidden
+  var cbRow = byIdStub('cashbackRow');
+  F.setAddMode('moneyin');
+  await sleep(20);
+  var accSel2 = byIdStub('f_account');
+  accSel2.value = 'CARD::Maya CC';
+  F.updateCashbackRow();
+  ok(cbRow.style.display !== 'none', 'v73.53: the cashback row shows for Money in + a card pick');
+  F.setAddMode('spend');
+  await sleep(20);
+  accSel2.value = 'CARD::Maya CC';
+  F.updateCashbackRow();
+  ok(cbRow.style.display === 'none', 'v73.53: the cashback row hides in Spend mode (a charge is never a cashback payoff)');
+  F.setAddMode('moneyin');
+  await sleep(20);
+  accSel2.value = 'CASH::Cash';
+  F.updateCashbackRow();
+  ok(cbRow.style.display === 'none', 'v73.53: the cashback row hides for a cash pick');
+
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
   process.exit(fails === 0 ? 0 : 1);

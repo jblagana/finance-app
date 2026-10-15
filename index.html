@@ -1018,6 +1018,16 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
           </div>
         </div>
       </div>
+      <!-- v73.53: the cashback flag — Money in on a CC where the money is
+           NEW (a cashback): owed drops, free RISES by the full amount,
+           liquid untouched (nothing left the bank). Hidden unless Money in
+           + a card pick. -->
+      <div id="cashbackRow" style="display:none;margin-top:8px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="f_cashback" style="width:16px;height:16px">
+          <span>From cashback — it pays the card down without touching my liquid</span>
+        </label>
+      </div>
       <label for="f_note">Note (optional)</label>
       <input id="f_note">
       <!-- v73.17: the plan-link chip — the add form's fuzzy match

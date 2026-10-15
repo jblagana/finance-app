@@ -839,6 +839,19 @@ def main():
           and "if (rawAcc.indexOf('CARD::') === 0) { el.style.display = 'none'; return; }" in js
           and "alert('Money in lands in a cash account" not in js
           and "'73.52': [" in js)
+    check("v73.53 (boss: 'the cc payoff i make using the money in tab doesnt charge to my liquid because its from a cashback'): a Money-in CC payoff can be flagged 'From cashback' (t.cashback) — NEW money: owed − amt, free + amt (the debt it erased), raw liquid UNTOUCHED, card balance − amt (utilization follows). The plain payoff keeps the v72.42 rule (raw − amt, free untouched). The flag rides the ledger row (undo's record, e.cb), survives import, is set/kept/cleared on edit, and the row's visibility follows the Paid-with pick (Money in + card only)",
+          "if (t.cashback) return { cash: 0, free: -amt, card: -amt, prepay: -amt, acc: t.account };" in js
+          and "if (t.kind === 'card_payment') t.cashback = !!data.cashback;" in js
+          and "if (t.kind === 'card_payment' && t.cashback) e.cb = true;" in js
+          and "if (e.cb === true) m.cb = true; // v73.53" in js
+          and "var cbRow = e.k === 'p' && e.cb;" in js
+          and "function updateCashbackRow() {" in js
+          and "updateCashbackRow: updateCashbackRow, // v73.53" in js
+          and 'id="f_cashback"' in html
+          and 'id="cashbackRow"' in html
+          and "if (kind === 'card_payment' && cbk && cbk.checked) payload.cashback = true;" in js
+          and "function freeEffect(t, amt) { if (t.kind === 'card_payment') return t.cashback ? amt : 0;" in js
+          and "'73.53': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]
@@ -921,7 +934,7 @@ def main():
           "var cardOwed = (month === months[0]) ? baseCardTotal(b) : 0;" in js  # the base month commits the full owed
           and "var outflows = r2(budgetTotal + debtTotal + sinkTotal + oneOffTotal + cardOwed);" in js  # owed replaces the prepay slice in outflows
           and "card_prepay: cardOwed" in js  # the comp field carries the full owed (the tile/committed read it)
-          and "if (t.kind === 'card_payment') return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js  # v72.42 overlay rule intact (keeps free = liquid - owed live)
+          and "return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js  # v72.42 plain-payoff rule intact (keeps free = liquid - owed live); v73.53: the cashback branch sits above it
           and "'73.12': [" in js)
     check("v73.13 (user: 'why did u change my numbers' - the v73.12 upgrade zeroed the phone's overlay, 41k free -> -6,664.88): the rebase trigger (snapSig) carried the DERIVED cash.free, so the owed-model formula change altered the sig without any base edit -> boot ran a FALSE REBASE and wiped the live overlay. The sig is now the RAW inputs only (liquid|owed|prepay slice) and old 4-component stored sigs normalize to the 3-component one at boot + import - a formula change can never trip the rebase again",
           "return [s.cash && s.cash.total, s.card_owed, s.total_prepay].join('|');" in js  # raw inputs only, no derived free
@@ -1198,7 +1211,7 @@ def main():
           and "state.txns.splice(ti, 0, r.t);" in js
           and "var r = removeTxnRow(tid, true); // keep the persistent row (see above)" in js)
     check("owed entries: only 'they paid for me' is a real ledger txn (v72.10, the filing rule was finalized in the v72.28 follow-ups — the ledger records CONSUMPTION, not loans: ipf/itb/tmb are ledger-silent, tpf always files a Cash cash_out): cash_in remains the exact inverse of cash_out (txnAdj, manual ledger use); v72.42: card_payment settles the debt instead of inverting the charge (raw liquid + owed drop, free untouched — the v72.42 check pins it), the log row flavor i/p renders before→after correctly and nets month spend, the Account section stays on ipf/itb/tmb as an informational record (user edit: 'dont drop it anymore' — never a txn), subentries edit the linked txn in place (v72.9) and delete/undo cover entry + txn together; 'Owed' joined the add-sheet categories (out again in v72.30); the v72.28 sections + filing rules are the NEXT check",
-          "if (t.kind === 'card_payment') return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js
+          "return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js  # v72.42 plain-payoff rule (the v73.53 cashback branch sits above it)
           and "if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };" in js
           and "k: t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x'" in js
           and '<select class="oent-acc">' in js and "owedAccOptions('CASH::Cash')" in js
@@ -1315,9 +1328,9 @@ def main():
           and "card ? 'CARD::' + card : null, 'prepay');" in js
           and "addSheetKind: addSheetKind" in js)
     check("v72.42 (the payoff bug, user: 'fix the payoff bug and keep both numbers — floor stays on raw bank cash'): a card_payment settles the debt — it is NOT the exact inverse of card_charge (the charge already spent the free cash; the credit limit isn't money). The payoff drops the RAW liquid (adj.cash +a → effective total −a) and the owed/prepay, and leaves free UNTOUCHED (tuple free: 0, freeEffect → 0): a charge+payoff cycle nets free −amt and liquid −amt with owed 0 (the expense is real, the debt is settled) instead of erasing the expense; the money-log 'p' row renders free unchanged (before = f) while its card sub-line still shows the owed dropping; cash.free and cash.total stay separate and the liquidity floor keeps running on the raw cash.total",
-          "if (t.kind === 'card_payment') return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js
-          and "function freeEffect(kind, amt) { if (kind === 'card_payment') return 0; return (kind === 'cash_in') ? amt : -amt; }" in js
-          and "var before = (e.k === 'p') ? r2(e.f)" in js)
+          "return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js  # the PLAIN payoff rule (v73.53: the cashback branch above it is the new-money variant)
+          and "function freeEffect(t, amt) { if (t.kind === 'card_payment') return t.cashback ? amt : 0; return (t.kind === 'cash_in') ? amt : -amt; }" in js  # v73.53: a cashback payoff moves free by +amt; a plain one by 0
+          and "var before = (e.k === 'p' && !cbRow) ? r2(e.f)" in js)
     check("v72.43 (prepaid cards under the old model, user: 'ive already prepaid the cards prior to this version, as such, card balance and free cash and liquid cash all changed, fix that'): the persisted overlay is NOT re-derived from txns on boot, so a pre-v72.42 phone's stored adj still carries each old prepay's old-model contribution (free inflated by the prepay total, liquid not reduced); the one-shot migration (the adj.mv model stamp) adds the {cash: +a, free: +a} delta per card_payment on boot + import — but NOT for a prepay after which a balance-override (money-log 'a') row rebased the overlay (that prepay's effect is in the sheet's numbers, not the overlay); every zeroed/fresh adj (boot initializer, both rebases, computeAdjFromTxns, the import sanitizer) carries the stamp so it fires exactly once; card owed is untouched (identical in both models)",
           "var ADJ_MODEL_V = 2" in js
           and "function payoffModelDelta(txns, lastOverrideAt)" in js
@@ -1341,7 +1354,7 @@ def main():
           and "spent += spendOf(t)" in js
           and "spendOf: spendOf" in js
           and "F.spendOf(tn)" in chatjs
-          and "if (e.k === 'p') freeTxt = ''" in js)  # (3) user edit: the prepay row shows only the card change, not the unchanged free line
+          and "if (e.k === 'p' && !cbRow) freeTxt = ''" in js)  # (3) user edit: the prepay row shows only the card change, not the unchanged free line (v73.53: a cashback payoff is new money — its free line stays)
     check("v72.45 (user: 'the bot dont know my cc limits / i feel like coach fin cant read my current actual numbers / i prepay in maya cc partial only but the chip is still not showing for that in the hey jan card. i want it to still show the remaining / salary is expected every 15th and used in the projection / insights on my finances based on every salary cycle (15th) / i can confirm somewhere if the salary has already entered prior to 15'): (1) the coach snapshot's CARD rows carry the LIVE per-card balance (the effective overlay, not the sheet as-of) + the stored credit limit + utilization; (2) a PARTIAL prepay keeps its per-card chips + a 'Partly handled — … still owed' row + the live 'prepay' alert — keyed on the remaining, only the full settlement takes them down; (3) the salary lands on the salary_day (the 15th, a new Your-numbers field, cutoff-day fallback): the cycle is 15th -> 14th (pure cycleDataFor), the expected amount is the cycle month's override when > 0 else the base salary (the sheet's pre-payday zero is 'not in yet', not 'no salary'), the 'Salary in' chip is a real cash_in (a third Add-sheet direction, CASH-only) the cycle reads back — even an early 13th one, which is excluded from the cycle spend so it cannot sink the previous cycle; (4) the projection gains the explicit payday point (actual receipt date once logged), the hero carries due / in, Home gets a 'This cycle' block, and the cycle rides the shared snapshot as a deterministic finding",
           "function cardEff(name) {" in chatjs
           and "var bal = c ? (Number(c.balance) || 0) : (Number(a.value) || 0);" in chatjs

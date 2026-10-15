@@ -537,7 +537,19 @@
     // prepay delta PER CARD — a prepay question about one card answers with
     // that card's prepay, not the total
     if (t.kind === 'card_charge') return { cash: 0, free: amt, card: amt, prepay: amt, acc: t.account };
-    if (t.kind === 'card_payment') return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };
+    // v73.53 (user: 'the cc payoff i make using the money in tab doesnt
+    // charge to my liquid because its from a cashback'): a cashback payoff
+    // is NEW money — the card's owed drops, but nothing leaves the bank
+    // (liquid untouched) and free RISES by the full amount (the debt it
+    // erased). The plain payoff (v72.42) stays: raw liquid − amt, free
+    // untouched, owed − amt.
+    if (t.kind === 'card_payment') {
+      // v73.53: a cashback payoff (Money-in CC) is NEW money — liquid
+      // untouched, free RISES by the full amount (the debt it erased),
+      // owed drops, card balance drops (prepay: -amt via prepayBy).
+      if (t.cashback) return { cash: 0, free: -amt, card: -amt, prepay: -amt, acc: t.account };
+      return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };
+    }
     if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };
     return { cash: amt, free: amt, card: 0, prepay: 0 }; // cash_out (default, legacy rows)
   }
@@ -1250,6 +1262,9 @@
     // form) — rides the record, so it syncs with the txn and survives
     // reboots. Absent (undefined) when there is no link.
     if (data.planRef) t.planRef = data.planRef;
+    // v73.53: the cashback flag (a Money-in CC payoff that is NEW money —
+    // owed − amt, free + amt, liquid untouched) rides the record too.
+    if (data.cashback) t.cashback = true;
     state.txns.push(t);
     addAdj(txnAdj(t), 1);
     logMoney('add', t);
@@ -1383,7 +1398,9 @@
   // up; v72.42: a card payment moves free by ZERO (the charge already spent it
   // — the payoff only settles the debt); card owed moves only for the two card
   // kinds; month spend counts spend, nets inflows, ignores card payments.
-  function freeEffect(kind, amt) { if (kind === 'card_payment') return 0; return (kind === 'cash_in') ? amt : -amt; }
+  // v73.53: a cashback payoff (t.cashback) moves free by +amt — the new
+  // money erases the debt; the rebase math follows the same rule.
+  function freeEffect(t, amt) { if (t.kind === 'card_payment') return t.cashback ? amt : 0; return (t.kind === 'cash_in') ? amt : -amt; }
   function cardEffect(kind, amt) { return kind === 'card_charge' ? amt : kind === 'card_payment' ? -amt : 0; }
   // v73.7: the cycle's OWN SALARY is income, not negative spend — the money-log
   // month-spent line must not swing by the full salary when the "Salary in"
@@ -1450,6 +1467,10 @@
     // re-passes it on every save (chip state), so editing an entry can
     // link, unlink, or keep the link just like a fresh add.
     if (data.planRef) t.planRef = data.planRef;
+    // v73.53: the cashback flag re-passes on every save (checkbox state) —
+    // and an unchecked box CLEARS a previously-set flag (a card_payment
+    // that is no longer a cashback payoff must drop back to the plain rule).
+    if (t.kind === 'card_payment') t.cashback = !!data.cashback;
     state.txns[oIdx] = t; // in place — position preserved
     // v73.45: the add+remove pair nets to the edit's delta — but on an EMPTY
     // overlay (a reset already wiped it) the pair's +new leg would create a
@@ -1458,7 +1479,7 @@
     if (!adjEmpty()) { addAdj(txnAdj(t), 1); addAdj(txnAdj(o), -1); }
     var oldAmt = Number(o.amount) || 0, newAmt = Number(t.amount) || 0;
     // effect delta (new − old) across free / card / month-spent
-    var dFree = freeEffect(t.kind, newAmt) - freeEffect(o.kind, oldAmt);
+    var dFree = freeEffect(t, newAmt) - freeEffect(o, oldAmt);
     var dCard = cardEffect(t.kind, newAmt) - cardEffect(o.kind, oldAmt);
     var meOld = monthEffect(o.kind, oldAmt, o), meNew = monthEffect(t.kind, newAmt, t); // v73.7: salary-aware
     var M_old = String(o.date || '').slice(0, 7), M_new = String(t.date || '').slice(0, 7);
@@ -1484,6 +1505,8 @@
       e0.nt = t.note || '';
       e0.m = t.account || '';
       e0.l = (t.category || t.account || 'entry') + (t.note ? ' · ' + t.note : '');
+      // v73.53: the cashback flag follows the edit (set, kept, or cleared)
+      if (t.kind === 'card_payment') { if (t.cashback) e0.cb = true; else delete e0.cb; }
       // e.at is UNTOUCHED — the original date/time stays on the row
       rebase(e0, dFree, dCard, 1);
       // v72.10: the edit flipped the row to a card flavor — backfill the card
@@ -1564,6 +1587,10 @@
     }
     var amtEl = byId('f_amount');
     if (amtEl) amtEl.value = String(t.amount);
+    // v73.53: a cashback payoff re-opens with its flag set (the row is
+    // visible once the mode/account are restored below)
+    var cbEl = byId('f_cashback');
+    if (cbEl) cbEl.checked = !!t.cashback;
     var ntEl = byId('f_note');
     if (ntEl) ntEl.value = t.note || '';
     var dtEl = byId('f_date');
@@ -1575,6 +1602,7 @@
     state.planLinkRef = t.planRef ? { planId: t.planRef.planId, date: t.planRef.date, name: t.planRef.name, amount: t.planRef.amount } : null;
     updatePlanLinkChip();
     setAddMode('spend'); // v72.41: editing an entry re-opens the sheet in Spend mode (the kind follows the entry)
+    updateCashbackRow(); // v73.53: the mode switch above re-seeded the account — the row follows
     var ttl = byId('addSheetTitle');
     if (ttl) ttl.textContent = 'Edit entry';
     var sub = byId('addSubmit');
@@ -1609,6 +1637,10 @@
       // spend / i cash in. Render derives every before→after from it.
       k: t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x'
     };
+    // v73.53: the cashback flag rides the ledger row too — the row is the
+    // undo record (deleteTxn's Undo re-pushes from it), and a cashback
+    // payoff's overlay rule is different, so the flag must survive.
+    if (t.kind === 'card_payment' && t.cashback) e.cb = true;
     e.f = r2(s.cash ? s.cash.free : 0);
     if (t.kind === 'card_charge' || t.kind === 'card_payment') e.o = r2(s.card_owed || 0);
     if (String(t.date).slice(0, 7) === mp && t.kind !== 'card_payment') {
@@ -1732,8 +1764,11 @@
         // behind it to reverse, so askDeleteAdjustment's override-revert is a
         // no-op for it).
         var isAdj = e.k === 'a' || e.k === 'r';
-        var inflow = e.k === 'i' || e.k === 'p';
-        var before = (e.k === 'p') ? r2(e.f)
+        // v73.53: a cashback payoff (e.cb) is NEW money — free rose by the
+        // full amount, so its row is an inflow like 'i', not a plain 'p'.
+        var cbRow = e.k === 'p' && e.cb;
+        var inflow = e.k === 'i' || e.k === 'p' || cbRow;
+        var before = (e.k === 'p' && !cbRow) ? r2(e.f)
           : r2(e.f + (add ? (inflow ? -e.n : e.n) : (inflow ? e.n : -e.n)));
         if (isAdj) before = r2(e.f - e.n);
         var extra = '';
@@ -1784,7 +1819,7 @@
           amtTxt = (e.n > 0 ? '+' : '−') + money(Math.abs(e.n));
           if (cardRow) freeTxt = ''; // a card override never moves free
         }
-        if (e.k === 'p') freeTxt = ''; // v72.44 (user edit): a payoff never moves free — show only the card balance change
+        if (e.k === 'p' && !cbRow) freeTxt = ''; // v72.44 (user edit): a plain payoff never moves free — show only the card balance change; v73.53: a cashback payoff DOES move free (it is new money)
         return '<div class="ml-row' + (add ? '' : ' del') + '"' + editAttr + '>' +
           '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
           (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
@@ -3266,6 +3301,7 @@
         if (as.options[i].value.indexOf('CARD::') === 0) { as.value = as.options[i].value; break; }
       }
     }
+    updateCashbackRow();
     updateChargeHint();
   }
   function prefillAdd(amt, dateISO, note, accValue, mode) {
@@ -3281,6 +3317,7 @@
     }
     openSheet('addSheet');
     state.planLinkRef = null; // v73.17: a coach prefill starts unlinked
+    updateCashbackRow(); // v73.53: the account pick above may have changed — the row follows
     updatePlanLinkChip();
   }
   // ---------- v73.17: the plan-link chip (the add form's suggestion) ----------
@@ -5276,6 +5313,20 @@
     else if (v <= 0) { eq.textContent = '= ' + money(v) + ' · must be more than 0'; eq.className = 'amtEq bad'; }
     else { eq.textContent = '= ' + money(v); eq.className = 'amtEq'; }
   }
+  // v73.53: the cashback row is visible only when Money in + a card pick —
+  // it is a flag on the PAYOFF, and a payoff only exists in that combination.
+  function updateCashbackRow() {
+    var row = byId('cashbackRow'); if (!row) return;
+    var as = byId('f_account');
+    var cardPick = as && String(as.value || '').indexOf('CARD::') === 0;
+    // Money in + card = the fresh cashback payoff; editing a card_payment
+    // (which re-opens in Spend mode) must also see the flag so it can be
+    // kept or cleared.
+    var show = cardPick && (addMode === 'moneyin' ||
+      (editingTxn && editingTxn.kind === 'card_payment'));
+    row.style.display = show ? '' : 'none';
+    if (!show) { var cb = byId('f_cashback'); if (cb) cb.checked = false; }
+  }
   function updateChargeHint() {
     var el = byId('chargeHint'); if (!el) return;
     // v72.41: the deficit hint is for spends — in Pay-card mode the prepay was
@@ -6500,6 +6551,7 @@
       if (typeof e.m === 'string') m.m = e.m.slice(0, 60);
       if (typeof e.n === 'number' && isFinite(e.n)) m.n = e.n;
       if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i' || e.k === 'a' || e.k === 'r') m.k = e.k; // v72.14: the v72.10 p/i flavors must survive an import too; v72.30: 'a' (the Adjustment override row); v73.45: 'r' (the reset audit row)
+      if (e.cb === true) m.cb = true; // v73.53: the cashback flag (a payoff that is NEW money) survives import too
       if (typeof e.f === 'number' && isFinite(e.f)) m.f = e.f;
       if (typeof e.o === 'number' && isFinite(e.o)) m.o = e.o;
       if (typeof e.s === 'number' && isFinite(e.s)) m.s = e.s;
@@ -6907,12 +6959,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.52, live: new Date(2026, 9, 16, 0, 27) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.53, live: new Date(2026, 9, 16, 3, 23) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.53': [
+      'Money in on a CC can now be flagged "From cashback" — a payoff that is NEW money: the card\'s owed drops and your free cash RISES by the full amount, and nothing is taken from your liquid (a plain payoff still leaves the bank the same way it always did).',
+      'A skipped plan due now restores the amount the hero had pre-deducted — skip a due and the free number comes back up by it; undo the skip and it goes back down. The skip is still one-off (this occurrence only).'
+    ],
     '73.52': [
       'Money in now takes your credit cards: pick a CC in the Paid-with list (it wears a "· CC" tag) and the entry pays it down — that card\'s owed drops by the amount, your free cash is untouched, and the raw liquid drops. Picking a cash account works exactly as before'
     ],
@@ -7843,6 +7899,7 @@
     shellNotesFor: shellNotesFor, // v72.29: the What's-new notes for a version (smoke drives it)
     addSheetKind: addSheetKind, // v72.41: the Add-sheet kind decision (smoke drives it — the submit is DOM-bound)
     seedAccounts: seedAccounts, // v73.52: the Paid-with options (smoke drives the Money-in card list)
+    updateCashbackRow: updateCashbackRow, // v73.53: the cashback row's visibility (smoke drives it)
     setAddMode: setAddMode, // v73.52: the direction toggle (smoke drives the mode switch)
     // v72.38: the running shell dot (smoke drives the What's-new fallback
     // check). v73.0: the dot SURVIVES — 73.0 is a whole number, so String()
@@ -8089,6 +8146,10 @@
         amount: amount,
         note: (byId('f_note').value || '').trim()
       };
+      // v73.53: the cashback flag rides the record — only on a payoff
+      // (a card_payment); it changes that payoff's overlay rule.
+      var cbk = byId('f_cashback');
+      if (kind === 'card_payment' && cbk && cbk.checked) payload.cashback = true;
       // v73.17: the explicit link (the boss tapped the chip) rides the
       // record — the truth the deduction + coach rows read before any
       // fuzzy rule. A stale ref (the fields changed after the tap and the
@@ -8185,6 +8246,10 @@
     if (amtEl) amtEl.addEventListener('input', function () { addAmtEq(amtEl); updateChargeHint(); updatePlanLinkChip(); });
     var noteEl = byId('f_note'); // v68 item 1: learned merchant→category prefill
     if (noteEl) noteEl.addEventListener('input', function () { autoCatFromNote(noteEl); updatePlanLinkChip(); });
+    // v73.53: the cashback row follows the Paid-with pick (a card in Money in
+    // reveals it; anything else hides it)
+    var accEl = byId('f_account');
+    if (accEl) accEl.addEventListener('change', function () { updateCashbackRow(); updateChargeHint(); });
     // v73.17: the plan-link chip — the four fields that feed the
     // suggestion all re-run it (the chip is a SUGGESTION until tapped)
     var catEl = byId('f_category');
