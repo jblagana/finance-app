@@ -6,6 +6,21 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.55 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-16 - "after a plan occurrence is SKIPPED, the plan record is no longer editable nor deletable in the plans list — go" (fix the ✎/✕ gap diagnosed in the v73.54 review)
+Status: **done** - v73.55 shipped (SW cache `finances-pwa-v73.55`; ONE commit pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/`.
+Progress: 100% - tracked gates green (release.ps1 v73.55 full run: check_site repo + root mirror, test_chat_parser, node --check x4, smoke_v68, smoke_app_v68 85 assertions ALL PASS).
+
+### What changed
+- **The ✎ survives a fully-skipped plan** (app.js `planHTML` recurring header): the edit button's render condition was `shown.length` — skipping the next due emptied `shown` (v73.54's record rows made that state persistent for the first time) and the ✎ vanished. Now `shown.length || skipped.length`, targeting `shown[0]` or falling back to `skipped[0]` (the sheet opens on the skipped occurrence — `openPlanEdit` was never blocked, it just had no button).
+- **Recurring plans get the plans-list ✕** (app.js `planHTML` recurring header): `data-delp` existed only on one-off rows — a recurring plan could only be deleted via the coach card's skip-and-delete flow. The header now carries the same ✕ (the handler was already global: `deletePlan` with its Undo + tombstone).
+- **The date-collision guard counts SKIPPED dates** (app.js `savePlanOccurrence`): the old guard `if (e.skip) return;` — so a skipped due could be moved onto another skipped date and collide in the lists. Now every grid date's resolved date occupies its slot regardless of skip state.
+
+### Notes
+- The skip-override itself blocks nothing (it's inert to edit/delete — the diagnosis was render conditions, not the override).
+- Smoke PART 11 (7 new asserts, 85 total): skip ALL of Gym's dues → ✎ present targeting the skipped occurrence, ✕ present, `openPlanEdit` opens on it, move-onto-skipped-date rejected with the collision alert, move-to-free-date allowed. The harness gained a `global.alert` recorder (the edit sheet's guards call `alert` — undefined in Node crashed the harness on first rejection).
+- check_site v73.55 pin: the new ✎ condition, the header ✕, the collision-guard change, the SHELL_NOTES entry.
+
 # v73.52 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-14 - "when i log money in entry, i should be able to choose my cc accounts and that subtracts from my owed in that cc"
 Status: **done** - v73.52 shipped (SW cache `finances-pwa-v73.52`; ONE commit pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/`.

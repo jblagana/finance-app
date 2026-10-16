@@ -866,6 +866,11 @@ def main():
           and "unskipPlanOccurrence: unskipPlanOccurrence, // v73.54" in js
           and "renderPlans: renderPlans, // v73.54" in js
           and "'73.54': [" in js)
+    check("v73.55 (boss: 'after a plan occurrence is SKIPPED, the plan record is no longer editable nor deletable in the plans list'): the skip-override blocks nothing — the ✎ was rendered only when shown.length (skipping the next due emptied it, and v73.54's record rows made that state persistent) and the recurring header had NO ✕ at all (one-offs only). Now: the ✎ renders when shown OR skipped (targeting the skipped occurrence), the recurring header gains the plans-list ✕ (deletePlan already carried the Undo + tombstone), and the date-collision guard counts SKIPPED dates too (a skipped due moved onto another skipped date would collide in the lists)",
+          "(shown.length || skipped.length ? '<button class=\"mini\" data-editp=\"' + p.id + '\" data-editd=\"' + (shown.length ? shown[0].d : skipped[0].d) + '\" title=\"Edit this occurrence\">✎</button>' : '')" in js
+          and "'<button class=\"mini\" data-delp=\"' + p.id + '\" title=\"Delete plan\">✕</button>' + '</div>';" in js
+          and "var r = planDateAt(p, g);" in js.split("collision: another occurrence")[1].split("if (others[newDate])")[0]
+          and "'73.55': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]

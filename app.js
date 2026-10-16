@@ -5071,7 +5071,13 @@
       '</div><div class="pl-sub">' + headSub + '</div></div>' +
       '<div class="pl-r"><div class="pl-amt">₱ ' + amt(p.amount) + '</div><div class="pl-per">each</div></div>' +
       (skipped.length ? '<button class="mini" data-unskip="' + p.id + '|' + skipped[0].d + '" title="Unskip ' + fmtDate(skipped[0].d) + ' (and see the rest expanded)">↺</button>' : '') +
-      (shown.length ? '<button class="mini" data-editp="' + p.id + '" data-editd="' + shown[0].d + '" title="Edit this occurrence">✎</button>' : '') + '</div>';
+      // v73.55: a plan whose dues are ALL skipped is exactly the plan you
+      // most want to edit/unskip — the ✎ must not vanish with `shown`.
+      (shown.length || skipped.length ? '<button class="mini" data-editp="' + p.id + '" data-editd="' + (shown.length ? shown[0].d : skipped[0].d) + '" title="Edit this occurrence">✎</button>' : '') +
+      // v73.55: recurring plans get the plans-list delete (one-offs already
+      // had it) — previously a recurring plan could only be removed via the
+      // coach card's skip-and-delete flow.
+      '<button class="mini" data-delp="' + p.id + '" title="Delete plan">✕</button>' + '</div>';
     if (!opts.open) return head;
     var sub = '<div class="occwrap">';
     shown.slice(0, OCC_CAP).forEach(function (o) {
@@ -5260,9 +5266,9 @@
       var others = {};
       planGridDates(p).forEach(function (g) {
         if (g === gridDate) return;
-        var e = ov[g] || {};
-        if (e.skip) return;
-        var r = e.move ? String(e.move) : planDateAt(p, g);
+        // v73.55: skipped occurrences OCCUPY their date too — a skipped due
+        // moved onto another skipped date would collide in the lists.
+        var r = planDateAt(p, g);
         others[r] = true;
       });
       if (others[newDate]) {
@@ -7018,12 +7024,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.54, live: new Date(2026, 9, 16, 4, 30) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.55, live: new Date(2026, 9, 16, 16, 14) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.55': [
+      'Fixed: a plan whose dues were all skipped lost its ✎ (edit) button — it is back, and it opens the sheet on the skipped occurrence. Recurring plans also get the ✕ in the plans list (before, only one-offs had it — a recurring plan could only be deleted from the coach card).'
+    ],
     '73.54': [
       'Skipped plan dues are no longer invisible: the plans list shows a "skipped" record row for each skipped occurrence (with the date it was skipped), and tapping it — or its ↺ — unskips, so the due returns to the coach card, the free-cash deduction, and the "On repeat" line. The series header also counts its skips ("N skipped") even when the row is collapsed.'
     ],

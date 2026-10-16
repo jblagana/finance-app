@@ -94,6 +94,11 @@ global.requestAnimationFrame = function (f) { return setTimeout(f, 0); };
 global.cancelAnimationFrame = function (id) { clearTimeout(id); };
 global.matchMedia = function () { return { matches: false, addListener: function () {}, removeListener: function () {} }; };
 global.scrollTo = function () {};
+// v73.55: the plan-edit collision guard + name/amount guards call alert() —
+// undefined in Node. Record the messages so the smoke can assert the
+// rejection (and so a real guard that fires doesn't crash the harness).
+global.__alerts = [];
+global.alert = function (m) { global.__alerts.push(String(m)); };
 
 var META = [
   { key: 'base', value: seed.base },
@@ -474,6 +479,55 @@ waitReady().then(async function (F) {
   await F.unskipPlanOccurrence('pmuimaif9irt', nextGym);
   await sleep(20);
   ok(!gym.overrides[nextGym], 'v73.54: unskip on an unskipped date is a no-op');
+
+  // ============ PART 11: v73.55 — the ✎/✕ must not vanish on a skipped plan ============
+  // (boss: 'after a plan occurrence is SKIPPED, the plan record is no longer
+  // editable nor deletable in the plans list'). The skip-override blocks
+  // nothing — the ✎ was rendered only when `shown.length` (skipping the
+  // next due emptied it) and the recurring header had NO ✕ at all.
+  console.log('\n== PART 11: v73.55 — edit/delete survive a skip ============');
+  var gym2 = null;
+  F.state.plans.forEach(function (p) { if (p.id === 'pmuimaif9irt') gym2 = p; });
+  var occ2 = F.planOccurrences(gym2);
+  ok(occ2.length >= 2, 'v73.55: seed precondition — Gym has >= 2 future occurrences (got ' + occ2.length + ')');
+  occ2.forEach(function (d) {
+    F.skipPlanChip('pmuimaif9irt|' + d); // skip EVERY due -> shown = []
+  });
+  await sleep(60);
+  F.renderPlans();
+  var plansHtml2 = String(byIdStub('plans').innerHTML || '');
+  ok(plansHtml2.indexOf('data-editp="pmuimaif9irt"') >= 0 &&
+     plansHtml2.indexOf('data-editd="' + occ2[0] + '"') >= 0,
+    'v73.55: the ✎ stays on a fully-skipped plan (targeting the skipped occurrence)');
+  ok(plansHtml2.indexOf('data-delp="pmuimaif9irt"') >= 0,
+    'v73.55: the recurring header has a ✕ (plans-list delete)');
+  // the edit sheet opens on the skipped occurrence (openPlanEdit guards only
+  // on !p || !p.repeat — the override is inert to it)
+  F.openPlanEdit('pmuimaif9irt', occ2[0]);
+  await sleep(20);
+  // (planEditCtx is exported as a GETTER — the v73.47 pin calls it too)
+  ok(F.planEditCtx() && F.planEditCtx().dateISO === occ2[0],
+    'v73.55: openPlanEdit opens on a skipped occurrence');
+  // the date-collision guard counts SKIPPED dates too (v73.55: the old
+  // guard skipped them, so a move could land on another skipped date)
+  byIdStub('pe_date').value = occ2[1];
+  global.__alerts.length = 0;
+  F.savePlanOccurrence();
+  await sleep(40);
+  ok(!gym2.overrides[occ2[0]] || !gym2.overrides[occ2[0]].move,
+    'v73.55: moving a skipped due onto another skipped date is rejected (collision)');
+  ok(global.__alerts.some(function (m) { return m.indexOf('already falls on') >= 0; }),
+    'v73.55: the collision alert fired (the guard named the skipped date)');
+  byIdStub('pe_date').value = '2026-12-05';
+  F.savePlanOccurrence();
+  await sleep(40);
+  ok(gym2.overrides[occ2[0]] && gym2.overrides[occ2[0]].move === '2026-12-05',
+    'v73.55: moving a skipped due to a free date is allowed');
+  // clean up: restore the pristine plan (the tests above mutated it)
+  delete gym2.overrides[occ2[0]];
+  delete gym2.overrides[occ2[1]];
+  await F.idbPut('plans', gym2);
+  await sleep(20);
 
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
