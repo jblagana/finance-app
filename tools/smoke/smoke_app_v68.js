@@ -57,6 +57,7 @@ function makeStub() {
 // stub needs a real `id` string or the Proxy returns a function for the key.
 var elMap = {
   confirmMsg: makeStub(),
+  plans: makeStub(), // v73.54: the plans-list target (renderPlans writes its HTML here)
   pe_date: makeStub(),
   pe_dateLabel: makeStub(),
   mlBody: makeStub(),
@@ -427,6 +428,52 @@ waitReady().then(async function (F) {
   accSel2.value = 'CASH::Cash';
   F.updateCashbackRow();
   ok(cbRow.style.display === 'none', 'v73.53: the cashback row hides for a cash pick');
+
+  // ============ PART 10: v73.54 — the skip record + unskip path ============
+  // (boss: 'a label in the plans list whenever i skip a due, so i can unskip
+  // it later'). The seed's Gym (pmuimaif9irt, monthly, 1,200) has its next
+  // due 2026-11-04 — in-cycle and UNPAID, so skipping it via the coach chip
+  // (the v73.28 path) drops the cycle deduction by exactly the due, and
+  // unskipping must return it. (Rent's next due is already logged-paid, so
+  // its deduction is 0 — the delta test needs an unpaid due.)
+  console.log('\n== PART 10: v73.54 — skip record + unskip ============');
+  var gym = null;
+  F.state.plans.forEach(function (p) { if (p.id === 'pmuimaif9irt') gym = p; });
+  ok(!!gym && gym.repeat === 'monthly', 'v73.54: seed precondition — Gym is the monthly plan');
+  var nextGym = F.planOccurrences(gym)[0];
+  ok(nextGym === '2026-11-04', 'v73.54: Gym\'s next due is 2026-11-04 (in-cycle) (got ' + nextGym + ')');
+  var ded0 = F.cyclePlanDeduction();
+  ok(ded0 > 0, 'v73.54: baseline cycle deduction is non-zero (' + ded0.toFixed(2) + ')');
+  // skip the next due via the coach chip (the v73.28 handler)
+  F.skipPlanChip('pmuimaif9irt|' + nextGym);
+  await sleep(40);
+  ok(gym.overrides[nextGym] && gym.overrides[nextGym].skip,
+    'v73.54: the coach chip writes the skip-override');
+  ok(typeof gym.overrides[nextGym].skippedAt === 'number',
+    'v73.54: the skip carries a skippedAt stamp (by-when record)');
+  var dedSkip = F.cyclePlanDeduction();
+  ok(close(ded0 - dedSkip, gym.amount), 'v73.54: skipping the in-cycle due drops the deduction by exactly the due (' + (ded0 - dedSkip).toFixed(2) + ')');
+  // the record row renders in the plans list (label + ↺, both data-unskip)
+  F.renderPlans();
+  var plansHtml = String(byIdStub('plans').innerHTML || '');
+  ok(plansHtml.indexOf('data-unskip="pmuimaif9irt|' + nextGym + '"') >= 0,
+    'v73.54: the plans list renders the skipped occurrence as a record row (data-unskip present)');
+  ok(plansHtml.indexOf('skipped') >= 0, 'v73.54: the record row wears the "skipped" label');
+  ok(plansHtml.indexOf('1 skipped') >= 0, 'v73.54: the series header counts its skips ("1 skipped")');
+  // the unskip path: the due returns to the cycle deduction and the override
+  // (and its stamp) is gone
+  await F.unskipPlanOccurrence('pmuimaif9irt', nextGym);
+  await sleep(40);
+  ok(!gym.overrides[nextGym] || !gym.overrides[nextGym].skip,
+    'v73.54: unskip removes the skip-override');
+  ok(close(F.cyclePlanDeduction(), ded0), 'v73.54: unskip returns the due to the cycle deduction (back to ' + ded0.toFixed(2) + ')');
+  F.renderPlans();
+  ok(String(byIdStub('plans').innerHTML || '').indexOf('data-unskip="pmuimaif9irt|' + nextGym + '"') < 0,
+    'v73.54: after unskip the record row is gone');
+  // unskip is a no-op on a date that isn't skipped (the guard)
+  await F.unskipPlanOccurrence('pmuimaif9irt', nextGym);
+  await sleep(20);
+  ok(!gym.overrides[nextGym], 'v73.54: unskip on an unskipped date is a no-op');
 
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');

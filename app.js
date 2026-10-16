@@ -3421,13 +3421,38 @@
     for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === pid) p = state.plans[i];
     if (!p || !pdate) return;
     var ov = p.overrides || {};
-    ov[pdate] = { skip: true };
+    ov[pdate] = { skip: true, skippedAt: Date.now() }; // v73.54: the record (by-when) rides the override
     p.overrides = ov;
     closeSheets();
     return idbPut(STORE_PLANS, p).then(function () {
       emit('plan');
       snack('Skipped ' + esc(p.name || 'plan') + ' · ' + fmtDate(pdate), function () {
         delete ov[pdate];
+        idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
+      });
+    });
+  }
+  // v73.54 (boss: 'a label in the plans list whenever i skip a due, so i can
+  // unskip it later'): the unskip path — tapping the "unskip" label on a
+  // skipped occurrence in the plans list removes the exact-date skip-override
+  // (the same { skip: true } the coach SKIP chip / edit sheet wrote), so the
+  // occurrence returns to the coach card's plan due rows, the free-cash
+  // deduction, and the "On repeat" line — all the existing ro.skip consumers
+  // flip back for free.
+  function unskipPlanOccurrence(planId, dateISO) {
+    var p = null;
+    for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === planId) p = state.plans[i];
+    if (!p || !dateISO) return;
+    var ov = p.overrides || {};
+    if (!ov[dateISO] || !ov[dateISO].skip) return;
+    var prev = ov[dateISO]; // the undo restores the exact record (incl. skippedAt)
+    delete ov[dateISO];
+    p.overrides = ov;
+    return idbPut(STORE_PLANS, p).then(function () {
+      emit('plan');
+      snack('Unskipped ' + esc(p.name || 'plan') + ' · ' + fmtDate(dateISO), function () {
+        ov[dateISO] = prev;
+        p.overrides = ov;
         idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
       });
     });
@@ -5023,20 +5048,29 @@
     }
     var occ = planOccurrences(p);
     var shown = [];
+    var skipped = []; // v73.54: the skipped occurrences (rendered as records, not hidden)
     var anyEdited = false;
     occ.forEach(function (od) {
       var ro = resolveOccurrence(p, od); // v73.14: the 3-scope resolver
-      if (ro && ro.skip) return;         // skipped dates don't render at all
+      if (ro && ro.skip) { skipped.push({ d: od, ro: ro }); return; } // v73.54: record it, don't hide it
       if (ro && ro.edited) anyEdited = true;
       shown.push({ d: od, ro: ro });
     });
+    // v73.54: the skip count is a clickable chip in the header — tapping it
+    // opens the series (the data-grp row handler) so the record rows show.
+    var skipCountHtml = '';
+    if (skipped.length) {
+      skipCountHtml = ' · <span data-grp="' + p.id + '" title="Tap to open the series and see the skipped occurrences" style="color:#8fb0ff;cursor:pointer">' + skipped.length + ' skipped</span>';
+    }
     var headSub = 'Every ' + per + ' · next ' + (shown.length ? fmtDate(shown[0].d) : '—');
     if (p.count) headSub += ' · ' + p.count + '×';
+    if (skipped.length) headSub += skipCountHtml;
     var head = '<div class="plrow grp' + (opts.open ? ' open' : '') + '" data-grp="' + p.id + '">' +
       '<div class="chev">▸</div><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') +
       (anyEdited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') +
       '</div><div class="pl-sub">' + headSub + '</div></div>' +
       '<div class="pl-r"><div class="pl-amt">₱ ' + amt(p.amount) + '</div><div class="pl-per">each</div></div>' +
+      (skipped.length ? '<button class="mini" data-unskip="' + p.id + '|' + skipped[0].d + '" title="Unskip ' + fmtDate(skipped[0].d) + ' (and see the rest expanded)">↺</button>' : '') +
       (shown.length ? '<button class="mini" data-editp="' + p.id + '" data-editd="' + shown[0].d + '" title="Edit this occurrence">✎</button>' : '') + '</div>';
     if (!opts.open) return head;
     var sub = '<div class="occwrap">';
@@ -5050,7 +5084,17 @@
         '<button class="mini oc-x" data-editp="' + p.id + '" data-editd="' + o.d + '" title="Edit this occurrence">✎</button></div>';
     });
     if (shown.length > OCC_CAP) sub += '<div class="occ"><span class="oc-d">+' + (shown.length - OCC_CAP) + ' more…</span></div>';
-    if (!shown.length) sub += '<div class="occ"><span class="oc-d">nothing left</span></div>';
+    // v73.54: the skipped occurrences render as RECORD rows — a tappable
+    // "skipped" label (the unskip path) instead of vanishing. The label is
+    // the affordance; the ↺ button is the visible one.
+    skipped.forEach(function (o) {
+      var when = o.ro.skippedAt ? ' · ' + new Date(o.ro.skippedAt).toLocaleDateString() : '';
+      sub += '<div class="occ occ-skipped"><span class="oc-d">' + fmtDate(o.d) + '</span>' +
+        '<span class="oc-n"><span class="pill occ-skip" data-unskip="' + p.id + '|' + o.d + '" style="font-size:10px;background:rgba(120,160,255,.15);color:#8fb0ff;cursor:pointer" title="Tap to unskip — the due returns to the coach card">' +
+        'skipped' + when + '</span></span>' +
+        '<button class="mini oc-x" data-unskip="' + p.id + '|' + o.d + '" title="Unskip this occurrence">↺</button></div>';
+    });
+    if (!shown.length && !skipped.length) sub += '<div class="occ"><span class="oc-d">nothing left</span></div>';
     sub += '</div>';
     return head + sub;
   }
@@ -5071,9 +5115,16 @@
     plans.forEach(function (p) { html += planHTML(p, { open: !!planOpen[p.id] }); });
     el.innerHTML = html;
     var grps = el.querySelectorAll('[data-grp]');
-    for (var g = 0; g < grps.length; g++) grps[g].onclick = function () {
+    for (var g = 0; g < grps.length; g++) grps[g].onclick = function (e) {
       var id = this.getAttribute('data-grp');
-      planOpen[id] = !planOpen[id];
+      // v73.54: the "N skipped" chip is a NESTED [data-grp] inside the row —
+      // tapping it ALWAYS opens the series (its job: reveal the record rows)
+      // and stops the bubble so the row's handler doesn't toggle it right
+      // back closed.
+      if (this.tagName === 'SPAN') {
+        if (e && e.stopPropagation) e.stopPropagation();
+        planOpen[id] = true;
+      } else { planOpen[id] = !planOpen[id]; }
       renderPlans();
     };
     var btns = el.querySelectorAll('[data-delp]');
@@ -5082,6 +5133,14 @@
     for (var j = 0; j < ebtns.length; j++) ebtns[j].onclick = function (e) {
       if (e && e.stopPropagation) e.stopPropagation(); // don't toggle the series
       openPlanEdit(this.getAttribute('data-editp'), this.getAttribute('data-editd'));
+    };
+    // v73.54: the unskip path — the "skipped" pill label and the ↺ button
+    // both carry data-unskip; tapping either removes the skip-override.
+    var ubtns = el.querySelectorAll('[data-unskip]');
+    for (var u = 0; u < ubtns.length; u++) ubtns[u].onclick = function (e) {
+      if (e && e.stopPropagation) e.stopPropagation(); // don't toggle the series
+      var parts = this.getAttribute('data-unskip').split('|');
+      unskipPlanOccurrence(parts[0], parts[1]);
     };
   }
   function addPlan(data) {
@@ -5275,7 +5334,7 @@
     if (!planEditCtx) return;
     var p = planEditCtx.plan, dateISO = planEditCtx.dateISO;
     var ov = p.overrides || {};
-    ov[dateISO] = { skip: true };
+    ov[dateISO] = { skip: true, skippedAt: Date.now() }; // v73.54: same record as the coach chip
     p.overrides = ov;
     closeSheets();
     planEditCtx = null;
@@ -6959,12 +7018,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.53, live: new Date(2026, 9, 16, 3, 23) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.54, live: new Date(2026, 9, 16, 4, 30) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.54': [
+      'Skipped plan dues are no longer invisible: the plans list shows a "skipped" record row for each skipped occurrence (with the date it was skipped), and tapping it — or its ↺ — unskips, so the due returns to the coach card, the free-cash deduction, and the "On repeat" line. The series header also counts its skips ("N skipped") even when the row is collapsed.'
+    ],
     '73.53': [
       'Money in on a CC can now be flagged "From cashback" — a payoff that is NEW money: the card\'s owed drops and your free cash RISES by the full amount, and nothing is taken from your liquid (a plain payoff still leaves the bank the same way it always did).',
       'A skipped plan due now restores the amount the hero had pre-deducted — skip a due and the free number comes back up by it; undo the skip and it goes back down. The skip is still one-off (this occurrence only).'
@@ -7935,6 +7997,8 @@
     salaryRowChip: salaryRowChip, // v73.19: the salary row-chip's handler body (smoke drives it without a DOM)
     payPlanChip: payPlanChip, // v73.18: the chip's handler body (smoke drives it without a DOM); v73.22: the in-scope function (the bare call in the wiring loop needs it)
     skipPlanChip: skipPlanChip, // v73.28: the coach row's Skip chip (one-off skip-override; smoke drives it without a DOM)
+  unskipPlanOccurrence: unskipPlanOccurrence, // v73.54: the unskip path (the plans-list record row; smoke drives it without a DOM)
+  renderPlans: renderPlans, // v73.54: the plans-list renderer (the smoke asserts the record row's HTML)
     unlinkPlanTxn: unlinkPlanTxn, // v73.17: break an explicit link (the txn keeps its money)
     setPlanLinkRef: function (r) { state.planLinkRef = r; }, // v73.17: the chip's link state (smoke drives it)
     getPlanLinkRef: function () { return state.planLinkRef; },

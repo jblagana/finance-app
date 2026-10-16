@@ -635,7 +635,8 @@ def main():
           and "data-skipplan=" in js
           and "class=\"rowchip skipchip\"" in js
           # (5) the skip writes the SAME override shape the edit sheet uses
-          and "ov[pdate] = { skip: true };" in js
+          # (v73.54: + skippedAt — the by-when record the plans list shows)
+          and "ov[pdate] = { skip: true, skippedAt: Date.now() };" in js
           # (6) the CSS (the quiet neutral pill)
           and ".skipchip{" in html
           # (7) the .dg-r becomes a flex row (pay chip + skip chip side by side)
@@ -852,6 +853,19 @@ def main():
           and "if (kind === 'card_payment' && cbk && cbk.checked) payload.cashback = true;" in js
           and "function freeEffect(t, amt) { if (t.kind === 'card_payment') return t.cashback ? amt : 0;" in js
           and "'73.53': [" in js)
+    check("v73.54 (boss: 'a label in the plans list whenever i skip a due, so i can unskip it later'): a skipped occurrence no longer vanishes from the plans list — it renders a RECORD row (the 'skipped' pill label + the ↺ button, both data-unskip) with the date it was skipped (skippedAt rides the override, stamped by both the coach SKIP chip and the edit sheet's skip button); tapping either removes the exact-date skip-override so the due returns to the coach card's plan due rows, the free-cash deduction, and the 'On repeat' line (all existing ro.skip consumers flip back); the series header counts its skips even when collapsed",
+          "ov[pdate] = { skip: true, skippedAt: Date.now() };" in js
+          and "ov[dateISO] = { skip: true, skippedAt: Date.now() };" in js
+          and "function unskipPlanOccurrence(planId, dateISO) {" in js
+          and "if (!ov[dateISO] || !ov[dateISO].skip) return;" in js
+          and "skipped.push({ d: od, ro: ro });" in js
+          and "data-unskip=\"' + p.id + '|' + o.d +" in js
+          and "'skipped' + when" in js
+          and "skipped.length + ' skipped</span>'" in js
+          and "if (this.tagName === 'SPAN') {" in js.split("function renderPlans")[1].split("function addPlan")[0]
+          and "unskipPlanOccurrence: unskipPlanOccurrence, // v73.54" in js
+          and "renderPlans: renderPlans, // v73.54" in js
+          and "'73.54': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]
