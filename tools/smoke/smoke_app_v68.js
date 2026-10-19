@@ -529,6 +529,53 @@ waitReady().then(async function (F) {
   await F.idbPut('plans', gym2);
   await sleep(20);
 
+  // ============ PART 12: v73.56 — link-only paid + expandable this-cycle dues ============
+  // (1) the boss's 12k-rent incident, reproduced: a fuzzy-matched payment
+  // from a PREVIOUS month (name word "rent" within the old [due-2, ∞)
+  // window) must NOT count toward the current occurrence. Only the
+  // explicit planRef link (the chip's tap) marks an occurrence paid.
+  // (2) the hero's THIS-cycle "Plan dues" row is expandable like the peek.
+  console.log('\n== PART 12: v73.56 — link-only paid + expandable this-cycle dues ============');
+  // findPaidTxn is pure over (d, kind) + state.txns — drive it directly.
+  // A fuzzy "Rent payment" logged 20 days before the due (name word +
+  // inside the old overdue window) must be ignored.
+  var probeRent = { planId: 'pmuk0wjffffx', date: '2026-10-15', name: 'Rent', amount: 12030 };
+  var fuzzyTxn = { kind: 'cash_out', category: 'Housing', note: 'Rent payment', amount: 12030, date: '2026-09-25' };
+  var baseTxns = F.state.txns.slice();
+  F.state.txns = baseTxns.concat([fuzzyTxn]);
+  var fuzzyPaid = F.findPaidTxn({ monthPrefix: '2026-10', today: '2026-10-13' }, probeRent);
+  ok(!(fuzzyPaid && Number(fuzzyPaid.amount) > 0),
+    'v73.56: a fuzzy name-word payment (no chip link) does NOT count as paid — the 12k-rent leak is dead (got ' + (fuzzyPaid && fuzzyPaid.amount) + ')');
+  // The explicit planRef link (the chip's tap) DOES count, regardless of
+  // amount — even 1 peso (the deterministic truth, unchanged).
+  var linkTxn = { kind: 'cash_out', category: 'Housing', note: 'Rent payment', amount: 1, date: '2026-10-13',
+    planRef: { planId: 'pmuk0wjffffx', date: '2026-10-15', name: 'Rent', amount: 12030 } };
+  F.state.txns = baseTxns.concat([linkTxn]);
+  var linkPaid = F.findPaidTxn({ monthPrefix: '2026-10', today: '2026-10-13' }, probeRent);
+  ok(!!(linkPaid && Number(linkPaid.amount) === 1 && linkPaid.linked),
+    'v73.56: the explicit planRef link counts as paid (even 1 peso, linked=true)');
+  F.state.txns = baseTxns; // restore
+  // (2) the THIS-cycle Plan dues row is expandable like the peek — the
+  // render writes cbPlansRow into the hero block; toggle the shared
+  // cbPlansOpen flag and the sub-rows (from planItems) appear.
+  F.state.cycleMode = 'this';
+  F.state.cbPlansOpen = false;
+  F.renderCycleBlock();
+  var cbClosed = String(byIdStub('cycleBlock').innerHTML || '');
+  ok(cbClosed.indexOf('id="cbPlansRow"') >= 0, 'v73.56: the this-cycle Plan dues row renders (cbPlansRow present)');
+  ok(cbClosed.indexOf('class="chev"') >= 0 && cbClosed.indexOf('chev open') < 0,
+    'v73.56: the this-cycle Plan dues row is collapsed by default (chevron, not open)');
+  F.state.cbPlansOpen = true;
+  F.renderCycleBlock();
+  var cbOpen = String(byIdStub('cycleBlock').innerHTML || '');
+  ok(cbOpen.indexOf('class="chev open"') >= 0, 'v73.56: tapping the this-cycle Plan dues row expands it (chevron open)');
+  // the sub-rows come from the same window walk as the peek (planItems)
+  var pw = F.planWindowTotal(F.cycleData());
+  ok(pw.items.length > 0, 'v73.56: the this-cycle window has plan items to expand (got ' + pw.items.length + ')');
+  ok(cbOpen.indexOf('class="cbsub"') >= 0, 'v73.56: the this-cycle expansion renders the sub-rows (cbsub present)');
+  F.state.cbPlansOpen = false; // leave the default state for any later render
+  F.renderCycleBlock();
+
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
   process.exit(fails === 0 ? 0 : 1);

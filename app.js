@@ -4271,7 +4271,28 @@
       rows += '<div class="cbrow"><div class="lab">Liquid</div><div class="amt">' + money(p.liquid) + '</div></div>';
       rows += '<div class="cbrow"><div class="lab">Cards owed<small>all cards</small></div><div class="amt minus">− ' + money(p.cardOwed) + '</div></div>';
       if (p.otherOut > 0.004) rows += '<div class="cbrow mut"><div class="lab">Other outflows<small>budgets · debts · sinking · one-offs</small></div><div class="amt minus">− ' + money(p.otherOut) + '</div></div>';
-      if (p.planShare > 0.004) rows += '<div class="cbrow"><div class="lab">Plan dues<small>' + p.planCount + ' due in window</small></div><div class="amt minus">− ' + money(p.planShare) + '</div></div>';
+      // v73.56 (boss: 'make the hero card this-cycle plan dues expandable
+      // just like next cycle'): the same tap-to-expand row as the peek —
+      // the v73.37/v73.39 machinery (cbPlansRow / cbPlansOpen / cbPlansMore)
+      // is mode-agnostic, so the this-cycle row reuses it: same id, same
+      // sub-rows, same "+N more…" second level. The amount stays
+      // p.planShare (the hero's own deduction — the rows must sum to the
+      // hero); the sub-rows come from p.planItems (the same window walk).
+      if (p.planShare > 0.004) {
+        var openThis = !!state.cbPlansOpen;
+        rows += '<div class="cbrow cbplans" id="cbPlansRow" role="button" tabindex="0" aria-expanded="' + (openThis ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (openThis ? ' open' : '') + '">▸</span>Plan dues<small>' + p.planCount + ' due in window</small></div><div class="amt minus">− ' + money(p.planShare) + '</div></div>';
+        if (openThis) {
+          var itemsT = p.planItems || [];
+          var moreOpenT = !!state.cbPlansMore;
+          var shownT = moreOpenT ? itemsT : itemsT.slice(0, 5);
+          var subsT = '';
+          shownT.forEach(function (it) {
+            subsT += '<div class="cbsub"><span class="sl">' + esc(it.name) + (it.edited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') + ' · ' + dayMonth(it.date) + '</span><span class="sv">' + money(it.amount) + '</span></div>';
+          });
+          if (!moreOpenT && itemsT.length > 5) subsT += '<div class="cbsub mut" id="cbPlansMoreRow" role="button" tabindex="0"><span class="sl">+' + (itemsT.length - 5) + ' more…</span></div>';
+          rows += '<div class="cbsubwrap">' + subsT + '</div>';
+        }
+      }
       rows += '<div class="cbrow cbfree"><div class="lab">Free cash<small>same as the hero number</small></div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
     }
     if (mode === 'next') {
@@ -4481,26 +4502,21 @@
         pSum += amt; pLast = t; pCount++; // v72.45: PARTIAL prepays count toward "handled so far"
         if (amt >= 0.5 * d.prepayAmt) out = t;
       } else {
-        // v73.26 (boss-approved mockup): ACCUMULATION replaces the 50% single-
-        // entry threshold. All txns matching the occurrence (±2 day window +
-        // name word, OR an explicit planRef link) sum toward the plan amount.
-        // Any positive amount counts; 100% = done (the row disappears).
-        // An explicit link (planRef) is deterministic truth — it counts
-        // regardless of amount (even 1 peso), same as today.
+        // v73.56 (boss: 'do 1' — kill the fuzzy match window): an occurrence
+        // is PAID ONLY by an explicit planRef link — the chip's tap. The
+        // v73.26 name-word ±2-day branch and the v73.27 overdue widening
+        // ([due−2, ∞)) are GONE: the unbounded window had no floor, so
+        // previous months' payments (or a logged 12k) summed toward the
+        // current occurrence and zeroed it — the due row vanished and the
+        // hero's free jumped back up by the full amount (the boss's
+        // 12k-rent incident). A payment logged without the chip simply
+        // doesn't count: the due row stays until the chip is tapped (or
+        // the entry is edited and linked) — the v73.17 design truth
+        // ('nothing auto-links'), now the ONLY truth.
         var linked = t.planRef &&
           String(t.planRef.planId) === String(kind.planId) &&
           String(t.planRef.date) === String(kind.date);
-        if (!linked) {
-          var dd = diffDays(String(t.date), kind.date);
-          // v73.27: the ±2 window is for FUTURE occurrences (paid around the
-          // due date). An OVERDUE occurrence (due date already passed) can be
-          // paid any number of days late — widen to [due−2, ∞) so a payment
-          // logged today still matches an occurrence that was due 6 days ago.
-          if (dd > 2) return;
-          if (dd < -2 && String(kind.date) >= (d && d.today || todayISO())) return;
-          var words = String(kind.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 4; });
-          if (!words.length || !words.some(function (w) { return hay.indexOf(w) >= 0; })) return;
-        }
+        if (!linked) return;
         if (amt <= 0) return;
         pSum += amt; pLast = t; pCount++;
         if (linked && !out) out = t; // the first linked txn is the "proof" (for the pill's linked/fuzzy distinction)
@@ -7024,12 +7040,16 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.55, live: new Date(2026, 9, 16, 16, 14) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.56, live: new Date(2026, 9, 20, 2, 1) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.56': [
+      'Fixed: a plan due could vanish on its own and your free cash jump back up — the "paid" detector was guessing by name and date, and a payment from a previous month (or a logged amount matching the due) counted toward the current occurrence. A plan is now marked paid ONLY by the chip link: tap the amount chip on the due row (or link the entry in its edit sheet) and nothing else.',
+      'The hero card\'s THIS-cycle "Plan dues" row is now expandable just like the Next-cycle peek — tap it to see the specific dues (with the "+N more…" second level), and the peek\'s expansion state follows it.'
+    ],
     '73.55': [
       'Fixed: a plan whose dues were all skipped lost its ✎ (edit) button — it is back, and it opens the sheet on the skipped occurrence. Recurring plans also get the ✕ in the plans list (before, only one-offs had it — a recurring plan could only be deleted from the coach card).'
     ],
@@ -7997,6 +8017,8 @@
     savePlanOccurrence: savePlanOccurrence, // v73.41: the edit sheet's save (the smoke drives the real date-edit path)
     setPlanEditCtx: function (c) { planEditCtx = c; }, // v73.41: the smoke seeds the edit context
     cyclePlanDeduction: cyclePlanDeduction, // v73.16: the cycle's plan share (the smoke drives it)
+    findPaidTxn: findPaidTxn, // v73.56: the paid detector (the smoke pins the link-only rule)
+    planWindowTotal: planWindowTotal, // v73.56: the window walk (the smoke reads the expandable sub-rows' source)
     planLinkSuggestion: planLinkSuggestion, // v73.17: the fuzzy SUGGESTION (pure — the smoke drives it)
     planRefAlive: planRefAlive, // v73.17: does an explicit link still point at a live occurrence
     renderCoach: renderCoach, // v73.18: the coach card render (smoke reads the pay-plan chip in the HTML)

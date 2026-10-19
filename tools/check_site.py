@@ -613,10 +613,12 @@ def main():
           # (3) the Overdue row (bad, 'N days past due', pay_plan chip)
           and "tag: 'Overdue'" in js
           and "' day' + (odays === 1 ? '' : 's') + ' past due.'" in js
-          # (3b) findPaidTxn's fuzzy window widens for OVERDUE occurrences
-          # (paid any number of days late) — the [due-2, +inf) branch
-          and "if (dd > 2) return;" in js
-          and "if (dd < -2 && String(kind.date) >= (d && d.today || todayISO())) return;" in js
+          # (3b) SUPERSEDED by v73.56: the fuzzy window (±2 day AND the
+          # overdue [due-2, +inf) widening) is GONE — an occurrence is paid
+          # only by an explicit planRef link (the chip's tap). The v73.56
+          # check pins the kill; see it below.
+          and "if (dd > 2) return;" not in js
+          and "if (dd < -2 && String(kind.date) >= (d && d.today || todayISO())) return;" not in js
           # (3c) the cycle deduction + 'On repeat' run on the WHOLE series
           # (planAllDates), so an overdue occurrence in the cycle still counts
           and "planAllDates(p).forEach(function (od) {" in js
@@ -871,6 +873,19 @@ def main():
           and "'<button class=\"mini\" data-delp=\"' + p.id + '\" title=\"Delete plan\">✕</button>' + '</div>';" in js
           and "var r = planDateAt(p, g);" in js.split("collision: another occurrence")[1].split("if (others[newDate])")[0]
           and "'73.55': [" in js)
+    check("v73.56 (boss: 'do 1' — kill the fuzzy match window, plus 'make the hero card this-cycle plan dues expandable just like next cycle'): (1) a plan occurrence is PAID ONLY by an explicit planRef link (the chip's tap) — the v73.26 name-word ±2-day branch and the v73.27 overdue [due-2, +inf) widening are GONE (the unbounded window had no floor, so previous months' payments or a logged matching amount summed toward the current occurrence and zeroed it — the due row vanished and the hero's free jumped back up by the full amount, the boss's 12k-rent incident); a payment logged without the chip simply doesn't count, the due row stays until the chip is tapped or the entry is edited and linked (the v73.17 design truth, now the ONLY truth); (2) the hero's THIS-cycle 'Plan dues' row is expandable exactly like the peek's — the v73.37/v73.39 machinery (cbPlansRow / cbPlansOpen / cbPlansMore) is shared: same id, same sub-rows from p.planItems, same '+N more…' second level, and the peek's expansion state follows the this-cycle row",
+          # (1) the kill: no fuzzy branch left in findPaidTxn's plan path
+          "if (!linked) return;" in js
+          and "if (dd > 2) return;" not in js
+          and "if (dd < -2 && String(kind.date) >= (d && d.today || todayISO())) return;" not in js
+          and "var words = String(kind.name || '').toLowerCase().split" not in js
+          # (1b) the link is still the deterministic match (unchanged)
+          and "String(t.planRef.planId) === String(kind.planId) &&" in js
+          # (2) the this-cycle row reuses the peek's expandable machinery
+          and "var openThis = !!state.cbPlansOpen;" in js
+          and "var itemsT = p.planItems || [];" in js
+          and "var moreOpenT = !!state.cbPlansMore;" in js
+          and "'73.56': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]
