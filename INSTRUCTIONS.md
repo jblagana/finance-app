@@ -6,6 +6,21 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.56 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-20 - "do 1, also make the hero card this-cycle plan dues expandable just like next cycle" (kill the fuzzy plan-paid match window; expandable this-cycle Plan dues row)
+Status: **done** - v73.56 shipped (SW cache `finances-pwa-v73.56`; commit `5515091` pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (sw.js cache + app.js pins fetched post-push).
+Progress: 100% - tracked gates green (release.ps1 v73.56 full run: check_site repo + root mirror, test_chat_parser, node --check x4, smoke_v68, smoke_app_v68 94 assertions ALL PASS).
+
+### What changed
+- **The fuzzy plan-paid match window is DEAD** (app.js `findPaidTxn` plan branch): an occurrence is now marked paid ONLY by an explicit `planRef` link (the chip's tap). The v73.26 name-word ±2-day branch and the v73.27 overdue widening (`[due−2, ∞)`, no floor) are gone — the unbounded window let previous months' payments (or a logged matching amount) sum toward the current occurrence and zero it: the due row vanished and the hero's free jumped back up by the full amount (the boss's 12k-rent incident). A payment logged without the chip simply doesn't count — the due row stays until the chip is tapped or the entry is edited and linked (the v73.17 design truth, now the ONLY truth).
+- **The hero's THIS-cycle "Plan dues" row is expandable** (app.js `renderCycleBlock`): same tap-to-expand machinery as the v73.37/v73.39 peek — same `cbPlansRow` id, same `cbPlansOpen`/`cbPlansMore` flags (the peek's expansion state follows the this-cycle row), same sub-rows from `p.planItems`, same "+N more…" second level. The row's amount stays `p.planShare` (the hero's own deduction — the bridge rows still sum to the hero).
+- Exports: `findPaidTxn` + `planWindowTotal` added to the smoke surface.
+
+### Notes
+- check_site v73.27 pin (3b) retargeted: the two window lines are now asserted ABSENT (the v73.56 pin asserts the kill + the expandable row).
+- Smoke PART 12 (9 new asserts, 94 total): a fuzzy "Rent payment" 20 days before the due (inside the old overdue window) does NOT count (got null); the explicit planRef link counts (even 1 peso, linked=true); the this-cycle row renders collapsed, expands on toggle, and renders its sub-rows.
+- Live fetch: `'73.56': [` confirmed present in the served app.js (the first check used a wrong quote style and reported false — re-verified with a raw substring scan).
+
 # v73.55 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-16 - "after a plan occurrence is SKIPPED, the plan record is no longer editable nor deletable in the plans list — go" (fix the ✎/✕ gap diagnosed in the v73.54 review)
 Status: **done** - v73.55 shipped (SW cache `finances-pwa-v73.55`; ONE commit pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/`.
