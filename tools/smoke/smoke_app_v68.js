@@ -576,6 +576,164 @@ waitReady().then(async function (F) {
   F.state.cbPlansOpen = false; // leave the default state for any later render
   F.renderCycleBlock();
 
+  // ============ PART 13: v73.57 — the 2-month step chart ============
+  // Boss-approved spec (parked 2026-10-20): window today -> end of the next
+  // 2 months; start = RAW cash (effectiveSnap.cash.total); step down on
+  // EVERY plan due on its due date (this month's included — no double count,
+  // the start is raw); step down per card on its payment due day (due=null
+  // -> the 15th default); step up on payday; LIVE owed (a charge grows the
+  // drop, a payoff shrinks it, a chip-paid/skipped due removes its drop).
+  console.log('\n== PART 13: v73.57 — the 2-month step chart ============');
+  var g0 = F.sparkData();
+  var g0pts = g0.pts;
+  // (1) start = RAW cash (the overlay-aware effective total, not the base
+  // matrix's start_cash — the seed's overlay moved the raw by −10,332.43).
+  var rawStart = F.effectiveSnap().cash.total;
+  ok(close(g0pts[0].v, rawStart), 'v73.57: the graph starts at RAW cash (effective ' + rawStart.toFixed(2) + ', got ' + g0pts[0].v.toFixed(2) + ')');
+  // (2) the 2-month window: the last point is on/before the end of the next
+  // 2 months and after today (the 6-month tail is gone).
+  var tToday = F.todayISO();
+  var tEnd = g0pts[g0pts.length - 1].date;
+  ok(tEnd > tToday, 'v73.57: the window ends after today (' + tEnd + ')');
+  var tp2 = tToday.split('-');
+  var tY = Number(tp2[0]), tM = Number(tp2[1]);
+  var tM2 = (tM + 2 - 1) % 12 + 1, tY2 = tY + Math.floor((tM + 2 - 1) / 12);
+  var tDim2 = new Date(tY2, tM2, 0).getDate();
+  var tWindowEnd = tY2 + '-' + (tM2 < 10 ? '0' : '') + tM2 + '-' + (tDim2 < 10 ? '0' : '') + tDim2;
+  ok(tEnd <= tWindowEnd, 'v73.57: the window ends on/before the end of the next 2 months (' + tEnd + ' <= ' + tWindowEnd + ')');
+  // (3) every plan due in the window drops on ITS due date: build the
+  // expected event map (planAllDates + resolveOccurrence + findPaidTxn, the
+  // same rules the app uses) and assert each one is a point.
+  var expPlanDates = {};
+  F.state.plans.forEach(function (p) {
+    F.planAllDates(p).forEach(function (od) {
+      if (od < tToday || od > tWindowEnd) return;
+      var ro = p.repeat ? F.resolveOccurrence(p, od) : null;
+      if (ro && ro.skip) return;
+      var nm = ro ? ro.name : p.name, am = ro ? ro.amount : p.amount;
+      var pp = F.findPaidTxn({ monthPrefix: tToday.slice(0, 7), today: tToday }, { planId: p.id, date: od, name: nm, amount: am });
+      var rem = Math.round((Number(am) - (Number(pp && pp.amount) || 0)) * 100) / 100;
+      if (rem > 0.004) expPlanDates[od] = true;
+    });
+  });
+  var gDates = {};
+  g0pts.forEach(function (p) { gDates[p.date] = true; });
+  var planDrops = 0;
+  Object.keys(expPlanDates).forEach(function (d) { if (gDates[d]) planDrops++; });
+  ok(planDrops === Object.keys(expPlanDates).length && planDrops >= 5,
+    'v73.57: every unpaid plan due drops on its due date (' + planDrops + '/' + Object.keys(expPlanDates).length + ' — ' + Object.keys(expPlanDates).join(', ') + ')');
+  // (4) the FULL expected event map (plan dues + card drops + payday) —
+  // built with the same rules the app uses — must match the actual point
+  // deltas one-for-one. The payday (salary_day 15) and the card default
+  // (the 15th) MERGE on the same date, so the net step there is a drop —
+  // the salary is asserted inside the map, not as a standalone rise.
+  var tExp = {};
+  Object.keys(expPlanDates).forEach(function (d) { tExp[d] = 0; });
+  F.state.plans.forEach(function (p) {
+    F.planAllDates(p).forEach(function (od) {
+      if (od < tToday || od > tWindowEnd || !(tExp[od] !== undefined)) return;
+      var ro = p.repeat ? F.resolveOccurrence(p, od) : null;
+      if (ro && ro.skip) return;
+      var nm = ro ? ro.name : p.name, am = ro ? ro.amount : p.amount;
+      var pp = F.findPaidTxn({ monthPrefix: tToday.slice(0, 7), today: tToday }, { planId: p.id, date: od, name: nm, amount: am });
+      tExp[od] -= Math.round((Number(am) - (Number(pp && pp.amount) || 0)) * 100) / 100; // a DROP
+    });
+  });
+  var cardDates = [];
+  F.effectiveSnap().cards.forEach(function (c) {
+    var owed = Number(c.balance) || 0;
+    if (!(owed > 0.004)) return;
+    var day0 = (c.due != null && c.due >= 1 && c.due <= 28) ? Math.round(c.due) : 15;
+    for (var k = 0; k < 3; k++) {
+      var m = (tM + k - 1) % 12 + 1, yy = tY + Math.floor((tM + k - 1) / 12);
+      var dim = new Date(yy, m, 0).getDate();
+      var day = Math.min(day0, dim);
+      var dISO = yy + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+      if (dISO < tToday) continue;
+      if (dISO <= tWindowEnd) {
+        tExp[dISO] = (tExp[dISO] || 0) - owed; // a DROP, once (the owed is a stock)
+        if (cardDates.indexOf(dISO) < 0) cardDates.push(dISO);
+      }
+      break; // first due date only
+    }
+  });
+  var sdT = F.salaryDayOf(F.state.base);
+  for (var k2 = 0; k2 < 3; k2++) {
+    var m2 = (tM + k2 - 1) % 12 + 1, yy2 = tY + Math.floor((tM + k2 - 1) / 12);
+    var dim2b = new Date(yy2, m2, 0).getDate();
+    var dISO2 = yy2 + '-' + (m2 < 10 ? '0' : '') + m2 + '-' + (Math.min(sdT, dim2b) < 10 ? '0' : '') + Math.min(sdT, dim2b);
+    if (dISO2 < tToday) continue;
+    tExp[dISO2] = (tExp[dISO2] || 0) + F.expectedSalaryFor(dISO2.slice(0, 7), F.state.base); // a RISE
+    break;
+  }
+  var tExpKeys = Object.keys(tExp).sort();
+  ok(tExpKeys.length >= 8, 'v73.57: the expected event map has the dues + card drops + payday (' + tExpKeys.length + ' dates)');
+  var deltaOK = true, deltaBad = '';
+  for (var gi4 = 1; gi4 < g0pts.length; gi4++) {
+    var dISO4 = g0pts[gi4].date;
+    var want = tExp[dISO4];
+    if (want === undefined) { deltaOK = false; deltaBad = 'unexpected point ' + dISO4; break; }
+    var got = Math.round((g0pts[gi4].v - g0pts[gi4 - 1].v) * 100) / 100;
+    if (Math.abs(got - want) > 0.02) { deltaOK = false; deltaBad = dISO4 + ': got ' + got + ' want ' + want; break; }
+  }
+  ok(deltaOK && g0pts.length === tExpKeys.length + 1, 'v73.57: every point delta matches the expected event map (' + (deltaBad || g0pts.length - 1 + '/' + tExpKeys.length + ' dates') + ')');
+  // the card default-15th is in the map (both seeded cards are due=null)
+  var first15 = (Number(tp2[2]) >= 15)
+    ? (tM === 12 ? tY + 1 + '-01-15' : tY + '-' + ((tM % 12) + 1 < 10 ? '0' : '') + ((tM % 12) + 1) + '-15')
+    : tY + '-' + (tM < 10 ? '0' : '') + tM + '-15';
+  ok(tExp[first15] !== undefined, 'v73.57: the card owed drops on the default 15th (' + first15 + ')');
+  // (6) LIVE owed reactivity — a new card charge grows the card drop.
+  var before = g0pts.map(function (p) { return p.v; });
+  var chargeId = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'MariBank CC', amount: 2000, note: 'probe charge', date: tToday }, { quiet: true });
+  await sleep(60);
+  var g1 = F.sparkData();
+  var vAt = function (pts, d) { for (var i = 0; i < pts.length; i++) if (pts[i].date === d) return pts[i].v; return null; };
+  var cardDelta = 0;
+  cardDates.forEach(function (d) {
+    var a = vAt(g0pts, d), b = vAt(g1.pts, d);
+    if (a !== null && b !== null) cardDelta += (a - b); // before − after = how much DEEPER the drop got
+  });
+  ok(close(cardDelta, 2000), 'v73.57: a new card charge grows the card drop by exactly 2,000 (got ' + cardDelta.toFixed(2) + ')');
+  // (7) a chip-paid due REMOVES its drop — link a payment to the first
+  // unpaid plan due in the window and its step disappears.
+  var targetDue = Object.keys(expPlanDates).sort()[0];
+  var targetPlan = null;
+  F.state.plans.forEach(function (p) { if (F.planAllDates(p).indexOf(targetDue) >= 0) targetPlan = p; });
+  var roT = F.resolveOccurrence(targetPlan, targetDue);
+  var ppT = F.findPaidTxn({ monthPrefix: tToday.slice(0, 7), today: tToday }, { planId: targetPlan.id, date: targetDue, name: roT.name, amount: roT.amount });
+  var payId = await F.addTxn({ kind: 'cash_out', category: 'Housing', account: 'Cash', amount: roT.amount, note: 'probe pay', date: tToday,
+    planRef: { planId: targetPlan.id, date: targetDue, name: roT.name, amount: roT.amount } }, { quiet: true });
+  await sleep(60);
+  var g2 = F.sparkData();
+  var g2Dates = {};
+  g2.pts.forEach(function (p) { g2Dates[p.date] = true; });
+  ok(!g2Dates[targetDue], 'v73.57: a chip-paid due removes its drop (' + targetDue + ' gone)');
+  // (8) a skipped due REMOVES its drop too.
+  var skipPlan = null, skipDue = null;
+  Object.keys(expPlanDates).sort().forEach(function (d) {
+    if (d === targetDue) return;
+    F.state.plans.forEach(function (p) { if (!skipPlan && F.planAllDates(p).indexOf(d) >= 0 && p.id !== targetPlan.id) { skipPlan = p; skipDue = d; } });
+  });
+  skipPlan.overrides = skipPlan.overrides || {};
+  skipPlan.overrides[skipDue] = { skip: true, skippedAt: tToday };
+  await F.idbPut('plans', skipPlan);
+  await sleep(20);
+  var g3 = F.sparkData();
+  var g3Dates = {};
+  g3.pts.forEach(function (p) { g3Dates[p.date] = true; });
+  ok(!g3Dates[skipDue], 'v73.57: a skipped due removes its drop (' + skipDue + ' gone)');
+  // cleanup: delete the probe txns + restore the skipped plan.
+  await F.deleteTxn(chargeId); await sleep(20);
+  await F.deleteTxn(payId); await sleep(20);
+  delete skipPlan.overrides[skipDue];
+  await F.idbPut('plans', skipPlan);
+  await sleep(20);
+  var g4 = F.sparkData();
+  // the probe txns are deleted (the overlay is back to baseline) — recompute
+  // the raw start from the effective snap (it may differ from g0's if any
+  // earlier part left a txn in the ledger).
+  ok(close(g4.pts[0].v, F.effectiveSnap().cash.total) && g4.pts.length === g0pts.length, 'v73.57: after cleanup the chart is back to baseline');
+
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
   process.exit(fails === 0 ? 0 : 1);

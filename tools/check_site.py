@@ -209,9 +209,9 @@ def main():
     check("welcome header: time-of-day greeting + full date, refreshed on tab show",
           'id="homeGreet"' in html and "function renderGreet" in js
           and "if (name === 'home') renderGreet();" in js and "renderGreet();" in js)
-    check("sparkline x-axis shows dates: as-of day/month start + 'Sep '26' months",
-          "function dayMonth" in js and '{ label: dayMonth(' in js
-          and 'monthShort(row.month)' in js)
+    check("sparkline x-axis shows dates (v51; v73.57: every tick is a real event date - the monthShort month points are dead)",
+          "function dayMonth" in js and 'label: dayMonth(' in js
+          and 'monthShort(row.month)' not in js)
 
     print("\n== v52: optional category, no emergency cap, slim placeholders ==")
     check("add-expense: category is optional (no required prompt)",
@@ -886,6 +886,22 @@ def main():
           and "var itemsT = p.planItems || [];" in js
           and "var moreOpenT = !!state.cbPlansMore;" in js
           and "'73.56': [" in js)
+    check("v73.57 (boss: 'limit it to 2months projection, and the deductions from dues reflects on the day when theyre due'): the hero graph is a 2-month STEP CHART of the live numbers - start = RAW cash (effectiveSnap.cash.total), step down on EVERY plan due on its due date (this month's included - the start is raw, so no double count), per-card card owed drops ONCE at its first payment due date in the window (the card's due day-of-month, DEFAULT 15 when unset - the owed is a stock: paying it zeroes the balance and unlogged charges are never predicted, so a second drop of the same owed would double-count), step up on the next payday; the v72.37/72.45 base-matrix plot path (raw 6-month running, monthShort month points, salDelta proration) is GONE; card drops read the LIVE owed (effectiveSnap cards - a charge grows the drop, a payoff shrinks it, a chip-paid or skipped due removes its drop)",
+          # the step chart is built from the events, not the matrix
+          "function sparkData()" in js
+          and "var events = {};" in js
+          and "planAllDates(p).forEach(function (od) {" in js
+          and "if (ro && ro.skip) return;" in js
+          and "var day0 = (c.due != null && c.due >= 1 && c.due <= 28) ? Math.round(c.due) : 15;" in js
+          and "ev(salISO, expectedSalaryFor(" in js
+          and "pts.push({ label: dayMonth(dISO), v: r2(pts[pts.length - 1].v + events[dISO]), date: dISO });" in js
+          # the 2-month window (today -> end of the next 2 months)
+          and "var lastM = addM(ty, tm, 2);" in js
+          # the old 6-month matrix plot is dead
+          and "s.matrix.base.forEach(function (row) {" not in js
+          and "monthShort(row.month)" not in js
+          and "salDelta" not in js
+          and "'73.57': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]
@@ -1414,8 +1430,12 @@ def main():
           and "function salaryRowChip(attr) {" in js  # v73.19: the salary row-chip's handler body
           and ".rowchip{" in html  # v73.20: the row-chip pill styling (the plan-due design for every action row)
           and "insBlock('This cycle'" in js
-          and "var salDelta = 0, salDate = null;" in js
-          and "pts.splice(1, 0, { label: dayMonth(salDate), v: vAtSal, date: salDate });" in js
+          # v73.57: the v72.45 salDelta/proration lines are GONE (the 2-month
+          # step chart replaced the base-matrix plot) — the salary now lands
+          # as a step event on the next payday (the v73.57 pin asserts it).
+          and "var salDelta = 0, salDate = null;" not in js
+          and "pts.splice(1, 0, { label: dayMonth(salDate), v: vAtSal, date: salDate });" not in js
+          and "ev(salISO, expectedSalaryFor(" in js
           and "var prepayActive = info.prepayActive;" in js
           # v73.23: the 'Partly handled — … still owed' row is GONE (the
           # per-card chip carries the live remainder) — those two assertions

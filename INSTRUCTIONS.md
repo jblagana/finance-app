@@ -6,6 +6,21 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.57 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-20 - "ship it" (the parked hero-graph rebuild — 2-month step chart of the live numbers)
+Status: **done** - v73.57 shipped (SW cache `finances-pwa-v73.57`; ONE commit pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (fetched post-push).
+Progress: 100% - tracked gates green (release.ps1 v73.57 full run: check_site repo + root mirror, test_chat_parser, node --check x4, smoke_v68, smoke_app_v68 106 assertions ALL PASS).
+
+### What changed
+- **The hero graph is a 2-month STEP CHART of the live numbers** (app.js `sparkData` rewritten): the v72.37/72.45 base-matrix plot (raw 6-month running, monthShort month points, salDelta proration) is dead. New shape per the boss-approved spec (parked 2026-10-20): window today → end of the next 2 months; start = RAW cash (`effectiveSnap().cash.total` — overlay-aware); step down on EVERY plan due on its due date (this month's included — the start is raw, so nothing is pre-deducted; no double count); per-card card owed drops ONCE at its first payment due date in the window (the card's `due` day-of-month, **default 15** when unset — both the boss's cards are due=null; the owed is a STOCK: paying it zeroes the balance and unlogged charges are never predicted, so a second drop of the same owed would double-count); step up on the next payday (`expectedSalaryFor`).
+- **LIVE-owed reactive:** card drops read `effectiveSnap().cards` — a logged charge grows the drop, a logged payoff shrinks it, a chip-paid or skipped due removes its drop (skips checked via `resolveOccurrence`, paid via the v73.56 link-only `findPaidTxn`).
+- Exports: `sparkData` + `planAllDates` added to the smoke surface.
+
+### Notes
+- check_site: v73.57 pin (step-chart lines present, matrix-plot lines ABSENT, `salDelta` gone, `'73.57': [` notes); the v51 sparkline-date pin retargeted (`monthShort(row.month)` now asserted absent — every tick is a real event date); the v72.45 pin retargeted (salDelta/proration lines now asserted absent, the payday step asserted present); the repo-mirror copy had to be re-patched after a mid-run sync overwrote the earlier patch (caught by the gate, fixed, re-run).
+- Smoke PART 13 (12 new asserts, 106 total): start = raw cash; window end within 2 months; the FULL expected event map (plan dues + card drops + payday, built with the same rules) matches every point delta one-for-one; the card default-15th is in the map; a new 2,000 card charge grows the card drop by exactly 2,000; a chip-paid due removes its drop; a skipped due removes its drop; cleanup restores the baseline.
+- Mid-build catches (the gates did their job): the plan drops were initially positive (a rise, not a drop — sign error), the card owed initially dropped EVERY month (a flow, not a stock — would have double-counted the same balance), and the smoke's expected-map mirror had the same two bugs independently.
+
 # v73.56 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-20 - "do 1, also make the hero card this-cycle plan dues expandable just like next cycle" (kill the fuzzy plan-paid match window; expandable this-cycle Plan dues row)
 Status: **done** - v73.56 shipped (SW cache `finances-pwa-v73.56`; commit `5515091` pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (sw.js cache + app.js pins fetched post-push).

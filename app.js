@@ -4393,59 +4393,92 @@
       renderCycleBlock();
     };
   }
+  // v73.57 (boss-approved spec, parked 2026-10-20): the hero graph is a
+  // 2-MONTH STEP CHART of the live numbers — the v72.37/72.45 base-matrix
+  // plot (raw 6-month projection, no plan term, start = raw cash) is dead.
+  //   window   today -> end of the next 2 months (the 6-month tail is gone)
+  //   start    RAW cash (effectiveSnap.cash.total — overlay-aware)
+  //   drops    EVERY plan due on its due date (this month's included — the
+  //             start is raw, so nothing is pre-deducted; no double count),
+  //             per-card card owed ONCE at its first payment due date in
+  //             the window (the card's `due` day-of-month, default 15 when
+  //             unset — the owed is a STOCK: paying it zeroes the balance,
+  //             and unlogged charges are never predicted, so a second drop
+  //             of the same owed would double-count)
+  //   rise     the expected salary on the next payday
+  //   live     card drops read the LIVE owed (a charge grows the drop, a
+  //             payoff shrinks it, a chip-paid or skipped due removes its
+  //             drop); it never predicts unlogged charges.
   function sparkData() {
     var s = state.snapshot;
-    if (!s || !s.matrix || !s.matrix.base || !s.matrix.base.length) return null;
-    // v72.37: each point carries the real date its value corresponds to
-    // (start = as-of date, month points = last day of that month), so the
-    // x axis can show real dates at the start / middle / end ticks.
-    var monthEnd = function (m) {
-      var p = String(m || '').split('-');
-      if (p.length === 2 && /^\d{4}$/.test(p[0]) && /^\d{2}$/.test(p[1])) {
-        return localISO(new Date(Number(p[0]), Number(p[1]), 0)); // day 0 = last day of the month
-      }
-      return null;
-    };
-    var asOf = (state.base && state.base.as_of) || todayISO();
-    // v72.45: the current month's EXPECTED salary (the salary_day, the 15th by
-    // default) belongs in the projection even when the sheet's model hasn't
-    // booked it yet — the as-of predates payday, so the month's salary sits at
-    // the pre-payday zero. The month-end / later running values carry the
-    // delta (computed locally — the stored matrix is never mutated) and the
-    // graph gains one explicit point on the payday, or the actual receipt
-    // date once the "Salary in" entry is logged. Other months untouched.
-    var bBase = state.base;
-    var nowMk = todayISO().slice(0, 7);
-    var row0 = s.matrix.base[0];
-    var comp0 = (row0 && row0.comp) ? row0.comp : {};
-    var salDelta = 0, salDate = null;
-    if (bBase && row0 && row0.month === nowMk) {
-      salDelta = r2(expectedSalaryFor(nowMk, bBase) - (Number(comp0.salary) || 0));
-      if (salDelta > 0.004) {
-        var sday0 = salaryDayOf(bBase);
-        var paydayISO = nowMk + '-' + (sday0 < 10 ? '0' : '') + sday0;
-        var cdat0 = cycleDataFor(nowMk, bBase);
-        salDate = (cdat0 && cdat0.received && String(cdat0.received.date).slice(0, 7) === nowMk) ? cdat0.received.date : paydayISO;
-        if (salDate < asOf) salDate = null; // the start point already stands after it
-      }
+    if (!s) return null;
+    var es = effectiveSnap();
+    var today = todayISO();
+    var bBase = state.base || {};
+    var tp = today.split('-'), ty = Number(tp[0]), tm = Number(tp[1]), tday = Number(tp[2]);
+    function iso(y, m, d) { return y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d; }
+    function addM(y, m, k) { var t = (m - 1 + k) % 12; if (t < 0) t += 12; return { y: y + Math.floor((m - 1 + k) / 12), m: t + 1 }; }
+    var lastM = addM(ty, tm, 2);
+    var end = iso(lastM.y, lastM.m, new Date(lastM.y, lastM.m, 0).getDate()); // end of the next 2 months
+    var events = {};
+    function ev(dateISO, amt) {
+      if (!dateISO || dateISO < today || dateISO > end) return;
+      if (Math.abs(amt) <= 0.004) return; // drops are negative — magnitude only
+      events[dateISO] = r2((events[dateISO] || 0) + amt);
     }
-    var pts = [{ label: dayMonth(asOf), v: Number(s.matrix.start_cash) || 0, date: asOf }];
-    s.matrix.base.forEach(function (row) {
-      var rv = Number(row.running) || 0;
-      if (salDelta > 0.004 && String(row.month) >= nowMk) rv = r2(rv + salDelta);
-      pts.push({ label: monthShort(row.month), v: rv, date: monthEnd(row.month) });
+    // (a) plan dues — every occurrence in the window, live remainder (the
+    // chip link is the only "paid" truth — v73.56), skips removed.
+    (state.plans || []).forEach(function (p) {
+      planAllDates(p).forEach(function (od) {
+        if (od < today || od > end) return;
+        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        if (ro && ro.skip) return;
+        var nm = ro ? ro.name : p.name;
+        var am = ro ? ro.amount : p.amount;
+        var pp = findPaidTxn({ monthPrefix: today.slice(0, 7), today: today }, { planId: p.id, date: od, name: nm, amount: am });
+        ev(od, -r2(Number(am) - (Number(pp && pp.amount) || 0))); // a DROP
+      });
     });
-    if (salDate) {
-      var mpp = nowMk.split('-');
-      var dim0 = new Date(Number(mpp[0]), Number(mpp[1]), 0).getDate();
-      var dayNum = Number(salDate.slice(8, 10));
-      // even-spend proration (the same assumption as the sheet's month-end
-      // roll): the month's outflows so far, then the salary lands
-      var vAtSal = r2((Number(s.matrix.start_cash) || 0) - r2(((Number(comp0.outflows) || 0) * (dayNum - 1)) / dim0) + salDelta);
-      pts.splice(1, 0, { label: dayMonth(salDate), v: vAtSal, date: salDate });
+    // (b) card owed — per card, on its payment due day (the card's `due`
+    // day-of-month, DEFAULT 15 when unset — both the boss's cards are
+    // due=null), a month at a time, LIVE owed (effectiveSnap cards).
+    (es.cards || []).forEach(function (c) {
+      var owed = Number(c.balance) || 0;
+      if (!(owed > 0.004)) return;
+      // The owed is a STOCK, not a monthly flow: it drops ONCE, at the
+      // first due date in the window (paying it zeroes the balance — the
+      // later due dates have nothing to drop because unlogged charges are
+      // never predicted; a logged charge grows the drop, a logged payoff
+      // shrinks it, and a full payoff removes it).
+      var day0 = (c.due != null && c.due >= 1 && c.due <= 28) ? Math.round(c.due) : 15;
+      for (var k = 0; k < 3; k++) {
+        var mm = addM(ty, tm, k);
+        var dim = new Date(mm.y, mm.m, 0).getDate();
+        var day = Math.min(day0, dim);
+        var dISO = iso(mm.y, mm.m, day);
+        if (dISO < today) continue;
+        if (dISO <= end) ev(dISO, -owed); // a DROP
+        break; // first due date only
+      }
+    });
+    // (c) the expected salary — the next payday inside the window (the
+    // current month's payday already passed = the raw start stands after it).
+    var sd = salaryDayOf(bBase);
+    for (var k2 = 0; k2 < 3; k2++) {
+      var mm2 = addM(ty, tm, k2);
+      var dim2 = new Date(mm2.y, mm2.m, 0).getDate();
+      if (sd > dim2) sd = dim2;
+      var salISO = iso(mm2.y, mm2.m, sd);
+      if (salISO < today) { sd = salaryDayOf(bBase); continue; }
+      ev(salISO, expectedSalaryFor(mm2.y + '-' + (mm2.m < 10 ? '0' : '') + mm2.m, bBase));
+      break;
     }
-    var floorLine = Number(s.floor) || 0;
-    return { pts: pts, floor: floorLine };
+    // the step points: raw start, then every event in date order.
+    var pts = [{ label: dayMonth(today), v: r2((es.cash && es.cash.total) || 0), date: today }];
+    Object.keys(events).sort().forEach(function (dISO) {
+      pts.push({ label: dayMonth(dISO), v: r2(pts[pts.length - 1].v + events[dISO]), date: dISO });
+    });
+    return { pts: pts, floor: Number(s.floor) || 0 };
   }
   function renderSpark() {
     var box = byId('sparkBox'); if (!box) return;
@@ -4462,7 +4495,7 @@
     var X = function (i) { return PL + iw * (i / (pts.length - 1)); };
     var Y = function (v) { return PT + ih * (1 - (v - lo) / (hi - lo)); };
     var line = pts.map(function (p, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p.v).toFixed(1); }).join(' ');
-    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Projected cash for the next six months">' +
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Projected cash for the next two months (v73.57 step chart: raw cash start, plan dues + card owed drop on their due dates, salary rises on payday)">' +
       '<path d="' + line + ' L' + X(pts.length - 1).toFixed(1) + ' ' + (H - PB) + ' L' + X(0).toFixed(1) + ' ' + (H - PB) + ' Z" fill="rgba(55,211,155,.13)" stroke="none"/>' +
       '<path d="' + line + '" fill="none" stroke="#37d39b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
     if (floor > 0) {
@@ -7040,12 +7073,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.56, live: new Date(2026, 9, 20, 2, 1) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.57, live: new Date(2026, 9, 20, 13, 41) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.57': [
+      'The hero graph is now a 2-month step chart of YOUR live numbers: it starts at your raw cash, drops exactly on each plan due date (this month included), drops each card\'s owed on its payment due day (the 15th until you set a real due), and rises on payday. It reacts to everything you log — a new card charge grows the drop, a payoff shrinks it, a chip-paid or skipped due removes its drop.'
+    ],
     '73.56': [
       'Fixed: a plan due could vanish on its own and your free cash jump back up — the "paid" detector was guessing by name and date, and a payment from a previous month (or a logged amount matching the due) counted toward the current occurrence. A plan is now marked paid ONLY by the chip link: tap the amount chip on the due row (or link the entry in its edit sheet) and nothing else.',
       'The hero card\'s THIS-cycle "Plan dues" row is now expandable just like the Next-cycle peek — tap it to see the specific dues (with the "+N more…" second level), and the peek\'s expansion state follows it.'
@@ -8019,6 +8055,8 @@
     cyclePlanDeduction: cyclePlanDeduction, // v73.16: the cycle's plan share (the smoke drives it)
     findPaidTxn: findPaidTxn, // v73.56: the paid detector (the smoke pins the link-only rule)
     planWindowTotal: planWindowTotal, // v73.56: the window walk (the smoke reads the expandable sub-rows' source)
+    sparkData: sparkData, // v73.57: the 2-month step chart (the smoke drives the drop dates + live reactivity)
+    planAllDates: planAllDates, // v73.57: the whole series (the smoke builds the expected drop dates)
     planLinkSuggestion: planLinkSuggestion, // v73.17: the fuzzy SUGGESTION (pure — the smoke drives it)
     planRefAlive: planRefAlive, // v73.17: does an explicit link still point at a live occurrence
     renderCoach: renderCoach, // v73.18: the coach card render (smoke reads the pay-plan chip in the HTML)
