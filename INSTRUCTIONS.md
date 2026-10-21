@@ -6,6 +6,25 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.59 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-21 - "redesign the plans in money tab, it becomes so cluttered" + "i want the plans paid and past occurrences to still exist there" + "make one offs also editable"
+Status: **done** - v73.59 shipped (SW cache `finances-pwa-v73.59`; ONE commit `e0e452a` pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (sw.js cache + app.js pins fetched post-push: SHELL_RELEASE v: 73.59, notes key, planSortKey, NEXT DUE, the one-off ✎ button — all present).
+Progress: 100% - tracked gates green (release.ps1 v73.59 full run: check_site repo + root mirror, test_chat_parser, node --check x4, smoke_v68, smoke_app_v68 130 assertions ALL PASS).
+
+### What changed
+- **The plans list splits into Recurring / One-offs** (the boss's clutter complaint). Recurring series sort by their NEXT occurrence (resolved, post-move date — a moved due re-orders the list; the old anchor-date sort never did), one-offs by their own date.
+- **The expanded series is the mockup's shape**: the NEXT due renders as one emphasized "NEXT DUE" row (tappable → the edit sheet), and every other occurrence compresses into a history CHIP STRIP — paid = green tick, skipped = strikethrough (carrying the v73.54 unskip path), past-due = red, newest first, capped at 6 with a "+N older" second level. Paid and past occurrences STAY visible — never deleted (the boss's explicit requirement).
+- **The collapsed sub-line answers directly**: "Every month · next Nov 15 · [1 paid]" — the payment record rides the header as a tappable chip.
+- **One-offs are editable**: the `!p.repeat` guard in `openPlanEdit` is lifted (the scope select + skip button hide — there is nothing to fork), the one-off row carries a ✎, and a one-off save writes name/amount/date straight onto the record (no override machinery).
+- Gate surgery: the v73.54 check_site pin was retargeted (the record row became a chip — the unskip pin now matches the chip's data-unskip + the header ↺ button); a v73.59 pin was added (16 sub-checks). The v73.54 smoke PART 10 assertions still pass unchanged (the chip strip renders where the record row did).
+
+### Self-audit
+- The check_site v73.59 pin had a syntax slip (`and` dropped on the first sub-check) — caught by the gate run itself, fixed, re-ran green.
+- The smoke's "1 paid" assertion initially matched another series' chip (Spaylater/AC have chip-linked past dues in the seed) — scoped to Rent's head row. The Rent 2026-09-15 paid-chip test had to clear the seed's skip override for that date (backup/restore) — a skipped past due renders strikethrough, not paid.
+- The harness can't click, so `setPlanOpen` was exported for the smoke to expand series.
+- The `--dim` CSS var doesn't exist in this app (it's `--mut`) — caught before shipping when the first CSS draft used it.
+- Live-verify note: `SHELL_RELEASE` is `var SHELL_RELEASE = { v: 73.59, ... }` (an object, not a bare string) — the pin matches `v: 73.59`; the one-off ✎ pin is `title="Edit this one-off"` (the data-editd attribute is built by string concat, so it's not a literal substring).
+
 # v73.58 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-21 - "for plan due rows, clicking the skip allows me to skip it entirely or move it to a later date in the calendar" (the skip/move chooser)
 Status: **done** - v73.58 shipped (SW cache `finances-pwa-v73.58`; ONE commit `6445318` pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (sw.js cache + app.js/index.html pins fetched post-push, all 7 PASS).
