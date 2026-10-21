@@ -6,6 +6,20 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.60 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-22 - "lets separate them thru a tab, left tab is oneoffs, right is recurring" + "Ship it as v73.60 (one-offs default default)"
+Status: **done** - v73.60 shipped (SW cache `finances-pwa-v73.60`; ONE commit `ba50291` pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (sw.js cache + app.js pins fetched post-push: SHELL_RELEASE v: 73.60, notes key, data-pltab one/rec, `var planTab = 'one'`, and the old `class="plsec"` render confirmed gone — all present/absent as expected).
+Progress: 100% - tracked gates green (release.ps1 v73.60 full run: check_site repo + root mirror, test_chat_parser, node --check x4, smoke_v68, smoke_app_v68 141 assertions ALL PASS).
+
+### What changed
+- **The v73.59 stacked sections became a TAB BAR** (the boss's mockup, approved with One-offs as the default tab): One-offs LEFT, Recurring RIGHT, counts ride the tabs (`1` / `8` on the seed). One-offs is the default (`planTab = 'one'`).
+- **Pure layout over the v73.59 renderer** — both lists always exist, nothing hidden or filtered; the tab is in-memory view state (no new persisted state, no new data). The v73.59 sort (recurring by next occurrence, one-offs by date), the history chip strip, the paid/skipped records, and the one-off ✎ all ride unchanged.
+- **Smoke**: PART 16 added (11 assertions — tab order, default active tab, counts, default pane contents, switch-to-Recurring pane swap, active-tab follow); the v73.54/55/59 recurring-list assertions retargeted to `setPlanTab('rec')` first (the harness can't click the tab). New export `setPlanTab` (the smoke's click surrogate). check_site: new v73.60 pin; the v73.59 pin's `>Recurring<`/`>One-offs<` section-header strings retargeted to the tab markup.
+- **Mid-build catch (gate-earned)**: the first smoke run failed 9 — my PART 16 assertions sliced on the wrong closing tag for the counts (`</span>` hit the label's span, not the count's), the active-tab position check compared the class string against the wrong attribute order, and three pre-existing v73.54/55 assertions read the plans list while it was on the One-offs tab. All fixed in the harness, not the app — the app code was right on the first pass.
+
+### Restore / rollback
+`git checkout origin/main -- app.js index.html sw.js tools/check_site.py tools/smoke/smoke_app_v68.js` (or the Muji mirror at `C:\Users\Jan\Muji\finance-app\tools\smoke\`).
+
 # v73.59 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-21 - "redesign the plans in money tab, it becomes so cluttered" + "i want the plans paid and past occurrences to still exist there" + "make one offs also editable"
 Status: **done** - v73.59 shipped (SW cache `finances-pwa-v73.59`; ONE commit `e0e452a` pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (sw.js cache + app.js pins fetched post-push: SHELL_RELEASE v: 73.59, notes key, planSortKey, NEXT DUE, the one-off ✎ button — all present).
