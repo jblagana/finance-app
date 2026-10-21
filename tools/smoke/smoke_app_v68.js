@@ -808,6 +808,111 @@ waitReady().then(async function (F) {
   await F.idbPut('plans', gym3);
   await sleep(20);
 
+  // ============ PART 15: v73.59 — the plans-list redesign ============
+  // (boss: 'redesign the plans in money tab, it becomes so cluttered' +
+  // 'i want the plans paid and past occurrences to still exist there' +
+  // 'make one offs also editable'). The list splits Recurring / One-offs,
+  // recurring sorts by NEXT occurrence (a moved due re-orders), the
+  // expanded series shows the NEXT DUE row + the history chip strip
+  // (paid ✓ / skipped strikethrough / past-due red — nothing deleted),
+  // and a one-off's ✎ opens the edit sheet (name/amount/date straight).
+  console.log('\n== PART 15: v73.59 — the plans-list redesign ============');
+  var rent = null, calc = null;
+  F.state.plans.forEach(function (p) {
+    if (p.id === 'pmuk0wjffffx') rent = p;
+    if (p.id === 'pmup5dq4iunh') calc = p;
+  });
+  ok(!!rent && rent.repeat === 'monthly', 'v73.59: seed precondition — Rent is the monthly plan');
+  ok(!!calc && !calc.repeat, 'v73.59: seed precondition — Calculator is the one-off');
+  // (1) the sections render, and recurring sorts by NEXT occurrence, not anchor
+  F.renderPlans();
+  var listHtml = String(byIdStub('plans').innerHTML || '');
+  ok(listHtml.indexOf('Recurring') >= 0 && listHtml.indexOf('One-offs') >= 0,
+    'v73.59: the list splits into Recurring and One-offs sections');
+  var iGym = listHtml.indexOf('data-grp="pmuimaif9irt"');   // next due 2026-11-04
+  var iCalc = listHtml.indexOf('data-editd="2026-10-09"');  // one-off date
+  ok(iGym >= 0 && iCalc >= 0 && iGym < iCalc,
+    'v73.59: the one-off (Oct 9) sorts AFTER the recurring section (Gym, next Nov 4) — sections, not one flat list');
+  var iRent = listHtml.indexOf('data-grp="pmuk0wjffffx"');
+  var iGymFirst = listHtml.indexOf('data-grp="pmuimaif9irt"');
+  ok(iRent >= 0 && iGymFirst >= 0 && iGymFirst < iRent,
+    'v73.59: recurring sorts by NEXT occurrence — Gym (next 2026-11-04) before Rent (next 2026-11-15)');
+  // (2) the expanded series: the NEXT DUE row + the history chip strip
+  // (the harness can't click — setPlanOpen is the exported toggle)
+  F.setPlanOpen('pmuk0wjffffx', true);
+  F.renderPlans();
+  listHtml = String(byIdStub('plans').innerHTML || '');
+  ok(listHtml.indexOf('NEXT DUE') >= 0, 'v73.59: the expanded series renders the NEXT DUE emphasis row');
+  // a LINKED payment on Rent's past due (2026-09-15) makes it a green paid
+  // chip. The SEED skips that occurrence (Rent's overrides carry a
+  // 2026-09-15 skip), so clear it for this test and restore it after —
+  // a skipped past due renders as a strikethrough chip, not a paid one.
+  var baseTxns2 = F.state.txns.slice();
+  var rentOvBackup = JSON.stringify(rent.overrides);
+  delete rent.overrides['2026-09-15'];
+  F.state.txns = baseTxns2.concat([{ kind: 'cash_out', category: 'Housing', note: 'Rent', amount: 3000, date: '2026-09-15',
+    planRef: { planId: 'pmuk0wjffffx', date: '2026-09-15', name: 'Rent', amount: 3000 } }]);
+  F.renderPlans();
+  listHtml = String(byIdStub('plans').innerHTML || '');
+  // scope to Rent's HEAD row (the sub-line carries the "N paid" chip) —
+  // other series (Spaylater/AC, their past dues chip-linked in the seed)
+  // also carry "1 paid", so the whole-list match would be a fluke
+  var rentHead = listHtml.slice(listHtml.indexOf('data-grp="pmuk0wjffffx"'));
+  rentHead = rentHead.slice(0, rentHead.indexOf('<div class="plrow'));
+  ok(rentHead.indexOf('1 paid') >= 0, 'v73.59: Rent\'s collapsed sub-line counts its paid history ("1 paid")');
+  ok(listHtml.indexOf('hchip paid') >= 0 && listHtml.indexOf('Sep 15, 2026') >= 0,
+    'v73.59: the paid past occurrence stays in the list as a green chip (hchip paid + its fmtDate date)');
+  F.state.txns = baseTxns2; // restore
+  rent.overrides = JSON.parse(rentOvBackup);
+  // (3) a skipped FUTURE due stays visible as a strikethrough chip (the v73.54 unskip path)
+  F.setPlanOpen('pmuimaif9irt', true); // expand Gym so its chip strip renders
+  F.skipPlanChip('pmuimaif9irt|2026-11-04');
+  await sleep(40);
+  F.renderPlans();
+  listHtml = String(byIdStub('plans').innerHTML || '');
+  ok(listHtml.indexOf('hchip skip') >= 0 && listHtml.indexOf('data-unskip="pmuimaif9irt|2026-11-04"') >= 0,
+    'v73.59: a skipped due stays visible as a strikethrough chip carrying the unskip path');
+  ok(listHtml.indexOf('1 skipped') >= 0, 'v73.59: the header still counts its skips ("1 skipped")');
+  await F.unskipPlanOccurrence('pmuimaif9irt', '2026-11-04');
+  await sleep(40);
+  F.setPlanOpen('pmuimaif9irt', false);
+  // (4) a moved due RE-ORDERS the list (the old anchor sort never did)
+  var gymM = null;
+  F.state.plans.forEach(function (p) { if (p.id === 'pmuimaif9irt') gymM = p; });
+  gymM.overrides = gymM.overrides || {};
+  gymM.overrides['2026-11-04'] = { move: '2026-12-05' };
+  await F.idbPut('plans', gymM);
+  await sleep(20);
+  F.renderPlans();
+  listHtml = String(byIdStub('plans').innerHTML || '');
+  var iGymMoved = listHtml.indexOf('data-grp="pmuimaif9irt"');
+  var iAve = listHtml.indexOf('data-grp="pmv502ftnhy2"'); // Ave next 2026-11-18
+  ok(iGymMoved >= 0 && iAve >= 0 && iAve < iGymMoved,
+    'v73.59: moving Gym to 2026-12-05 re-orders it AFTER Ave (next 2026-11-18) — sort by next occurrence');
+  delete gymM.overrides['2026-11-04'];
+  await F.idbPut('plans', gymM);
+  await sleep(20);
+  // (5) one-offs are EDITABLE — the ✎ opens the sheet, save writes name/amount/date straight
+  F.renderPlans();
+  listHtml = String(byIdStub('plans').innerHTML || '');
+  ok(listHtml.indexOf('data-editp="pmup5dq4iunh" data-editd="2026-10-09"') >= 0,
+    'v73.59: the one-off row carries a ✎ targeting its own date');
+  F.openPlanEdit('pmup5dq4iunh', '2026-10-09');
+  ok(F.planEditCtx() && F.planEditCtx().dateISO === '2026-10-09',
+    'v73.59: openPlanEdit opens on a ONE-OFF (the !p.repeat guard is lifted)');
+  byIdStub('pe_name').value = 'Calculator (new)';
+  byIdStub('pe_amount').value = '2500';
+  byIdStub('pe_date').value = '2026-10-20';
+  F.savePlanOccurrence();
+  await sleep(40);
+  ok(calc.name === 'Calculator (new)' && calc.amount === 2500 && calc.date === '2026-10-20',
+    'v73.59: saving a one-off edit writes name/amount/date straight onto the record (got ' + calc.name + ' / ' + calc.amount + ' / ' + calc.date + ')');
+  // restore the pristine one-off + collapse the series (leave the default state)
+  calc.name = 'Calculator'; calc.amount = 2000; calc.date = '2026-10-09';
+  await F.idbPut('plans', calc);
+  F.setPlanOpen('pmuk0wjffffx', false);
+  await sleep(20);
+
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
   process.exit(fails === 0 ? 0 : 1);

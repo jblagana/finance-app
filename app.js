@@ -5167,6 +5167,7 @@
   // keep their ✕ (it's a single date — nothing to nuke by accident).
   var OCC_CAP = 5;
   var planOpen = {}; // planId -> true while the series is expanded
+var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N older" second level is open (in-memory, like cbPlansMore)
   var coachGroupOpen = {}; // v73.23: coach-card group fold state (group key -> bool); v73.25: default closed (coachGroupOpen[g] === true means open)
   var planSig = '';  // the plan set the open-state was captured for
   // v73.18: the occurrence's PAID pill (the same proof the edit sheet shows —
@@ -5195,9 +5196,14 @@
       var subTxt = when === fmtDate(p.date) ? when : when + ' · ' + fmtDate(p.date);
       // v73.18: a one-off's ONE occurrence is the row itself — its paid
       // state rides the name line (the same proof as the sub-rows).
+      // v73.59: a one-off is EDITABLE — its one occurrence IS the row, so
+      // the ✎ targets p.date (openPlanEdit's !p.repeat guard is lifted for
+      // one-offs: the scope select hides, the date field is the move, the
+      // paid-proof block works the same).
       return '<div class="plrow oneoff"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') + planPaidPill(p.id, String(p.date), p.name, p.amount) + '</div>' +
         '<div class="pl-sub">' + esc(subTxt) + '</div></div>' +
         '<div class="pl-r"><div class="pl-amt">₱ ' + amt(p.amount) + '</div></div>' +
+        '<button class="mini" data-editp="' + p.id + '" data-editd="' + String(p.date) + '" title="Edit this one-off">✎</button>' +
         '<button class="mini" data-delp="' + p.id + '" title="Delete plan">✕</button></div>';
     }
     var occ = planOccurrences(p);
@@ -5210,14 +5216,32 @@
       if (ro && ro.edited) anyEdited = true;
       shown.push({ d: od, ro: ro });
     });
+    // v73.59: the HISTORY strip — past occurrences stay in the list as
+    // compact chips (paid = green tick, skipped = strikethrough, past-due
+    // = red) instead of full rows. planAllDates is the whole series (the
+    // coach's overdue walk already leans on it); today splits history
+    // from the future window.
+    var today = todayISO();
+    var past = [];
+    planAllDates(p).forEach(function (d) {
+      if (d >= today) return;
+      var ro = resolveOccurrence(p, d);
+      var paid = ro && !ro.skip ? findPaidTxn({}, { planId: p.id, date: d, name: ro.name, amount: ro.amount }) : null;
+      past.push({ d: d, skip: !!(ro && ro.skip), paid: !!paid, amount: ro ? ro.amount : p.amount });
+    });
+    past.sort(function (a, b) { return a.d < b.d ? 1 : -1; }); // newest first
+    var paidCount = past.filter(function (x) { return x.paid; }).length;
     // v73.54: the skip count is a clickable chip in the header — tapping it
     // opens the series (the data-grp row handler) so the record rows show.
     var skipCountHtml = '';
     if (skipped.length) {
       skipCountHtml = ' · <span data-grp="' + p.id + '" title="Tap to open the series and see the skipped occurrences" style="color:#8fb0ff;cursor:pointer">' + skipped.length + ' skipped</span>';
     }
+    // v73.59: the collapsed sub-line answers the question directly —
+    // cadence · next due · the payment record ("N paid" chip).
     var headSub = 'Every ' + per + ' · next ' + (shown.length ? fmtDate(shown[0].d) : '—');
     if (p.count) headSub += ' · ' + p.count + '×';
+    if (paidCount) headSub += ' · <span class="pill" style="font-size:10px;background:rgba(55,211,155,.12);color:var(--ok);cursor:pointer" data-grp="' + p.id + '" title="Tap to open the series and see the paid history">' + paidCount + ' paid</span>';
     if (skipped.length) headSub += skipCountHtml;
     var head = '<div class="plrow grp' + (opts.open ? ' open' : '') + '" data-grp="' + p.id + '">' +
       '<div class="chev">▸</div><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') +
@@ -5233,46 +5257,83 @@
       // coach card's skip-and-delete flow.
       '<button class="mini" data-delp="' + p.id + '" title="Delete plan">✕</button>' + '</div>';
     if (!opts.open) return head;
-    var sub = '<div class="occwrap">';
-    shown.slice(0, OCC_CAP).forEach(function (o) {
-      var nm = o.ro.name, a = o.ro.amount;
-      // v73.18: the occurrence's paid pill rides the name line (the same
-      // proof the edit sheet shows — linked = bold, fuzzy = muted).
-      sub += '<div class="occ"><span class="oc-d">' + fmtDate(o.d) + '</span>' +
-        '<span class="oc-n">' + (nm !== p.name ? esc(nm) : '') + (o.ro.edited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') + planPaidPill(p.id, o.d, nm, a) + '</span>' +
-        (a !== p.amount ? '<span class="oc-a">₱ ' + amt(a) + '</span>' : '') +
-        '<button class="mini oc-x" data-editp="' + p.id + '" data-editd="' + o.d + '" title="Edit this occurrence">✎</button></div>';
-    });
-    if (shown.length > OCC_CAP) sub += '<div class="occ"><span class="oc-d">+' + (shown.length - OCC_CAP) + ' more…</span></div>';
-    // v73.54: the skipped occurrences render as RECORD rows — a tappable
-    // "skipped" label (the unskip path) instead of vanishing. The label is
-    // the affordance; the ↺ button is the visible one.
-    skipped.forEach(function (o) {
-      var when = o.ro.skippedAt ? ' · ' + new Date(o.ro.skippedAt).toLocaleDateString() : '';
-      sub += '<div class="occ occ-skipped"><span class="oc-d">' + fmtDate(o.d) + '</span>' +
-        '<span class="oc-n"><span class="pill occ-skip" data-unskip="' + p.id + '|' + o.d + '" style="font-size:10px;background:rgba(120,160,255,.15);color:#8fb0ff;cursor:pointer" title="Tap to unskip — the due returns to the coach card">' +
-        'skipped' + when + '</span></span>' +
-        '<button class="mini oc-x" data-unskip="' + p.id + '|' + o.d + '" title="Unskip this occurrence">↺</button></div>';
-    });
-    if (!shown.length && !skipped.length) sub += '<div class="occ"><span class="oc-d">nothing left</span></div>';
-    sub += '</div>';
+    // v73.59: the expanded state is the mockup's shape — the NEXT due gets
+    // one emphasized row (the ✎ target, the skip/move chooser lives on the
+    // coach card), and everything before today compresses into the history
+    // CHIP STRIP. Paid and skipped occurrences stay visible — never
+    // deleted — at 1/5 the vertical space of the old full rows.
+    var sub = '';
+    if (shown.length) {
+      var nx = shown[0];
+      sub += '<div class="plrow next" data-editp="' + p.id + '" data-editd="' + nx.d + '" title="Tap to edit this occurrence">' +
+        '<span class="oc-d">' + fmtDate(nx.d) + '<span class="nxt-tag">NEXT DUE</span></span>' +
+        '<span class="oc-n">' + (nx.ro.name !== p.name ? esc(nx.ro.name) : '') + (nx.ro.edited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') + planPaidPill(p.id, nx.d, nx.ro.name, nx.ro.amount) + '</span>' +
+        '<span class="oc-a">₱ ' + amt(nx.ro.amount) + '</span>' +
+        '<button class="mini oc-x" data-editp="' + p.id + '" data-editd="' + nx.d + '" title="Edit this occurrence">✎</button></div>';
+    }
+    // the history strip: every occurrence that is NOT the next due —
+    // past (paid = green ✓, past-due = red) and SKIPPED future occurrences
+    // (strikethrough, tappable = the v73.54 unskip path — a skipped due
+    // stays a visible record, never vanishes). Newest first, capped at
+    // HIST_CAP with a "+N older" reveal.
+    var records = past.concat(skipped.map(function (o) {
+      return { d: o.d, skip: true, paid: false, amount: o.ro.amount };
+    }));
+    records.sort(function (a, b) { return a.d < b.d ? 1 : -1; });
+    // v73.59: "+N older" reveal — the strip's second level (in-memory,
+    // like the peek's cbPlansMore).
+    var HIST_CAP = histMoreOpen[p.id] ? records.length : 6;
+    if (records.length) {
+      sub += '<div class="hist-chips">';
+      records.slice(0, HIST_CAP).forEach(function (x) {
+        var cls = x.skip ? 'skip' : (x.paid ? 'paid' : 'late');
+        var mark = x.skip ? '' : (x.paid ? ' ✓' : '');
+        var tap = x.skip ? ' data-unskip="' + p.id + '|' + x.d + '" title="Tap to unskip — the due returns to the coach card"' : ' title="' + (x.paid ? 'Paid' : 'Past due, unpaid') + ' · ' + fmtDate(x.d) + '"';
+        sub += '<span class="hchip ' + cls + '"' + tap + '>' + fmtDate(x.d) + mark + ' <span class="h-amt">' + amt(x.amount) + '</span></span>';
+      });
+      if (records.length > HIST_CAP) sub += '<button class="hist-more" data-histmore="' + p.id + '">+' + (records.length - HIST_CAP) + ' older</button>';
+      sub += '</div>';
+    }
+    if (!shown.length && !records.length) sub += '<div class="occwrap"><div class="occ"><span class="oc-d">nothing left</span></div></div>';
     return head + sub;
+  }
+  // v73.59: the sort key — a recurring series sorts by its NEXT occurrence
+  // (the resolved, post-move date — a moved due re-orders the list), a
+  // one-off by its own date. The old anchor-date sort drifted out of sync
+  // with reality (a moved due never moved its row).
+  function planSortKey(p) {
+    if (p.repeat) {
+      var occ = planOccurrences(p);
+      return occ.length ? occ[0] : String(p.date);
+    }
+    return String(p.date);
   }
   function renderPlans() {
     var el = byId('plans'); if (!el) return;
-    var plans = state.plans.slice().sort(function (a, b) {
-      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-      return (a.created || '') < (b.created || '') ? -1 : 1;
-    });
-    if (!plans.length) {
+    var all = state.plans.slice();
+    if (!all.length) {
       el.innerHTML = '<p class="note" style="margin:2px 0">No plans yet — add one below to see what\'s coming and whether you can afford it.</p>';
       return;
     }
+    // v73.59: the list splits into Recurring / One-offs — the recurring
+    // series are the many-row offenders (they get the compact next-due +
+    // history-chip treatment), one-offs stay plain rows. Pure renderer
+    // change over the same data, no new state.
+    var byKey = function (a, b) {
+      var ka = planSortKey(a), kb = planSortKey(b);
+      if (ka !== kb) return ka < kb ? -1 : 1;
+      return (a.created || '') < (b.created || '') ? -1 : 1;
+    };
+    var recs = all.filter(function (p) { return p.repeat; }).sort(byKey);
+    var oneoffs = all.filter(function (p) { return !p.repeat; }).sort(byKey);
     // expand/collapse state survives re-renders until the plan SET changes
-    var sig = plans.map(function (p) { return p.id; }).join('|');
+    var sig = all.map(function (p) { return p.id; }).join('|');
     if (sig !== planSig) { planOpen = {}; planSig = sig; }
     var html = '';
-    plans.forEach(function (p) { html += planHTML(p, { open: !!planOpen[p.id] }); });
+    if (recs.length) html += '<div class="plsec">Recurring</div>';
+    recs.forEach(function (p) { html += planHTML(p, { open: !!planOpen[p.id] }); });
+    if (oneoffs.length) html += '<div class="plsec">One-offs</div>';
+    oneoffs.forEach(function (p) { html += planHTML(p, { open: !!planOpen[p.id] }); });
     el.innerHTML = html;
     var grps = el.querySelectorAll('[data-grp]');
     for (var g = 0; g < grps.length; g++) grps[g].onclick = function (e) {
@@ -5301,6 +5362,14 @@
       if (e && e.stopPropagation) e.stopPropagation(); // don't toggle the series
       var parts = this.getAttribute('data-unskip').split('|');
       unskipPlanOccurrence(parts[0], parts[1]);
+    };
+    // v73.59: the history strip's "+N older" reveal — the second level of
+    // the same strip (in-memory, like the peek's cbPlansMore).
+    var hms = el.querySelectorAll('[data-histmore]');
+    for (var m = 0; m < hms.length; m++) hms[m].onclick = function (e) {
+      if (e && e.stopPropagation) e.stopPropagation();
+      histMoreOpen[this.getAttribute('data-histmore')] = !histMoreOpen[this.getAttribute('data-histmore')];
+      renderPlans();
     };
   }
   function addPlan(data) {
@@ -5335,7 +5404,23 @@
   function openPlanEdit(planId, dateISO) {
     var p = null;
     for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === planId) p = state.plans[i];
-    if (!p || !p.repeat) return;
+    // v73.59: one-offs are editable too — their one occurrence IS the row,
+    // so the same sheet works: name/amount direct, the date field is the
+    // move (no scope select — there is nothing to fork).
+    if (!p) return;
+    var scopeSel = byId('pe_scope');
+    if (scopeSel) {
+      scopeSel.style.display = p.repeat ? '' : 'none';
+      // the "Apply to" label is the previous ELEMENT sibling (the stub's
+      // querySelectorAll is forgiving, so previousElementSibling is real
+      // in the browser and the no-op guard holds in the harness)
+      var scopeLbl = scopeSel.previousElementSibling;
+      if (scopeLbl && scopeLbl.tagName === 'LABEL') scopeLbl.style.display = p.repeat ? '' : 'none';
+    }
+    // v73.59: a one-off has no occurrence to skip — its exit is the ✕
+    // (delete) or the sheet's "Delete whole plan"; the skip button hides.
+    var peSkipBtn = byId('peSkip');
+    if (peSkipBtn) peSkipBtn.style.display = p.repeat ? '' : 'none';
     planEditCtx = { plan: p, dateISO: dateISO };
     var ro = resolveOccurrence(p, dateISO);
     var n = byId('pe_name'), a = byId('pe_amount'), dt = byId('pe_date'), sc = byId('pe_scope'), h = byId('peHint');
@@ -5401,6 +5486,21 @@
     if (!name) { alert('Give the plan a name.'); return; }
     if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
     var scope = byId('pe_scope').value;
+    // v73.59: a one-off has no series to fork — name/amount/date write
+    // STRAIGHT onto the record (the date field is the move; there is no
+    // scope). The override machinery is recurring-only.
+    if (!p.repeat) {
+      var newDate1 = byId('pe_date').value || dateISO;
+      p.name = name;
+      p.amount = amount;
+      p.date = newDate1;
+      closeSheets();
+      planEditCtx = null;
+      return idbPut(STORE_PLANS, p).then(function () {
+        emit('plan');
+        snack('Updated ' + esc(name) + ' · ' + fmtDate(newDate1));
+      });
+    }
     var ov = p.overrides || {};
     // v73.41: the override is keyed by GRID date — map the (possibly
     // already-moved) occurrence back to the grid date it came from.
@@ -7178,12 +7278,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.58, live: new Date(2026, 9, 21, 19, 21) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.59, live: new Date(2026, 9, 21, 21, 14) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.59': [
+      'The plans list got a declutter: it now splits into Recurring and One-offs, and each recurring series sorts by its NEXT due (a moved due re-orders the list). Tap a series to see its next due as one emphasized row, and every PAID, SKIPPED, or PAST occurrence stays there as a compact chip — green tick for paid, strikethrough for skipped (tap it to unskip), red for past-due. One-offs are now editable too: the ✎ opens the same sheet, the date field is the move.'
+    ],
     '73.58': [
       'The SKIP chip on a plan due now asks what you want: skip this occurrence (as before), or move it to a later date — pick the date and the due reappears on that day everywhere (the coach card, the free-cash deduction, the graph). Both are undoable from the toast.'
     ],
@@ -8181,6 +8284,8 @@
   movePlanChip: movePlanChip, // v73.58: the move itself (v73.41 move-override + collision guard; smoke drives it)
   unskipPlanOccurrence: unskipPlanOccurrence, // v73.54: the unskip path (the plans-list record row; smoke drives it without a DOM)
   renderPlans: renderPlans, // v73.54: the plans-list renderer (the smoke asserts the record row's HTML)
+    planSortKey: planSortKey, // v73.59: the sort key (recurring = next occurrence, one-off = its date)
+    setPlanOpen: function (id, open) { planOpen[id] = open ? true : undefined; }, // v73.59: the smoke expands a series (the harness can't click)
     unlinkPlanTxn: unlinkPlanTxn, // v73.17: break an explicit link (the txn keeps its money)
     setPlanLinkRef: function (r) { state.planLinkRef = r; }, // v73.17: the chip's link state (smoke drives it)
     getPlanLinkRef: function () { return state.planLinkRef; },

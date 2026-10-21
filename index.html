@@ -128,6 +128,21 @@ button.plchip.linked{border:1px solid var(--ok);background:rgba(55,211,155,.12);
 .occ .oc-a{flex:0 0 auto;font-weight:700;font-variant-numeric:tabular-nums}
 .occ .oc-x{flex:0 0 auto}
 .occ .oc-n{flex:1;min-width:0;color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* v73.59: the plans-list redesign — the Recurring / One-offs section
+   headers, the NEXT DUE emphasis row, and the history chip strip (paid
+   = green tick, skipped = grey strikethrough, past-due = red). The paid
+   and skipped occurrences STAY visible as chips — never deleted. */
+.plsec{font-size:10.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--mut);padding:12px 0 4px}
+.plrow.next{background:rgba(55,211,155,.05);border:1px solid rgba(55,211,155,.22);border-radius:10px;margin:6px 0;padding:9px 10px}
+.plrow.next .oc-d{color:var(--acc);font-weight:700}
+.nxt-tag{font-size:9.5px;font-weight:800;letter-spacing:.5px;color:var(--acc);margin-left:6px}
+.hist-chips{display:flex;gap:5px;flex-wrap:wrap;padding:4px 0 8px 30px}
+.hchip{font-size:10.5px;font-variant-numeric:tabular-nums;color:var(--mut);background:rgba(147,161,189,.08);border:1px solid var(--line);border-radius:7px;padding:2px 7px;display:inline-flex;align-items:center;gap:4px}
+.hchip.paid{color:var(--ok);background:rgba(55,211,155,.08);border-color:rgba(55,211,155,.25)}
+.hchip.skip{color:var(--mut);text-decoration:line-through}
+.hchip.late{color:var(--bad);background:rgba(255,107,107,.08);border-color:rgba(255,107,107,.3)}
+.hchip .h-amt{opacity:.75;font-size:10px}
+.hist-more{font-size:10.5px;color:var(--mut);background:none;border:1px dashed var(--line);border-radius:7px;padding:2px 7px;cursor:pointer}
 .note{color:var(--mut);font-size:13px;margin:6px 0}
 .low{color:var(--bad)}
 code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:12px}

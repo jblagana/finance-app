@@ -863,8 +863,11 @@ def main():
           and "function unskipPlanOccurrence(planId, dateISO) {" in js
           and "if (!ov[dateISO] || !ov[dateISO].skip) return;" in js
           and "skipped.push({ d: od, ro: ro });" in js
-          and "data-unskip=\"' + p.id + '|' + o.d +" in js
-          and "'skipped' + when" in js
+          # v73.59: the record row became a strikethrough CHIP in the history
+          # strip — the unskip path rides data-unskip on the chip (the header
+          # ↺ button keeps the v73.54 shape)
+          and "x.skip ? ' data-unskip=\"' + p.id + '|' + x.d +" in js
+          and "data-unskip=\"' + p.id + '|' + skipped[0].d +" in js
           and "skipped.length + ' skipped</span>'" in js
           and "if (this.tagName === 'SPAN') {" in js.split("function renderPlans")[1].split("function addPlan")[0]
           and "unskipPlanOccurrence: unskipPlanOccurrence, // v73.54" in js
@@ -924,6 +927,25 @@ def main():
           and "openSkipChooser: openSkipChooser," in js
           and "movePlanChip: movePlanChip," in js
           and "'73.58': [" in js)
+    check("v73.59 (boss: 'redesign the plans in money tab, it becomes so cluttered' + 'i want the plans paid and past occurrences to still exist there' + 'make one offs also editable'): the plans list splits into Recurring / One-offs sections, each sorted by NEXT occurrence (a moved due re-orders the list - the old anchor-date sort never did); a recurring series' collapsed sub-line answers directly (cadence - next due - 'N paid' chip); the expanded state is the NEXT DUE emphasis row + a history CHIP STRIP where every past occurrence stays visible at 1/5 the space of the old full rows (paid = green tick, skipped = strikethrough carrying the v73.54 unskip path, past-due = red) with a '+N older' second level; one-offs are EDITABLE - the !p.repeat guard in openPlanEdit is lifted (scope select + skip button hide), and a one-off save writes name/amount/date straight onto the record (no override machinery - there is nothing to fork)",
+          # the sections + the sort key (recurring = next occurrence, one-off = its date)
+          "function planSortKey(p) {" in js
+          and 'class="plsec"' in js
+          and ">Recurring<" in js and ">One-offs<" in js
+          # the collapsed sub-line's paid count
+          and "paidCount + ' paid</span>'" in js
+          # the expanded shape: NEXT DUE row + the history chip strip
+          and 'NEXT DUE' in js
+          and "hchip " in js and "data-histmore=" in js
+          # the history strip's unskip path (the v73.54 record, now a chip)
+          and "x.skip ? ' data-unskip=\"' + p.id + '|' + x.d +" in js
+          # the CSS (the strip + the emphasis row)
+          and ".hist-chips{" in html and ".plrow.next{" in html and ".hchip.skip{" in html
+          # one-offs editable: the guard is lifted + the straight-write path
+          and "if (!p) return;" in js.split("function openPlanEdit")[1].split("planEditCtx = { plan: p")[0]
+          and "p.name = name;" in js.split("function savePlanOccurrence")[1].split("var ov = p.overrides")[0]
+          and "planSortKey: planSortKey," in js
+          and "'73.59': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]
