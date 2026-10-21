@@ -631,8 +631,10 @@ def main():
           # (2) the export references the in-scope function (no second inline copy)
           and "skipPlanChip: skipPlanChip," in js
           and "skipPlanChip: function (attr)" not in js
-          # (3) the wiring loop calls the bare identifier
-          and "skipPlanChip(b.getAttribute('data-skipplan'));" in js
+          # (3) the wiring loop (v73.58: the chip opens the skip/move
+          # chooser — the skip path INSIDE is skipPlanChip verbatim; the
+          # v73.58 pin asserts the chooser wiring)
+          and "openSkipChooser(parts[0], parts[1]);" in js
           # (4) the chip renders on the pay_plan row (next to the pay chip)
           and "data-skipplan=" in js
           and "class=\"rowchip skipchip\"" in js
@@ -902,6 +904,26 @@ def main():
           and "monthShort(row.month)" not in js
           and "salDelta" not in js
           and "'73.57': [" in js)
+    check("v73.58 (boss: 'clicking the skip allows me to skip it entirely or move it to a later date in the calendar'): the coach's SKIP chip opens a skip/move CHOOSER dialog instead of skipping on the spot - 'Skip this occurrence' is skipPlanChip verbatim (the v73.28 override + its own toast Undo), 'Move to a later date' reveals a date input (min = day after the due, default = next same-day-of-month) and movePlanChip writes the v73.41 move-override ({ move: newDate } at the GRID date - the same shape savePlanOccurrence writes for a 'this' scope move) with the same collision rule (v73.55: skipped dates occupy their slot too); the moved due reappears on its new date everywhere (lists dedupe, hero deduction, peek, v73.57 graph drop) and the toast carries an Undo that restores the exact prior override",
+          # the chooser dialog (index.html, same surface as #confirmDlg)
+          'id="skipChooserDlg"' in html
+          and 'id="scDate"' in html
+          and 'id="scMove"' in html
+          and "#skipChooserDlg.show{opacity:1;pointer-events:auto}" in html
+          # the handlers
+          and "function openSkipChooser(planId, dateISO) {" in js
+          and "function movePlanChip(planId, dateISO, newDate) {" in js
+          and "ov[gridDate] = { move: newDate };" in js
+          # the chip now opens the chooser (the skip path inside is verbatim)
+          and "openSkipChooser(parts[0], parts[1]);" in js
+          and "skipPlanChip(c.planId + '|' + c.dateISO);" in js
+          # the past-date guard + the collision rule
+          and "Pick a date after " in js
+          and "Another occurrence of this plan already falls on " in js
+          # the exports (the smoke drives the chooser without a DOM)
+          and "openSkipChooser: openSkipChooser," in js
+          and "movePlanChip: movePlanChip," in js
+          and "'73.58': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]

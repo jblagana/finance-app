@@ -3432,6 +3432,93 @@
       });
     });
   }
+  // v73.58 (boss: 'clicking the skip allows me to skip it entirely or move
+  // it to a later date'): the SKIP chip no longer skips on the spot — it
+  // opens a tiny chooser dialog with the two options. "Skip this
+  // occurrence" reuses skipPlanChip VERBATIM (the v73.28 override + its
+  // own toast Undo), so the skip path is byte-identical to before;
+  // "Move to a later date" reveals a date input (min = day after the due
+  // — a move to the past is a payment, not a move; default = next
+  // same-day-of-month) and movePlanChip writes the v73.41 move-override
+  // ({ move: newDate } at the GRID date — the same shape savePlanOccurrence
+  // writes for a "this" scope move), so the collision guard, the lists'
+  // dedupe, the hero deduction, the peek, and the v73.57 graph drop all
+  // pick the new date up for free. Undo restores the exact prior override.
+  var skipChooserCtx = null; // { planId, dateISO } — the open chooser's target
+  function openSkipChooser(planId, dateISO) {
+    var dlg = byId('skipChooserDlg');
+    if (!dlg) return;
+    var p = null;
+    for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === planId) p = state.plans[i];
+    if (!p || !dateISO) return;
+    skipChooserCtx = { planId: planId, dateISO: dateISO };
+    var msg = byId('scMsg');
+    if (msg) msg.textContent = (p.name || 'plan') + ' · ' + fmtDate(dateISO);
+    var inp = byId('scDate');
+    if (inp) {
+      var d = parseISO(dateISO);
+      var min = new Date(d); min.setDate(min.getDate() + 1);
+      var def = new Date(d);
+      for (var m = 1; m <= 3; m++) { def = new Date(def.getFullYear(), def.getMonth() + 1, def.getDate()); if (def > min) break; }
+      inp.min = localISO(min);
+      inp.value = localISO(def);
+    }
+    dlg.classList.add('show');
+  }
+  function closeSkipChooser() {
+    var dlg = byId('skipChooserDlg');
+    if (dlg) dlg.classList.remove('show');
+    skipChooserCtx = null;
+  }
+  function skipChooserSkip() {
+    var c = skipChooserCtx;
+    if (!c) return;
+    closeSkipChooser();
+    skipPlanChip(c.planId + '|' + c.dateISO); // the v73.28 path, unchanged
+  }
+  function movePlanChip(planId, dateISO, newDate) {
+    var p = null;
+    for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === planId) p = state.plans[i];
+    if (!p || !dateISO || !newDate) return;
+    if (newDate <= dateISO) { alert('Pick a date after ' + fmtDate(dateISO) + ' — a move to the past is a payment, not a move.'); return; }
+    // v73.41: the override is keyed by GRID date — map the (possibly
+    // already-moved) occurrence back to the grid date it came from.
+    var gridDate = dateISO;
+    planGridDates(p).forEach(function (g) { if (gridDate === dateISO && planDateAt(p, g) === dateISO) gridDate = g; });
+    // the same collision rule savePlanOccurrence enforces (v73.55:
+    // skipped dates OCCUPY their slot too) — another occurrence (after
+    // this move) landing on the picked date would lose a row in the lists.
+    var others = {};
+    planGridDates(p).forEach(function (g) {
+      if (g === gridDate) return;
+      others[planDateAt(p, g)] = true;
+    });
+    if (others[newDate]) {
+      alert('Another occurrence of this plan already falls on ' + fmtDate(newDate) + ' — pick a different date.');
+      return;
+    }
+    var ov = p.overrides || {};
+    var prev = ov[gridDate] || null; // the undo restores the exact prior entry
+    ov[gridDate] = { move: newDate };
+    p.overrides = ov;
+    return idbPut(STORE_PLANS, p).then(function () {
+      emit('plan');
+      snack('Moved ' + esc(p.name || 'plan') + ' · ' + fmtDate(dateISO) + ' → ' + fmtDate(newDate), function () {
+        if (prev) ov[gridDate] = prev; else delete ov[gridDate];
+        p.overrides = ov;
+        idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
+      });
+    });
+  }
+  function skipChooserMove() {
+    var c = skipChooserCtx;
+    if (!c) return;
+    var inp = byId('scDate');
+    var newDate = inp ? (inp.value || '') : '';
+    closeSkipChooser();
+    if (!newDate) return;
+    movePlanChip(c.planId, c.dateISO, newDate);
+  }
   // v73.54 (boss: 'a label in the plans list whenever i skip a due, so i can
   // unskip it later'): the unskip path — tapping the "unskip" label on a
   // skipped occurrence in the plans list removes the exact-date skip-override
@@ -3753,16 +3840,34 @@
           };
         })(ppb[k]);
       }
-      // v73.28: the Skip chip — the handler body is skipPlanChip (exported
-      // — the smoke drives the same code path without a DOM, same pattern
-      // as payPlanChip).
+      // v73.28: the Skip chip — v73.58: it opens the skip/move chooser
+      // (openSkipChooser); the skip path inside is skipPlanChip verbatim
+      // (both exported — the smoke drives the same code paths without a
+      // DOM, same pattern as payPlanChip).
       var spb = body.querySelectorAll('[data-skipplan]');
       for (var ks = 0; ks < spb.length; ks++) {
         spb[ks].onclick = (function (b) {
           return function () {
-            skipPlanChip(b.getAttribute('data-skipplan'));
+            var parts = b.getAttribute('data-skipplan').split('|');
+            openSkipChooser(parts[0], parts[1]);
           };
         })(spb[ks]);
+      }
+      // v73.58: the skip/move chooser dialog (skip = v73.28 path; move =
+      // the v73.41 move-override with the savePlanOccurrence collision rule)
+      var scDlg = byId('skipChooserDlg');
+      if (scDlg) {
+        var scCancel = byId('scCancel');
+        if (scCancel) scCancel.onclick = closeSkipChooser;
+        var scSkip = byId('scSkip');
+        if (scSkip) scSkip.onclick = skipChooserSkip;
+        var scMove = byId('scMove');
+        if (scMove) scMove.onclick = skipChooserMove;
+        // scrim tap closes (onclick, not addEventListener — renderCoach
+        // re-runs on every emit, so a listener here would accumulate)
+        scDlg.onclick = function (e) {
+          if (e && e.target === scDlg) closeSkipChooser();
+        };
       }
       // v73.20: the prepay + salary row chips (v73.19: they were the whole
       // row; now they are the pill on the right). Real <button>s — Enter/
@@ -7073,12 +7178,15 @@
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.57, live: new Date(2026, 9, 20, 13, 41) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.58, live: new Date(2026, 9, 21, 19, 21) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.58': [
+      'The SKIP chip on a plan due now asks what you want: skip this occurrence (as before), or move it to a later date — pick the date and the due reappears on that day everywhere (the coach card, the free-cash deduction, the graph). Both are undoable from the toast.'
+    ],
     '73.57': [
       'The hero graph is now a 2-month step chart of YOUR live numbers: it starts at your raw cash, drops exactly on each plan due date (this month included), drops each card\'s owed on its payment due day (the 15th until you set a real due), and rises on payday. It reacts to everything you log — a new card charge grows the drop, a payoff shrinks it, a chip-paid or skipped due removes its drop.'
     ],
@@ -8066,6 +8174,11 @@
     salaryRowChip: salaryRowChip, // v73.19: the salary row-chip's handler body (smoke drives it without a DOM)
     payPlanChip: payPlanChip, // v73.18: the chip's handler body (smoke drives it without a DOM); v73.22: the in-scope function (the bare call in the wiring loop needs it)
     skipPlanChip: skipPlanChip, // v73.28: the coach row's Skip chip (one-off skip-override; smoke drives it without a DOM)
+  openSkipChooser: openSkipChooser, // v73.58: the skip/move chooser (the chip now opens this; smoke drives it without a DOM)
+  closeSkipChooser: closeSkipChooser, // v73.58: the chooser's cancel/scrim path
+  skipChooserSkip: skipChooserSkip, // v73.58: the chooser's Skip button (skipPlanChip verbatim)
+  skipChooserMove: skipChooserMove, // v73.58: the chooser's Move button (reads scDate)
+  movePlanChip: movePlanChip, // v73.58: the move itself (v73.41 move-override + collision guard; smoke drives it)
   unskipPlanOccurrence: unskipPlanOccurrence, // v73.54: the unskip path (the plans-list record row; smoke drives it without a DOM)
   renderPlans: renderPlans, // v73.54: the plans-list renderer (the smoke asserts the record row's HTML)
     unlinkPlanTxn: unlinkPlanTxn, // v73.17: break an explicit link (the txn keeps its money)

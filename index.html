@@ -580,6 +580,12 @@ button.gear{width:44px;height:44px}
 .confirm-box .row button{flex:1 1 0;width:auto;min-height:42px}
 button.act.danger{background:var(--bad);border-color:var(--bad)}
 @media (prefers-reduced-motion:reduce){#confirmDlg,.confirm-box{transition:none}}
+/* v73.58: the skip/move chooser — same surface as #confirmDlg (shares
+   .confirm-box) */
+#skipChooserDlg{position:fixed;inset:0;z-index:45;display:flex;align-items:center;justify-content:center;
+  background:rgba(5,8,14,.66);padding:24px 18px;opacity:0;pointer-events:none;transition:opacity .16s ease}
+#skipChooserDlg.show{opacity:1;pointer-events:auto}
+#skipChooserDlg.show .confirm-box{transform:translateY(0)}
 .ai-model{flex:1;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 10px;font-weight:600;font-size:12.5px}
 .ai-model.on{border-color:var(--acc);color:#fff;background:var(--acc)}
 .lex-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
@@ -1169,6 +1175,22 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
     <div class="row">
       <button type="button" id="confirmNo" class="act ghost">Cancel</button>
       <button type="button" id="confirmYes" class="act danger">Delete</button>
+    </div>
+  </div>
+</div>
+<!-- v73.58: the skip/move chooser — the coach's Skip chip opens this (skip
+     entirely = the v73.28 path; move = a later date via the v73.41
+     move-override). Fixed overlay, same surface as #confirmDlg. -->
+<div id="skipChooserDlg" class="confirm" role="dialog" aria-modal="true" aria-labelledby="scMsg">
+  <div class="confirm-box">
+    <p id="scMsg" class="confirm-m"></p>
+    <div class="row">
+      <button type="button" id="scCancel" class="act ghost">Cancel</button>
+      <button type="button" id="scSkip" class="act danger">Skip</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input type="date" id="scDate" aria-label="Move to a later date" style="flex:1;font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:transparent;color:inherit">
+      <button type="button" id="scMove" class="act">Move</button>
     </div>
   </div>
 </div>

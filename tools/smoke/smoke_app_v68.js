@@ -734,6 +734,80 @@ waitReady().then(async function (F) {
   // earlier part left a txn in the ledger).
   ok(close(g4.pts[0].v, F.effectiveSnap().cash.total) && g4.pts.length === g0pts.length, 'v73.57: after cleanup the chart is back to baseline');
 
+  // ============ PART 14: v73.58 — the skip/move chooser ============
+  // (boss: 'clicking the skip allows me to skip it entirely or move it to a
+  // later date in the calendar'). The coach's SKIP chip opens a chooser:
+  // "Skip this occurrence" = skipPlanChip verbatim (the v73.28 override),
+  // "Move to a later date" = the v73.41 move-override with the
+  // savePlanOccurrence collision rule. Driven without a DOM via the
+  // exported chooser fns (scDate is a byId stub the harness pre-seeds).
+  console.log('\n== PART 14: v73.58 — the skip/move chooser ============');
+  var gym3 = null;
+  F.state.plans.forEach(function (p) { if (p.id === 'pmuimaif9irt') gym3 = p; });
+  ok(!!gym3 && gym3.repeat === 'monthly', 'v73.58: seed precondition — Gym is the monthly plan');
+  var occ3 = F.planOccurrences(gym3);
+  ok(occ3.length >= 2, 'v73.58: Gym has >= 2 future occurrences (got ' + occ3.length + ')');
+  var occA = occ3[0], occB = occ3[1];
+  // clean slate on the target
+  gym3.overrides = gym3.overrides || {};
+  delete gym3.overrides[occA];
+  await F.idbPut('plans', gym3);
+  await sleep(20);
+  // (1) the SKIP path inside the chooser is skipPlanChip verbatim
+  F.openSkipChooser(gym3.id, occA);
+  F.skipChooserSkip();
+  await sleep(40);
+  ok(gym3.overrides[occA] && gym3.overrides[occA].skip, 'v73.58: the chooser Skip button writes the v73.28 skip-override');
+  ok(typeof gym3.overrides[occA].skippedAt === 'number', 'v73.58: the chooser skip carries the skippedAt stamp');
+  delete gym3.overrides[occA];
+  await F.idbPut('plans', gym3);
+  await sleep(20);
+  // (2) the MOVE path: writes the v73.41 move-override at the grid date,
+  // the occurrence resolves to the new date, and the lists follow
+  F.openSkipChooser(gym3.id, occA);
+  byIdStub('scDate').value = '2026-12-05'; // a free date
+  F.skipChooserMove();
+  await sleep(40);
+  ok(gym3.overrides[occA] && gym3.overrides[occA].move === '2026-12-05',
+    'v73.58: the chooser Move writes the v73.41 move-override (move=2026-12-05)');
+  ok(F.planDateAt(gym3, occA) === '2026-12-05', 'v73.58: the occurrence resolves to the new date');
+  var occAfterMove = F.planOccurrences(gym3);
+  ok(occAfterMove.indexOf('2026-12-05') >= 0 && occAfterMove.indexOf(occA) < 0,
+    'v73.58: the moved due reappears on its new date and leaves the old one');
+  // cleanup the move
+  delete gym3.overrides[occA];
+  await F.idbPut('plans', gym3);
+  await sleep(20);
+  // (3) the collision rule: a move onto ANOTHER occurrence's date is rejected
+  F.openSkipChooser(gym3.id, occA);
+  byIdStub('scDate').value = occB;
+  global.__alerts.length = 0;
+  F.skipChooserMove();
+  await sleep(40);
+  ok(!gym3.overrides[occA] || !gym3.overrides[occA].move, 'v73.58: moving onto another occurrence date is rejected (no move written)');
+  ok(global.__alerts.some(function (m) { return m.indexOf('already falls on') >= 0; }),
+    'v73.58: the collision alert fired (the savePlanOccurrence rule)');
+  // (4) the past-date guard: a move to the due date (or earlier) is rejected
+  F.openSkipChooser(gym3.id, occA);
+  byIdStub('scDate').value = occA;
+  global.__alerts.length = 0;
+  F.skipChooserMove();
+  await sleep(40);
+  ok(!gym3.overrides[occA] || !gym3.overrides[occA].move, 'v73.58: a move to the due date itself is rejected (past guard)');
+  ok(global.__alerts.some(function (m) { return m.indexOf('Pick a date after') >= 0; }),
+    'v73.58: the past-date alert fired');
+  // (5) the date input is constrained: min = day after the due, default = next same-day-of-month
+  F.openSkipChooser(gym3.id, occA);
+  var scInp = byIdStub('scDate');
+  ok(scInp.min === '2026-11-05', 'v73.58: the date input min is the day after the due (got ' + scInp.min + ')');
+  ok(/^2026-\d{2}-04$/.test(scInp.value) && scInp.value > '2026-11-04',
+    'v73.58: the date input defaults to the next same-day-of-month (got ' + scInp.value + ')');
+  F.closeSkipChooser();
+  // cleanup: pristine plan
+  delete gym3.overrides[occA];
+  await F.idbPut('plans', gym3);
+  await sleep(20);
+
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
   process.exit(fails === 0 ? 0 : 1);
