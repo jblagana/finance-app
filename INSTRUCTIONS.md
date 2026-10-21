@@ -6,6 +6,21 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.58 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-21 - "for plan due rows, clicking the skip allows me to skip it entirely or move it to a later date in the calendar" (the skip/move chooser)
+Status: **done** - v73.58 shipped (SW cache `finances-pwa-v73.58`; ONE commit `6445318` pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (sw.js cache + app.js/index.html pins fetched post-push, all 7 PASS).
+Progress: 100% - tracked gates green (release.ps1 v73.58 full run: check_site repo + root mirror, test_chat_parser, node --check x4, smoke_v68, smoke_app_v68 119 assertions ALL PASS).
+
+### What changed
+- **The coach's SKIP chip opens a skip/move chooser** (new `#skipChooserDlg` in index.html, same surface as `#confirmDlg`) instead of skipping on the spot: (1) "Skip this occurrence" = `skipPlanChip` verbatim (the v73.28 override + its own toast Undo — the skip path is byte-identical to before), (2) "Move to a later date" reveals a date input (min = day after the due — a move to the past is a payment, not a move; default = next same-day-of-month) and `movePlanChip` writes the v73.41 move-override (`{ move: newDate }` at the GRID date — the same shape `savePlanOccurrence` writes for a "this" scope move) with the SAME collision rule (v73.55: skipped dates occupy their slot too). The moved due reappears on its new date everywhere for free (lists dedupe, hero deduction, peek, v73.57 graph drop) and the toast carries an Undo that restores the exact prior override.
+- New exports: `openSkipChooser`, `closeSkipChooser`, `skipChooserSkip`, `skipChooserMove`, `movePlanChip` (the smoke drives the chooser without a DOM).
+- check_site: v73.58 pin (dialog + handlers + guards + exports); the v73.28 (3) pin retargeted — the wiring loop now calls `openSkipChooser(parts[0], parts[1])` (the old instant-skip call is asserted gone by the v73.58 pin's "chooser wiring" line).
+
+### Notes
+- The chooser wiring lives INSIDE `renderCoach` (the same place as the chip wiring) — it re-runs on every emit, so the scrim close is an `onclick` assignment, NOT `addEventListener` (a listener would accumulate per render).
+- Gate catch: the v73.55 pin splits app.js on the literal `collision: another occurrence` comment to find the collision loop — `movePlanChip`'s first draft used different comment wording, so the split landed on the wrong occurrence and the pin failed. Fixed by keeping the exact comment phrasing in the new function (the gate enforces comment text, not just code — a quirk to remember when adding collision checks).
+- Smoke PART 14 (13 new asserts, 119 total): chooser Skip writes the v73.28 override + stamp; chooser Move writes the move-override and the occurrence resolves to the new date (lists follow); collision onto another occurrence date rejected (alert fired); move to the due date itself rejected (past guard, alert fired); date input min = day after the due, default = next same-day-of-month.
+
 # v73.57 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-20 - "ship it" (the parked hero-graph rebuild — 2-month step chart of the live numbers)
 Status: **done** - v73.57 shipped (SW cache `finances-pwa-v73.57`; ONE commit pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (fetched post-push).
