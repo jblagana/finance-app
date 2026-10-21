@@ -930,8 +930,11 @@ def main():
     check("v73.59 (boss: 'redesign the plans in money tab, it becomes so cluttered' + 'i want the plans paid and past occurrences to still exist there' + 'make one offs also editable'): the plans list splits into Recurring / One-offs sections, each sorted by NEXT occurrence (a moved due re-orders the list - the old anchor-date sort never did); a recurring series' collapsed sub-line answers directly (cadence - next due - 'N paid' chip); the expanded state is the NEXT DUE emphasis row + a history CHIP STRIP where every past occurrence stays visible at 1/5 the space of the old full rows (paid = green tick, skipped = strikethrough carrying the v73.54 unskip path, past-due = red) with a '+N older' second level; one-offs are EDITABLE - the !p.repeat guard in openPlanEdit is lifted (scope select + skip button hide), and a one-off save writes name/amount/date straight onto the record (no override machinery - there is nothing to fork)",
           # the sections + the sort key (recurring = next occurrence, one-off = its date)
           "function planSortKey(p) {" in js
-          and 'class="plsec"' in js
-          and ">Recurring<" in js and ">One-offs<" in js
+          # v73.60: the sections became the tab bar — the labels render from
+          # the tab data-pltab markup (the old >Recurring< / >One-offs<
+          # section-header strings moved into the tab bar)
+          and 'data-pltab="one"' in js and 'data-pltab="rec"' in js
+          and 'One-offs' in js and 'Recurring' in js
           # the collapsed sub-line's paid count
           and "paidCount + ' paid</span>'" in js
           # the expanded shape: NEXT DUE row + the history chip strip
@@ -946,6 +949,19 @@ def main():
           and "p.name = name;" in js.split("function savePlanOccurrence")[1].split("var ov = p.overrides")[0]
           and "planSortKey: planSortKey," in js
           and "'73.59': [" in js)
+    check("v73.60 (boss: 'lets separate them thru a tab, left tab is oneoffs, right is recurring' + 'Ship it as v73.60 (one-offs default default)'): the v73.59 stacked sections become a TAB BAR - One-offs LEFT, Recurring RIGHT, counts ride the tabs, ONE-OFFS is the default tab (planTab='one'); pure layout over the v73.59 renderer - both lists always exist, nothing hidden or filtered, the tab is in-memory view state",
+          # the tab bar markup + the default tab
+          "var planTab = 'one'" in js
+          and 'data-pltab="one"' in js and 'data-pltab="rec"' in js
+          and "planTab === 'one' ? ' on' : ''" in js
+          # the tab click handler + the pane switch
+          and "planTab = this.getAttribute('data-pltab');" in js
+          and "planTab === 'one'" in js.split("function renderPlans")[1].split("function addPlan")[0]
+          # the CSS
+          and ".pltabs{" in html and ".pltab.on{" in html and ".plcnt{" in html
+          # the export (the smoke drives the tab without a DOM)
+          and "setPlanTab: function (t) { planTab = (t === 'rec') ? 'rec' : 'one'; }," in js
+          and "'73.60': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]

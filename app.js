@@ -5167,6 +5167,7 @@
   // keep their ✕ (it's a single date — nothing to nuke by accident).
   var OCC_CAP = 5;
   var planOpen = {}; // planId -> true while the series is expanded
+var planTab = 'one'; // v73.60: the plans list's tab — 'one' (one-offs, DEFAULT) | 'rec' (recurring)
 var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N older" second level is open (in-memory, like cbPlansMore)
   var coachGroupOpen = {}; // v73.23: coach-card group fold state (group key -> bool); v73.25: default closed (coachGroupOpen[g] === true means open)
   var planSig = '';  // the plan set the open-state was captured for
@@ -5315,10 +5316,12 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       el.innerHTML = '<p class="note" style="margin:2px 0">No plans yet — add one below to see what\'s coming and whether you can afford it.</p>';
       return;
     }
-    // v73.59: the list splits into Recurring / One-offs — the recurring
-    // series are the many-row offenders (they get the compact next-due +
-    // history-chip treatment), one-offs stay plain rows. Pure renderer
-    // change over the same data, no new state.
+    // v73.60 (boss: 'lets separate them thru a tab, left tab is oneoffs,
+    // right is recurring' + 'Ship it as v73.60 (one-offs default default)'):
+    // the v73.59 stacked sections become a TAB BAR — One-offs LEFT,
+    // Recurring RIGHT, counts ride the tabs, and ONE-OFFS is the default
+    // tab. Pure layout over the v73.59 renderer: both lists always exist,
+    // nothing is hidden or filtered, the tab is in-memory view state.
     var byKey = function (a, b) {
       var ka = planSortKey(a), kb = planSortKey(b);
       if (ka !== kb) return ka < kb ? -1 : 1;
@@ -5329,12 +5332,21 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     // expand/collapse state survives re-renders until the plan SET changes
     var sig = all.map(function (p) { return p.id; }).join('|');
     if (sig !== planSig) { planOpen = {}; planSig = sig; }
-    var html = '';
-    if (recs.length) html += '<div class="plsec">Recurring</div>';
-    recs.forEach(function (p) { html += planHTML(p, { open: !!planOpen[p.id] }); });
-    if (oneoffs.length) html += '<div class="plsec">One-offs</div>';
-    oneoffs.forEach(function (p) { html += planHTML(p, { open: !!planOpen[p.id] }); });
+    var html = '<div class="pltabs">' +
+      '<div class="pltab' + (planTab === 'one' ? ' on' : '') + '" data-pltab="one">One-offs<span class="plcnt">' + oneoffs.length + '</span></div>' +
+      '<div class="pltab' + (planTab === 'rec' ? ' on' : '') + '" data-pltab="rec">Recurring<span class="plcnt">' + recs.length + '</span></div>' +
+      '</div>';
+    if (planTab === 'one') {
+      oneoffs.forEach(function (p) { html += planHTML(p, { open: !!planOpen[p.id] }); });
+    } else {
+      recs.forEach(function (p) { html += planHTML(p, { open: !!planOpen[p.id] }); });
+    }
     el.innerHTML = html;
+    var tabs = el.querySelectorAll('[data-pltab]');
+    for (var t = 0; t < tabs.length; t++) tabs[t].onclick = function () {
+      planTab = this.getAttribute('data-pltab');
+      renderPlans();
+    };
     var grps = el.querySelectorAll('[data-grp]');
     for (var g = 0; g < grps.length; g++) grps[g].onclick = function (e) {
       var id = this.getAttribute('data-grp');
@@ -7278,12 +7290,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.59, live: new Date(2026, 9, 21, 21, 14) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.60, live: new Date(2026, 9, 22, 0, 14) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.60': [
+      'The plans list is now a tab bar: One-offs (left) and Recurring (right), with counts on the tabs. One-offs is the default tab. Nothing is hidden — every plan still lives in its tab, paid and past occurrences included.'
+    ],
     '73.59': [
       'The plans list got a declutter: it now splits into Recurring and One-offs, and each recurring series sorts by its NEXT due (a moved due re-orders the list). Tap a series to see its next due as one emphasized row, and every PAID, SKIPPED, or PAST occurrence stays there as a compact chip — green tick for paid, strikethrough for skipped (tap it to unskip), red for past-due. One-offs are now editable too: the ✎ opens the same sheet, the date field is the move.'
     ],
@@ -8286,6 +8301,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   renderPlans: renderPlans, // v73.54: the plans-list renderer (the smoke asserts the record row's HTML)
     planSortKey: planSortKey, // v73.59: the sort key (recurring = next occurrence, one-off = its date)
     setPlanOpen: function (id, open) { planOpen[id] = open ? true : undefined; }, // v73.59: the smoke expands a series (the harness can't click)
+    setPlanTab: function (t) { planTab = (t === 'rec') ? 'rec' : 'one'; }, // v73.60: the smoke switches the tab (the harness can't click)
     unlinkPlanTxn: unlinkPlanTxn, // v73.17: break an explicit link (the txn keeps its money)
     setPlanLinkRef: function (r) { state.planLinkRef = r; }, // v73.17: the chip's link state (smoke drives it)
     getPlanLinkRef: function () { return state.planLinkRef; },

@@ -458,7 +458,9 @@ waitReady().then(async function (F) {
     'v73.54: the skip carries a skippedAt stamp (by-when record)');
   var dedSkip = F.cyclePlanDeduction();
   ok(close(ded0 - dedSkip, gym.amount), 'v73.54: skipping the in-cycle due drops the deduction by exactly the due (' + (ded0 - dedSkip).toFixed(2) + ')');
-  // the record row renders in the plans list (label + ↺, both data-unskip)
+  // the record row renders in the plans list (label + ↺, both data-unskip).
+  // v73.60: recurring series live on the Recurring tab — switch to it.
+  F.setPlanTab('rec');
   F.renderPlans();
   var plansHtml = String(byIdStub('plans').innerHTML || '');
   ok(plansHtml.indexOf('data-unskip="pmuimaif9irt|' + nextGym + '"') >= 0,
@@ -494,6 +496,7 @@ waitReady().then(async function (F) {
     F.skipPlanChip('pmuimaif9irt|' + d); // skip EVERY due -> shown = []
   });
   await sleep(60);
+  F.setPlanTab('rec'); // v73.60: the series lives on the Recurring tab
   F.renderPlans();
   var plansHtml2 = String(byIdStub('plans').innerHTML || '');
   ok(plansHtml2.indexOf('data-editp="pmuimaif9irt"') >= 0 &&
@@ -824,15 +827,18 @@ waitReady().then(async function (F) {
   });
   ok(!!rent && rent.repeat === 'monthly', 'v73.59: seed precondition — Rent is the monthly plan');
   ok(!!calc && !calc.repeat, 'v73.59: seed precondition — Calculator is the one-off');
-  // (1) the sections render, and recurring sorts by NEXT occurrence, not anchor
+  // (1) the sections render, and recurring sorts by NEXT occurrence, not
+  // anchor. v73.60 note: the list is now a TAB bar (One-offs default) —
+  // the recurring assertions run on the Recurring tab.
+  F.setPlanTab('rec');
   F.renderPlans();
   var listHtml = String(byIdStub('plans').innerHTML || '');
-  ok(listHtml.indexOf('Recurring') >= 0 && listHtml.indexOf('One-offs') >= 0,
-    'v73.59: the list splits into Recurring and One-offs sections');
+  ok(listHtml.indexOf('One-offs') >= 0 && listHtml.indexOf('Recurring') >= 0,
+    'v73.59: the list splits into Recurring and One-offs (v73.60: as the tab bar)');
   var iGym = listHtml.indexOf('data-grp="pmuimaif9irt"');   // next due 2026-11-04
   var iCalc = listHtml.indexOf('data-editd="2026-10-09"');  // one-off date
-  ok(iGym >= 0 && iCalc >= 0 && iGym < iCalc,
-    'v73.59: the one-off (Oct 9) sorts AFTER the recurring section (Gym, next Nov 4) — sections, not one flat list');
+  ok(iGym >= 0 && iCalc < 0,
+    'v73.59: the Recurring pane holds the series; the one-off (Oct 9) is on its own tab — sections, not one flat list');
   var iRent = listHtml.indexOf('data-grp="pmuk0wjffffx"');
   var iGymFirst = listHtml.indexOf('data-grp="pmuimaif9irt"');
   ok(iRent >= 0 && iGymFirst >= 0 && iGymFirst < iRent,
@@ -883,6 +889,7 @@ waitReady().then(async function (F) {
   gymM.overrides['2026-11-04'] = { move: '2026-12-05' };
   await F.idbPut('plans', gymM);
   await sleep(20);
+  F.setPlanTab('rec'); // v73.60: the re-order assertion needs the Recurring pane
   F.renderPlans();
   listHtml = String(byIdStub('plans').innerHTML || '');
   var iGymMoved = listHtml.indexOf('data-grp="pmuimaif9irt"');
@@ -892,7 +899,10 @@ waitReady().then(async function (F) {
   delete gymM.overrides['2026-11-04'];
   await F.idbPut('plans', gymM);
   await sleep(20);
-  // (5) one-offs are EDITABLE — the ✎ opens the sheet, save writes name/amount/date straight
+  // (5) one-offs are EDITABLE — the ✎ opens the sheet, save writes name/amount/date straight.
+  // v73.60: the one-off lives on the One-offs tab — switch back to it first
+  // (this part opened on the Recurring tab for the sort assertions).
+  F.setPlanTab('one');
   F.renderPlans();
   listHtml = String(byIdStub('plans').innerHTML || '');
   ok(listHtml.indexOf('data-editp="pmup5dq4iunh" data-editd="2026-10-09"') >= 0,
@@ -911,6 +921,52 @@ waitReady().then(async function (F) {
   calc.name = 'Calculator'; calc.amount = 2000; calc.date = '2026-10-09';
   await F.idbPut('plans', calc);
   F.setPlanOpen('pmuk0wjffffx', false);
+  await sleep(20);
+
+  // ============ PART 16: v73.60 — the plans tab bar ============
+  // (boss: 'lets separate them thru a tab, left tab is oneoffs, right is
+  // recurring' + 'Ship it as v73.60 (one-offs default default)'). The
+  // v73.59 stacked sections become a tab bar — One-offs LEFT, Recurring
+  // RIGHT, counts ride the tabs, ONE-OFFS is the default. Pure layout:
+  // both lists always exist, the tab is in-memory view state.
+  console.log('\n== PART 16: v73.60 — the plans tab bar ============');
+  F.setPlanTab('one'); // the default — also proves the exported setter
+  F.renderPlans();
+  listHtml = String(byIdStub('plans').innerHTML || '');
+  ok(listHtml.indexOf('class="pltabs"') >= 0, 'v73.60: the plans list renders the tab bar');
+  ok(listHtml.indexOf('data-pltab="one"') >= 0 && listHtml.indexOf('data-pltab="rec"') >= 0,
+    'v73.60: both tabs render (One-offs + Recurring)');
+  var iTabOne = listHtml.indexOf('data-pltab="one"');
+  var iTabRec = listHtml.indexOf('data-pltab="rec"');
+  ok(iTabOne >= 0 && iTabRec >= 0 && iTabOne < iTabRec,
+    'v73.60: One-offs is the LEFT tab, Recurring the RIGHT (tab order)');
+  ok(listHtml.indexOf('class="pltab on"') >= 0 && listHtml.indexOf('class="pltab on"') < iTabRec,
+    'v73.60: the active (on) tab is One-offs by default');
+  // counts ride the tabs: seed = 1 one-off (Calculator), 8 recurring
+  var cntOne = listHtml.slice(iTabOne, listHtml.indexOf('</div>', iTabOne));
+  var cntRec = listHtml.slice(iTabRec, listHtml.indexOf('</div>', iTabRec));
+  ok(/plcnt">1</.test(cntOne), 'v73.60: the One-offs tab carries its count (1)');
+  ok(/plcnt">8</.test(cntRec), 'v73.60: the Recurring tab carries its count (8)');
+  // the DEFAULT pane shows the one-off, NOT a recurring series
+  ok(listHtml.indexOf('data-editp="pmup5dq4iunh"') >= 0,
+    'v73.60: the default (One-offs) pane shows the one-off row');
+  ok(listHtml.indexOf('data-grp="pmuk0wjffffx"') < 0,
+    'v73.60: the default pane does NOT show a recurring series (Rent) — that lives on the Recurring tab');
+  // switch to Recurring: the series appear, the one-off leaves the pane
+  F.setPlanTab('rec');
+  F.renderPlans();
+  listHtml = String(byIdStub('plans').innerHTML || '');
+  ok(listHtml.indexOf('data-grp="pmuk0wjffffx"') >= 0 && listHtml.indexOf('data-grp="pmuimaif9irt"') >= 0,
+    'v73.60: switching to Recurring shows the recurring series (Rent, Gym)');
+  ok(listHtml.indexOf('data-editp="pmup5dq4iunh"') < 0,
+    'v73.60: the one-off leaves the pane on the Recurring tab (view state only — nothing deleted)');
+  // the on class precedes its own data-pltab attr — the active tab's class
+  // must sit AFTER the one tab and BEFORE the rec tab's data attr
+  ok(listHtml.indexOf('data-pltab="one"') < listHtml.indexOf('pltab on') &&
+     listHtml.indexOf('pltab on') < listHtml.indexOf('data-pltab="rec"'),
+    'v73.60: after switching, the active (on) tab is Recurring');
+  // back to the default
+  F.setPlanTab('one');
   await sleep(20);
 
   console.log('');
