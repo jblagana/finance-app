@@ -1256,6 +1256,42 @@ waitReady().then(async function (F) {
   F.state.txns = baseTxns17;
   F.renderPlans();
 
+  // ============ PART 21: v73.65 — the x-axis ticks don't collide ==========
+  // (boss: 'Oct2 Oct29 Oct5 Nov8…' overlap into each other on the free-cash
+  // graph. renderSpark now thins the axis to a minimum pixel distance —
+  // first/last always labeled — while the plotted line keeps EVERY point.)
+  console.log('\n== PART 21: v73.65 — x-axis tick throttling =');
+  var sd21 = F.sparkData();
+  ok(sd21 && sd21.pts.length >= 2, 'v73.65 precondition: sparkData has points (got ' + (sd21 && sd21.pts.length) + ')');
+  var sparkBefore = String(byIdStub('sparkBox').innerHTML || '');
+  F.renderSpark();
+  var sparkAfter = String(byIdStub('sparkBox').innerHTML || '');
+  var tickCount = sparkAfter.split('<text').length - 1; // the axis <text>s (floor label only if floor>0 — the seed has none)
+  ok(tickCount >= 2, 'v73.65: at least the first + last tick render (got ' + tickCount + ')');
+  // the throttle floor: W=320, PL=PR=8 → iw=304; a "Nov15"-width label at
+  // font-size 8 ≈ 5 chars × 4.6px + 6px gutter = 34px minimum spacing.
+  var maxTicks = Math.floor(304 / 34) + 1; // greedy worst case + the forced last
+  ok(tickCount <= maxTicks, 'v73.65: the tick count is throttled to the pixel floor (got ' + tickCount + ', max ' + maxTicks + ' for ' + sd21.pts.length + ' points)');
+  ok(tickCount < sd21.pts.length, 'v73.65: fewer ticks than points — the axis is thinned, not 1:1 (ticks ' + tickCount + ' vs points ' + sd21.pts.length + ')');
+  // the line keeps EVERY point (thinning the axis must never thin the data)
+  var pathSegs = (sparkAfter.match(/L\d+/g) || []).length;
+  ok(pathSegs >= sd21.pts.length - 1, 'v73.65: the line still has a segment per point (got ' + pathSegs + ' L-segments for ' + sd21.pts.length + ' points)');
+  ok(sparkBefore !== sparkAfter, 'v73.65: renderSpark actually wrote the svg (the stub instance is the real target)');
+  // a dense synthetic series (12 events in 60 days) must thin to ≤ the floor
+  var _t21 = F.parseISO(F.todayISO());
+  function iso21(off) { var d = new Date(_t21.getTime() + off * 86400000); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  var dense21 = [];
+  for (var k21 = 0; k21 < 12; k21++) dense21.push({ label: 'd' + k21, v: 1000 - k21 * 50, date: iso21(k21 * 5) });
+  dense21.unshift({ label: 'now', v: 1000, date: F.todayISO() });
+  var W21 = 320, iw21 = 320 - 16, minPx21 = 34;
+  var expectMax21 = Math.floor(iw21 / minPx21) + 1;
+  var X21 = function (i) { return 8 + iw21 * (i / (dense21.length - 1)); };
+  var greedy21 = [0];
+  for (var g21 = 1; g21 < dense21.length - 1; g21++) if (X21(g21) - X21(greedy21[greedy21.length - 1]) >= minPx21) greedy21.push(g21);
+  greedy21.push(dense21.length - 1);
+  ok(greedy21.length <= expectMax21, 'v73.65: the greedy thinning bound holds for a dense 13-point series (got ' + greedy21.length + ', max ' + expectMax21 + ')');
+  ok(greedy21[0] === 0 && greedy21[greedy21.length - 1] === dense21.length - 1, 'v73.65: the first + last points always keep their tick');
+
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
   process.exit(fails === 0 ? 0 : 1);

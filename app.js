@@ -4722,11 +4722,23 @@
     var t0x = X(0).toFixed(1), t0y = Y(pts[0].v).toFixed(1);
     svg += '<circle class="spark-today" cx="' + t0x + '" cy="' + t0y + '" r="6.5" fill="rgba(55,211,155,.28)" stroke="none"/>';
     // v72.41 (user: 'write the x axis ticks as end of month, e.g. 30 Sep, 31 Oct, etc'):
-    // EVERY tick is a date — the month points sit on the last day of their month
-    // (the plotted value is that month-end projection), so the axis reads
-    // "6 Sep · 30 Sep · 31 Oct · 30 Nov · 31 Dec · 31 Jan · 28 Feb"; p.label
-    // (the compact month name) is only the no-date fallback now.
-    pts.forEach(function (p, i) {
+    // every tick is a DATE (p.label, the compact month name, is only the
+    // no-date fallback). v73.65 (boss: the labels collide — 'Oct2 Oct29
+    // Oct5 Nov8…' overlap into each other): NOT every point gets a tick —
+    // the axis is throttled to a minimum pixel distance (a "Nov15"-width
+    // label ≈ 5 chars × 4.6px at font-size 8, plus a 6px gutter). First and
+    // last points always label; middle ticks are greedy-skip'd when they'd
+    // land closer than the floor to the previous one (the NEXT candidate
+    // gets the slot — no double-skip). The plotted line is untouched: this
+    // only thins the axis, never the data.
+    var tickMinPx = Math.max(34, Math.round(4.6 * 5 + 6));
+    var tickIdx = [0];
+    for (var ti = 1; ti < pts.length - 1; ti++) {
+      if (X(ti) - X(tickIdx[tickIdx.length - 1]) >= tickMinPx) tickIdx.push(ti);
+    }
+    tickIdx.push(pts.length - 1);
+    tickIdx.forEach(function (i) {
+      var p = pts[i];
       var anch = i === 0 ? 'start' : (i === pts.length - 1 ? 'end' : 'middle');
       var lab = p.date ? dayMonth(p.date) : p.label;
       svg += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 4) + '" text-anchor="' + anch + '" font-size="8" fill="#93a1bd">' + esc(lab) + '</text>';
@@ -7444,12 +7456,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.64, live: new Date(2026, 9, 22, 23, 46) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.65, live: new Date(2026, 9, 23, 1, 17) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.65': [
+      'Fixed: the free-cash graph\u2019s date labels collided into each other (Oct2 Oct29 Oct5 Nov8…) — the x-axis now thins itself: only enough ticks to keep at least ~34px between labels, first and last always shown. The line and its drops are untouched; the axis just breathes.'
+    ],
     '73.64': [
       'Fixed: a skipped plan due could disappear with NO trace — the only way back was the undo toast (close the app and it was gone). A skip is now a relocation, not a deletion: the skipped occurrence stays in the series, so the plans list always shows its "skipped" chip (strikethrough, tap to unskip) and the header keeps its ↺ button. Your Rent — skipped, undone, gone, no unskip access — is the case this kills.',
       'Fixed: the "N skipped" count and the header ↺ only saw FUTURE skips — a PAST skip (like your Rent) left the count at 0 and the header with no button. Both now count every skip, past and future, and the ↺ targets the most recent one.'
@@ -8452,6 +8467,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     findPaidTxn: findPaidTxn, // v73.56: the paid detector (the smoke pins the link-only rule)
     planWindowTotal: planWindowTotal, // v73.56: the window walk (the smoke reads the expandable sub-rows' source)
     sparkData: sparkData, // v73.57: the 2-month step chart (the smoke drives the drop dates + live reactivity)
+    renderSpark: renderSpark, // v73.65: the axis-throttled render (the smoke counts the <text> ticks)
     planAllDates: planAllDates, // v73.57: the whole series (the smoke builds the expected drop dates)
     planLinkSuggestion: planLinkSuggestion, // v73.17: the fuzzy SUGGESTION (pure — the smoke drives it)
     planRefAlive: planRefAlive, // v73.17: does an explicit link still point at a live occurrence

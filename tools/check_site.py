@@ -1045,6 +1045,18 @@ def main():
           and "x.skip ? ' data-unskip=\"' + p.id + '|' + x.d + '\"" in js
           # the notes
           and "'73.64': [" in js)
+    check("v73.65 (boss: 'the free-cash chart's x-axis date labels overlap' — 'Oct2 Oct29 Oct5 Nov8…' collided into each other): the x-axis is THROTTLED, not 1:1 — every tick is still a date (the v72.41 rule survives), but middle ticks are greedy-skip'd when they'd land closer than ~34px (a 'Nov15'-width label at font-size 8 + gutter) to the previous one; first + last points always keep their tick; the plotted line keeps EVERY point (thinning the axis never thins the data)",
+          # (a) the throttle floor (label width + gutter)
+          "var tickMinPx = Math.max(34, Math.round(4.6 * 5 + 6));" in js
+          # (b) the greedy skip of middle ticks only (first/last forced)
+          and "if (X(ti) - X(tickIdx[tickIdx.length - 1]) >= tickMinPx) tickIdx.push(ti);" in js
+          and "tickIdx.push(pts.length - 1);" in js
+          # (c) the render iterates the THINNED set, not every point
+          and "tickIdx.forEach(function (i) {" in js
+          # (d) the v72.41 date-label rule survives on the thinned ticks
+          and "var lab = p.date ? dayMonth(p.date) : p.label;" in js
+          # the notes
+          and "'73.65': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]

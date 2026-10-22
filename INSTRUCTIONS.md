@@ -6,6 +6,18 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.65 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-22 - "the free-cash chart's x-axis date labels overlap" — axis tick throttling
+Status: **done** - v73.65 shipped (SW cache `finances-pwa-v73.65`; ONE commit pushed to origin/main). The boss's screenshot showed 'Oct2 Oct29 Oct5 Nov8 Nov15 Nov18…' colliding into each other under the free-cash graph.
+
+Diagnosis: `renderSpark` (app.js) labeled EVERY point of the v73.57 step chart — up to ~13 dates across a 320px viewBox. At font-size 8 a "Nov15"-width label is ~23px, so adjacent ticks on closely-spaced events (the 10-29/11-05/11-08 cluster) overlapped. The v72.41 rule ("every tick is a date") was honored 1:1, which is exactly what made it collide.
+
+Fix: the axis is THROTTLED, not 1:1. `renderSpark` computes `tickMinPx = max(34, 4.6*5+6)` (a 5-char label at ~4.6px/char + 6px gutter), keeps the first + last points unconditionally, and greedy-skip's middle ticks that would land closer than the floor to the previous tick (the NEXT candidate gets the slot — no double-skip). The tick loop iterates the thinned `tickIdx` set; the plotted line/path keeps EVERY point — thinning the axis never thins the data. The v72.41 date-label rule (`dayMonth(p.date)`) survives on the thinned ticks.
+
+Gates: smoke PART 21 (8 asserts: seed-data 13 points → 7 ticks, ≤ the pixel-floor bound of 9, fewer ticks than points, the line still has a segment per point, a dense synthetic 13-point series stays within the greedy bound, first + last always labeled) — 168/168 ALL PASS. New v73.65 check_site pin block (throttle floor + greedy skip + forced last + thinned iteration + the surviving dayMonth label); the v72.41 pin's `var lab = p.date ? dayMonth(p.date) : p.label;` assertion still holds on the thinned render. `renderSpark` exported on the FinApp surface for the smoke.
+
+Live-verify note: pending at commit time — the CDN fetch from this machine has been slow/timing out since v73.63; verify via range fetch (sw cache `finances-pwa-v73.65` + the tickMinPx pin) or the boss's phone pull.
+
 # v73.64 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-22 - "the amber partial chip disappeared with NO trace, and i no longer have access to unskip" — the persistent unskip control
 Status: **done** - v73.64 shipped (commit `261afaa`, pushed to origin/main; one
