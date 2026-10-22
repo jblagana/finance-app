@@ -6,6 +6,23 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.61 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-22 - "the recurring Rent stops showing as a plan due row once it is a day PAST its due date" + "should we only fast forward when i actually skipped (not moved) or have already fully paid the current due?" + "what if the move is on a date before the next occurence, why should the series fast forward if the count is still the same"
+Status: **done** - v73.61 shipped (SW cache `finances-pwa-v73.61`; ONE commit `8e52fee` pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (sw.js cache + app.js pins fetched post-push: SHELL_RELEASE v: 73.61, the state-aware pin, the v73.41 blind loop confirmed gone, notes key present).
+Progress: 100% - tracked gates green (release.ps1 v73.61 full run: check_site repo + root mirror, test_chat_parser, node --check x4, smoke_v68, smoke_app_v68 148 assertions ALL PASS).
+
+### The bug (diagnosed + reproduced before the build)
+- `planGridDates` (app.js:358, v73.41) fast-forwarded a COUNT-LESS series past EVERY date below today — so a past-due occurrence (with its overrides) dropped off the grid the day after its due. `planAllDates` reuses that grid, so the v73.27 overdue row never saw it, and the hero deduction, graph, and peek stopped counting it. The boss's recurring Rent (forked 13,394, 10-20) vanished on 10-21; the one-off Rent survived (one-offs bypass the grid).
+
+### What changed
+- **The blind fast-forward is GONE — the advance is STATE-AWARE, one occurrence at a time:** skipped -> advance (v73.28); fully planRef-paid -> advance (the chip is the truth, v73.56 — a PARTIAL payment does NOT advance); moved to the FUTURE -> advance BUT the moved date is pushed into the window (a move is a relocation, not a resolution — the grid slot must not orphan the override; boss: "why should the series fast forward if the count is still the same"); moved to the PAST or unpaid -> STAY (the v73.27 overdue row keeps it, overdue at the moved date).
+- **The inline override read is deliberate:** the advance loop reads the exact/applyFrom override entries directly, NOT `resolveOccurrence` — its grid-mapping fallback calls `planGridDates`, which recursed into the loop (the first draft did exactly that; the smoke's RangeError caught it before push).
+- Counted series are untouched (they never fast-forwarded); the 730 guard stays.
+
+### Verified
+- **Smoke PART 17** (7 new asserts, 148 total, ALL PASS): unpaid past-due stays (the Rent bug); skipped advances; fully paid advances; partially paid stays; moved-future advances + moved date in the window; moved-past stays at the moved date; the boss's real Rent shape (13,394 fork, 7,364 linked) stays reachable with its forked amount, remainder 6,030 still owed.
+- Two gate catches pre-push: (1) the smoke's `nextM` used +30 days instead of the monthly grid step (shiftMonth) — the assertions compared against the wrong date; (2) the check_site pin asserted the first draft's `resolveOccurrence`-based lines, which the recursion fix rewrote — retargeted to the inline-read lines (eS/bestS/eR/mv).
+
 # v73.60 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-22 - "lets separate them thru a tab, left tab is oneoffs, right is recurring" + "Ship it as v73.60 (one-offs default default)"
 Status: **done** - v73.60 shipped (SW cache `finances-pwa-v73.60`; ONE commit `ba50291` pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (sw.js cache + app.js pins fetched post-push: SHELL_RELEASE v: 73.60, notes key, data-pltab one/rec, `var planTab = 'one'`, and the old `class="plsec"` render confirmed gone — all present/absent as expected).
