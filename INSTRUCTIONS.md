@@ -6,6 +6,33 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.66 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-23 - "make coach fin and coachs note very funny and very roasty" — roasty coach + notes
+Status: **done** — commit `0621821` (SHELL_RELEASE 73.66, sw cache `finances-pwa-v73.66`) pushed to
+`https://github.com/jblagana/finance-app.git` (main).
+
+The boss wanted the coach card and its notes "very funny and very roasty." Every coach branch
+(negative free, prepay due, over-budget week, red-month pace, tight daily, on-track) now lands a
+roasty line; the "On repeat" line, the since-last-check memory, and the insights Today / Next-7-days
+/ This cycle / This month + recap one-liners match. The NUMBERS are untouched — every line still
+quotes the same computed values (money(), d.daily, d.pace, remainders); only the words around them
+changed.
+
+- renderCoach: all six branches roasty (e.g. "no room to breathe" -> "your free cash is negative.
+  Bold. Truly bold."; on-track -> "...spend it, you have earned the guilt."); "On repeat" +
+  coach-memory lines roast.
+- renderInsights: Today / Next-7-days / cycle / month one-liners roasty.
+- monthBlock recap line roasty.
+- renderCoach exported on the FinApp surface (smoke PART 22 drives the real render: roasty marker
+  present, old flat copy gone, number still quoted — 5 new asserts, 168 total).
+- check_site v73.66 pin (15 markers across the branches/insights/recap + the export + the notes).
+
+Gate slip caught + fixed pre-push: the v73.66 pin used a straight apostrophe for "can't" but the
+app string escapes it (`can\'t`), so the marker missed — pinned the escaped form.
+
+Live-verify: the CDN fetch from this machine keeps timing out (same as v73.63/64/65) — the gates
+are the verification; the phone pull is the final confirmation.
+
 # v73.65 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-22 - "the free-cash chart's x-axis date labels overlap" — axis tick throttling
 Status: **done** - v73.65 shipped (SW cache `finances-pwa-v73.65`; ONE commit pushed to origin/main). The boss's screenshot showed 'Oct2 Oct29 Oct5 Nov8 Nov15 Nov18…' colliding into each other under the free-cash graph.
