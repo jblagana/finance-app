@@ -6,6 +6,51 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.64 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-22 - "the amber partial chip disappeared with NO trace, and i no longer have access to unskip" — the persistent unskip control
+Status: **done** - v73.64 shipped (commit `261afaa`, pushed to origin/main; one
+commit per the v73.47 discipline). The boss's Rent (13,394 fork, 7,364 linked,
+6,030 remainder) was skipped, the skip-undo deleted the override, and the
+occurrence then had NO trace anywhere — the plans list had no "skipped" chip,
+the header count read 0, the header ↺ was absent, and the only unskip access
+was the toast (close the app, it's gone).
+
+Root causes (two, both in the plans-list/grid path):
+1. **The grid advanced past a skipped occurrence and never emitted it again** —
+   `planGridDates`'s state-aware loop (v73.61) did `if (eR && eR.skip) {
+   start = step(start,1); continue; }`: the skipped date left the window, so
+   `planAllDates` (the history strip's source) never saw it → no chip, no
+   unskip target. A skip is a RELOCATION, not a resolution (same semantics as
+   a moved-to-future due): the loop now pushes the skipped occurrence's
+   resolved date into the window before advancing.
+2. **The header only counted FUTURE skips** — `skipped.length` (the `skipped`
+   array is the forward window); the boss's Rent was a PAST skip → count 0,
+   no ↺. `skipTotal` now spans past + future, and the header ↺ falls back to
+   the most recent past skip (`pastSkips[0]`) when only past skips remain.
+   The ✎ render condition moved from `skipped.length` to `skipTotal` (same
+   reason). `unskipPlanOccurrence`'s was-restore is UNTOUCHED — it never
+   deletes a fork (the v73.63 guard stays).
+
+Gates: smoke PART 20 (10 asserts — the boss's exact shape: 13,394 fork +
+7,364 linked → skip carries `was`, the skipped date STAYS in the series, the
+deduction drops on skip and returns on unskip, the strip chip renders
+`data-unskip`, the header counts the past skip, the persistent unskip
+restores the FORK not the base) — 160/160 ALL PASS. The v73.54/55/61
+check_site pins were retargeted to the new shapes (skipTotal / firstSkip /
+the skip-retention block) rather than deleted. Three of my slips caught
+pre-push and logged here: (a) a missing `and` after my new pin line (Python
+SyntaxError — the gate caught it), (b) the v73.54/55/61 pins asserting the
+OLD header/grid shapes (retargeted), (c) PART 17's "skipped advances" assert
+expected the skipped date GONE from planAllDates — v73.64 intentionally
+keeps it, so the assert now expects it present (retargeted, not deleted).
+
+Live-verify note: the full app.js fetch from this machine timed out twice
+(the CDN link was slow — a 300KB range took 84s); verified via a 300KB range
+fetch instead: the grid skip-retention pin, the skipTotal pin, and the old
+blind skip line's absence are all confirmed in the live app.js (the
+firstSkip pin sits past the 300KB mark — code-verified in the pushed commit,
+not the fetch).
+
 # v73.63 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-22 - "i skipped the 6,030 partly-handled Rent, undid the skip, it did NOT return to the due rows" + "why didn't skipping the one-offs affect free cash" (the 10k one-off test)
 Status: **done** - v73.63 shipped (SW cache `finances-pwa-v73.63`; ONE commit pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (sw.js cache + app.js pins fetched post-push: SHELL_RELEASE v: 73.63, the `was`-carry pin, the planGridDateFor helper, the one-off resolve pin, the v73.63 notes key).
