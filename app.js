@@ -406,7 +406,23 @@
           if (!bestS || e.applyFrom > bestKs) { bestS = e; bestKs = e.applyFrom; }
         });
         var eR = eS || bestS;
-        if (eR && eR.skip) { start = step(start, 1); guard++; continue; }
+        // v73.64 (boss: 'the chip disappeared with no trace, and I no longer
+        // have access to unskip'): v73.63 keys skips at the RESOLVED date —
+        // for a past due that IS the grid date, so the check above still
+        // finds it. But the instant the grid advanced past it (a skip
+        // written when the occurrence was current, or a legacy grid-keyed
+        // skip), the grid-date read misses it and the occurrence dropped
+        // off the grid: the history strip (planAllDates) never emitted it,
+        // the plans list had no 'skipped' record chip, and the ONLY unskip
+        // access was the toast. A skip is a relocation, not a resolution
+        // (same semantics as a moved-to-future due below): keep the
+        // resolved date in the window so every consumer (strip chip +
+        // data-unskip, hero, graph) still sees it.
+        if (eR && eR.skip) {
+          var sRes = planDateAt(p, start);
+          if (out.indexOf(sRes) < 0) out.push(sRes);
+          start = step(start, 1); guard++; continue;
+        }
         var amv = Number((eR && eR.amount != null) ? eR.amount : p.amount) || 0;
         var nmv = (eR && eR.name != null) ? eR.name : p.name;
         var pp = findPaidTxn({ monthPrefix: today.slice(0, 7), today: today },
@@ -5353,25 +5369,37 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     var paidCount = past.filter(function (x) { return x.paid; }).length; // v73.62: full pays only — a partial is its own state
     // v73.54: the skip count is a clickable chip in the header — tapping it
     // opens the series (the data-grp row handler) so the record rows show.
+    // v73.64: the count spans ALL skips — future ones (the `skipped` array)
+    // AND past ones now retained in the grid window (the strip chips). The
+    // boss's Rent was a PAST due: counting only `skipped` would keep the
+    // header at 0 and leave the strip chip as the sole trace.
+    var skipTotal = skipped.length + past.filter(function (x) { return x.skip; }).length;
     var skipCountHtml = '';
-    if (skipped.length) {
-      skipCountHtml = ' · <span data-grp="' + p.id + '" title="Tap to open the series and see the skipped occurrences" style="color:#8fb0ff;cursor:pointer">' + skipped.length + ' skipped</span>';
+    if (skipTotal) {
+      skipCountHtml = ' · <span data-grp="' + p.id + '" title="Tap to open the series and see the skipped occurrences" style="color:#8fb0ff;cursor:pointer">' + skipTotal + ' skipped</span>';
     }
     // v73.59: the collapsed sub-line answers the question directly —
     // cadence · next due · the payment record ("N paid" chip).
     var headSub = 'Every ' + per + ' · next ' + (shown.length ? fmtDate(shown[0].d) : '—');
     if (p.count) headSub += ' · ' + p.count + '×';
     if (paidCount) headSub += ' · <span class="pill" style="font-size:10px;background:rgba(55,211,155,.12);color:var(--ok);cursor:pointer" data-grp="' + p.id + '" title="Tap to open the series and see the paid history">' + paidCount + ' paid</span>';
-    if (skipped.length) headSub += skipCountHtml;
+    if (skipTotal) headSub += skipCountHtml;
+    // v73.64: the header's ↺ targets the skip the boss will act on next —
+    // the earliest FUTURE skip (skipped[] is ascending), or, when only PAST
+    // skips remain (the boss's Rent case: past[0] is newest-first), the
+    // most recent past one. Before v73.64 only `skipped` (future) counted,
+    // so a past-only skip left the header with no button at all.
+    var pastSkips = past.filter(function (x) { return x.skip; });
+    var firstSkip = skipped.length ? skipped[0].d : (pastSkips[0] || {}).d;
     var head = '<div class="plrow grp' + (opts.open ? ' open' : '') + '" data-grp="' + p.id + '">' +
       '<div class="chev">▸</div><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') +
       (anyEdited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') +
       '</div><div class="pl-sub">' + headSub + '</div></div>' +
       '<div class="pl-r"><div class="pl-amt">₱ ' + amt(p.amount) + '</div><div class="pl-per">each</div></div>' +
-      (skipped.length ? '<button class="mini" data-unskip="' + p.id + '|' + skipped[0].d + '" title="Unskip ' + fmtDate(skipped[0].d) + ' (and see the rest expanded)">↺</button>' : '') +
+      (firstSkip ? '<button class="mini" data-unskip="' + p.id + '|' + firstSkip + '" title="Unskip ' + fmtDate(firstSkip) + ' (and see the rest expanded)">↺</button>' : '') +
       // v73.55: a plan whose dues are ALL skipped is exactly the plan you
       // most want to edit/unskip — the ✎ must not vanish with `shown`.
-      (shown.length || skipped.length ? '<button class="mini" data-editp="' + p.id + '" data-editd="' + (shown.length ? shown[0].d : skipped[0].d) + '" title="Edit this occurrence">✎</button>' : '') +
+      (shown.length || skipTotal ? '<button class="mini" data-editp="' + p.id + '" data-editd="' + (shown.length ? shown[0].d : firstSkip) + '" title="Edit this occurrence">✎</button>' : '') +
       // v73.55: recurring plans get the plans-list delete (one-offs already
       // had it) — previously a recurring plan could only be removed via the
       // coach card's skip-and-delete flow.
@@ -7416,12 +7444,16 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.63, live: new Date(2026, 9, 22, 21, 30) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.64, live: new Date(2026, 9, 22, 23, 46) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.64': [
+      'Fixed: a skipped plan due could disappear with NO trace — the only way back was the undo toast (close the app and it was gone). A skip is now a relocation, not a deletion: the skipped occurrence stays in the series, so the plans list always shows its "skipped" chip (strikethrough, tap to unskip) and the header keeps its ↺ button. Your Rent — skipped, undone, gone, no unskip access — is the case this kills.',
+      'Fixed: the "N skipped" count and the header ↺ only saw FUTURE skips — a PAST skip (like your Rent) left the count at 0 and the header with no button. Both now count every skip, past and future, and the ↺ targets the most recent one.'
+    ],
     '73.63': [
       'Fixed: skipping a plan due could eat the amount you had edited on it — the skip replaced the fork (like your 13,394 rent) instead of sitting on top of it, so after an undo the due came back at its base amount and never showed again. The skip now carries the fork under it, and undo restores it exactly.',
       'Fixed: skipping a MOVED due wrote the skip on the wrong date, so the due vanished and the undo had nothing to bring back. Skips now land on the date the series actually owns.',

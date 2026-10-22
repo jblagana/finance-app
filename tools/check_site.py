@@ -872,14 +872,19 @@ def main():
           # strip — the unskip path rides data-unskip on the chip (the header
           # ↺ button keeps the v73.54 shape)
           and "x.skip ? ' data-unskip=\"' + p.id + '|' + x.d +" in js
-          and "data-unskip=\"' + p.id + '|' + skipped[0].d +" in js
-          and "skipped.length + ' skipped</span>'" in js
+          # v73.64: the header ↺ targets `firstSkip` (the earliest future
+          # skip, or the most recent past one — the boss's Rent case)
+          and "data-unskip=\"' + p.id + '|' + firstSkip +" in js
+          and "skipTotal + ' skipped</span>'" in js
           and "if (this.tagName === 'SPAN') {" in js.split("function renderPlans")[1].split("function addPlan")[0]
           and "unskipPlanOccurrence: unskipPlanOccurrence, // v73.54" in js
           and "renderPlans: renderPlans, // v73.54" in js
           and "'73.54': [" in js)
     check("v73.55 (boss: 'after a plan occurrence is SKIPPED, the plan record is no longer editable nor deletable in the plans list'): the skip-override blocks nothing — the ✎ was rendered only when shown.length (skipping the next due emptied it, and v73.54's record rows made that state persistent) and the recurring header had NO ✕ at all (one-offs only). Now: the ✎ renders when shown OR skipped (targeting the skipped occurrence), the recurring header gains the plans-list ✕ (deletePlan already carried the Undo + tombstone), and the date-collision guard counts SKIPPED dates too (a skipped due moved onto another skipped date would collide in the lists)",
-          "(shown.length || skipped.length ? '<button class=\"mini\" data-editp=\"' + p.id + '\" data-editd=\"' + (shown.length ? shown[0].d : skipped[0].d) + '\" title=\"Edit this occurrence\">✎</button>' : '')" in js
+          # v73.64: the ✎ renders on `skipTotal` (past + future skips) and
+          # targets `firstSkip` (the v73.55 `skipped.length`/`skipped[0]`
+          # shape retargeted — past-only skips now keep the button too)
+          "(shown.length || skipTotal ? '<button class=\"mini\" data-editp=\"' + p.id + '\" data-editd=\"' + (shown.length ? shown[0].d : firstSkip) + '\" title=\"Edit this occurrence\">✎</button>' : '')" in js
           and "'<button class=\"mini\" data-delp=\"' + p.id + '\" title=\"Delete plan\">✕</button>' + '</div>';" in js
           and "var r = planDateAt(p, g);" in js.split("collision: another occurrence")[1].split("if (others[newDate])")[0]
           and "'73.55': [" in js)
@@ -973,7 +978,10 @@ def main():
           # feeds skip/amount/name/move, NOT resolveOccurrence (its
           # grid-mapping fallback calls planGridDates -> recursion)
           "while (start < today && guard < 730) {" in js
-          and "if (eR && eR.skip) { start = step(start, 1); guard++; continue; }" in js
+          # v73.64: the skip branch now KEEPS the resolved date in the
+          # window (a relocation, not a deletion) — the v73.61 single-line
+          # advance retargeted to the new block
+          and "if (eR && eR.skip) {\n          var sRes = planDateAt(p, start);" in js
           and "var fullyPaid = amv > 0 && (Number(pp && pp.amount) || 0) >= amv;" in js
           and "if (fullyPaid) { start = step(start, 1); guard++; continue; }" in js
           and "var mv = eS && eS.move ? eS.move : null;" in js
@@ -1025,6 +1033,18 @@ def main():
           and 'data-unskip="' + "' + p.id + '|' + String(p.date)" in js
           # the notes
           and "'73.63': [" in js)
+    check("v73.64 (boss: 'the amber partial chip disappeared with no trace, i no longer have access to unskip'): a skip is a RELOCATION, not a deletion — the grid's advance loop keeps the skipped occurrence's resolved date in the window (same semantics as a moved-to-future due), so the history strip renders its 'skipped' chip with data-unskip and the header's ↺ + 'N skipped' count cover PAST skips too (they only saw future ones before — the boss's Rent was a past skip: count 0, no button, no chip). unskipPlanOccurrence's was-restore is untouched (never deletes a fork).",
+          # (a) the grid keeps the skipped resolved date in the window
+          "if (eR && eR.skip) {\n          var sRes = planDateAt(p, start);\n          if (out.indexOf(sRes) < 0) out.push(sRes);" in js
+          # (b) the header count spans past + future skips
+          and "var skipTotal = skipped.length + past.filter(function (x) { return x.skip; }).length;" in js
+          # (c) the header ↺ falls back to the most recent PAST skip (the
+          # boss's Rent case — before, a past-only skip left it buttonless)
+          and "var firstSkip = skipped.length ? skipped[0].d : (pastSkips[0] || {}).d;" in js
+          # (d) the strip chip's unskip path is unchanged (the record never vanishes)
+          and "x.skip ? ' data-unskip=\"' + p.id + '|' + x.d + '\"" in js
+          # the notes
+          and "'73.64': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]

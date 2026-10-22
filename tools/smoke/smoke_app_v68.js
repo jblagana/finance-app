@@ -999,8 +999,10 @@ waitReady().then(async function (F) {
   };
   // 1. unpaid, 1 day past due -> the due STAYS (the boss's Rent bug)
   run17('unpaid past-due stays (the Rent bug)', mkPlan17('p17a'), [anchor], [nextM === anchor ? '' : '']);
-  // 2. skipped -> advances (v73.28 preserved)
-  run17('skipped advances', mkPlan17('p17b', { [anchor]: { skip: true, skippedAt: T17 } }), [nextM], [anchor]);
+  // 2. skipped -> the grid advances (v73.28 preserved) AND the skipped date
+  // stays in the window as its trace (v73.64: a skip is a relocation, not a
+  // deletion — the plans list needs it to render the unskip chip).
+  run17('skipped advances + keeps its trace', mkPlan17('p17b', { [anchor]: { skip: true, skippedAt: T17 } }), [anchor, nextM], []);
   // 3. fully planRef-paid -> advances (the chip is the truth)
   var baseTxns17 = F.state.txns;
   F.state.txns = baseTxns17.concat([{ id: 't17paid', date: anchor, amount: 1000, note: 'p17 paid', planRef: { planId: 'p17c', date: anchor } }]);
@@ -1199,6 +1201,58 @@ waitReady().then(async function (F) {
   await sleep(30);
   F.state.plans.pop(); // one19
   F.state.plans.pop(); // rent19
+  F.state.txns = baseTxns17;
+  F.renderPlans();
+
+  // ============ PART 20: v73.64 — a skipped past due keeps its trace ======
+  // (boss: 'the amber partial chip disappeared with NO trace, the only way
+  // back was the undo toast, and i no longer have access to unskip'. The
+  // grid's advance loop must keep the skipped occurrence's resolved date in
+  // the window — same semantics as a moved-to-future due — so the history
+  // strip renders its 'skipped' chip (data-unskip) and the header's ↺ +
+  // 'N skipped' count cover PAST skips, not just future ones.)
+  console.log('\n== PART 20: v73.64 — skipped past due keeps its unskip trace =');
+  var _t20 = F.parseISO(F.todayISO());
+  var anchor20 = F.localISO(new Date(_t20.getFullYear(), _t20.getMonth(), 20, 12));
+  if (anchor20 > F.todayISO()) anchor20 = F.todayISO();
+  var rent20 = { id: 'p20rent', name: 'Rent20', amount: 3000, date: anchor20, repeat: 'monthly', count: null,
+    overrides: { [anchor20]: { amount: 13394 } }, created: '2026-01-01T00:00:00.000Z' };
+  F.state.plans.push(rent20);
+  F.state.txns = baseTxns17.concat([{ id: 't20rent', date: anchor20, amount: 7364, note: 'Rent (plan payment)', planRef: { planId: 'p20rent', date: anchor20 } }]);
+  // precondition: the partly-handled due is in the series BEFORE the skip
+  ok(F.planAllDates(rent20).indexOf(anchor20) >= 0, 'v73.64 precondition: the partly-handled past due is in the series (got ' + F.planAllDates(rent20).join(',') + ')');
+  var ded20a = F.cyclePlanDeduction();
+  ok(ded20a >= 6030 - 0.005, 'v73.64 precondition: the 6,030 remainder is in the deduction (got ' + ded20a.toFixed(2) + ')');
+  // skip it (the grid advances past it — the v73.61 path)
+  F.skipPlanChip('p20rent|' + anchor20);
+  await sleep(40);
+  ok(rent20.overrides[anchor20] && rent20.overrides[anchor20].skip && rent20.overrides[anchor20].was.amount === 13394,
+    'v73.64: the skip wrote with the fork carried under it');
+  // THE FIX: the skipped date must STAY in the window (the grid advanced past
+  // it, but the resolved date was pushed into the window like a moved due)
+  ok(F.planAllDates(rent20).indexOf(anchor20) >= 0,
+    'v73.64: the SKIPPED past due stays in the series (the trace the boss lost — got ' + F.planAllDates(rent20).join(',') + ')');
+  ok(F.cyclePlanDeduction() < ded20a - 6000, 'v73.64: the skip still drops the deduction (free rises — the skip works)');
+  // the plans list: the 'skipped' chip with data-unskip + the header count
+  F.setPlanTab('rec');
+  F.setPlanOpen('p20rent', true);
+  F.renderPlans();
+  var rent20Html = String(byIdStub('plans').innerHTML || '');
+  ok(rent20Html.indexOf('data-unskip="p20rent|' + anchor20 + '"') >= 0,
+    'v73.64: the plans list renders the skipped past due as a tappable unskip chip (the persistent access)');
+  ok(rent20Html.indexOf('1 skipped') >= 0,
+    'v73.64: the header counts the PAST skip (skipTotal spans past + future)');
+  // unskip via the persistent path — the fork must come back exactly
+  await F.unskipPlanOccurrence('p20rent', anchor20);
+  await sleep(40);
+  ok(rent20.overrides[anchor20] && !rent20.overrides[anchor20].skip && rent20.overrides[anchor20].amount === 13394,
+    'v73.64: the persistent unskip restores the FORK (13,394), not the base (the never-delete-a-fork guard)');
+  ok(close(F.cyclePlanDeduction(), ded20a), 'v73.64: the unskip returns the 6,030 remainder to the deduction');
+  F.renderPlans();
+  ok(String(byIdStub('plans').innerHTML || '').indexOf('data-unskip="p20rent|' + anchor20 + '"') < 0,
+    'v73.64: after the unskip the skip chip is gone (the due is back to normal)');
+  // restore
+  F.state.plans.pop(); // rent20
   F.state.txns = baseTxns17;
   F.renderPlans();
 
