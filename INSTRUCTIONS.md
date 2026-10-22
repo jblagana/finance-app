@@ -6,6 +6,21 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.62 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-22 - "why is the Oct payment marked fully paid when it was only partly handled?" (diagnose) + "Partial chips: tick + 7,364/13,394 vs amber partial style"
+Status: **done** - v73.62 shipped (SW cache `finances-pwa-v73.62`; ONE commit pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (sw.js cache + app.js pins fetched post-push: SHELL_RELEASE v: 73.62, the comparison pin, the v73.59 truthiness confirmed gone, notes key present).
+Progress: 100% - tracked gates green (release.ps1 v73.62 full run: check_site repo + root mirror, test_chat_parser, node --check x4, smoke_v68, smoke_app_v68 150 assertions ALL PASS).
+
+### The bug (diagnosed before the build)
+- The v73.59 history chip marked an occurrence "paid" on `paid: !!paid` — ANY linked payment (even ₱1) — and printed the OCCURRENCE amount next to the tick. The boss's Rent (forked 13,394, 7,364 linked) read "✓ 13,394.00". The match itself was correct (`findPaidTxn` sums all planRef links = 7,364); the display threw the comparison away. The "N paid" header counted the same boolean. The next-due `planPaidPill` had the same truthiness hole.
+
+### What changed
+- **The chip (and the pill) is a COMPARISON:** `paid` = the planRef sum covers the occurrence amount (the coach's >= 100% rule, 0.005 tolerance). A partial renders **amber** with the paid sum over the due ("◐ 7,364.00/13,394.00") — never a green tick. The "N paid" header counts full pays only. CSS: `.hchip.partial` + `.occ-paid.partial` (amber, the edited-pill palette).
+
+### Verified
+- **Smoke PART 18** (6 new asserts, 150 total, ALL PASS): the boss's real shape (13,394 fork, 7,364 linked) renders the amber chip with the sum and NO green tick and NO "1 paid" header; a full pay still ticks green (counted series, so the paid occurrence stays on the grid — a count-less fully-paid past due advances off per v73.61 and never renders a chip); the next-due pill shows 1,500.00/3,000.00 on a partial, never "✓ paid".
+- Gate catches pre-push (three, all mine): (1) the check_site pin was missing `and` between its condition lines — a Python SyntaxError the gate caught; (2) the pin's mark literal had no leading space (`'◐'` vs app.js's `' ◐'`) — the gate caught it, the probe dump showed the exact rendered string; (3) the smoke's block slicer cut the history strip off (the head's "N paid" pill is a NESTED `[data-grp]` with the same id — slicing on `data-grp` is a trap; the block now ends at the next series' head div), and `renderPlans` resets `planOpen` when the plan SET changes (planSig wipe) — the harness must render once after the push, THEN open the series.
+
 # v73.61 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-22 - "the recurring Rent stops showing as a plan due row once it is a day PAST its due date" + "should we only fast forward when i actually skipped (not moved) or have already fully paid the current due?" + "what if the move is on a date before the next occurence, why should the series fast forward if the count is still the same"
 Status: **done** - v73.61 shipped (SW cache `finances-pwa-v73.61`; ONE commit `8e52fee` pushed to origin/main). Live-verified at the REAL Pages URL `jblagana.github.io/finance-app/` (sw.js cache + app.js pins fetched post-push: SHELL_RELEASE v: 73.61, the state-aware pin, the v73.41 blind loop confirmed gone, notes key present).

@@ -1027,6 +1027,89 @@ waitReady().then(async function (F) {
   F.state.plans.pop();
   F.state.txns = baseTxns17; // restore
 
+  // ============ PART 18: v73.62 — the partial chip is a COMPARISON ============
+  // (boss: the Rent history chip showed "✓ 13,394" on a 7,364 partial — the
+  // v73.59 `paid: !!paid` truthiness marked ANY linked payment as fully paid
+  // and printed the occurrence amount next to the tick). Now: paid = the
+  // planRef sum covers the amount (the coach's >= 100% rule); a partial is
+  // AMBER with the paid sum over the due ("◐ 7,364/13,394"), never a green
+  // tick; the "N paid" header counts full pays only.
+  console.log('\n== PART 18: v73.62 — the partial chip is a comparison =====');
+  F.setPlanTab('rec');
+  // (a) the boss's real shape: forked 13,394 on a past anchor, 7,364 linked
+  var rent18 = { id: 'p18rent', name: 'Rent18', amount: 3000, date: anchor, repeat: 'monthly', count: null,
+    overrides: { [anchor]: { amount: 13394 } }, created: '2026-01-01T00:00:00.000Z' };
+  F.state.plans.push(rent18);
+  F.state.txns = baseTxns17.concat([{ id: 't18rent', date: anchor, amount: 7364, note: 'Rent (plan payment)', planRef: { planId: 'p18rent', date: anchor } }]);
+  // the plan SET changed -> renderPlans resets planOpen (planSig wipe), so
+  // render ONCE to update the signature, THEN open the series, THEN render.
+  F.renderPlans();
+  F.setPlanOpen('p18rent', true);
+  F.renderPlans();
+  listHtml = String(byIdStub('plans').innerHTML || '');
+  // the WHOLE series block: from this series' data-grp to the NEXT series'
+  // HEAD row (the only `plrow grp` / `plrow oneoff` divs are series heads —
+  // the NEXT DUE row is `plrow next`, the strip is spans). A data-grp
+  // boundary is a trap: the head's own "N paid" pill is a NESTED
+  // [data-grp] with the same id, so slicing there cuts the strip off.
+  var block18 = function (id) {
+    var s = listHtml.indexOf('data-grp="' + id + '"');
+    if (s < 0) return '';
+    var rest = listHtml.slice(s);
+    var i1 = rest.indexOf('<div class="plrow grp');
+    var i2 = i1 >= 0 ? rest.indexOf('<div class="plrow grp', i1 + 10) : -1;
+    var j1 = rest.indexOf('<div class="plrow oneoff');
+    var cands = [i2, j1].filter(function (x) { return x >= 0; });
+    var e = cands.length ? Math.min.apply(null, cands) : -1;
+    return e >= 0 ? rest.slice(0, e) : rest;
+  };
+  var rent18Head = block18('p18rent');
+  ok(rent18Head.indexOf('hchip partial') >= 0 && rent18Head.indexOf('7,364.00/13,394.00') >= 0,
+    'v73.62: a partial pay renders the AMBER chip with the paid sum over the due (◐ 7,364.00/13,394.00 — amt() keeps cents)');
+  ok(rent18Head.indexOf('hchip paid') < 0,
+    'v73.62: a partial pay is NEVER a green tick — the v73.59 truthiness is gone');
+  ok(rent18Head.indexOf('1 paid') < 0,
+    'v73.62: the header "N paid" count is full-pays only (a partial does not count)');
+  F.setPlanOpen('p18rent', false);
+  F.state.plans.pop();
+  // (b) the FULL case still ticks green (the comparison, not the absence of
+  // one, is what changed). COUNTED (3x) on purpose: a count-less fully-paid
+  // past due advances OFF the grid (v73.61) and never renders a chip — the
+  // green tick case is a paid occurrence that stays on its grid (counted
+  // series, or a paid due within the window).
+  var rent18f = { id: 'p18full', name: 'RentFull', amount: 3000, date: anchor, repeat: 'monthly', count: 3,
+    overrides: {}, created: '2026-01-01T00:00:00.000Z' };
+  F.state.plans.push(rent18f);
+  F.state.txns = baseTxns17.concat([{ id: 't18full', date: anchor, amount: 3000, note: 'Rent full', planRef: { planId: 'p18full', date: anchor } }]);
+  F.renderPlans(); // planSig wipe (the push) — see (a)
+  F.setPlanOpen('p18full', true);
+  F.renderPlans();
+  listHtml = String(byIdStub('plans').innerHTML || '');
+  var rent18fHead = block18('p18full');
+  ok(rent18fHead.indexOf('hchip paid') >= 0 && rent18fHead.indexOf('✓') >= 0 && rent18fHead.indexOf('hchip partial') < 0,
+    'v73.62: a full pay still renders the green tick (the comparison passes at 100%)');
+  F.setPlanOpen('p18full', false);
+  F.state.plans.pop();
+  // (c) the NEXT-DUE pill has the same hole, same fix: a partial pay on a
+  // FUTURE due shows the sum over the due, never "✓ paid"
+  var dueFut = F.shiftMonth(anchor, 1);
+  var rent18n = { id: 'p18next', name: 'RentNext', amount: 3000, date: dueFut, repeat: 'monthly', count: null,
+    overrides: {}, created: '2026-01-01T00:00:00.000Z' };
+  F.state.plans.push(rent18n);
+  F.state.txns = baseTxns17.concat([{ id: 't18next', date: dueFut, amount: 1500, note: 'Rent next part', planRef: { planId: 'p18next', date: dueFut } }]);
+  F.renderPlans(); // planSig wipe (the push) — see (a)
+  F.setPlanOpen('p18next', true);
+  F.renderPlans();
+  listHtml = String(byIdStub('plans').innerHTML || '');
+  var rent18nRow = block18('p18next');
+  ok(rent18nRow.indexOf('occ-paid partial') >= 0 && rent18nRow.indexOf('1,500.00/3,000.00') >= 0,
+    'v73.62: the next-due pill is a comparison too — a partial pay shows 1,500.00/3,000.00 (amt() keeps cents), never "✓ paid"');
+  ok(rent18nRow.indexOf('✓ paid') < 0, 'v73.62: the next-due pill never ticks a partial pay as paid');
+  F.setPlanOpen('p18next', false);
+  F.state.plans.pop();
+  F.state.txns = baseTxns17; // restore
+  F.setPlanTab('one'); // back to the default
+
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
   process.exit(fails === 0 ? 0 : 1);

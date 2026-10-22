@@ -5227,6 +5227,14 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     // pill's linked/fuzzy distinction reads the flag (a linked txn counts
     // as the proof even when fuzzy entries are summed in with it).
     var linked = !!paid.linked;
+    // v73.62: the pill is a COMPARISON too — a partial pay shows the sum
+    // over the due ("7,364/13,394") in the partial style, never a bare
+    // "✓ paid" (the same truthiness hole as the v73.59 history chip).
+    var pAmt = Number(paid.amount) || 0;
+    if (pAmt < (Number(amount) || 0) - 0.005) {
+      return ' <span class="pill occ-paid partial" title="Partly paid — ' + money(pAmt) + ' of ' + money(Number(amount) || 0) + '">' +
+        '◐ ' + money(pAmt).replace('PHP ', '') + '/' + money(Number(amount) || 0).replace('PHP ', '') + '</span>';
+    }
     return ' <span class="pill occ-paid' + (linked ? '' : ' auto') + '" title="' +
       (linked ? 'Linked to a logged payment' : 'Matched to a logged payment (auto)') + '">' +
       (linked ? '✓ paid' : 'paid') + '</span>';
@@ -5274,10 +5282,18 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       if (d >= today) return;
       var ro = resolveOccurrence(p, d);
       var paid = ro && !ro.skip ? findPaidTxn({}, { planId: p.id, date: d, name: ro.name, amount: ro.amount }) : null;
-      past.push({ d: d, skip: !!(ro && ro.skip), paid: !!paid, amount: ro ? ro.amount : p.amount });
+      // v73.62: the chip is a COMPARISON, not a truthiness — the v73.59
+      // `paid: !!paid` marked ANY linked payment (even ₱1) as fully paid
+      // and printed the occurrence amount next to the tick (the boss's
+      // Rent showing "✓ 13,394" on a 7,364 partial). paid = the sum
+      // covers the amount (the coach's >= 100% rule); paidAmt rides the
+      // chip so a partial reads "7,364/13,394" in amber.
+      var pAmt = (paid && Number(paid.amount) > 0) ? Number(paid.amount) : 0;
+      var full = pAmt >= (ro ? ro.amount : p.amount) - 0.005;
+      past.push({ d: d, skip: !!(ro && ro.skip), paid: full, partial: !full && pAmt > 0, paidAmt: pAmt, amount: ro ? ro.amount : p.amount });
     });
     past.sort(function (a, b) { return a.d < b.d ? 1 : -1; }); // newest first
-    var paidCount = past.filter(function (x) { return x.paid; }).length;
+    var paidCount = past.filter(function (x) { return x.paid; }).length; // v73.62: full pays only — a partial is its own state
     // v73.54: the skip count is a clickable chip in the header — tapping it
     // opens the series (the data-grp row handler) so the record rows show.
     var skipCountHtml = '';
@@ -5333,10 +5349,13 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     if (records.length) {
       sub += '<div class="hist-chips">';
       records.slice(0, HIST_CAP).forEach(function (x) {
-        var cls = x.skip ? 'skip' : (x.paid ? 'paid' : 'late');
-        var mark = x.skip ? '' : (x.paid ? ' ✓' : '');
-        var tap = x.skip ? ' data-unskip="' + p.id + '|' + x.d + '" title="Tap to unskip — the due returns to the coach card"' : ' title="' + (x.paid ? 'Paid' : 'Past due, unpaid') + ' · ' + fmtDate(x.d) + '"';
-        sub += '<span class="hchip ' + cls + '"' + tap + '>' + fmtDate(x.d) + mark + ' <span class="h-amt">' + amt(x.amount) + '</span></span>';
+        // v73.62: three states, not two — a PARTIAL pay is amber with the
+        // paid sum over the due ("7,364/13,394"), never a green tick.
+        var cls = x.skip ? 'skip' : (x.paid ? 'paid' : (x.partial ? 'partial' : 'late'));
+        var mark = x.skip ? '' : (x.paid ? ' ✓' : (x.partial ? ' ◐' : ''));
+        var amtTxt = x.partial ? amt(x.paidAmt) + '/' + amt(x.amount) : amt(x.amount);
+        var tap = x.skip ? ' data-unskip="' + p.id + '|' + x.d + '" title="Tap to unskip — the due returns to the coach card"' : ' title="' + (x.paid ? 'Paid' : (x.partial ? 'Partly paid — ' + amt(x.paidAmt) + ' of ' + amt(x.amount) : 'Past due, unpaid')) + ' · ' + fmtDate(x.d) + '"';
+        sub += '<span class="hchip ' + cls + '"' + tap + '>' + fmtDate(x.d) + mark + ' <span class="h-amt">' + amtTxt + '</span></span>';
       });
       if (records.length > HIST_CAP) sub += '<button class="hist-more" data-histmore="' + p.id + '">+' + (records.length - HIST_CAP) + ' older</button>';
       sub += '</div>';
@@ -7336,12 +7355,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.61, live: new Date(2026, 9, 22, 15, 22) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.62, live: new Date(2026, 9, 22, 16, 24) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.62': [
+      'Fixed: a partly-paid plan due showed a green "paid" tick with the full amount next to it — the history chip (and the next-due pill) marked ANY linked payment as paid, so a 7,364 payment on a 13,394 due read "✓ 13,394". Paid now means the linked payments cover the due; a partial pay shows amber with what you paid over what you owe (◐ 7,364/13,394), and the "N paid" count only counts full pays.'
+    ],
     '73.61': [
       'Fixed: a recurring plan due could vanish the day after its due date — the series fast-forwarded past every old date, so a past-due occurrence dropped off the grid and stopped showing (and stopped counting in your free cash, the graph, and the peek). Now a series only advances past an occurrence you actually resolved: skipped, or fully paid by the chip. A moved due keeps its slot — it shows at its new date, and if that date passes it goes overdue there. Partly-paid and unpaid dues stay put as overdue rows until you handle them.'
     ],

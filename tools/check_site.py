@@ -978,6 +978,22 @@ def main():
           # the v73.41 blind loop is GONE (the unconditional advance)
           and "while (start < today && guard < 730) { start = step(start, 1); guard++; }" not in js
           and "'73.61': [" in js)
+    check("v73.62 (boss: 'Partial chips: tick + 7,364/13,394 vs amber partial style' — the v73.59 history chip marked ANY linked payment as fully paid on a truthiness check and printed the occurrence amount next to the tick; the boss's Rent showed '✓ 13,394' on a 7,364 partial): the chip (and the next-due pill) is now a COMPARISON — paid = the planRef sum covers the occurrence amount (the coach's >= 100% rule), and a partial renders AMBER with the paid sum over the due ('◐ 7,364/13,394'), never a green tick; the 'N paid' header count is full-pays only",
+          # the comparison (the truthiness is gone)
+          "var full = pAmt >= (ro ? ro.amount : p.amount) - 0.005;" in js
+          and "partial: !full && pAmt > 0, paidAmt: pAmt, amount: ro ? ro.amount : p.amount" in js
+          # the amber partial chip + the paid/due text
+          and "x.partial ? ' ◐' : ''" in js
+          and "amt(x.paidAmt) + '/' + amt(x.amount)" in js
+          and "x.paid ? 'paid' : (x.partial ? 'partial' : 'late')" in js
+          # the next-due pill's partial branch (same hole, same fix)
+          and "if (pAmt < (Number(amount) || 0) - 0.005) {" in js
+          and "pill occ-paid partial" in js
+          # the CSS (both surfaces)
+          and ".hchip.partial{" in html and ".occ-paid.partial{" in html
+          # the v73.59 truthiness is GONE
+          and "paid: !!paid, amount: ro ? ro.amount : p.amount" not in js
+          and "'73.62': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]
