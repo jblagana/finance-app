@@ -329,6 +329,23 @@
     dd.setDate(dd.getDate() + shift);
     return localISO(dd);
   }
+  // v73.63: the RESOLVED date -> GRID date map. Used by movePlanChip (the
+  // move-override must key at the grid date the slot came from — the slot
+  // is still on the grid, so the mapping is findable) and by
+  // unskipPlanOccurrence's LEGACY fallback (pre-v73.63 skips keyed at the
+  // grid date). Skips themselves key at the RESOLVED date (v73.63): after
+  // a move the slot is OFF the grid, so a grid-keyed skip is orphaned —
+  // the resolved date is where the grid's advance loop and the consumers
+  // actually see it.
+  function planGridDateFor(p, dateISO) {
+    if (!p) return dateISO;
+    if (!p.repeat) return String(p.date); // one-off: the single date IS the grid
+    var g0 = String(dateISO);
+    planGridDates(p).forEach(function (g) {
+      if (g0 === dateISO && planDateAt(p, g) === dateISO) g0 = g;
+    });
+    return g0;
+  }
   // v73.41: the raw template grid (no date overrides) — the anchor the
   // resolver walks. Two shapes, matching the pre-v73.41 behavior exactly:
   //   no count  -> the SLIDING window: `win` dates from the first grid date
@@ -482,7 +499,7 @@
       planOccurrences(p).forEach(function (od) {
         var dd = diffDays(od, String(payload.date));
         if (dd < -2 || dd > 2) return;
-        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        var ro = resolveOccurrence(p, od); // v73.63: one-offs resolve too (their skip overrides are honored)
         if (ro && ro.skip) return;
         var nm = ro ? ro.name : p.name;
         var am = ro ? ro.amount : p.amount;
@@ -510,7 +527,7 @@
       var occs = planOccurrences(p);
       for (var j = 0; j < occs.length; j++) {
         if (occs[j] === String(ref.date)) {
-          var ro = p.repeat ? resolveOccurrence(p, occs[j]) : null;
+          var ro = resolveOccurrence(p, occs[j]); // v73.63: one-offs too — a skipped one-off's link is not alive
           if (ro && ro.skip) return false;
           return true;
         }
@@ -2736,7 +2753,7 @@
     (state.plans || []).forEach(function (p) {
       planAllDates(p).forEach(function (od) {
         if (od < cd.start || od > cd.end) return;
-        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        var ro = resolveOccurrence(p, od); // v73.63: one-offs resolve too — a skipped one-off leaves the window total (free moves on skip/undo)
         if (ro && ro.skip) return;
         var nm = ro ? ro.name : p.name;
         var am = ro ? ro.amount : p.amount;
@@ -2872,7 +2889,7 @@
       // coach card shows it (v73.27) and the free cash must agree with it.
       planAllDates(p).forEach(function (od) {
         if (od < cd.start || od > cd.end) return;
-        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        var ro = resolveOccurrence(p, od); // v73.63: one-offs resolve too — a skipped one-off leaves the cycle deduction (the boss's 10k test: free must rise on skip, drop on undo)
         if (ro && ro.skip) return;
         var nm = ro ? ro.name : p.name;
         var am = ro ? ro.amount : p.amount;
@@ -3147,7 +3164,7 @@
       var countedLater = false;
       planOccurrences(p).forEach(function (od) {
         // v73.14: the coach sees RESOLVED occurrences (forks + skips)
-        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        var ro = resolveOccurrence(p, od); // v73.63: one-offs too — a skipped one-off leaves the coming-up list
         if (ro && ro.skip) return;
         var nm = ro ? ro.name : p.name;
         var am = ro ? ro.amount : p.amount;
@@ -3178,7 +3195,7 @@
       for (var i = 0; i < occ.length; i++) {
         if (String(occ[i]).slice(0, 7) === monthPrefix) {
           // v73.14: resolved (a forked amount counts, a skipped one doesn't)
-          var ro = p.repeat ? resolveOccurrence(p, occ[i]) : null;
+          var ro = resolveOccurrence(p, occ[i]); // v73.63: one-offs too
           if (ro && ro.skip) continue;
           monthPlans += Number(ro ? ro.amount : p.amount) || 0; monthPlanCount++; break;
         }
@@ -3466,14 +3483,27 @@
     var p = null;
     for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === pid) p = state.plans[i];
     if (!p || !pdate) return;
+    // v73.63 (boss's Rent incident): the skip must NOT clobber the entry it
+    // lands on — a fork ({ amount: 13394 }) at the same date was REPLACED
+    // by the skip, and the undo's `delete` left the occurrence at its BASE
+    // amount: with 7,364 already logged against a 3,000 base, the remainder
+    // is <= 0, so the row never returned and the deduction stayed at 0
+    // ('the undo did not return it to the due rows and free cash remains
+    // the same'). The prior entry rides under the skip as `was` and the
+    // undo restores it exactly (the movePlanChip pattern).
+    // Keyed at the RESOLVED date (the chip's date): after a move the slot
+    // is OFF the grid, so a grid-keyed skip would be orphaned — the
+    // resolved date is where the grid's advance loop and the consumers
+    // (resolveOccurrence's exact read) actually see it.
     var ov = p.overrides || {};
-    ov[pdate] = { skip: true, skippedAt: Date.now() }; // v73.54: the record (by-when) rides the override
+    var prev = ov[pdate] || null; // the fork (name/amount) rides under the skip
+    ov[pdate] = { skip: true, skippedAt: Date.now(), was: prev }; // v73.54: the record (by-when) rides the override
     p.overrides = ov;
     closeSheets();
     return idbPut(STORE_PLANS, p).then(function () {
       emit('plan');
       snack('Skipped ' + esc(p.name || 'plan') + ' · ' + fmtDate(pdate), function () {
-        delete ov[pdate];
+        if (prev) ov[pdate] = prev; else delete ov[pdate];
         idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
       });
     });
@@ -3529,8 +3559,8 @@
     if (newDate <= dateISO) { alert('Pick a date after ' + fmtDate(dateISO) + ' — a move to the past is a payment, not a move.'); return; }
     // v73.41: the override is keyed by GRID date — map the (possibly
     // already-moved) occurrence back to the grid date it came from.
-    var gridDate = dateISO;
-    planGridDates(p).forEach(function (g) { if (gridDate === dateISO && planDateAt(p, g) === dateISO) gridDate = g; });
+    // (v73.63: the shared planGridDateFor helper — same mapping.)
+    var gridDate = planGridDateFor(p, dateISO);
     // the same collision rule savePlanOccurrence enforces (v73.55:
     // skipped dates OCCUPY their slot too) — another occurrence (after
     // this move) landing on the picked date would lose a row in the lists.
@@ -3545,7 +3575,15 @@
     }
     var ov = p.overrides || {};
     var prev = ov[gridDate] || null; // the undo restores the exact prior entry
-    ov[gridDate] = { move: newDate };
+    // v73.63: the move MERGES into the entry, never a bare replace — a fork
+    // ({ amount: 13394 }) at this date would be CLOBBERED by { move }, and
+    // the occurrence would move at its BASE amount (the same clobber class
+    // the skip fix kills). The fork rides under the move; undo restores
+    // the prior entry exactly.
+    var mvEntry = { move: newDate };
+    if (prev && prev.amount != null) mvEntry.amount = prev.amount;
+    if (prev && prev.name != null) mvEntry.name = prev.name;
+    ov[gridDate] = mvEntry;
     p.overrides = ov;
     return idbPut(STORE_PLANS, p).then(function () {
       emit('plan');
@@ -3577,14 +3615,20 @@
     for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === planId) p = state.plans[i];
     if (!p || !dateISO) return;
     var ov = p.overrides || {};
-    if (!ov[dateISO] || !ov[dateISO].skip) return;
-    var prev = ov[dateISO]; // the undo restores the exact record (incl. skippedAt)
-    delete ov[dateISO];
+    // v73.63: skips key at the RESOLVED date (the label's date) — read it
+    // there first; the grid-date fallback covers LEGACY pre-v73.63 skips.
+    var kdate = ov[dateISO] && ov[dateISO].skip ? dateISO : planGridDateFor(p, dateISO);
+    var e = ov[kdate];
+    if (!e || !e.skip) return;
+    var prev = e; // the undo restores the exact record (incl. skippedAt)
+    // v73.63: restore the fork the skip sat on (`was`), not a bare delete —
+    // deleting would leave a forked occurrence at its base amount.
+    if (e.was) ov[kdate] = e.was; else delete ov[kdate];
     p.overrides = ov;
     return idbPut(STORE_PLANS, p).then(function () {
       emit('plan');
       snack('Unskipped ' + esc(p.name || 'plan') + ' · ' + fmtDate(dateISO), function () {
-        ov[dateISO] = prev;
+        ov[kdate] = prev; // the same key the skip was read from
         p.overrides = ov;
         idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
       });
@@ -4582,7 +4626,7 @@
     (state.plans || []).forEach(function (p) {
       planAllDates(p).forEach(function (od) {
         if (od < today || od > end) return;
-        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        var ro = resolveOccurrence(p, od); // v73.63: one-offs too — a skipped one-off's drop leaves the graph
         if (ro && ro.skip) return;
         var nm = ro ? ro.name : p.name;
         var am = ro ? ro.amount : p.amount;
@@ -4976,7 +5020,7 @@
       // the due date has passed.
       (p.repeat ? planAllDates(p) : [String(p.date)]).forEach(function (od) {
         // v73.14: resolved (forked name/amount show, skipped dates don't)
-        var ro = p.repeat ? resolveOccurrence(p, od) : null;
+        var ro = resolveOccurrence(p, od); // v73.63: one-offs too — a skipped one-off's due row disappears (and returns on undo)
         if (ro && ro.skip) return;
         var u2 = { p: p, date: od, dd: diffDays(d.today, od) };
         if (ro) { u2.nm = ro.name; u2.am = ro.amount; }
@@ -5255,6 +5299,19 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       // the ✎ targets p.date (openPlanEdit's !p.repeat guard is lifted for
       // one-offs: the scope select hides, the date field is the move, the
       // paid-proof block works the same).
+      // v73.63: a SKIPPED one-off wears the same record treatment as a
+      // skipped recurring occurrence — a "skipped" pill + ↺ (the v73.54
+      // data-unskip path), so the unskip access the boss lost is here too
+      // (the recurring-only record row never existed for one-offs).
+      var roO = resolveOccurrence(p, String(p.date));
+      if (roO && roO.skip) {
+        return '<div class="plrow oneoff skipped"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') +
+          ' <span class="pill" style="font-size:10px;background:rgba(143,176,255,.14);color:#8fb0ff">skipped</span></div>' +
+          '<div class="pl-sub">' + esc(subTxt) + '</div></div>' +
+          '<div class="pl-r"><div class="pl-amt" style="text-decoration:line-through;opacity:.6">₱ ' + amt(p.amount) + '</div></div>' +
+          '<button class="mini" data-unskip="' + p.id + '|' + String(p.date) + '" title="Tap to unskip — the due returns to the coach card">↺</button>' +
+          '<button class="mini" data-delp="' + p.id + '" title="Delete plan">✕</button></div>';
+      }
       return '<div class="plrow oneoff"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') + planPaidPill(p.id, String(p.date), p.name, p.amount) + '</div>' +
         '<div class="pl-sub">' + esc(subTxt) + '</div></div>' +
         '<div class="pl-r"><div class="pl-amt">₱ ' + amt(p.amount) + '</div></div>' +
@@ -5670,15 +5727,19 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   function skipPlanOccurrence() {
     if (!planEditCtx) return;
     var p = planEditCtx.plan, dateISO = planEditCtx.dateISO;
+    // v73.63: same fix as skipPlanChip — the `was` carry (a skip must not
+    // clobber the fork at the same date; the undo restores it exactly),
+    // keyed at the RESOLVED date (the sheet's date) for the same reason.
     var ov = p.overrides || {};
-    ov[dateISO] = { skip: true, skippedAt: Date.now() }; // v73.54: same record as the coach chip
+    var prev = ov[dateISO] || null;
+    ov[dateISO] = { skip: true, skippedAt: Date.now(), was: prev }; // v73.54: same record as the coach chip
     p.overrides = ov;
     closeSheets();
     planEditCtx = null;
     return idbPut(STORE_PLANS, p).then(function () {
       emit('plan');
       snack('Skipped ' + esc(p.name || 'plan') + ' · ' + fmtDate(dateISO), function () {
-        delete ov[dateISO];
+        if (prev) ov[dateISO] = prev; else delete ov[dateISO];
         idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
       });
     });
@@ -7355,12 +7416,18 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.62, live: new Date(2026, 9, 22, 16, 24) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.63, live: new Date(2026, 9, 22, 21, 30) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.63': [
+      'Fixed: skipping a plan due could eat the amount you had edited on it — the skip replaced the fork (like your 13,394 rent) instead of sitting on top of it, so after an undo the due came back at its base amount and never showed again. The skip now carries the fork under it, and undo restores it exactly.',
+      'Fixed: skipping a MOVED due wrote the skip on the wrong date, so the due vanished and the undo had nothing to bring back. Skips now land on the date the series actually owns.',
+      'New: skipping a one-off now moves your free cash — skipping a one-off due raises it (the due leaves the cycle), undo drops it back. One-offs and recurring plans finally behave the same.',
+      'New: a skipped one-off shows a "skipped" pill with a ↺ in the plans list — tap it to unskip (the same access recurring plans had).'
+    ],
     '73.62': [
       'Fixed: a partly-paid plan due showed a green "paid" tick with the full amount next to it — the history chip (and the next-due pill) marked ANY linked payment as paid, so a 7,364 payment on a 13,394 due read "✓ 13,394". Paid now means the linked payments cover the due; a partial pay shows amber with what you paid over what you owe (◐ 7,364/13,394), and the "N paid" count only counts full pays.'
     ],
@@ -8363,6 +8430,8 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     salaryRowChip: salaryRowChip, // v73.19: the salary row-chip's handler body (smoke drives it without a DOM)
     payPlanChip: payPlanChip, // v73.18: the chip's handler body (smoke drives it without a DOM); v73.22: the in-scope function (the bare call in the wiring loop needs it)
     skipPlanChip: skipPlanChip, // v73.28: the coach row's Skip chip (one-off skip-override; smoke drives it without a DOM)
+    skipPlanOccurrence: skipPlanOccurrence, // v73.41: the edit sheet's skip button (smoke drives it; v73.63: grid-date keying + `was` carry)
+    planGridDateFor: planGridDateFor, // v73.63: resolved -> grid date map (the smoke asserts the orphaned-key fix)
   openSkipChooser: openSkipChooser, // v73.58: the skip/move chooser (the chip now opens this; smoke drives it without a DOM)
   closeSkipChooser: closeSkipChooser, // v73.58: the chooser's cancel/scrim path
   skipChooserSkip: skipChooserSkip, // v73.58: the chooser's Skip button (skipPlanChip verbatim)

@@ -1110,6 +1110,98 @@ waitReady().then(async function (F) {
   F.state.txns = baseTxns17; // restore
   F.setPlanTab('one'); // back to the default
 
+  // ============ PART 19: v73.63 — one-off skips move free; skips never orphan ============
+  // (boss's Rent incident, three parts: (1) a skip CLOBBERED the 13,394 fork
+  // so the undo restored a 3,000 base that was already overpaid — the row
+  // never returned; (2) the skip was keyed at the RESOLVED date, not the
+  // grid date — orphaned after a move; (3) one-off skips never touched the
+  // cycle deduction (the boss's 10k test).)
+  console.log('\n== PART 19: v73.63 — skip/undo integrity + one-off free =====');
+  // (a) the boss's exact Rent shape: 13,394 fork, 7,364 linked, skip, UNDO.
+  // Anchor = the 20th of the CURRENT month (past due, INSIDE the cycle
+  // window — last month's 20th would be out of cycle and the deduction
+  // test would lie).
+  var _t19 = F.parseISO(F.todayISO());
+  var anchor19 = F.localISO(new Date(_t19.getFullYear(), _t19.getMonth(), 20, 12));
+  if (anchor19 > F.todayISO()) anchor19 = F.todayISO();
+  var rent19 = { id: 'p19rent', name: 'Rent19', amount: 3000, date: anchor19, repeat: 'monthly', count: null,
+    overrides: { [anchor19]: { amount: 13394 } }, created: '2026-01-01T00:00:00.000Z' };
+  F.state.plans.push(rent19);
+  F.state.txns = baseTxns17.concat([{ id: 't19rent', date: anchor19, amount: 7364, note: 'Rent (plan payment)', planRef: { planId: 'p19rent', date: anchor19 } }]);
+  // the fork must be in the cycle deduction (6,030 remainder) BEFORE the skip
+  var ded19a = F.cyclePlanDeduction();
+  ok(ded19a >= 6030 - 0.005, 'v73.63: the forked 13,394 with 7,364 linked deducts its 6,030 remainder (got ' + ded19a.toFixed(2) + ')');
+  // skip the due via the coach chip (resolved date = anchor, it is unmoved)
+  F.skipPlanChip('p19rent|' + anchor19);
+  await sleep(40);
+  ok(rent19.overrides[anchor19] && rent19.overrides[anchor19].skip, 'v73.63: the skip wrote at the grid date');
+  ok(rent19.overrides[anchor19].was && rent19.overrides[anchor19].was.amount === 13394,
+    'v73.63: the skip CARRIES the fork under it (`was.amount` = 13,394) — it no longer clobbers it');
+  ok(close(F.cyclePlanDeduction(), ded19a - 6030), 'v73.63: skipping the forked due drops the deduction by the 6,030 remainder (free rises)');
+  // UNDO — the fork must come back EXACTLY (the boss's 'it did not return').
+  // The undo lives on the snackUndo button's onclick (the snack's undoFn).
+  var undo19Btn = elMap['snackUndo'];
+  ok(!!undo19Btn && typeof undo19Btn.onclick === 'function', 'v73.63: the skip toast carries a working Undo button');
+  if (undo19Btn && typeof undo19Btn.onclick === 'function') { undo19Btn.onclick(); await sleep(40); }
+  ok(rent19.overrides[anchor19] && !rent19.overrides[anchor19].skip && rent19.overrides[anchor19].amount === 13394,
+    'v73.63: the undo restores the FORK (amount 13,394), not a bare delete (the boss\'s row-never-returned fix)');
+  ok(close(F.cyclePlanDeduction(), ded19a), 'v73.63: the undo returns the 6,030 remainder to the deduction (free drops back)');
+  // (b) the orphaned-key fix: MOVE the due, then SKIP it — the skip must
+  // land at the GRID date, and unskip (resolved date) must find it.
+  // +5 days on purpose: a same-month shift would land on ANOTHER
+  // occurrence (the count-less window is 3 same-day-of-month dates — the
+  // v73.55 collision guard would reject it).
+  var _nd = F.parseISO(anchor19); _nd.setDate(_nd.getDate() + 5);
+  var newDate19 = F.localISO(_nd);
+  await F.movePlanChip('p19rent', anchor19, newDate19);
+  await sleep(40);
+  ok(rent19.overrides[anchor19] && rent19.overrides[anchor19].move === newDate19,
+    'v73.63 precondition: the move-override sits at the grid date (move: newDate)');
+  ok(F.planGridDateFor(rent19, newDate19) === newDate19,
+    'v73.63: after a move the slot is OFF the grid — the resolved date maps to itself (which is why skips key at the resolved date)');
+  F.skipPlanChip('p19rent|' + newDate19); // the chip passes the RESOLVED date
+  await sleep(40);
+  ok(rent19.overrides[newDate19] && rent19.overrides[newDate19].skip,
+    'v73.63: skipping a MOVED due keys the skip at the RESOLVED date (where the grid + consumers see it — no orphan)');
+  await F.unskipPlanOccurrence('p19rent', newDate19); // the label passes the RESOLVED date
+  await sleep(40);
+  ok(rent19.overrides[anchor19] && !rent19.overrides[anchor19].skip && rent19.overrides[anchor19].move === newDate19,
+    'v73.63: unskip (resolved date) finds the resolved-keyed skip and the move entry survives exactly');
+  ok(!rent19.overrides[newDate19], 'v73.63: the unskip removed the resolved-keyed skip entry');
+  // (c) the boss's 10k one-off test: skip moves free, undo drops it back.
+  // Date = TODAY: a one-off is only deducted inside the cycle window, so a
+  // next-month date would never be in the deduction (the test would lie).
+  var one19 = { id: 'p19one', name: 'OneOff19', amount: 10000, date: F.todayISO(), repeat: null, count: null,
+    overrides: {}, created: '2026-01-01T00:00:00.000Z' };
+  F.state.plans.push(one19);
+  var ded19c = F.cyclePlanDeduction();
+  ok(ded19c >= 10000 - 0.005, 'v73.63: the one-off 10k is in the cycle deduction (got ' + ded19c.toFixed(2) + ')');
+  F.skipPlanChip('p19one|' + one19.date);
+  await sleep(40);
+  ok(one19.overrides[one19.date] && one19.overrides[one19.date].skip, 'v73.63: the one-off skip wrote at its date');
+  ok(close(F.cyclePlanDeduction(), ded19c - 10000), 'v73.63: skipping the one-off drops the deduction by 10k (free RISES — the boss\'s test, now passing)');
+  var undo19bBtn = elMap['snackUndo'];
+  if (undo19bBtn && typeof undo19bBtn.onclick === 'function') { undo19bBtn.onclick(); await sleep(40); }
+  ok(!one19.overrides[one19.date], 'v73.63: the one-off undo removed the skip (nothing to restore)');
+  ok(close(F.cyclePlanDeduction(), ded19c), 'v73.63: the one-off undo returns the 10k to the deduction (free drops back)');
+  // (d) the skipped one-off wears the record pill + ↺ in the plans list
+  F.skipPlanChip('p19one|' + one19.date);
+  await sleep(40);
+  F.setPlanTab('one');
+  F.renderPlans();
+  var one19Html = String(byIdStub('plans').innerHTML || '');
+  ok(one19Html.indexOf('data-unskip="p19one|' + one19.date + '"') >= 0,
+    'v73.63: a skipped one-off renders the ↺ unskip path in the plans list (the access the boss lost)');
+  ok(/skipped/.test(one19Html.slice(one19Html.indexOf('p19one') - 400, one19Html.indexOf('p19one') + 400)),
+    'v73.63: the skipped one-off row wears the "skipped" pill');
+  // restore
+  await F.unskipPlanOccurrence('p19one', one19.date);
+  await sleep(30);
+  F.state.plans.pop(); // one19
+  F.state.plans.pop(); // rent19
+  F.state.txns = baseTxns17;
+  F.renderPlans();
+
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
   process.exit(fails === 0 ? 0 : 1);

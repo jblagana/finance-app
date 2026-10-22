@@ -639,8 +639,9 @@ def main():
           and "data-skipplan=" in js
           and "class=\"rowchip skipchip\"" in js
           # (5) the skip writes the SAME override shape the edit sheet uses
-          # (v73.54: + skippedAt — the by-when record the plans list shows)
-          and "ov[pdate] = { skip: true, skippedAt: Date.now() };" in js
+          # (v73.54: + skippedAt — the by-when record the plans list shows;
+          #  v73.63: + was — the fork the skip sits on, restored on undo)
+          and "ov[pdate] = { skip: true, skippedAt: Date.now(), was: prev };" in js
           # (6) the CSS (the quiet neutral pill)
           and ".skipchip{" in html
           # (7) the .dg-r becomes a flex row (pay chip + skip chip side by side)
@@ -858,10 +859,14 @@ def main():
           and "function freeEffect(t, amt) { if (t.kind === 'card_payment') return t.cashback ? amt : 0;" in js
           and "'73.53': [" in js)
     check("v73.54 (boss: 'a label in the plans list whenever i skip a due, so i can unskip it later'): a skipped occurrence no longer vanishes from the plans list — it renders a RECORD row (the 'skipped' pill label + the ↺ button, both data-unskip) with the date it was skipped (skippedAt rides the override, stamped by both the coach SKIP chip and the edit sheet's skip button); tapping either removes the exact-date skip-override so the due returns to the coach card's plan due rows, the free-cash deduction, and the 'On repeat' line (all existing ro.skip consumers flip back); the series header counts its skips even when collapsed",
-          "ov[pdate] = { skip: true, skippedAt: Date.now() };" in js
-          and "ov[dateISO] = { skip: true, skippedAt: Date.now() };" in js
+          # v73.63: both writers carry the `was` fork under the skip (the
+          # undo restores it exactly) — the v73.54 shape pins retargeted.
+          "ov[pdate] = { skip: true, skippedAt: Date.now(), was: prev };" in js
+          and "ov[dateISO] = { skip: true, skippedAt: Date.now(), was: prev };" in js
           and "function unskipPlanOccurrence(planId, dateISO) {" in js
-          and "if (!ov[dateISO] || !ov[dateISO].skip) return;" in js
+          # v73.63: the guard reads the resolved-keyed skip first, with a
+          # grid-date fallback for legacy pre-v73.63 skips
+          and "var kdate = ov[dateISO] && ov[dateISO].skip ? dateISO : planGridDateFor(p, dateISO);" in js
           and "skipped.push({ d: od, ro: ro });" in js
           # v73.59: the record row became a strikethrough CHIP in the history
           # strip — the unskip path rides data-unskip on the chip (the header
@@ -916,7 +921,7 @@ def main():
           # the handlers
           and "function openSkipChooser(planId, dateISO) {" in js
           and "function movePlanChip(planId, dateISO, newDate) {" in js
-          and "ov[gridDate] = { move: newDate };" in js
+          and "var mvEntry = { move: newDate };" in js  # v73.63: the move MERGES into the entry (carries the fork), no longer a bare replace
           # the chip now opens the chooser (the skip path inside is verbatim)
           and "openSkipChooser(parts[0], parts[1]);" in js
           and "skipPlanChip(c.planId + '|' + c.dateISO);" in js
@@ -994,6 +999,32 @@ def main():
           # the v73.59 truthiness is GONE
           and "paid: !!paid, amount: ro ? ro.amount : p.amount" not in js
           and "'73.62': [" in js)
+    check("v73.63 (boss: 'i skipped the 6,030 partly-handled Rent, undid the skip, it did NOT return to the due rows' + 'why didnt skipping the one-offs affect free cash' + the 10k one-off test): three fixes in one. (a) a skip CLOBBERED the fork it landed on — the undo's bare delete left the occurrence at its base amount (overpaid -> the row never returned); the skip now carries the prior entry under `was` and the undo restores it exactly (skipPlanChip/skipPlanOccurrence/unskipPlanOccurrence). (b) a skip on a MOVED due was orphaned (the slot is off the grid) — skips now key at the RESOLVED date, where the grid's advance loop and the consumers actually see it; the shared planGridDateFor helper (resolved->grid, one-off = its own date) is used by movePlanChip and by unskip's legacy fallback. (c) one-off skips never touched the cycle deduction (the p.repeat-ternary gate) — one-offs now resolve in cyclePlanDeduction/planWindowTotal/coachRows/planWhen/monthPlanTotal/planRefAlive, so a skipped one-off raises free on skip and drops it back on undo, and a skipped one-off renders the v73.54 record pill + unskip path in the plans list",
+          # (a) the `was` carry (skip must not clobber the fork) — both writers
+          "var prev = ov[pdate] || null; // the fork (name/amount) rides under the skip" in js
+          and "ov[pdate] = { skip: true, skippedAt: Date.now(), was: prev };" in js
+          and "if (prev) ov[pdate] = prev; else delete ov[pdate];" in js
+          and "var prev = ov[dateISO] || null;" in js
+          and "ov[dateISO] = { skip: true, skippedAt: Date.now(), was: prev };" in js
+          and "if (prev) ov[dateISO] = prev; else delete ov[dateISO];" in js
+          # (b) the shared resolved->grid map + its users (skips key at the
+          # RESOLVED date — after a move the slot is off the grid, so a
+          # grid-keyed skip would be orphaned; unskip keeps a grid-date
+          # fallback for legacy pre-v73.63 skips)
+          and "function planGridDateFor(p, dateISO) {" in js
+          and "if (!p.repeat) return String(p.date); // one-off: the single date IS the grid" in js
+          and "var gridDate = planGridDateFor(p, dateISO);" in js
+          and "var kdate = ov[dateISO] && ov[dateISO].skip ? dateISO : planGridDateFor(p, dateISO);" in js
+          and "var gdate = planGridDateFor(p, pdate);" not in js
+          # (c) one-offs resolve (the p.repeat gate is gone from the deduction)
+          and "var ro = resolveOccurrence(p, od); // v73.63: one-offs resolve too — a skipped one-off leaves the cycle deduction (the boss's 10k test: free must rise on skip, drop on undo)" in js
+          and "var ro = resolveOccurrence(p, od); // v73.63: one-offs resolve too — a skipped one-off leaves the window total (free moves on skip/undo)" in js
+          # the old gate is GONE from the deduction
+          and "var ro = p.repeat ? resolveOccurrence(p, od) : null;" not in js
+          # the skipped one-off's record pill + unskip path in the plans list
+          and 'data-unskip="' + "' + p.id + '|' + String(p.date)" in js
+          # the notes
+          and "'73.63': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]
