@@ -962,6 +962,22 @@ def main():
           # the export (the smoke drives the tab without a DOM)
           and "setPlanTab: function (t) { planTab = (t === 'rec') ? 'rec' : 'one'; }," in js
           and "'73.60': [" in js)
+    check("v73.61 (boss: 'the recurring Rent stops showing as a plan due row once it is a day PAST its due date' + 'should we only fast forward when i actually skipped (not moved) or have already fully paid the current due?' + 'what if the move is on a date before the next occurence, why should the series fast forward if the count is still the same'): the blind fast-forward in planGridDates (advance a count-less series past EVERY date below today) is GONE - it dropped a past-due occurrence off the grid the day after its due, so the v73.27 overdue row, the hero deduction, the graph, and the peek all went blind (the boss's recurring Rent vanishing). The advance is now STATE-AWARE, one occurrence at a time: skipped -> advance; fully planRef-paid -> advance (a PARTIAL payment does NOT advance); moved to the future -> advance BUT the moved date is pushed into the window (a move is a relocation, not a resolution - the grid slot must not orphan the override); moved to the past or unpaid -> STAY (the overdue row keeps it)",
+          # the state-aware advance (the blind loop is gone) — the inline
+          # override read (eS = exact, bestS = latest applyFrom) is what
+          # feeds skip/amount/name/move, NOT resolveOccurrence (its
+          # grid-mapping fallback calls planGridDates -> recursion)
+          "while (start < today && guard < 730) {" in js
+          and "if (eR && eR.skip) { start = step(start, 1); guard++; continue; }" in js
+          and "var fullyPaid = amv > 0 && (Number(pp && pp.amount) || 0) >= amv;" in js
+          and "if (fullyPaid) { start = step(start, 1); guard++; continue; }" in js
+          and "var mv = eS && eS.move ? eS.move : null;" in js
+          and "if (String(mv) < today) break;" in js
+          and "if (out.indexOf(mvRes) < 0) out.push(mvRes);" in js
+          and "break; // unpaid (or partly paid) past due — the series stops here" in js
+          # the v73.41 blind loop is GONE (the unconditional advance)
+          and "while (start < today && guard < 730) { start = step(start, 1); guard++; }" not in js
+          and "'73.61': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]

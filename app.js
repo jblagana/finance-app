@@ -355,11 +355,57 @@
       return shiftMonth(x, k);
     };
     var start = d, guard = 0;
-    if (!hasCount) {
-      var today = todayISO();
-      while (start < today && guard < 730) { start = step(start, 1); guard++; }
-    }
     var out = [];
+    if (!hasCount) {
+      // v73.61 (boss-approved): the blind fast-forward is GONE. It advanced a
+      // count-less series past EVERY date below today — so a past-due
+      // occurrence (with its overrides) dropped off the grid the day after
+      // its due: the v73.27 overdue row never saw it, and the hero/graph/
+      // peek stopped counting it (the boss's recurring Rent vanishing a day
+      // past due). Advance is now STATE-AWARE, one occurrence at a time:
+      //   skipped            -> advance (v73.28 — it is truly gone)
+      //   fully planRef-paid -> advance (resolved — the chip is the truth,
+      //                         v73.56; a PARTIAL payment does NOT advance)
+      //   moved to a FUTURE  -> advance, but the moved date is pushed into
+      //                         the window (the due lives at its new date —
+      //                         a move is a relocation, not a resolution,
+      //                         and the grid slot must not orphan the
+      //                         override; boss: 'why should the series fast
+      //                         forward if the count is still the same')
+      //   moved to the PAST  -> STAY (it is overdue at the moved date)
+      //   unpaid             -> STAY (the v73.27 overdue row keeps it)
+      var today = todayISO();
+      while (start < today && guard < 730) {
+        // INLINE override read (exact entry, else the latest applyFrom at or
+        // before the date) — deliberately NOT resolveOccurrence: its
+        // grid-mapping fallback calls planGridDates, which would recurse
+        // into this loop (the v73.61 first draft did exactly that and the
+        // smoke's RangeError caught it).
+        var ovS = p.overrides || {};
+        var eS = ovS[start] || null, bestS = null, bestKs = '';
+        if (!eS) Object.keys(ovS).forEach(function (k) {
+          var e = ovS[k];
+          if (!e || !e.applyFrom || e.applyFrom > start) return;
+          if (!bestS || e.applyFrom > bestKs) { bestS = e; bestKs = e.applyFrom; }
+        });
+        var eR = eS || bestS;
+        if (eR && eR.skip) { start = step(start, 1); guard++; continue; }
+        var amv = Number((eR && eR.amount != null) ? eR.amount : p.amount) || 0;
+        var nmv = (eR && eR.name != null) ? eR.name : p.name;
+        var pp = findPaidTxn({ monthPrefix: today.slice(0, 7), today: today },
+          { planId: p.id, date: start, name: nmv, amount: amv });
+        var fullyPaid = amv > 0 && (Number(pp && pp.amount) || 0) >= amv;
+        if (fullyPaid) { start = step(start, 1); guard++; continue; }
+        var mv = eS && eS.move ? eS.move : null;
+        if (mv) {
+          if (String(mv) < today) break; // moved into the past — overdue at the moved date
+          var mvRes = planDateAt(p, start);
+          if (out.indexOf(mvRes) < 0) out.push(mvRes); // the relocated due stays in the window
+          start = step(start, 1); guard++; continue;
+        }
+        break; // unpaid (or partly paid) past due — the series stops here
+      }
+    }
     for (var k = 0; k < n; k++) out.push(step(start, k));
     return out;
   }
@@ -7290,12 +7336,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.60, live: new Date(2026, 9, 22, 0, 14) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.61, live: new Date(2026, 9, 22, 15, 22) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.61': [
+      'Fixed: a recurring plan due could vanish the day after its due date — the series fast-forwarded past every old date, so a past-due occurrence dropped off the grid and stopped showing (and stopped counting in your free cash, the graph, and the peek). Now a series only advances past an occurrence you actually resolved: skipped, or fully paid by the chip. A moved due keeps its slot — it shows at its new date, and if that date passes it goes overdue there. Partly-paid and unpaid dues stay put as overdue rows until you handle them.'
+    ],
     '73.60': [
       'The plans list is now a tab bar: One-offs (left) and Recurring (right), with counts on the tabs. One-offs is the default tab. Nothing is hidden — every plan still lives in its tab, paid and past occurrences included.'
     ],

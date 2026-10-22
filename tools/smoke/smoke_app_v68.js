@@ -969,6 +969,64 @@ waitReady().then(async function (F) {
   F.setPlanTab('one');
   await sleep(20);
 
+  // ============ PART 17: v73.61 — the state-aware fast-forward ============
+  // (boss: the recurring Rent VANISHED a day past due — planGridDates' blind
+  // fast-forward dropped the past occurrence off the grid, so the v73.27
+  // overdue row, the hero deduction, the graph, and the peek all went blind).
+  // The advance is now one-occurrence-at-a-time and state-aware:
+  //   skipped / fully planRef-paid -> advance
+  //   moved to the future          -> advance, moved date pushed into window
+  //   moved to the past            -> STAY (overdue at the moved date)
+  //   unpaid / partly paid         -> STAY (the v73.27 overdue row keeps it)
+  console.log('\n== PART 17: v73.61 — the state-aware fast-forward ============');
+  var T17 = F.todayISO();
+  var d17 = function (iso, days) { var dd = new Date(iso + 'T00:00:00'); dd.setDate(dd.getDate() + days); return dd.getFullYear() + '-' + String(dd.getMonth() + 1).padStart(2, '0') + '-' + String(dd.getDate()).padStart(2, '0'); };
+  var anchor = d17(T17, -1); // due YESTERDAY — one day past due
+  var nextM = F.shiftMonth(anchor, 1); // the next grid date is +1 MONTH, not +30 days
+  var mkPlan17 = function (id, over) {
+    var p = { id: id, name: 'P17 ' + id, amount: 1000, date: anchor, repeat: 'monthly', count: null, created: '2026-01-01T00:00:00.000Z' };
+    if (over) p.overrides = over;
+    return p;
+  };
+  var run17 = function (label, p, expectHas, expectNotHas) {
+    F.state.plans.push(p);
+    var all = F.planAllDates(p);
+    var has = expectHas.every(function (d) { return all.indexOf(d) >= 0; });
+    var notHas = expectNotHas.every(function (d) { return all.indexOf(d) < 0; });
+    ok(has && notHas, 'v73.61: ' + label + ' — planAllDates ' + JSON.stringify(all) +
+      (has ? '' : ' (missing ' + expectHas.join(',') + ')') + (notHas ? '' : ' (should not have ' + expectNotHas.join(',') + ')'));
+    F.state.plans.pop();
+  };
+  // 1. unpaid, 1 day past due -> the due STAYS (the boss's Rent bug)
+  run17('unpaid past-due stays (the Rent bug)', mkPlan17('p17a'), [anchor], [nextM === anchor ? '' : '']);
+  // 2. skipped -> advances (v73.28 preserved)
+  run17('skipped advances', mkPlan17('p17b', { [anchor]: { skip: true, skippedAt: T17 } }), [nextM], [anchor]);
+  // 3. fully planRef-paid -> advances (the chip is the truth)
+  var baseTxns17 = F.state.txns;
+  F.state.txns = baseTxns17.concat([{ id: 't17paid', date: anchor, amount: 1000, note: 'p17 paid', planRef: { planId: 'p17c', date: anchor } }]);
+  run17('fully paid advances', mkPlan17('p17c'), [nextM], [anchor]);
+  // 4. PARTIALLY paid -> STAYS (the remainder is still owed)
+  F.state.txns = baseTxns17.concat([{ id: 't17part', date: anchor, amount: 400, note: 'p17 part', planRef: { planId: 'p17d', date: anchor } }]);
+  run17('partially paid stays', mkPlan17('p17d'), [anchor], []);
+  // 5. moved to the FUTURE -> advances, the moved date lands in the window
+  var moveFut = d17(T17, 5);
+  run17('moved-future advances + moved date in window', mkPlan17('p17e', { [anchor]: { move: moveFut } }), [moveFut], [anchor]);
+  // 6. moved to the PAST -> STAYS, overdue at the moved date
+  var movePast = d17(T17, -4);
+  run17('moved-past stays at the moved date', mkPlan17('p17f', { [anchor]: { move: movePast } }), [movePast], [anchor]);
+  F.state.txns = baseTxns17; // restore
+  // 7. the boss's REAL Rent shape: forked amount on the past anchor, partial
+  // link -> the forked occurrence stays reachable with its forked amount
+  var rentLike = mkPlan17('p17g', { [anchor]: { amount: 13394 } });
+  F.state.txns = baseTxns17.concat([{ id: 't17rent', date: anchor, amount: 7364, note: 'Rent (plan payment)', planRef: { planId: 'p17g', date: anchor } }]);
+  F.state.plans.push(rentLike);
+  var allG = F.planAllDates(rentLike);
+  var roG = F.resolveOccurrence(rentLike, anchor);
+  ok(allG.indexOf(anchor) >= 0 && Number(roG.amount) === 13394,
+    'v73.61: the forked past due (13,394) stays reachable with its forked amount — remainder ' + (13394 - 7364) + ' still owed');
+  F.state.plans.pop();
+  F.state.txns = baseTxns17; // restore
+
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
   process.exit(fails === 0 ? 0 : 1);
