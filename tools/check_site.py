@@ -1057,6 +1057,29 @@ def main():
           and "var lab = p.date ? dayMonth(p.date) : p.label;" in js
           # the notes
           and "'73.65': [" in js)
+    check("v73.66 (boss: 'make coach fin and coachs note very funny and very roasty'): the coach card + the insights/recap one-liners got the roast treatment — every coach branch (negative free, prepay due, over-budget week, red-month pace, tight daily, on-track) now lands a roasty line, the 'On repeat' line and the coach-memory lines roast too, and the insights Today / Next-7-days / cycle / month + recap one-liners match. The NUMBERS are untouched — every line still quotes the same computed values (money(), d.daily, d.pace, remainders); only the words around them changed",
+          # (a) the coach's six branches are roasty (one marker per branch)
+          "your free cash is negative. Bold. Truly bold." in js
+          and "It is not optional, no matter what your wallet keeps saying." in js
+          and "The math is not your friend right now." in js
+          and "That is a plan, apparently." in js
+          and "We can do this, we just can\\'t do it today." in js  # the app string escapes the apostrophe (can\'t)
+          and "spend it, you have earned the guilt." in js
+          # (b) the 'On repeat' line + the coach memory roast
+          and "They do not get less real just because you keep not looking at them." in js
+          and "Progress is progress, I suppose." in js
+          and "You have not changed, and that is its own kind of loyalty." in js
+          # (c) the insights one-liners (Today / 7-days / cycle / month)
+          and "the treats are now a memory" in js
+          and "You win this round; do not celebrate yet." in js
+          and "the paycheque is dying a young death" in js
+          and "Suspiciously fine — do not log anything else." in js
+          # (d) the recap one-liner
+          and "worth a look, or worth a therapist?" in js
+          # (e) the smoke can drive the real render
+          and "renderCoach: renderCoach," in js
+          # the notes
+          and "'73.66': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]

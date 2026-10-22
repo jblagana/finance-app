@@ -1292,6 +1292,27 @@ waitReady().then(async function (F) {
   ok(greedy21.length <= expectMax21, 'v73.65: the greedy thinning bound holds for a dense 13-point series (got ' + greedy21.length + ', max ' + expectMax21 + ')');
   ok(greedy21[0] === 0 && greedy21[greedy21.length - 1] === dense21.length - 1, 'v73.65: the first + last points always keep their tick');
 
+  // ============ PART 22: v73.66 — the coach + notes are roasty ==========
+  // (boss: 'make coach fin and coachs note very funny and very roasty'). The
+  // smoke drives the REAL renderCoach: the seed state (free 58,631.36, no
+  // prepay window, no shortfall) lands the GOOD branch — the roasty marker
+  // must render, the old flat copy must be gone, and the numbers must still
+  // be quoted (money(d.daily) in the head, the meal in the sub).
+  console.log('\n== PART 22: v73.66 — the roasty coach =');
+  function money22(v) { return 'PHP ' + (Math.round(v * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); } // the app's money() format
+  F.renderCoach();
+  var coachHead22 = String(byIdStub('coachHead').textContent || '');
+  var coachSub22 = String(byIdStub('coachSub').textContent || '');
+  ok(coachHead22.indexOf('you are on track') >= 0 && coachHead22.indexOf('earned the guilt') >= 0,
+    'v73.66: the coach head is roasty (good branch: "on track … earned the guilt") — got: ' + JSON.stringify(coachHead22));
+  ok(coachHead22.indexOf('PHP ') >= 0, 'v73.66: the roast still quotes the NUMBER (money(d.daily) in the head)');
+  ok(coachSub22.indexOf('the app is watching') >= 0,
+    'v73.66: the coach sub is roasty ("the app is watching") — got: ' + JSON.stringify(coachSub22));
+  ok(coachHead22.indexOf('You can spend up to ' + money22(F.insightsData().daily)) >= 0,
+    'v73.66: the head quotes the exact daily headroom (the math is untouched, only the words changed)');
+  ok(coachHead22.indexOf('no room to breathe right now') < 0 && coachSub22.indexOf('Skip the treats today — back the cards first.') < 0,
+    'v73.66: the old flat copy is gone (the roast replaced it, not joined it)');
+
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
   process.exit(fails === 0 ? 0 : 1);

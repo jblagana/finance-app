@@ -3026,9 +3026,9 @@
     var net = r2(income - spent);
     // the coach's one-liner — deterministic, no API
     var line = '';
-    if (!income && !spent) line = 'A quiet month — nothing logged.';
-    else if (net >= 0) line = 'You kept ' + money(net) + ' this month. ' + (top[0] ? top[0].cat + ' led the spend at ' + money(top[0].amt) + '.' : '');
-    else line = 'You spent ' + money(Math.abs(net)) + ' more than you took in. ' + (top[0] ? top[0].cat + ' was the biggest at ' + money(top[0].amt) + ' — worth a look?' : '');
+    if (!income && !spent) line = 'A quiet month — nothing logged. The silence is either discipline or avoidance; the app cannot tell.';
+    else if (net >= 0) line = 'You kept ' + money(net) + ' this month. ' + (top[0] ? top[0].cat + ' led the spend at ' + money(top[0].amt) + '. A win, technically — do not get used to it.' : '');
+    else line = 'You spent ' + money(Math.abs(net)) + ' more than you took in. ' + (top[0] ? top[0].cat + ' was the biggest at ' + money(top[0].amt) + ' — worth a look, or worth a therapist?' : '');
     return { month: month, income: r2(income), spent: r2(spent), net: net, cats: cats, top: top, line: line,
       lesson: readLesson(month) };
   }
@@ -3680,36 +3680,36 @@
     });
     if (freeN < 0) {
       cls = 'bad';
-      head = hi + 'no room to breathe right now.';
-      sub = 'Free cash is ' + money(freeN) + '.' + (prepayActive
-        ? ' Skip the treats today and put it toward the ' + money(d.prepayAmt) + ' prepay due on the ' + ordinal(d.prepayDay) + ' (below).'
-        : ' Skip the treats today — back the cards first.');
+      head = hi + 'your free cash is negative. Bold. Truly bold.';
+      sub = 'You are ' + money(Math.abs(freeN)) + ' in the hole, which is a very specific kind of brave.' + (prepayActive
+        ? ' The ' + money(d.prepayAmt) + ' prepay is due on the ' + ordinal(d.prepayDay) + ' (below) — the treats can wait for a richer you.'
+        : ' Back the cards before you back anything else. The treats are a rumor now.');
     } else if (prepayActive && d.prepayIn <= 3) {
       cls = d.prepayIn <= 1 ? 'bad' : 'warn';
-      head = hi + money(d.prepayAmt) + ' card prepay is due ' + due + ' (the ' + ordinal(d.prepayDay) + ').';
-      sub = 'Set aside ' + money(d.prepayIn > 0 ? r2(d.prepayAmt / d.prepayIn) : d.prepayAmt) + '/day to cover it.';
-      if (afterWeek < floor) sub += ' Paying it takes cash to ' + money(afterWeek) + ' — under your ' + money(floor) + ' floor' +
-        (trim ? '. Biggest lever if you need room: ' + trim.label + ' (' + money(trim.amt) + ').' : '.');
-      else sub += ' After it, about ' + money(afterWeek) + ' stays free — safe.';
+      head = hi + money(d.prepayAmt) + ' card prepay lands ' + due + ' (the ' + ordinal(d.prepayDay) + '). It is not optional, no matter what your wallet keeps saying.';
+      sub = 'Stash ' + money(d.prepayIn > 0 ? r2(d.prepayAmt / d.prepayIn) : d.prepayAmt) + '/day and it stops being a problem.';
+      if (afterWeek < floor) sub += ' Paying it drops you to ' + money(afterWeek) + ' — below your ' + money(floor) + ' floor' +
+        (trim ? '. If you need room, ' + trim.label + ' (' + money(trim.amt) + ') is the fat you can trim.' : '.');
+      else sub += ' After it, about ' + money(afterWeek) + ' is still free — you survive, barely, with style.';
     } else if (shortfall > 0) {
       cls = 'bad';
-      head = hi + 'this week is over budget by ' + money(shortfall) + '.';
-      sub = (prepayActive ? 'The card prepay below is the reason: ' : 'This week\'s plans total ') + money(d.weekCost) + ' vs ' + money(freeN) + ' free.';
-      if (trim) sub += ' Biggest lever: ' + trim.label + ' (' + money(trim.amt) + ').';
-      if (afterWeek < floor) sub += ' As is, cash dips to ' + money(afterWeek) + ' — under your ' + money(floor) + ' floor.';
+      head = hi + 'this week is over budget by ' + money(shortfall) + '. The math is not your friend right now.';
+      sub = (prepayActive ? 'The card prepay below is the culprit: ' : 'This week\'s plans total ') + money(d.weekCost) + ' against ' + money(freeN) + ' free.';
+      if (trim) sub += ' Easiest thing to cut: ' + trim.label + ' (' + money(trim.amt) + ').';
+      if (afterWeek < floor) sub += ' Left alone, cash dips to ' + money(afterWeek) + ' — under your ' + money(floor) + ' floor.';
       else sub += ' Keep today at zero extras and it stays above the floor.';
     } else if (d.freeAfterPace < 0) {
       cls = 'warn';
-      head = hi + 'at ' + money(d.pace) + '/day you finish the month ' + money(r2(-d.freeAfterPace)) + ' in the red.';
-      sub = 'Easing to about ' + money(d.daily) + '/day from here puts you back on track.';
+      head = hi + 'at ' + money(d.pace) + '/day you end the month ' + money(r2(-d.freeAfterPace)) + ' in the red. That is a plan, apparently.';
+      sub = 'Slow to about ' + money(d.daily) + '/day from here and the red goes away. It is that easy, which is why you keep not doing it.';
     } else if (d.daily < d.meal) {
       cls = 'warn';
       head = hi + 'keep today around ' + money(d.daily) + '.';
-      sub = 'That is your daily share of the free cash; a ' + money(d.meal) + ' treat would overshoot by ' + money(r2(d.meal - d.daily)) + '.';
+      sub = 'That is your daily share; a ' + money(d.meal) + ' treat would overshoot by ' + money(r2(d.meal - d.daily)) + '. We can do this, we just can\'t do it today.';
     } else {
       cls = 'good';
-      head = hi + 'you are on track. You can spend up to ' + money(d.daily) + ' today.';
-      sub = 'Next 7 days stay covered; an eat-out (about ' + money(d.meal) + ') is safe.';
+      head = hi + 'you are on track. You can spend up to ' + money(d.daily) + ' today — spend it, you have earned the guilt.';
+      sub = 'Next 7 days stay covered; an eat-out (about ' + money(d.meal) + ') is safe. Go on, the app is watching.';
     }
     // v73.23 (boss: 'for the how much is owed, show only what is owed within
     // the cycle'): the "On repeat" line is CYCLE-SCOPED — only the recurring
@@ -3741,7 +3741,7 @@
         });
       });
       if (recNames.length) {
-        sub += ' On repeat: ' + recNames.join(', ') + ' — ' + money(r2(recAmt)) + ' owed this cycle.';
+        sub += ' On repeat: ' + recNames.join(', ') + ' — ' + money(r2(recAmt)) + ' still owed this cycle. They do not get less real just because you keep not looking at them.';
       }
     }
     // ---- coach memory: compare with the last visit, notice what got handled ----
@@ -3749,21 +3749,23 @@
     if (mem && mem.d && mem.d !== d.today) {
       var bits = [];
       var dFree = r2(d.free - (Number(mem.free) || 0));
-      if (Math.abs(dFree) >= 1) bits.push('free cash ' + (dFree < 0 ? 'fell' : 'rose') + ' ' + money(Math.abs(dFree)));
+      if (Math.abs(dFree) >= 1) bits.push(dFree < 0
+        ? 'free cash fell ' + money(Math.abs(dFree)) + ' — the universe is collecting'
+        : 'free cash rose ' + money(Math.abs(dFree)) + ' — suspicious, enjoy it');
       var dSpent = r2(d.spentM - (Number(mem.spentM) || 0));
-      if (dSpent > 1) bits.push('you logged ' + money(dSpent) + ' in new spending');
+      if (dSpent > 1) bits.push('you logged ' + money(dSpent) + ' in new spending, because of course you did');
       (mem.alerts || []).forEach(function (k) {
         if (info.alerts.indexOf(k) >= 0) return;
-        if (k === 'prepay') bits.push(info.prepayPaid ? 'the prepay you handled is off the list' : 'the prepay is past its window');
-        else if (k === 'floor') bits.push('the cash floor alert cleared');
+        if (k === 'prepay') bits.push(info.prepayPaid ? 'the prepay you handled is off the list — a rare victory' : 'the prepay is past its window — a rare defeat');
+        else if (k === 'floor') bits.push('the cash floor alert cleared — the floor is safe, for now');
         else if (k === 'dip') bits.push('the tight-month flag cleared'); // v68 item 7
         else if (k === 'sink') bits.push('a goal alert cleared'); // v68 item 6
-        else if (k.indexOf('recurring:') === 0) bits.push('the recurring suggestion cleared'); // v68 item 5
+        else if (k.indexOf('recurring:') === 0) bits.push('the recurring suggestion cleared — you resisted the plan'); // v68 item 5
         else if (k.indexOf('pace:') === 0) bits.push('the ' + k.slice(5) + ' pace flag cleared'); // v68 item 4
       });
-      if (bits.length) sub = 'Since your last check: ' + bits.slice(0, 2).join('; ') + '. ' + sub;
+      if (bits.length) sub = 'Since your last check: ' + bits.slice(0, 2).join('; ') + '. Progress is progress, I suppose. ' + sub;
       else if (info.alerts.length && (mem.alerts || []).join() === info.alerts.join()) {
-        sub = 'Same story as your last check — ' + (info.alerts.indexOf('prepay') >= 0 ? 'the prepay is still the priority. ' : 'the items below are still the priority. ') + sub;
+        sub = 'Same story as your last check — ' + (info.alerts.indexOf('prepay') >= 0 ? 'the prepay is still the priority. Nothing happened, and I respect the commitment. ' : 'the items below are still the priority. You have not changed, and that is its own kind of loyalty. ') + sub;
       }
     }
     el.className = 'card coach ' + cls;
@@ -4051,10 +4053,10 @@
     var tLines = ['Headroom: <b>' + money(hDaily) + '/day</b> left across the next ' + hDays + ' day' + (hDays === 1 ? '' : 's') + '.' + cycLbl];
     if (todaySpend > 0) tLines.push('Spent in this app today: <b>' + money(todaySpend) + '</b>.');
     var tCls, tTxt;
-    if (free < 0) { tCls = 'bad'; tTxt = 'No room for treats — free cash is negative. Back the cards first.'; }
-    else if (hDaily >= meal) { tCls = 'good'; tTxt = 'Eat out OK: a ' + money(meal) + ' treat still leaves you on track (about ' + money(r2(hDaily - meal)) + ' under your daily headroom).'; }
-    else if (hDaily > 0) { tCls = 'warn'; tTxt = 'Tight today: only ' + money(hDaily) + '/day left — a ' + money(meal) + ' treat would overshoot by ' + money(r2(meal - hDaily)) + '.'; }
-    else { tCls = 'warn'; tTxt = 'Nothing left after this month\'s commitments.'; }
+    if (free < 0) { tCls = 'bad'; tTxt = 'No room for treats — free cash is negative, which means the treats are now a memory. Back the cards first.'; }
+    else if (hDaily >= meal) { tCls = 'good'; tTxt = 'Eat out OK: a ' + money(meal) + ' treat still leaves you on track (about ' + money(r2(hDaily - meal)) + ' under your daily headroom). Spend it, you have earned the guilt.'; }
+    else if (hDaily > 0) { tCls = 'warn'; tTxt = 'Tight today: only ' + money(hDaily) + '/day left — a ' + money(meal) + ' treat would overshoot by ' + money(r2(meal - hDaily)) + '. We can do this, we just can\'t do it today.'; }
+    else { tCls = 'warn'; tTxt = 'Nothing left after this month\'s commitments. The wallet is at zero, the willpower should match.'; }
     blocks += insBlock('Today', tLines, tCls, tTxt);
 
     // ---- Next 7 days: plans + card prepay
@@ -4069,9 +4071,9 @@
     if (prepayIn === 0 && prepayAmt > 0) wLines.push('<b>Prepay day is today</b> — ' + money(prepayAmt) + ' is due before the ' + (s.cutoff_day || 15) + '.');
     else if (prepayIn > 0 && prepayIn <= 7 && prepayAmt > 0) wLines.push('Set aside <b>' + money(r2(prepayAmt / prepayIn)) + '/day</b> until the ' + ordinal(prepayDay) + ' prepay.');
     var wCls, wTxt;
-    if (!weekTotal) { wCls = 'good'; wTxt = 'No cost coming up — free cash stays where it is.'; }
-    else if (weekTotal <= free) { wCls = 'good'; wTxt = 'Covered: ' + money(r2(free - weekTotal)) + ' left after the next 7 days.'; }
-    else { wCls = 'bad'; wTxt = 'Over free cash by ' + money(r2(weekTotal - free)) + ' — trim a plan, or know this dips into the floor.'; }
+    if (!weekTotal) { wCls = 'good'; wTxt = 'No cost coming up — free cash stays where it is. Suspicious, but fine.'; }
+    else if (weekTotal <= free) { wCls = 'good'; wTxt = 'Covered: ' + money(r2(free - weekTotal)) + ' left after the next 7 days. You win this round; do not celebrate yet.'; }
+    else { wCls = 'bad'; wTxt = 'Over free cash by ' + money(r2(weekTotal - free)) + ' — trim a plan, or enjoy dipping into the floor.'; }
     blocks += insBlock('Next 7 days', wLines, wCls, wTxt);
     // ---- This salary cycle (the 15th) — v72.45 ----
     var cyc = d.cycle;
@@ -4088,9 +4090,9 @@
         cLines.push('Last cycle (' + dayMonth(cyc.prev.start) + ' – ' + dayMonth(cyc.prev.end) + '): spent <b>' + money(cyc.prev.spent) + '</b>, kept ' + money(cyc.prev.net) + '.');
       }
       var cCls, cTxt;
-      if (cyc.elapsed >= 7 && cyc.projectedNet < 0) { cCls = 'bad'; cTxt = 'This pace burns the salary before the cycle ends — slow down or cut a plan.'; }
-      else if (cyc.spent > 0.6 * cyc.expected && cyc.elapsed < 0.6 * cyc.days) { cCls = 'warn'; cTxt = 'You are past 60% of the salary with 60% of the cycle still to go — keep the rest lean.'; }
-      else { cCls = 'good'; cTxt = 'On pace — the salary covers this cycle at the current spend.'; }
+      if (cyc.elapsed >= 7 && cyc.projectedNet < 0) { cCls = 'bad'; cTxt = 'This pace burns the salary before the cycle ends — the paycheque is dying a young death. Slow down or cut a plan.'; }
+      else if (cyc.spent > 0.6 * cyc.expected && cyc.elapsed < 0.6 * cyc.days) { cCls = 'warn'; cTxt = 'You are past 60% of the salary with 60% of the cycle still to go. The salary does not know it is already half gone; do not tell it.'; }
+      else { cCls = 'good'; cTxt = 'On pace — the salary covers this cycle at the current spend. Do not let it hear you saying that.'; }
       blocks += insBlock('This cycle', cLines, cCls, cTxt);
     }
 
@@ -4107,9 +4109,9 @@
     mLines.push('App spend so far: <b>' + money(spentM) + '</b> (about ' + money(pace) + '/day).');
     var freeAfterPace = d.freeAfterPace;
     var mCls, mTxt;
-    if (freeAfterPace < 0) { mCls = 'warn'; mTxt = 'At this pace you\'d need ' + money(r2(-freeAfterPace)) + ' more than your free cash — slow down or cut plans.'; }
-    else if (monthPlanCount && monthPlans > freeAfterPace) { mCls = 'warn'; mTxt = 'Careful: doing all ' + monthPlanCount + ' planned item' + (monthPlanCount === 1 ? '' : 's') + ' would leave ' + money(r2(freeAfterPace - monthPlans)) + ' free — that\'s under your headroom.'; }
-    else { mCls = 'good'; mTxt = 'On track: at this pace about ' + money(freeAfterPace) + ' stays free at month end' + (monthPlanCount ? ', before your ' + monthPlanCount + ' plan' + (monthPlanCount === 1 ? '' : 's') : '') + '.'; }
+    if (freeAfterPace < 0) { mCls = 'warn'; mTxt = 'At this pace you\'d need ' + money(r2(-freeAfterPace)) + ' more than your free cash — slow down, or cut plans, or invent money. The first two are easier.'; }
+    else if (monthPlanCount && monthPlans > freeAfterPace) { mCls = 'warn'; mTxt = 'Careful: doing all ' + monthPlanCount + ' planned item' + (monthPlanCount === 1 ? '' : 's') + ' would leave ' + money(r2(freeAfterPace - monthPlans)) + ' free — that\'s under your headroom. The plans are not the enemy; the volume of them is.'; }
+    else { mCls = 'good'; mTxt = 'On track: at this pace about ' + money(freeAfterPace) + ' stays free at month end' + (monthPlanCount ? ', before your ' + monthPlanCount + ' plan' + (monthPlanCount === 1 ? '' : 's') : '') + '. Suspiciously fine — do not log anything else.'; }
     return insBlock('This month', mLines, mCls, mTxt);
   }
   function renderProjection() {
@@ -7456,12 +7458,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.65, live: new Date(2026, 9, 23, 1, 17) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.66, live: new Date(2026, 9, 23, 2, 29) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.66': [
+      'Changed: the coach and its notes got the roast treatment — every coach branch (negative free, prepay due, over-budget week, red-month pace, tight daily, on-track) now lands a roasty line, and the "On repeat" line, the since-last-check memory, the insights one-liners (Today / Next 7 days / This cycle / This month) and the recap line match. The numbers are untouched — same math, funnier words.'
+    ],
     '73.65': [
       'Fixed: the free-cash graph\u2019s date labels collided into each other (Oct2 Oct29 Oct5 Nov8…) — the x-axis now thins itself: only enough ticks to keep at least ~34px between labels, first and last always shown. The line and its drops are untouched; the axis just breathes.'
     ],
@@ -8439,6 +8444,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     seedAccounts: seedAccounts, // v73.52: the Paid-with options (smoke drives the Money-in card list)
     updateCashbackRow: updateCashbackRow, // v73.53: the cashback row's visibility (smoke drives it)
     setAddMode: setAddMode, // v73.52: the direction toggle (smoke drives the mode switch)
+    renderCoach: renderCoach, // v73.66: the coach card render (smoke drives the roasty copy)
     // v72.38: the running shell dot (smoke drives the What's-new fallback
     // check). v73.0: the dot SURVIVES — 73.0 is a whole number, so String()
     // prints "73" while the SHELL_NOTES key is "73.0"; re-append a dropped
