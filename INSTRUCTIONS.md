@@ -6,6 +6,41 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.68 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-28 - "extend the plan due rows... on second thoughts, make it 'this cycle's dues, initially collapsed to 4 +x more rows"
+Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.68, sw cache
+`finances-pwa-v73.68` pushed to `https://github.com/jblagana/finance-app.git` (main).
+
+The coach's plan-due rows now span the WHOLE current salary cycle instead of a fixed forward
+window:
+
+- `coachRows` window: `u2.dd >= 0 ? (cycEnd ? u2.date <= cycEnd : u2.dd <= 20) : true` — forward
+  dues run today..this cycle's end (cycEnd), overdue (dd < 0) still stays forever (v73.27
+  untouched). The 10-day window (v73.23) is dead; the +20 is only the fallback if cycle data is
+  ever missing. The interrupted v73.68 draft had built +20 — the boss re-scoped it to the cycle
+  before approval, so the 20-day widening never shipped.
+- `coachRows` no longer caps at 4 — the old `shown < 4` loop bound silently DROPPED dues past the
+  fourth row. Every due in the window becomes a row now.
+- `renderCoach` collapses the plans group to its first 4 rows + a tappable "+N more…" row
+  (`coachPlansMore`, in-memory, defaults collapsed — same pattern as the peek's cbPlansMoreRow;
+  div[role=button], the v73.20 no-button-in-button pattern). Tapping it re-renders the full list.
+- The v73.23 + v73.27 check_site pins were retargeted to the new window line (retargeted, not
+  deleted — both still assert the overdue branch).
+- smoke PART 24 (9 new asserts, 183 total): premise (cycEnd >= today, dates anchored on cycEnd so
+  the premise holds on ANY run date), overdue dues in, in-cycle due in, a due at cycEnd+1 OUT of
+  the due rows (it lives in the peek), no 4-cap (11 rows built), collapse to 4 in the render,
+  more-row renders, tap expands to 11, more-row gone when expanded.
+
+Gate slips caught + fixed pre-push: (1) the v73.23 pin still asserted the old `dd <= 10` line —
+retargeted to the cycle-window line; (2) the v73.27 pin had the same stale line — retargeted;
+(3) the first -GatesOnly run failed the ROOT MIRROR gate — the mirror copy of check_site.py at
+`C:\Users\Jan\Muji\finance-app\` was a STALE pre-v73.47 copy (127KB vs the repo's 182KB) whose
+v73.23/v73.27 pins still asserted the dead `dd <= 10` line; the `release.ps1 v73.68` stamp pass
+re-synced the mirror and the full suite went green (all 6 gates ok).
+
+Live-verify: the CDN fetch from this machine keeps timing out (same as v73.63/64/65/66) — the
+gates are the verification; the phone pull is the final confirmation.
+
 # v73.67 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-28 - "i used the due rows chip but it has no link chip" — the overdue link is alive
 Status: **done** — commit `b205012` (SHELL_RELEASE 73.67, sw cache `finances-pwa-v73.67`) pushed to

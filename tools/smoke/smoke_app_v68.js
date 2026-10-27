@@ -1347,9 +1347,64 @@ waitReady().then(async function (F) {
   ok(F.planRefAlive({ planId: 'smoke23-gym', date: fut23d, name: 'Gym', amount: 1200 }),
     'v73.67: a link to a FUTURE occurrence is still alive (the normal case, unchanged)');
 
-  console.log('');
-  console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
-  process.exit(fails === 0 ? 0 : 1);
+  // ============ PART 24: v73.68 — the due rows span the cycle ==========
+  // (boss: 'extend the plan due rows... on second thoughts, make it
+  // "this cycle"'s dues, initially collapsed to 4 +x more rows'). The
+  // coach's window is today..cycEnd (the 10-day forward window is dead),
+  // overdue stays forever (v73.27), coachRows builds EVERY due in the
+  // window (the old shown<4 cap dropped the rest), and renderCoach
+  // collapses the plans group to 4 rows + a tappable "+N more…".
+  console.log('\n== PART 24: v73.68 — cycle-spanning due rows + 4-row collapse =');
+  (async function () {
+    var origPlans = F.state.plans;
+    var iso = function (off) { var d = new Date(); d.setDate(d.getDate() + off); return F.localISO(d); };
+    var d24 = F.insightsData();
+    var cycEnd24 = d24.cycle && d24.cycle.end;
+    // dates are anchored on cycEnd (not fixed offsets) so the premise holds
+    // on ANY run date: today is always inside the cycle (cycEnd >= today).
+    ok(cycEnd24 && cycEnd24 >= F.todayISO(), 'v73.68: premise — the cycle end is today or later (cycEnd ' + cycEnd24 + ')');
+    var pIn = { id: 'smoke24-in', name: 'InCyc', amount: 2222, date: cycEnd24, repeat: 'monthly', count: null, overrides: {} };
+    var pPast = { id: 'smoke24-past', name: 'PastCyc', amount: 4444, date: F.localISO((function () { var d = F.parseISO(cycEnd24); d.setDate(d.getDate() + 1); return d; })()), repeat: 'monthly', count: null, overrides: {} };
+    var pO1 = { id: 'smoke24-o1', name: 'OverDue1', amount: 1111, date: iso(-10), repeat: 'monthly', count: null, overrides: {} };
+    var pO2 = { id: 'smoke24-o2', name: 'OverDue2', amount: 5555, date: iso(-20), repeat: 'monthly', count: null, overrides: {} };
+    var pO3 = { id: 'smoke24-o3', name: 'OverDue3', amount: 6666, date: iso(-30), repeat: 'monthly', count: null, overrides: {} };
+    var pO4 = { id: 'smoke24-o4', name: 'OverDue4', amount: 7777, date: iso(-40), repeat: 'monthly', count: null, overrides: {} };
+    var pO5 = { id: 'smoke24-o5', name: 'OverDue5', amount: 8888, date: iso(-50), repeat: 'monthly', count: null, overrides: {} };
+    F.setPlans([pIn, pPast, pO1, pO2, pO3, pO4, pO5]);
+    d24 = F.insightsData();
+    var rows24 = F.coachRows(d24).rows;
+    var planRows24 = rows24.filter(function (r) { return r.group === 'plans'; });
+    ok(planRows24.some(function (r) { return r.tag === 'Overdue'; }), 'v73.68: the OVERDUE dues are in the window (v73.27 no-horizon survives)');
+    ok(planRows24.some(function (r) { return r.tag === 'Plan due'; }), 'v73.68: the in-cycle due (today..cycEnd) is in the window');
+    ok(planRows24.every(function (r) { return String(r.text).indexOf('PastCyc') < 0; }),
+      'v73.68: a due PAST the cycle end (cycEnd+1) is OUT of the due rows (it lives in the peek) — the window ends at cycEnd');
+    ok(planRows24.length > 4, 'v73.68: coachRows builds EVERY due in the window — the old shown<4 cap is gone (got ' + planRows24.length + ')');
+    // the render collapse: >4 plan rows → 4 rows + a tappable "+N more…"
+    F.state.coachPlansMore = false;
+    F.renderCoach();
+    var body24 = byIdStub('digBody');
+    var collapsedPlan = (String(body24.innerHTML).match(/data-payplan=/g) || []).length;
+    ok(collapsedPlan === 4, 'v73.68: the plans group COLLAPSES to its first 4 rows (got ' + collapsedPlan + ')');
+    var bodyHtml24 = String(byIdStub('digBody').innerHTML);
+    ok(bodyHtml24.indexOf('coachPlansMoreRow') >= 0 && bodyHtml24.indexOf('more…') >= 0,
+      'v73.68: the "+N more…" row renders with the hidden count (body has it: ' + (bodyHtml24.indexOf('coachPlansMoreRow') >= 0) + ')');
+    F.state.coachPlansMore = true;
+    F.renderCoach();
+    var expandedPlan = (String(byIdStub('digBody').innerHTML).match(/data-payplan=/g) || []).length;
+    ok(expandedPlan >= 5, 'v73.68: tapping "+N more…" (coachPlansMore) expands to the full list (got ' + expandedPlan + ')');
+    ok(String(byIdStub('digBody').innerHTML).indexOf('coachPlansMoreRow') < 0,
+      'v73.68: the more-row is gone once expanded');
+    F.state.coachPlansMore = false;
+    F.setPlans(origPlans);
+    F.renderCoach();
+  })().then(function () {
+    console.log('');
+    console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
+    process.exit(fails === 0 ? 0 : 1);
+  }).catch(function (e) {
+    console.error('PROBE ERROR:', e && e.stack || e);
+    process.exit(2);
+  });
 }).catch(function (e) {
   console.error('PROBE ERROR:', e && e.stack || e);
   process.exit(2);

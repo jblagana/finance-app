@@ -543,10 +543,11 @@ def main():
           # (2) the card-payment tag (the window moved to the DUE date in v73.24)
           and "tag: 'Card payment · ' + c.name" in js
           and "prepayDaysAgo: prepayDaysAgo, prepayAmt: prepayAmt," in js
-          # (3) the plan window widens to 10 days (v73.27: the forward window
-          # is preserved — dd >= 0 ? dd <= 10 : true — with an overdue branch
-          # added for dd < 0; see the v73.27 check)
-          and "if (u2.dd >= 0 ? u2.dd <= 10 : true) urgent.push(u2);" in js
+          # (3) the plan window (v73.23: 7 -> 10 days; v73.27: the overdue
+          # branch added for dd < 0; v73.68: the forward window is now
+          # today..cycEnd — the 10-day line is DEAD, retargeted to the
+          # cycle-window line below)
+          and "if (u2.dd >= 0 ? (cycEnd ? u2.date <= cycEnd : u2.dd <= 20) : true) urgent.push(u2);" in js
           # (4) the removed rows are GONE (assert on the row-TEXT markers, not
           # the words — the words still appear in a comment + the SHELL_NOTES
           # copy, which is fine; the ROW code is what must be gone).
@@ -607,8 +608,10 @@ def main():
     check("v73.27 (boss: 'if the plan is still not paid past due date, keep it showing'): an UNPAID plan occurrence that has passed its due date no longer vanishes — it shows as a red 'Overdue' row ('N days past due') and stays until paid (then it drops out like any handled one). The forward 10-day window is unchanged (due today..+10); the new branch is the overdue one (dd < 0, nothing logged). planAllDates() exposes the whole series (past + future) so past occurrences are reachable — planOccurrences() is a forward window (first >= today) and would never yield them. A partially paid overdue occurrence still shows the 'Partly handled' row (the partial state wins over the overdue one); a fully paid one renders no row. The chip is the same pay_plan action (prefilled + pre-linked).",
           # (1) the whole-series helper (past + future; planOccurrences is forward-only)
           "function planAllDates(p) {" in js
-          # (2) the overdue occurrences are pulled in (dd < 0 stays, no horizon)
-          and "if (u2.dd >= 0 ? u2.dd <= 10 : true) urgent.push(u2);" in js
+          # (2) the overdue occurrences are pulled in (dd < 0 stays, no
+          # horizon) — v73.68 retarget: the forward side of the same
+          # condition is now today..cycEnd (the 10-day window is dead)
+          and "if (u2.dd >= 0 ? (cycEnd ? u2.date <= cycEnd : u2.dd <= 20) : true) urgent.push(u2);" in js
           and "(p.repeat ? planAllDates(p) : [String(p.date)])" in js
           # (3) the Overdue row (bad, 'N days past due', pay_plan chip)
           and "tag: 'Overdue'" in js
@@ -1089,6 +1092,20 @@ def main():
           and "if (ro && ro.skip) return false;" in js
           # the notes
           and "'73.67': [" in js)
+    check("v73.68 (boss: 'extend the plan due rows to show dues... on second thoughts, make it this cycle's dues, initially collapsed to 4 +x more rows'): the coach's plan-due window now spans the WHOLE current cycle (due today..cycEnd, the 10-day forward window is dead; fallback to +20 only if cycle data is ever missing) and overdue dues still stay forever (v73.27 untouched); coachRows builds EVERY due in the window into rows (the old shown<4 cap silently dropped the rest) and renderCoach collapses the plans group to its first 4 rows + a tappable '+N more…' (coachPlansMore, in-memory, defaults collapsed — the peek's cbPlansMoreRow pattern, div[role=button])",
+          # (a) the window: today..cycEnd (fallback +20), overdue stays
+          "if (u2.dd >= 0 ? (cycEnd ? u2.date <= cycEnd : u2.dd <= 20) : true) urgent.push(u2);" in js
+          # (b) the old 10-day forward window is gone from coachRows
+          and "u2.dd <= 10" not in js
+          # (c) coachRows no longer caps at 4 (the collapse moved to renderCoach)
+          and "i < urgent.length && shown < 4" not in js
+          # (d) the collapse: slice to 4 + the more-row + the in-memory flag
+          and "if (isPlans && !state.coachPlansMore && grow.length > 4) planRows = grow.slice(0, 4);" in js
+          and 'id="coachPlansMoreRow" role="button"' in js
+          and "state.coachPlansMore = true;" in js
+          and "coachPlansMore: false" in js
+          # the notes
+          and "'73.68': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]

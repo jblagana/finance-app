@@ -32,7 +32,8 @@
     cycleMode: 'this', // v73.34: the hero's cycle block — This cycle by default, Next cycle only on tap
     peekMode: 'with',  // v73.34: the Next-cycle salary toggle (With salary / Without)
     cbPlansOpen: false, // v73.37: the peek's Plans row expansion (in-memory, defaults closed)
- cbPlansMore: false // v73.39: the peek's "+N more…" second-level expansion (in-memory, defaults collapsed)
+    cbPlansMore: false, // v73.39: the peek's "+N more…" second-level expansion (in-memory, defaults collapsed)
+    coachPlansMore: false // v73.68: the coach's Plans group "+N more…" (in-memory, defaults collapsed to 4 rows)
   };
 
   // ---------- event bus: a state change re-renders only the views that depend on it ----------
@@ -3773,6 +3774,7 @@
         else if (k === 'sink') bits.push('a goal alert cleared'); // v68 item 6
         else if (k.indexOf('recurring:') === 0) bits.push('the recurring suggestion cleared — you resisted the plan'); // v68 item 5
         else if (k.indexOf('pace:') === 0) bits.push('the ' + k.slice(5) + ' pace flag cleared'); // v68 item 4
+        else if (k.indexOf('plan:') === 0) bits.push('the ' + k.slice(5) + ' due cleared — you actually paid something, shocking'); // v73.68
       });
       if (bits.length) sub = 'Since your last check: ' + bits.slice(0, 2).join('; ') + '. Progress is progress, I suppose. ' + sub;
       else if (info.alerts.length && (mem.alerts || []).join() === info.alerts.join()) {
@@ -3902,13 +3904,23 @@
           '<span class="g-r">' + money(r2(total)) + '</span></button>';
         html += '<div class="grp-body' + (open ? ' open' : '') + '" data-coachgrpbody="' + g + '">';
         var sawNext = false;
-        grow.forEach(function (rw) {
+        // v73.68: the plans group collapses to its first 4 rows + a tappable
+        // "+N more…" (coachPlansMore, in-memory, defaults collapsed) — the
+        // window now spans the whole cycle, so a long cycle would flood the
+        // card. The more-row is a div[role=button] (the v73.20 pattern — no
+        // button-in-button); tapping it re-renders with the full list.
+        var planRows = grow;
+        if (isPlans && !state.coachPlansMore && grow.length > 4) planRows = grow.slice(0, 4);
+        planRows.forEach(function (rw) {
           if (isPlans && rw.nextCycle && !sawNext) {
             sawNext = true;
             html += '<div class="cyc-div"><span class="lbl">Next cycle · from ' + nextStartLbl + '</span><span class="rule"></span></div>';
           }
           html += rowHTML(rw);
         });
+        if (isPlans && !state.coachPlansMore && grow.length > 4) {
+          html += '<div class="cbsub mut" id="coachPlansMoreRow" role="button" tabindex="0"><span class="sl">+' + (grow.length - 4) + ' more…</span></div>';
+        }
         html += '</div>';
       });
       rows.forEach(function (rw) {
@@ -3931,6 +3943,13 @@
           };
         })(grps[gi]);
       }
+      // v73.68: the plans group's "+N more…" row expands the full cycle's
+      // dues (same in-memory flag pattern as the peek's cbPlansMoreRow).
+      var cpmRow = body.querySelector('#coachPlansMoreRow');
+      if (cpmRow) cpmRow.onclick = function () {
+        state.coachPlansMore = true;
+        renderCoach();
+      };
       // v73.20: the TAP FIX (the boss: 'the chips in the plans are not
       // clickable still'). The chip is the ONLY button on the row, and the
       // row handler now bails when the tap started on a chip
@@ -5065,14 +5084,21 @@
         if (ro && ro.skip) return;
         var u2 = { p: p, date: od, dd: diffDays(d.today, od) };
         if (ro) { u2.nm = ro.name; u2.am = ro.amount; }
-        // dd >= 0: the original 10-day forward window (due today..+10).
+        // dd >= 0: the forward window (v73.68 — due today..this cycle's end,
+        // cycEnd; the 20-day widening was the pre-approval draft, the boss
+        // re-scoped it to "this cycle's dues"; fallback to +20 if the cycle
+        // data is ever missing). The render collapses past the first 4 rows
+        // + a tappable "+N more…".
         // dd < 0: v73.27 — an overdue occurrence STAYS (no horizon).
-        if (u2.dd >= 0 ? u2.dd <= 10 : true) urgent.push(u2);
+        if (u2.dd >= 0 ? (cycEnd ? u2.date <= cycEnd : u2.dd <= 20) : true) urgent.push(u2);
       });
     });
     urgent.sort(function (a, b) { return a.dd - b.dd; });
+    // v73.68: build EVERY due in the window (this cycle + overdue) into rows —
+    // the collapse to 4 + "+N more…" happens in renderCoach (coachPlansMore),
+    // not here. The old `shown < 4` cap silently DROPPED the rest.
     var shown = 0;
-    for (var i = 0; i < urgent.length && shown < 4; i++) {
+    for (var i = 0; i < urgent.length; i++) {
       var u = urgent[i];
       // v73.14: the RESOLVED name/amount (fork-aware) — used for the match
       // AND the row, so a forked occurrence's payment counts against it.
@@ -7469,12 +7495,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.67, live: new Date(2026, 9, 28, 0, 45) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.68, live: new Date(2026, 9, 28, 1, 37) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.68': [
+      'New: the coach\u2019s plan-due rows now span the WHOLE current cycle (not a 10-day window) — every due from today to the cycle end is in the list, and overdue dues still stay forever. The group collapses to its first 4 rows + a tappable "+N more\u2026" so a long cycle never floods the card.'
+    ],
     '73.67': [
       'Fixed: paying a PAST-DUE plan due from its own chip could silently drop the link — the app checked the link against the future window only, so an overdue occurrence looked "dead", the link chip vanished, and the payment saved unlinked: the due stayed AND the money counted as a normal expense (double deduction). Overdue dues are now first-class link targets — the chip stays, the link survives, and paying an overdue due clears it in one tap.'
     ],
@@ -8514,7 +8543,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     unlinkPlanTxn: unlinkPlanTxn, // v73.17: break an explicit link (the txn keeps its money)
     setPlanLinkRef: function (r) { state.planLinkRef = r; }, // v73.17: the chip's link state (smoke drives it)
     getPlanLinkRef: function () { return state.planLinkRef; },
-    coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut)
+    coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut); v73.68: the cycle-window + no-4-cap assertions
     insightsData: insightsData, // v73.2: the insight math (coachRows' input)
     renderProjection: renderProjection, // v73.42: the Money tab's projection card (smoke drives it; it now carries the adj bar)
     adjActive: adjActive, // v73.42: is the overlay live (the adj bar's gate)
