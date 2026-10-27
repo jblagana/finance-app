@@ -535,12 +535,23 @@
   }
   // v73.17: does an explicit link still point at a live occurrence?
   // (The plan can be deleted, or the series re-anchored, after the link.)
+  // v73.67 (boss: 'i used the due rows chip but it has no link chip'): the
+  // membership check used planOccurrences() — the FORWARD window (first
+  // date >= today). An OVERDUE occurrence (past, unpaid) is NOT in that
+  // window, so a link the boss set from the overdue due row's own chip
+  // (payPlanChip) was nullified on the very next updatePlanLinkChip: the
+  // chip rendered hidden, the saved txn carried no planRef, the due row
+  // stayed, and the hero deducted it AGAIN (the double-deduction). An
+  // overdue occurrence is the MOST important link target, not a stale
+  // one — check the FULL series (planAllDates: forward + past) instead.
+  // A truly dead link (plan deleted, series re-anchored, occurrence
+  // skipped) is still dead: none of those dates appear in planAllDates.
   function planRefAlive(ref) {
     if (!ref || !ref.planId) return false;
     for (var i = 0; i < state.plans.length; i++) {
       var p = state.plans[i];
       if (String(p.id) !== String(ref.planId)) continue;
-      var occs = planOccurrences(p);
+      var occs = planAllDates(p); // v73.67: full series, past included
       for (var j = 0; j < occs.length; j++) {
         if (occs[j] === String(ref.date)) {
           var ro = resolveOccurrence(p, occs[j]); // v73.63: one-offs too — a skipped one-off's link is not alive
@@ -7458,12 +7469,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.66, live: new Date(2026, 9, 23, 2, 29) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.67, live: new Date(2026, 9, 28, 0, 45) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.67': [
+      'Fixed: paying a PAST-DUE plan due from its own chip could silently drop the link — the app checked the link against the future window only, so an overdue occurrence looked "dead", the link chip vanished, and the payment saved unlinked: the due stayed AND the money counted as a normal expense (double deduction). Overdue dues are now first-class link targets — the chip stays, the link survives, and paying an overdue due clears it in one tap.'
+    ],
     '73.66': [
       'Changed: the coach and its notes got the roast treatment — every coach branch (negative free, prepay due, over-budget week, red-month pace, tight daily, on-track) now lands a roasty line, and the "On repeat" line, the since-last-check memory, the insights one-liners (Today / Next 7 days / This cycle / This month) and the recap line match. The numbers are untouched — same math, funnier words.'
     ],
@@ -8476,7 +8490,8 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     renderSpark: renderSpark, // v73.65: the axis-throttled render (the smoke counts the <text> ticks)
     planAllDates: planAllDates, // v73.57: the whole series (the smoke builds the expected drop dates)
     planLinkSuggestion: planLinkSuggestion, // v73.17: the fuzzy SUGGESTION (pure — the smoke drives it)
-    planRefAlive: planRefAlive, // v73.17: does an explicit link still point at a live occurrence
+    planRefAlive: planRefAlive, // v73.17: does an explicit link still point at a live occurrence (v73.67: full-series check — the smoke drives the overdue case)
+    setPlans: function (ps) { state.plans = ps; }, // v73.67: test hook (smoke seeds an overdue series)
     renderCoach: renderCoach, // v73.18: the coach card render (smoke reads the pay-plan chip in the HTML)
     prefillAdd: prefillAdd, // v73.18: the coach prefill (smoke verifies the chip's target state)
     getAddMode: function () { return addMode; }, // v73.19: the Add sheet's direction (the row chips' prefill proof)

@@ -1159,8 +1159,8 @@ waitReady().then(async function (F) {
   await sleep(40);
   ok(rent19.overrides[anchor19] && rent19.overrides[anchor19].move === newDate19,
     'v73.63 precondition: the move-override sits at the grid date (move: newDate)');
-  ok(F.planGridDateFor(rent19, newDate19) === newDate19,
-    'v73.63: after a move the slot is OFF the grid — the resolved date maps to itself (which is why skips key at the resolved date)');
+  ok(F.planGridDateFor(rent19, newDate19) === anchor19,
+    'v73.63 (retargeted v73.64): after a move the slot is ON the grid (relocation) — the resolved date maps back to its grid date (which is why skips key at the RESOLVED date, not this)');
   F.skipPlanChip('p19rent|' + newDate19); // the chip passes the RESOLVED date
   await sleep(40);
   ok(rent19.overrides[newDate19] && rent19.overrides[newDate19].skip,
@@ -1312,6 +1312,40 @@ waitReady().then(async function (F) {
     'v73.66: the head quotes the exact daily headroom (the math is untouched, only the words changed)');
   ok(coachHead22.indexOf('no room to breathe right now') < 0 && coachSub22.indexOf('Skip the treats today — back the cards first.') < 0,
     'v73.66: the old flat copy is gone (the roast replaced it, not joined it)');
+
+  // ============ PART 23: v73.67 — the overdue link is alive ==========
+  // (boss: 'i used the due rows chip but it has no link chip'). The link
+  // liveness check walked planOccurrences() — the FORWARD window — so an
+  // OVERDUE occurrence looked dead and updatePlanLinkChip nullified the
+  // ref the boss had just set from the due row's own chip: the chip
+  // vanished, the txn saved unlinked, the due stayed, the hero deducted
+  // it AGAIN. planRefAlive now walks planAllDates (full series, past
+  // included) — an overdue occurrence is the MOST important link target.
+  console.log('\n== PART 23: v73.67 — the overdue link is alive =');
+  // dates are RELATIVE to the run's today — the premise (an overdue occurrence
+  // that is NOT in the forward window) must hold whenever the gate runs.
+  var past23 = F.localISO((function () { var d = new Date(); d.setDate(d.getDate() - 8); return d; })());
+  var fut23d = F.localISO((function () { var d = new Date(); d.setDate(d.getDate() + 7); return d; })());
+  var rent23 = {
+    id: 'smoke23-rent', name: 'Rent', amount: 13394,
+    date: past23, repeat: 'monthly', count: null, overrides: {}
+  };
+  var fut23 = { id: 'smoke23-gym', name: 'Gym', amount: 1200, date: fut23d, repeat: 'monthly', count: null, overrides: {} };
+  // planRefAlive walks state.plans — seed the two test series in (setPlans hook, v73.67);
+  // PART 23 is the last part, so no restore is needed.
+  F.setPlans([rent23, fut23]);
+  var fwd23 = F.planOccurrences(rent23);
+  ok(fwd23.indexOf(past23) < 0, 'v73.67: the overdue occurrence is NOT in the forward window (the old bug\'s premise) — got: ' + JSON.stringify(fwd23));
+  ok(F.planAllDates(rent23).indexOf(past23) >= 0, 'v73.67: the overdue occurrence IS in the full series (planAllDates)');
+  ok(F.planRefAlive({ planId: 'smoke23-rent', date: past23, name: 'Rent', amount: 13394 }),
+    'v73.67: a link to the OVERDUE occurrence is ALIVE (the boss\'s chip must survive)');
+  rent23.overrides = { [past23]: { skip: true, skippedAt: 1 } };
+  ok(!F.planRefAlive({ planId: 'smoke23-rent', date: past23, name: 'Rent', amount: 13394 }),
+    'v73.67: a link to a SKIPPED occurrence is still dead (the v73.63 rule survives)');
+  ok(!F.planRefAlive({ planId: 'smoke23-gone', date: past23, name: 'Rent', amount: 13394 }),
+    'v73.67: a link to a DELETED plan is still dead');
+  ok(F.planRefAlive({ planId: 'smoke23-gym', date: fut23d, name: 'Gym', amount: 1200 }),
+    'v73.67: a link to a FUTURE occurrence is still alive (the normal case, unchanged)');
 
   console.log('');
   console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');

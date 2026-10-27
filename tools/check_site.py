@@ -1080,6 +1080,15 @@ def main():
           and "renderCoach: renderCoach," in js
           # the notes
           and "'73.66': [" in js)
+    check("v73.67 (boss: 'i used the due rows chip but it has no link chip'): paying a PAST-DUE plan due from its own chip could silently drop the link — planRefAlive checked the link against planOccurrences() (the FORWARD window, first date >= today), so an OVERDUE occurrence looked dead: updatePlanLinkChip nullified the ref the boss had just set, the chip rendered hidden, the saved txn carried no planRef, the due row stayed, and the hero deducted it AGAIN (the double-deduction). The membership check now uses planAllDates (the FULL series, past included) — an overdue occurrence is the MOST important link target, not a stale one; a truly dead link (plan deleted, re-anchored, skipped) still dies because none of those dates appear in planAllDates",
+          # (a) the check walks the full series, not the forward window
+          "var occs = planAllDates(p); // v73.67: full series, past included" in js
+          # (b) the old forward-window membership is gone from planRefAlive
+          and "var occs = planOccurrences(p);" not in js.split("function planRefAlive")[1].split("function mealBudget")[0]
+          # (c) the skip-still-dead rule survives
+          and "if (ro && ro.skip) return false;" in js
+          # the notes
+          and "'73.67': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]
