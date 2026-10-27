@@ -6,6 +6,38 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.67 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-28 - "i used the due rows chip but it has no link chip" — the overdue link is alive
+Status: **done** — commit `b205012` (SHELL_RELEASE 73.67, sw cache `finances-pwa-v73.67`) pushed to
+`https://github.com/jblagana/finance-app.git` (main).
+
+The boss paid his 6,030 Rent remainder from the due row's own chip, but the Add sheet showed no
+link chip (unlike future dues) and the payment saved UNLINKED — the due row stayed AND the money
+counted as a normal expense (the double deduction). Diagnosis: `planRefAlive` (app.js) checked the
+link against `planOccurrences()` — the FORWARD window (first date >= today). An OVERDUE occurrence
+is not in that window, so `updatePlanLinkChip` nullified the ref `payPlanChip` had just set, the
+chip rendered hidden, and the saved txn carried no planRef.
+
+- planRefAlive now walks `planAllDates` (the FULL series, past included) — an overdue occurrence is
+  the MOST important link target, not a stale one. Truly dead links still die (plan deleted,
+  re-anchored, or skipped — none of those dates appear in planAllDates).
+- smoke PART 23 (6 new asserts, 174 total): overdue link alive (dates relative to run-today so the
+  premise holds whenever the gate runs), skipped link still dead (v73.63 rule), deleted-plan link
+  still dead, future link unchanged. `setPlans` test hook added to the FinApp surface.
+- check_site v73.67 pin (full-series line present, forward-window line absent from planRefAlive,
+  skip-still-dead rule survives, notes entry).
+
+Gate slips caught + fixed pre-push: (1) my pin's "forward-window gone" marker was written
+`"..." in js.split(...)[1].split(...)[0] == False` — operator precedence makes that
+`"..." in (slice == False)`, which is never true — rewrote as `not in`; (2) the v73.63 PART 19 assert "after a move the slot is
+OFF the grid" was stale — v73.64 made a move a RELOCATION (the slot stays on the grid, the resolved
+date maps back to it), so the assert now expects `planGridDateFor === anchor` (retargeted, not
+deleted); (3) PART 23's first draft used fixed 2026-10-20/11-04 dates — the "not in the forward
+window" premise only holds relative to run-today, so the dates are computed from `todayISO()`.
+
+Live-verify: the CDN fetch from this machine keeps timing out (same as v73.63/64/65/66) — the gates
+are the verification; the phone pull is the final confirmation.
+
 # v73.66 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-23 - "make coach fin and coachs note very funny and very roasty" — roasty coach + notes
 Status: **done** — commit `0621821` (SHELL_RELEASE 73.66, sw cache `finances-pwa-v73.66`) pushed to

@@ -74,8 +74,8 @@ User mandate (2026-09-12): these apply to every batch in this repo.
      runs a preflight (all gate dependencies present — v73.48), then the
      FULL gate suite in one pass (check_site repo + mirror,
      `test_chat_parser.py`, `node --check` on all JS, both smokes —
-     `tools\smoke\smoke_app_v68.js`, a permanent 150-assertion gate
-     rebuilt in v73.47 (150 as of v73.62: PART 7 = toast lifetime by
+     `tools\smoke\smoke_app_v68.js`, a permanent 174-assertion gate
+     rebuilt in v73.47 (174 as of v73.67; PART 7 = toast lifetime by
      kind; PART 8 = Money-in on a CC = payoff; PART 9 = the cashback
      payoff is NEW money; PART 10 = the skip record + unskip path;
      PART 11 = edit/delete survive a fully-skipped plan; PART 12 =
@@ -84,7 +84,10 @@ User mandate (2026-09-12): these apply to every batch in this repo.
      the plans-list redesign (next-due sort, history strip, editable
      one-offs); PART 16 = the One-offs/Recurring tab bar; PART 17 =
      the state-aware fast-forward; PART 18 = the partial chip is a
-     comparison),
+     comparison; PART 19 = skip/undo integrity + one-off skips move
+     free; PART 20 = a skipped past due keeps its unskip trace;
+     PART 21 = x-axis tick throttling; PART 22 = the roasty coach;
+     PART 23 = the overdue link is alive),
      seeded by `tools\smoke\smoke_seed.json`).
      Invoke it as the
      final step right before commit; the live-stamp freshness check
