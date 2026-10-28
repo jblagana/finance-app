@@ -899,10 +899,10 @@ def main():
           and "var words = String(kind.name || '').toLowerCase().split" not in js
           # (1b) the link is still the deterministic match (unchanged)
           and "String(t.planRef.planId) === String(kind.planId) &&" in js
-          # (2) the this-cycle row reuses the peek's expandable machinery
-          and "var openThis = !!state.cbPlansOpen;" in js
-          and "var itemsT = p.planItems || [];" in js
-          and "var moreOpenT = !!state.cbPlansMore;" in js
+          # (2) SUPERSEDED by v73.69: the this-cycle expansion (openThis /
+          # itemsT / moreOpenT) was the thing v73.69 deleted — the this-cycle
+          # row is now a total with 'details in the coach' (see the v73.69
+          # check). The peek's expandable machinery (cbPlansRow) survives.
           and "'73.56': [" in js)
     check("v73.57 (boss: 'limit it to 2months projection, and the deductions from dues reflects on the day when theyre due'): the hero graph is a 2-month STEP CHART of the live numbers - start = RAW cash (effectiveSnap.cash.total), step down on EVERY plan due on its due date (this month's included - the start is raw, so no double count), per-card card owed drops ONCE at its first payment due date in the window (the card's due day-of-month, DEFAULT 15 when unset - the owed is a stock: paying it zeroes the balance and unlogged charges are never predicted, so a second drop of the same owed would double-count), step up on the next payday; the v72.37/72.45 base-matrix plot path (raw 6-month running, monthShort month points, salDelta proration) is GONE; card drops read the LIVE owed (effectiveSnap cards - a charge grows the drop, a payoff shrinks it, a chip-paid or skipped due removes its drop)",
           # the step chart is built from the events, not the matrix
@@ -1106,6 +1106,28 @@ def main():
           and "coachPlansMore: false" in js
           # the notes
           and "'73.68': [" in js)
+    check("v73.69 (boss: 'a lot of infos are repeated in Home tab' - approved mockup, one number one home): the Home tab stopped repeating itself - (1) the coach head no longer re-quotes free cash (it lives ONLY in the hero); (2) the hero sub is cards owed / payday / days left in cycle (Liquid left - the cycle block owns it; the prepay statement left - the coach rows own it); (3) the THIS-cycle Plan dues row is a TOTAL ONLY with a details-in-the-coach pointer (the v73.56 expansion is dead; the peek keeps its expandable row); (4) the old three-block Insights card is a 3-cell strip (Salary used + bar, Days left, Cycle ends with) + roast verdict + a More-cycle-detail fold, and the card title is the cycle window",
+          # (1) the coach head stopped quoting free cash - the head is the
+          # verdict + daily number (lowercase on-track branch, ASCII prefix)
+          "head = hi + 'you are on track. You can spend up to ' + money(d.daily)" in js
+          and "head = hi + 'Free cash is ' + money(free) + '.';" not in js
+          # (2) the hero sub: cards owed + cycle facts, no Liquid / no prepay
+          and "sub.push('Cards owed <b>' + money(s.card_owed) + '</b>');" in js
+          and "sub.push('Liquid <b>' + money(s.cash ? s.cash.total : 0) + '</b>');" not in js
+          and "sub.push(pw + ' <b>' + money(d.prepayAmt) + '</b>');" not in js
+          and "left in cycle" in js
+          # (3) the this-cycle Plan dues row is a total (no expansion), the
+          # peek keeps its expandable row
+          and "details in the coach</small>" in js
+          and "var openThis = !!state.cbPlansOpen;" not in js
+          and "var itemsT = p.planItems || [];" not in js
+          # (4) the 3-cell strip + fold (the old text blocks are gone)
+          and '<div class="k">Salary used</div>' in js
+          and "More cycle detail" in js
+          and "insBlock('Next 7 days', wLines, wCls, wTxt);" not in js
+          and "insBlock('Today', tLines, tCls, tTxt);" not in js
+          and "insBlock('This cycle', cLines, cCls, cTxt);" not in js
+          and "'73.69': [" in js)
     check("v73.46 (boss: 'the date field is invisible, i just click with faith that its there'): the plan-edit sheet's date input (opacity:0 by design) now has a visible .dlabel span (#pe_dateLabel) — the same pattern as every other date field — and the sheet fill + input binding call syncDateLabel so the label shows the real date, never the 'Pick a date' placeholder",
           'id="pe_dateLabel"' in html
           and 'class="dlabel"' in html.split('id="pe_dateLabel"')[0].split('<span')[-1]

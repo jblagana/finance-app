@@ -4064,6 +4064,12 @@
     if (he) he.style.display = d ? 'none' : '';
     if (!d) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
+    // v73.69: the card's title is the cycle itself (the old 'Insights' label
+    // was a category, not information).
+    var it = byId('insTitle');
+    if (it) it.textContent = (d.cycle && d.cycle.start && d.cycle.end)
+      ? 'This cycle · ' + dayMonth(d.cycle.start) + ' → ' + dayMonth(d.cycle.end)
+      : 'This cycle';
     var s = d.s, daysLeft = d.daysLeft, meal = d.meal;
     // v73.16: the headroom runs on the NET free (raw minus the cycle's plan
     // share) — the same number the hero + coach quote.
@@ -4075,58 +4081,71 @@
     // free cash has to last until the NEXT salary (the 14th), not the calendar
     // month end. cycleDaysLeft falls back to the calendar days when there is
     // no cycle, so the old text is the no-cycle case.
+    // v73.69 (boss: 'a lot of infos are repeated in Home tab' — approved
+    // mockup, one number one home): the old three text blocks (Today
+    // headroom / Next 7 days / This cycle) are DELETED — the daily number
+    // lives only in the coach head, the due list lives only in the coach
+    // card, and the cycle facts collapse into a 3-CELL STRIP (Salary used
+    // % + bar · Days left · Cycle ends with) + the roast verdict + a
+    // "More cycle detail" fold (last-cycle compare, pace, treat budget,
+    // spent today). The v73.66 one-liners survive in the verdict.
     var todaySpend = d.todaySpend;
     var daily = d.daily;
     var hDays = d.cycleDaysLeft || daysLeft;
-    var hDaily = hDays > 0 ? r2(Math.max(0, free) / hDays) : 0;
-    var cycLbl = d.cycle && d.cycle.end ? ' this cycle (to ' + dayMonth(d.cycle.end) + ')' : '';
-    var tLines = ['Headroom: <b>' + money(hDaily) + '/day</b> left across the next ' + hDays + ' day' + (hDays === 1 ? '' : 's') + '.' + cycLbl];
-    if (todaySpend > 0) tLines.push('Spent in this app today: <b>' + money(todaySpend) + '</b>.');
-    var tCls, tTxt;
-    if (free < 0) { tCls = 'bad'; tTxt = 'No room for treats — free cash is negative, which means the treats are now a memory. Back the cards first.'; }
-    else if (hDaily >= meal) { tCls = 'good'; tTxt = 'Eat out OK: a ' + money(meal) + ' treat still leaves you on track (about ' + money(r2(hDaily - meal)) + ' under your daily headroom). Spend it, you have earned the guilt.'; }
-    else if (hDaily > 0) { tCls = 'warn'; tTxt = 'Tight today: only ' + money(hDaily) + '/day left — a ' + money(meal) + ' treat would overshoot by ' + money(r2(meal - hDaily)) + '. We can do this, we just can\'t do it today.'; }
-    else { tCls = 'warn'; tTxt = 'Nothing left after this month\'s commitments. The wallet is at zero, the willpower should match.'; }
-    blocks += insBlock('Today', tLines, tCls, tTxt);
-
-    // ---- Next 7 days: plans + card prepay
-    var items = d.items;
-    var laterCount = d.laterCount, laterAmt = d.laterAmt;
-    var prepayDay = d.prepayDay, prepayIn = d.prepayIn, prepayAmt = d.prepayAmt;
-    var weekTotal = d.weekCost;
-    var wLines = items.length
-      ? items.map(function (it) { return esc(planWhen(it.date)) + ' · ' + esc(it.label) + ' — <b>' + money(it.amt) + '</b>'; })
-      : ['Nothing planned for the next 7 days — a quiet stretch.'];
-    if (laterCount) wLines.push('Later in the month: ' + laterCount + ' more plan' + (laterCount === 1 ? '' : 's') + ', ' + money(r2(laterAmt)) + ' total.');
-    if (prepayIn === 0 && prepayAmt > 0) wLines.push('<b>Prepay day is today</b> — ' + money(prepayAmt) + ' is due before the ' + (s.cutoff_day || 15) + '.');
-    else if (prepayIn > 0 && prepayIn <= 7 && prepayAmt > 0) wLines.push('Set aside <b>' + money(r2(prepayAmt / prepayIn)) + '/day</b> until the ' + ordinal(prepayDay) + ' prepay.');
-    var wCls, wTxt;
-    if (!weekTotal) { wCls = 'good'; wTxt = 'No cost coming up — free cash stays where it is. Suspicious, but fine.'; }
-    else if (weekTotal <= free) { wCls = 'good'; wTxt = 'Covered: ' + money(r2(free - weekTotal)) + ' left after the next 7 days. You win this round; do not celebrate yet.'; }
-    else { wCls = 'bad'; wTxt = 'Over free cash by ' + money(r2(weekTotal - free)) + ' — trim a plan, or enjoy dipping into the floor.'; }
-    blocks += insBlock('Next 7 days', wLines, wCls, wTxt);
-    // ---- This salary cycle (the 15th) — v72.45 ----
     var cyc = d.cycle;
     if (cyc && cyc.expected > 0) {
-      var cLines = [];
-      cLines.push('Cycle: <b>' + dayMonth(cyc.start) + ' – ' + dayMonth(cyc.end) + '</b> — ' + cyc.elapsed + ' of ' + cyc.days + ' days.');
-      cLines.push(cyc.received
-        ? 'Salary <b>' + money(cyc.received.amount) + '</b> — in on ' + dayMonth(cyc.received.date) + '.'
-        : 'Salary <b>' + money(cyc.expected) + '</b> — due on the ' + ordinal(cyc.sday) + '.');
-      cLines.push('Spent this cycle: <b>' + money(cyc.spent) + '</b> (' + Math.round((cyc.spent / cyc.expected) * 100) + '% of the salary).');
-      if (d.planDeduct > 0) cLines.push('Plans landing in this cycle: <b>' + money(d.planDeduct) + '</b> — already deducted from your free cash.'); // v73.16
-      if (cyc.elapsed >= 7) cLines.push('At this pace the cycle ends with <b>' + money(cyc.projectedNet) + '</b> of the salary.');
+      var usedPct = Math.min(100, Math.round((cyc.spent / cyc.expected) * 100));
+      var endsNet = cyc.elapsed >= 7 ? cyc.projectedNet : null;
+      var cTxt;
+      if (cyc.elapsed >= 7 && cyc.projectedNet < 0) cTxt = 'This pace burns the salary before the cycle ends — the paycheque is dying a young death. Slow down or cut a plan.';
+      else if (cyc.spent > 0.6 * cyc.expected && cyc.elapsed < 0.6 * cyc.days) cTxt = 'You are past 60% of the salary with 60% of the cycle still to go. The salary does not know it is already half gone; do not tell it.';
+      else cTxt = 'On pace — the salary covers this cycle at the current spend. Do not let it hear you saying that.';
+      var strip = '<div class="pace">'
+        + '<div class="p"><div class="k">Salary used</div><div class="v">' + usedPct + '%</div><div class="pbar"><i style="width:' + usedPct + '%"></i></div></div>'
+        + '<div class="p"><div class="k">Days left</div><div class="v">' + hDays + '</div></div>'
+        + '<div class="p"><div class="k">Cycle ends with</div><div class="v' + (endsNet != null ? (endsNet < 0 ? ' style="color:var(--bad)"' : ' style="color:var(--ok)"') : '') + '">' + (endsNet != null ? (endsNet < 0 ? '−' : '+') + money(Math.abs(endsNet)) : '—') + '</div></div>'
+        + '</div>'
+        + '<p class="note" style="margin-top:10px">' + cTxt + '</p>';
+      var fold = [];
       if (cyc.prev && (cyc.prev.spent > 0 || cyc.prev.expected > 0)) {
-        cLines.push('Last cycle (' + dayMonth(cyc.prev.start) + ' – ' + dayMonth(cyc.prev.end) + '): spent <b>' + money(cyc.prev.spent) + '</b>, kept ' + money(cyc.prev.net) + '.');
+        fold.push('<div class="kv"><span>Last cycle (' + dayMonth(cyc.prev.start) + ' – ' + dayMonth(cyc.prev.end) + ')</span><b>' + (cyc.prev.net < 0 ? '−' : '+') + money(Math.abs(cyc.prev.net)) + '</b></div>');
       }
-      var cCls, cTxt;
-      if (cyc.elapsed >= 7 && cyc.projectedNet < 0) { cCls = 'bad'; cTxt = 'This pace burns the salary before the cycle ends — the paycheque is dying a young death. Slow down or cut a plan.'; }
-      else if (cyc.spent > 0.6 * cyc.expected && cyc.elapsed < 0.6 * cyc.days) { cCls = 'warn'; cTxt = 'You are past 60% of the salary with 60% of the cycle still to go. The salary does not know it is already half gone; do not tell it.'; }
-      else { cCls = 'good'; cTxt = 'On pace — the salary covers this cycle at the current spend. Do not let it hear you saying that.'; }
-      blocks += insBlock('This cycle', cLines, cCls, cTxt);
+      fold.push('<div class="kv"><span>Pace to keep green</span><b>' + money(daily) + '/day</b></div>');
+      fold.push('<div class="kv"><span>Treat budget</span><b>' + money(meal) + '</b></div>');
+      if (todaySpend > 0) fold.push('<div class="kv"><span>Spent in app today</span><b>' + money(todaySpend) + '</b></div>');
+      // v73.69: the v73.66 one-liners the old blocks carried survive here —
+      // the roast travels with the card, the card just got smaller.
+      var hDaily = hDays > 0 ? r2(Math.max(0, free) / hDays) : 0;
+      var cycLbl = d.cycle && d.cycle.end ? ' this cycle (to ' + dayMonth(d.cycle.end) + ')' : '';
+      var tTxt;
+      if (free < 0) tTxt = 'No room for treats — free cash is negative, which means the treats are now a memory. Back the cards first.';
+      else if (hDaily >= meal) tTxt = 'Eat out OK: a ' + money(meal) + ' treat still leaves you on track (about ' + money(r2(hDaily - meal)) + ' under your daily headroom). Spend it, you have earned the guilt.';
+      else if (hDaily > 0) tTxt = 'Tight today: only ' + money(hDaily) + '/day left — a ' + money(meal) + ' treat would overshoot by ' + money(r2(meal - hDaily)) + '. We can do this, we just can\'t do it today.';
+      else tTxt = 'Nothing left after this month\'s commitments. The wallet is at zero, the willpower should match.';
+      fold.push('<p class="note" style="margin:8px 0 2px">' + tTxt + '</p>');
+      var weekTotal = d.weekCost, prepayIn = d.prepayIn, prepayAmt = d.prepayAmt;
+      var wTxt;
+      if (!weekTotal) wTxt = 'No cost coming up — free cash stays where it is. Suspiciously fine — do not log anything else.';
+      else if (weekTotal <= free) wTxt = 'Covered: ' + money(r2(free - weekTotal)) + ' left after the next 7 days. You win this round; do not celebrate yet.';
+      else wTxt = 'Over free cash by ' + money(r2(weekTotal - free)) + ' — trim a plan, or enjoy dipping into the floor.';
+      fold.push('<p class="note" style="margin:8px 0 2px">' + wTxt + '</p>');
+      if (fold.length) {
+        strip += '<button type="button" class="drow" id="insDetailBtn" style="margin-top:8px">More cycle detail</button><div id="insDetailRows" style="display:none">' + fold.join('') + '</div>';
+      }
+      body.innerHTML = strip;
+      var detBtn = byId('insDetailBtn');
+      if (detBtn) detBtn.addEventListener('click', function () {
+        var rowsEl = byId('insDetailRows');
+        if (!rowsEl) return;
+        var open = rowsEl.style.display !== 'none';
+        rowsEl.style.display = open ? 'none' : '';
+        detBtn.textContent = open ? 'More cycle detail' : '− show less';
+      });
+      return;
     }
-
-    body.innerHTML = blocks;
+    // no cycle (no salary) — the old card had nothing either; keep the card
+    // hidden rather than rendering an empty strip.
+    body.innerHTML = '';
   }
   function monthBlock(d) {
     var s = d.s;
@@ -4457,15 +4476,18 @@
       countUp(hv, heroVal == null ? free : heroVal, free, function (v) { return money(v); });
     }
     heroVal = free;
+    // v73.69 (boss: 'a lot of infos are repeated in Home tab' — approved
+    // mockup, one number one home): the sub line is cards owed · payday ·
+    // days left in cycle. Liquid moved OUT (the cycle block's bridge row
+    // already shows it), and the prepay statement moved OUT (the coach's
+    // prepay rows own it).
     var sub = [];
-    sub.push('Liquid <b>' + money(s.cash ? s.cash.total : 0) + '</b>');
-    // v73.34: the '− ₱X plans this cycle' line LEFT the hero sub — the
-    // cycle block below now carries it as an auditable line item (the
-    // approved mockup's freesub: liquid · cards · prepay, nothing else).
     sub.push('Cards owed <b>' + money(s.card_owed) + '</b>');
-    if (d && d.prepayAmt > 0) {
-      var pw = d.prepayIn <= 0 ? 'Prepay due today' : 'Prepay in ' + d.prepayIn + ' day' + (d.prepayIn === 1 ? '' : 's');
-      sub.push(pw + ' <b>' + money(d.prepayAmt) + '</b>');
+    var cycH = d ? d.cycle : null;
+    if (cycH && cycH.end) {
+      sub.push('payday <b>' + dayMonth(cycH.end) + '</b>');
+      var dLeft = Math.round((parseISO(cycH.end) - parseISO((d && d.today) || todayISO())) / 86400000) + 1;
+      if (dLeft > 0) sub.push(dLeft + ' day' + (dLeft === 1 ? '' : 's') + ' left in cycle');
     }
     // v73.33: the salary statement LEFT the Free/unallocated line (boss:
     // 'remove the salary statement in the free/unallocated card') — the
@@ -4514,27 +4536,15 @@
       rows += '<div class="cbrow"><div class="lab">Liquid</div><div class="amt">' + money(p.liquid) + '</div></div>';
       rows += '<div class="cbrow"><div class="lab">Cards owed<small>all cards</small></div><div class="amt minus">− ' + money(p.cardOwed) + '</div></div>';
       if (p.otherOut > 0.004) rows += '<div class="cbrow mut"><div class="lab">Other outflows<small>budgets · debts · sinking · one-offs</small></div><div class="amt minus">− ' + money(p.otherOut) + '</div></div>';
-      // v73.56 (boss: 'make the hero card this-cycle plan dues expandable
-      // just like next cycle'): the same tap-to-expand row as the peek —
-      // the v73.37/v73.39 machinery (cbPlansRow / cbPlansOpen / cbPlansMore)
-      // is mode-agnostic, so the this-cycle row reuses it: same id, same
-      // sub-rows, same "+N more…" second level. The amount stays
-      // p.planShare (the hero's own deduction — the rows must sum to the
-      // hero); the sub-rows come from p.planItems (the same window walk).
+      // v73.69 (boss: 'a lot of infos are repeated in Home tab' — approved
+      // mockup, one number one home): the this-cycle Plan dues row is a
+      // TOTAL ONLY — no chev, no expand. The per-due list's one home is the
+      // coach card (v73.68's cycle-spanning collapsed list); the v73.56
+      // this-cycle expansion is dead. The amount stays p.planShare (the
+      // hero's own deduction — the rows must sum exactly to the hero).
+      // The NEXT-cycle peek keeps its expandable row (v73.37/39, below).
       if (p.planShare > 0.004) {
-        var openThis = !!state.cbPlansOpen;
-        rows += '<div class="cbrow cbplans" id="cbPlansRow" role="button" tabindex="0" aria-expanded="' + (openThis ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (openThis ? ' open' : '') + '">▸</span>Plan dues<small>' + p.planCount + ' due in window</small></div><div class="amt minus">− ' + money(p.planShare) + '</div></div>';
-        if (openThis) {
-          var itemsT = p.planItems || [];
-          var moreOpenT = !!state.cbPlansMore;
-          var shownT = moreOpenT ? itemsT : itemsT.slice(0, 5);
-          var subsT = '';
-          shownT.forEach(function (it) {
-            subsT += '<div class="cbsub"><span class="sl">' + esc(it.name) + (it.edited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') + ' · ' + dayMonth(it.date) + '</span><span class="sv">' + money(it.amount) + '</span></div>';
-          });
-          if (!moreOpenT && itemsT.length > 5) subsT += '<div class="cbsub mut" id="cbPlansMoreRow" role="button" tabindex="0"><span class="sl">+' + (itemsT.length - 5) + ' more…</span></div>';
-          rows += '<div class="cbsubwrap">' + subsT + '</div>';
-        }
+        rows += '<div class="cbrow"><div class="lab">Plan dues<small>' + p.planCount + ' due in window · details in the coach</small></div><div class="amt minus">− ' + money(p.planShare) + '</div></div>';
       }
       rows += '<div class="cbrow cbfree"><div class="lab">Free cash<small>same as the hero number</small></div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
     }
@@ -7495,12 +7505,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.68, live: new Date(2026, 9, 28, 1, 37) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.69, live: new Date(2026, 9, 29, 0, 14) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.69': [
+      'Cleaner: Home stopped repeating itself — one number, one home. Free cash lives only in the hero (the coach stopped re-quoting it); the "spend up to ₱X today" number lives only in the coach; the plan-due list lives only in the coach (the hero\u2019s this-cycle Plan dues row is now a total with "details in the coach", no expand); the hero sub is now cards owed · payday · days left in cycle (Liquid and the prepay statement left — the cycle block and the coach rows own them); and the old three-block Insights card is a 3-cell strip — Salary used % + bar, Days left, Cycle ends with — with the roast verdict and a "More cycle detail" fold (last cycle, pace, treat budget, spent today).'
+    ],
     '73.68': [
       'New: the coach\u2019s plan-due rows now span the WHOLE current cycle (not a 10-day window) — every due from today to the cycle end is in the list, and overdue dues still stay forever. The group collapses to its first 4 rows + a tappable "+N more\u2026" so a long cycle never floods the card.'
     ],
@@ -8488,6 +8501,8 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     updateCashbackRow: updateCashbackRow, // v73.53: the cashback row's visibility (smoke drives it)
     setAddMode: setAddMode, // v73.52: the direction toggle (smoke drives the mode switch)
     renderCoach: renderCoach, // v73.66: the coach card render (smoke drives the roasty copy)
+    renderHero: renderHero, // v73.69: the hero render (smoke drives the deduped sub line)
+    renderInsights: renderInsights, // v73.69: the cycle-strip render (smoke drives the 3 cells + fold)
     // v72.38: the running shell dot (smoke drives the What's-new fallback
     // check). v73.0: the dot SURVIVES — 73.0 is a whole number, so String()
     // prints "73" while the SHELL_NOTES key is "73.0"; re-append a dropped

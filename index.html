@@ -160,6 +160,13 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 .kv{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13px;padding:4px 0;border-top:1px solid var(--line)}
 .kv .k{color:var(--mut)}
 .kv b{color:var(--ink);text-align:right;word-break:break-word}
+/* v73.69: the cycle-strip cells (the old Insights card's 3-cell summary) */
+.pace{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pace .p{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 8px;text-align:center}
+.pace .p .k{color:var(--mut);font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;line-height:1.35}
+.pace .p .v{font-size:14px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+.pbar{height:4px;border-radius:2px;background:var(--line);overflow:hidden;margin-top:6px}
+.pbar i{display:block;height:100%;background:var(--acc);border-radius:2px}
 .bar{height:8px;background:var(--card2);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:8px 0 6px}
 .bar i{display:block;height:100%;background:var(--acc);border-radius:6px}
 /* coach chat (v24: the floating bot opens a floating bubble above the FAB —
@@ -743,7 +750,7 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
 
     <section id="insights" class="card" style="display:none">
       <div class="ins-top">
-        <h2 style="margin-top:0">Insights</h2>
+        <h2 id="insTitle" style="margin-top:0">This cycle</h2>
         <div class="ins-ctrls">
           <label class="ins-meal" for="mealEdit">treat ≈ ₱<input id="mealEdit" type="number" min="0" step="50" inputmode="numeric"></label>
         </div>

@@ -558,25 +558,73 @@ waitReady().then(async function (F) {
   ok(!!(linkPaid && Number(linkPaid.amount) === 1 && linkPaid.linked),
     'v73.56: the explicit planRef link counts as paid (even 1 peso, linked=true)');
   F.state.txns = baseTxns; // restore
-  // (2) the THIS-cycle Plan dues row is expandable like the peek — the
-  // render writes cbPlansRow into the hero block; toggle the shared
-  // cbPlansOpen flag and the sub-rows (from planItems) appear.
+  // ============ PART 25: v73.69 — the Home dedup (one number, one home) ============
+  // Boss: 'a lot of infos are repeated in Home tab' — approved mockup:
+  // free cash only in the hero, the daily number only in the coach, the
+  // due list only in the coach, the hero sub = cards owed · payday · days
+  // left, the Insights card = a 3-cell cycle strip + fold.
+  console.log('\n== PART 25: v73.69 — the Home dedup ============');
+  F.renderHero();
+  var hs25 = String(byIdStub('heroSub').innerHTML || '');
+  ok(hs25.indexOf('Cards owed') >= 0, 'v73.69: the hero sub shows cards owed');
+  ok(hs25.indexOf('Liquid') < 0, 'v73.69: Liquid left the hero sub (the cycle block owns it)');
+  ok(hs25.indexOf('Prepay in') < 0 && hs25.indexOf('Prepay due today') < 0,
+    'v73.69: the prepay statement left the hero sub (the coach rows own it)');
+  ok(hs25.indexOf('left in cycle') >= 0 || hs25.indexOf('payday') >= 0,
+    'v73.69: the hero sub carries the cycle facts (payday / days left)');
+  // the coach head no longer re-quotes free cash (the hero owns it)
+  F.renderCoach();
+  // the coach head writes via textContent (app.js:3786-3787), not innerHTML;
+  // the head is ONE element (verdict + daily number in the same string).
+  var coach25 = String(byIdStub('coachHead').textContent || '');
+  ok(coach25.indexOf('Free cash is') < 0, 'v73.69: the coach head stopped re-quoting free cash (any branch)');
+  ok(coach25.indexOf('spend up to') >= 0 && coach25.indexOf('today') >= 0,
+    'v73.69: the coach head still carries the daily number (its one home)');
+  // the insights card is the 3-cell strip (the old three text blocks are dead)
+  F.renderInsights();
+  var ins25 = String(byIdStub('insBody').innerHTML || '');
+  ok(ins25.indexOf('Salary used') >= 0 && ins25.indexOf('Days left') >= 0 && ins25.indexOf('Cycle ends with') >= 0,
+    'v73.69: the insights card is the 3-cell cycle strip');
+  ok(ins25.indexOf('class="pbar"') >= 0, 'v73.69: the Salary used cell carries the bar');
+  ok(ins25.indexOf('More cycle detail') >= 0, 'v73.69: the detail fold button renders');
+  ok(ins25.indexOf('Next 7 days') < 0 && ins25.indexOf('Headroom') < 0 && ins25.indexOf("insBlock('Today'") < 0,
+    'v73.69: the old Today / Next 7 days text blocks are gone from the card');
+  var insT25 = String(byIdStub('insTitle').textContent || '');
+  ok(insT25.indexOf('This cycle') >= 0 && insT25.indexOf('→') >= 0,
+    'v73.69: the card title is the cycle window (got ' + JSON.stringify(insT25) + ')');
+  // the fold opens (the button toggles the hidden rows). The stub's
+  // addEventListener is a no-op, so capture the handler on the button;
+  // seed the rows' initial display:none (the HTML attribute) first.
+  var detBtn25 = byIdStub('insDetailBtn');
+  detBtn25.addEventListener = function (type, fn) { detBtn25._fn = fn; };
+  byIdStub('insDetailRows').style.display = 'none';
+  F.renderInsights();
+  ok(typeof detBtn25._fn === 'function', 'v73.69: the More cycle detail button is wired');
+  detBtn25._fn();
+  var detRows25 = byIdStub('insDetailRows');
+  ok(detRows25.style.display !== 'none', 'v73.69: tapping More cycle detail opens the fold');
+  detBtn25._fn();
+  ok(detRows25.style.display === 'none', 'v73.69: tapping again closes the fold');
+
+  // (2) v73.69: the THIS-cycle Plan dues row is a TOTAL ONLY (the v73.56
+  // expand is dead — the per-due list's one home is the coach card). The
+  // row renders with the 'details in the coach' pointer and NO chevron.
   F.state.cycleMode = 'this';
   F.state.cbPlansOpen = false;
   F.renderCycleBlock();
   var cbClosed = String(byIdStub('cycleBlock').innerHTML || '');
-  ok(cbClosed.indexOf('id="cbPlansRow"') >= 0, 'v73.56: the this-cycle Plan dues row renders (cbPlansRow present)');
-  ok(cbClosed.indexOf('class="chev"') >= 0 && cbClosed.indexOf('chev open') < 0,
-    'v73.56: the this-cycle Plan dues row is collapsed by default (chevron, not open)');
+  ok(cbClosed.indexOf('Plan dues') >= 0, 'v73.69: the this-cycle Plan dues row renders (total)');
+  ok(cbClosed.indexOf('details in the coach') >= 0, 'v73.69: the this-cycle Plan dues row points to the coach');
+  ok(cbClosed.indexOf('id="cbPlansRow"') < 0 && cbClosed.indexOf('class="chev"') < 0,
+    'v73.69: the this-cycle Plan dues row is NOT expandable (no cbPlansRow, no chevron)');
+  // the peek (next mode) KEEPS its expandable row (v73.37/39 untouched)
+  F.state.cycleMode = 'next';
   F.state.cbPlansOpen = true;
   F.renderCycleBlock();
-  var cbOpen = String(byIdStub('cycleBlock').innerHTML || '');
-  ok(cbOpen.indexOf('class="chev open"') >= 0, 'v73.56: tapping the this-cycle Plan dues row expands it (chevron open)');
-  // the sub-rows come from the same window walk as the peek (planItems)
-  var pw = F.planWindowTotal(F.cycleData());
-  ok(pw.items.length > 0, 'v73.56: the this-cycle window has plan items to expand (got ' + pw.items.length + ')');
-  ok(cbOpen.indexOf('class="cbsub"') >= 0, 'v73.56: the this-cycle expansion renders the sub-rows (cbsub present)');
-  F.state.cbPlansOpen = false; // leave the default state for any later render
+  var peekOpen = String(byIdStub('cycleBlock').innerHTML || '');
+  ok(peekOpen.indexOf('id="cbPlansRow"') >= 0, 'v73.69: the NEXT-cycle peek keeps its expandable Plan dues row');
+  F.state.cbPlansOpen = false;
+  F.state.cycleMode = 'this'; // leave the defaults for any later render
   F.renderCycleBlock();
 
   // ============ PART 13: v73.57 — the 2-month step chart ============
