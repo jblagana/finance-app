@@ -6,6 +6,43 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.69 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-28 - "a lot of infos are repeated in Home tab" - one number, one home (mockup approved)
+Status: **done** - commit `541a623` -> v73.69 pushed to `https://github.com/jblagana/finance-app.git` (main),
+SHELL_RELEASE 73.69, sw cache `finances-pwa-v73.69`.
+
+### What changed (the approved mockup, C:\Users\Jan\Muji\mockup_home_clean.html)
+1. **Coach head stopped re-quoting free cash** - the head is the verdict + daily number;
+   free cash lives ONLY in the hero.
+2. **Hero sub = cards owed / payday / days left in cycle** - Liquid left (the cycle block's
+   bridge row owns it) and the prepay statement left (the coach's prepay rows own it).
+3. **The hero's THIS-cycle Plan dues row is a TOTAL ONLY** with a "details in the coach"
+   pointer - the v73.56 this-cycle expansion (cbPlansRow/chevron/cbsub) is dead; the
+   per-due list's one home is the coach card (v73.68's cycle-spanning collapsed list);
+   the NEXT-cycle peek keeps its expandable row.
+4. **The old three-block Insights card (Today headroom / Next 7 days / This cycle) is a
+   3-cell strip** - Salary used % + bar, Days left, Cycle ends with - + the roast verdict
+   + a "More cycle detail" fold (last cycle, pace, treat budget, spent today, and the
+   v73.66 one-liners relocated into the fold). The card title is the cycle window.
+   New CSS: `.pace` / `.pbar` in index.html.
+
+### Verified
+- check_site: v73.69 pin block (15 markers: head line, no free-cash quote, cards-owed sub,
+  no Liquid/prepay sub, left-in-cycle, details-in-coach, no openThis/itemsT, Salary-used
+  cell, More-cycle-detail, no insBlock Today/Next7/This-cycle, 73.69 notes key).
+  Retargeted (not deleted): v73.56 (its this-cycle expansion is the thing v73.69 killed),
+  v73.11 (the one-liners moved into the fold's tTxt; cycLbl kept in the fold scope),
+  v73.45 (This-cycle block -> strip cells, pace math pinned in the strip verdict).
+- smoke PART 25 (12 asserts, 195 total ALL PASS): hero sub dedup, coach head no free-cash
+  quote + daily number present, 3-cell strip + bar + fold button wired (open/close),
+  this-cycle Plan dues row = total (no cbPlansRow/chevron), peek keeps its expandable row.
+- node --check x4, smoke_v68 25/25.
+- The root-mirror check_site copy (C:\Users\Jan\Muji\finance-app\check_site.py) had
+  drifted to a v73.30-era copy and failed the gate against the live repo; re-synced from
+  the repo (it is a mirror, not a source - the repo copy is canonical).
+- Live: jblagana.github.io/finance-app/ serves sw cache finances-pwa-v73.69 +
+  SHELL_RELEASE 73.69 (fetched after push).
+
 # v73.68 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-28 - "extend the plan due rows... on second thoughts, make it 'this cycle's dues, initially collapsed to 4 +x more rows"
 Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.68, sw cache
