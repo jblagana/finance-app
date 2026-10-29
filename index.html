@@ -161,7 +161,7 @@ code{background:#0b0f18;border:1px solid var(--line);border-radius:5px;padding:1
 .kv .k{color:var(--mut)}
 .kv b{color:var(--ink);text-align:right;word-break:break-word}
 /* v73.69: the cycle-strip cells (the old Insights card's 3-cell summary) */
-.pace{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pace{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .pace .p{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 8px;text-align:center}
 .pace .p .k{color:var(--mut);font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;line-height:1.35}
 .pace .p .v{font-size:14px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
@@ -273,6 +273,13 @@ button.gear:active{border-color:var(--acc);color:var(--acc)}
 #baseStatus .pill{vertical-align:1px}
 /* ---- v21: Your numbers editor (Settings sheet) ---- */
 .bnote{color:var(--mut);font-size:12px;font-weight:600}
+/* v73.70: the CC row's second grid line (billing / due / due-this-cycle
+   override) — a brow, but dimmer + indented so it reads as the card's
+   detail, not a new account. */
+.brow.ccgrid{opacity:.92;padding-top:2px}
+.brow.ccgrid .bnote{flex:0 0 92px;text-align:right}
+.brow.ccgrid input{flex:1 1 0}
+.brow.ccgrid input[data-r="billing"],.brow.ccgrid input[data-r="dued"]{flex:0 0 56px;text-align:center}
 .brow{display:flex;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--line)}
 .brow:first-of-type{border-top:0}
 /* v62: explicit flex shares per row — the global input{width:100%} made every sibling's
@@ -442,9 +449,9 @@ padding:7px 14px;font-size:12.5px}
 .cbrow.cbfree .lab{font-weight:600}
 .cbrow.cbfree .amt{font-size:15px;font-weight:800}
 .cbrow.cbplans{cursor:pointer;-webkit-tap-highlight-color:transparent}
-.cbrow.cbplans .chev{display:inline-block;font-size:10px;color:var(--mut);margin-right:5px;
+.cbrow.cbplans .chev,.cbrow.cbcards .chev{display:inline-block;font-size:10px;color:var(--mut);margin-right:5px;
   transition:transform .15s ease;transform:rotate(0deg)}
-.cbrow.cbplans .chev.open{transform:rotate(90deg)}
+.cbrow.cbplans .chev.open,.cbrow.cbcards .chev.open{transform:rotate(90deg)}
 .cbsubwrap{margin:2px 0 4px 15px}
 .cbsub{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:3px 0;font-size:12px}
 .cbsub .sl{color:var(--mut);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -560,7 +567,7 @@ padding:7px 14px;font-size:12.5px}
 .drow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mut)}
 .drow b{font-variant-numeric:tabular-nums}
 .drow .pc{color:var(--mut);font-size:11px;width:32px;text-align:right;flex:0 0 auto}
-.pace{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pace{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .pace .p{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 8px;text-align:center}
 .pace .p .k{color:var(--mut);font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;line-height:1.35}
 .pace .p .v{font-size:14px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
@@ -592,6 +599,11 @@ label.chk input{width:18px;height:18px;accent-color:var(--acc);flex:0 0 auto;mar
 .ml-cat{font-size:13.5px;font-weight:700}
 .ml-note{font-size:12.5px;font-style:italic;color:var(--mut);margin-top:1px}
 .ml-meta{color:var(--mut);font-size:11.5px;margin-top:2px}
+/* v73.70: the CC cycle pill on in-window card charges (THIS/NEXT CYCLE) */
+.cyclepill{display:inline-block;vertical-align:baseline;margin-left:6px;padding:1px 7px;border-radius:9px;border:1px solid var(--line);background:rgba(94,202,144,.12);color:var(--ok);font-size:9.5px;font-weight:700;letter-spacing:.3px;cursor:pointer}
+.cyclepill:hover{background:rgba(94,202,144,.22)}
+.cyclepill.next{background:rgba(255,196,92,.12);color:#ffc45c;border-color:rgba(255,196,92,.35)}
+.cyclepill.next:hover{background:rgba(255,196,92,.22)}
 /* ---- Phase 4 a11y: 44px primary tap targets ---- */
 .tab{min-height:44px;padding:12px 6px}
 button.gear{width:44px;height:44px}

@@ -6,6 +6,57 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.72 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-29 - "ship 73.72" (v73.70 CC cycle model + v73.71 expandable hero rows + v73.72 headroom strip, one release)
+Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.72, sw cache
+`finances-pwa-v73.72` pushed to `https://github.com/jblagana/finance-app.git` (main).
+
+Three builds shipped together (the tree carried v73.70 + v73.71 unshipped on top of v73.69):
+
+### v73.70 — the CC cycle model (boss-approved handover from Fin.AI — branch)
+- **Settings → Your numbers:** credit rows split into identity line + labeled grid (Balance|Limit,
+  Billing date|Due date|Due-this-cycle override, ghost "optional"); debit rows unchanged. Per-card
+  dates: Maya 15/5, MariBank 20/10. The global prepay/cutoff/due days are now DEFAULTS FOR NEW
+  CARDS ONLY. `migrateCardDays` stamps the globals onto imported cards.
+- **Ledger:** a card charge INSIDE the card's window (billing−5 → billing) gets a THIS/NEXT CYCLE
+  toggle pill (default THIS); outside the window there is NO tag at all (v73.72 rule). The tag
+  rides the ledger entry (`t.cycle`) so it survives export/import.
+- **Auto due:** `cardDueData` = live balance − (post-billing charges) − (in-window charges tagged
+  NEXT) — the bill frozen at the last billing cut. Manual `due_override` wins (auto/manual
+  provenance). The hero OWE stays the FULL balance.
+- **Graph:** the card drop is the auto due on the card's OWN due date (v73.57 spec: a charge grows
+  the drop, a payoff shrinks it).
+
+### v73.71 — hero This-cycle expandable rows
+- `cbCardsRow` (Cards owed) + the this-cycle Plan dues row are tap targets, default COLLAPSED;
+  expand shows per-card sub-rows (balance, limit, per-card due date) and per-due sub-rows (summing
+  exactly to the total). Live: an overlay charge moves the row total. The v73.69 "details in the
+  coach" pointer is dead on the this-cycle rows; the NEXT-cycle peek keeps its own expansion.
+
+### v73.72 — headroom strip + the three v73.70 bug fixes
+- The Insights strip is 4 cells (was 3): Salary used · **Headroom** (₱X/day) · Days left · Cycle
+  ends with — the headroom is back on Home in the app's own skin.
+- **Fix 1 (balOverride dead):** `cardDueData` declared `balOverride` but never read it — a new
+  charge (overlay) never grew the due/drop. Now the override is the live balance.
+- **Fix 2 (wrong window anchor):** `cardCycleInfo` anchored the window to the CHARGE's month, so
+  with today 10-29 a 10-12 charge tested against the September window (09-10..09-15) and every
+  charge read "auto next" — the pill never showed and the toggle no-op'd. Now it anchors to the
+  card's CURRENT cycle (today), same anchor as `cardDueData`.
+- **Fix 3 (pill scope):** the pill renders ONLY for in-window charges (outside the window: no tag
+  at all — the boss's v73.72 rule). `toggleTxnCycle`/`txnCyclePill` take an optional scenario
+  "today" so the smoke drives the model with its fixed date (the app wiring passes nothing = real
+  today).
+
+### Verified
+- smoke PART 26 (v73.70: S1 13k−3k@16th=10k, S2 in-window 5k toggle, 15th=this, pre-window no
+  pill, 16th=auto-next, manual wins, per-card dates, pill markup, toggle round-trip) + PART 27
+  (v73.71: 24 asserts) + PART 13 (v73.57 graph: the 2k charge now lands IN the card's window so it
+  grows the drop by exactly 2,000; the chip-paid-due test counts drop points instead of date
+  existence — a due ON TODAY has no drop point by design).
+- smoke_app_v68: 271 asserts ALL PASS. AGENTS.md count + PART list updated to match.
+- release.ps1 v73.72 full gates green; ONE commit + push; live-verified at
+  jblagana.github.io/finance-app/.
+
 # v73.69 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-28 - "a lot of infos are repeated in Home tab" - one number, one home (mockup approved)
 Status: **done** - commit `541a623` -> v73.69 pushed to `https://github.com/jblagana/finance-app.git` (main),

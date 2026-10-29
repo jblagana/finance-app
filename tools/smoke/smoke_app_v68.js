@@ -587,8 +587,18 @@ waitReady().then(async function (F) {
     'v73.69: the insights card is the 3-cell cycle strip');
   ok(ins25.indexOf('class="pbar"') >= 0, 'v73.69: the Salary used cell carries the bar');
   ok(ins25.indexOf('More cycle detail') >= 0, 'v73.69: the detail fold button renders');
-  ok(ins25.indexOf('Next 7 days') < 0 && ins25.indexOf('Headroom') < 0 && ins25.indexOf("insBlock('Today'") < 0,
+  // v73.72 retarget: the old block's "Headroom: <b>" text is still dead; the
+  // word now appears only as the v73.72 strip cell label (boss: 'restore the
+  // headroom in the home tab').
+  ok(ins25.indexOf('Next 7 days') < 0 && ins25.indexOf('Headroom: ') < 0 && ins25.indexOf("insBlock('Today'") < 0,
     'v73.69: the old Today / Next 7 days text blocks are gone from the card');
+  // v73.72: the headroom cell is back on the strip — the SAME d.daily the
+  // coach head quotes (one number, one home; the cell is its second face).
+  ok(ins25.indexOf('Headroom</div>') >= 0 && ins25.indexOf('/day</div>') >= 0,
+    'v73.72: the strip carries the Headroom cell with the /day number');
+  var cellNum25 = (ins25.match(/Headroom<\/div><div class="v">([^<]+)\/day/) || [])[1];
+  ok(!!cellNum25 && coach25.indexOf('spend up to ' + cellNum25 + ' today') >= 0,
+    'v73.72: the cell number IS the coach head number (same d.daily, one home)');
   var insT25 = String(byIdStub('insTitle').textContent || '');
   ok(insT25.indexOf('This cycle') >= 0 && insT25.indexOf('→') >= 0,
     'v73.69: the card title is the cycle window (got ' + JSON.stringify(insT25) + ')');
@@ -606,17 +616,21 @@ waitReady().then(async function (F) {
   detBtn25._fn();
   ok(detRows25.style.display === 'none', 'v73.69: tapping again closes the fold');
 
-  // (2) v73.69: the THIS-cycle Plan dues row is a TOTAL ONLY (the v73.56
-  // expand is dead — the per-due list's one home is the coach card). The
-  // row renders with the 'details in the coach' pointer and NO chevron.
+  // (2) v73.71 (boss: 'in the hero card, make the card and plan dues
+  // expandable'): the v73.69 total-only flattening is DEAD — the this-cycle
+  // Plan dues row is a tap target again (the per-due list lives HERE now,
+  // not only in the coach). The Cards owed row is expandable too.
   F.state.cycleMode = 'this';
   F.state.cbPlansOpen = false;
+  F.state.cbThisPlansOpen = false;
+  F.state.cbCardsOpen = false;
   F.renderCycleBlock();
   var cbClosed = String(byIdStub('cycleBlock').innerHTML || '');
-  ok(cbClosed.indexOf('Plan dues') >= 0, 'v73.69: the this-cycle Plan dues row renders (total)');
-  ok(cbClosed.indexOf('details in the coach') >= 0, 'v73.69: the this-cycle Plan dues row points to the coach');
-  ok(cbClosed.indexOf('id="cbPlansRow"') < 0 && cbClosed.indexOf('class="chev"') < 0,
-    'v73.69: the this-cycle Plan dues row is NOT expandable (no cbPlansRow, no chevron)');
+  ok(cbClosed.indexOf('Plan dues') >= 0, 'v73.71: the this-cycle Plan dues row renders (total)');
+  ok(cbClosed.indexOf('details in the coach') < 0, 'v73.71: the v73.69 coach pointer is dead');
+  ok(cbClosed.indexOf('id="cbThisPlansRow"') >= 0 && cbClosed.indexOf('class="chev"') >= 0,
+    'v73.71: the this-cycle Plan dues row IS expandable again (tap target + chevron)');
+  ok(cbClosed.indexOf('id="cbCardsRow"') >= 0, 'v73.71: the this-cycle Cards owed row is expandable (tap target)');
   // the peek (next mode) KEEPS its expandable row (v73.37/39 untouched)
   F.state.cycleMode = 'next';
   F.state.cbPlansOpen = true;
@@ -691,21 +705,19 @@ waitReady().then(async function (F) {
     });
   });
   var cardDates = [];
+  // v73.70: the card drop is the AUTO DUE (cardDueData) on the card's OWN
+  // due date - mirror the app's sparkData rule exactly (v73.72: WITH the
+  // live overlay balance, same as the app passes it).
   F.effectiveSnap().cards.forEach(function (c) {
-    var owed = Number(c.balance) || 0;
+    var baseCard = null;
+    (F.state.base.accounts || []).forEach(function (a) { if (String(a.name) === String(c.name)) baseCard = a; });
+    var cd = F.cardDueData(baseCard, F.state.txns, F.state.base, tToday, c.balance);
+    if (!cd) return;
+    var owed = cd.due;
     if (!(owed > 0.004)) return;
-    var day0 = (c.due != null && c.due >= 1 && c.due <= 28) ? Math.round(c.due) : 15;
-    for (var k = 0; k < 3; k++) {
-      var m = (tM + k - 1) % 12 + 1, yy = tY + Math.floor((tM + k - 1) / 12);
-      var dim = new Date(yy, m, 0).getDate();
-      var day = Math.min(day0, dim);
-      var dISO = yy + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
-      if (dISO < tToday) continue;
-      if (dISO <= tWindowEnd) {
-        tExp[dISO] = (tExp[dISO] || 0) - owed; // a DROP, once (the owed is a stock)
-        if (cardDates.indexOf(dISO) < 0) cardDates.push(dISO);
-      }
-      break; // first due date only
+    if (cd.dueDate >= tToday && cd.dueDate <= tWindowEnd) {
+      tExp[cd.dueDate] = (tExp[cd.dueDate] || 0) - owed; // a DROP, once
+      if (cardDates.indexOf(cd.dueDate) < 0) cardDates.push(cd.dueDate);
     }
   });
   var sdT = F.salaryDayOf(F.state.base);
@@ -734,8 +746,19 @@ waitReady().then(async function (F) {
     : tY + '-' + (tM < 10 ? '0' : '') + tM + '-15';
   ok(tExp[first15] !== undefined, 'v73.57: the card owed drops on the default 15th (' + first15 + ')');
   // (6) LIVE owed reactivity — a new card charge grows the card drop.
+  // v73.72: the charge lands IN the card's current window (windowStart from
+  // cardDueData) — a same-day charge is post-billing-cut, which the v73.70
+  // model correctly treats as NEXT cycle (excluded from this bill), so it
+  // would not grow this cycle's drop. In-window, it counts THIS cycle and
+  // the drop grows by exactly the charge.
   var before = g0pts.map(function (p) { return p.v; });
-  var chargeId = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'MariBank CC', amount: 2000, note: 'probe charge', date: tToday }, { quiet: true });
+  var mbBase = null;
+  (F.state.base.accounts || []).forEach(function (a) { if (String(a.name) === 'MariBank CC') mbBase = a; });
+  var mbCd = F.cardDueData(mbBase, F.state.txns, F.state.base, tToday);
+  var chargeDate = mbCd.windowStart; // in-window by construction (windowStart..windowEnd)
+  if (chargeDate < tToday) chargeDate = tToday; // never backdate (addTxn floor)
+  if (chargeDate > mbCd.windowEnd) chargeDate = mbCd.windowEnd; // clamp inside the window
+  var chargeId = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'MariBank CC', amount: 2000, note: 'probe charge', date: chargeDate }, { quiet: true });
   await sleep(60);
   var g1 = F.sparkData();
   var vAt = function (pts, d) { for (var i = 0; i < pts.length; i++) if (pts[i].date === d) return pts[i].v; return null; };
@@ -756,9 +779,14 @@ waitReady().then(async function (F) {
     planRef: { planId: targetPlan.id, date: targetDue, name: roT.name, amount: roT.amount } }, { quiet: true });
   await sleep(60);
   var g2 = F.sparkData();
-  var g2Dates = {};
-  g2.pts.forEach(function (p) { g2Dates[p.date] = true; });
-  ok(!g2Dates[targetDue], 'v73.57: a chip-paid due removes its drop (' + targetDue + ' gone)');
+  // v73.72: the START point always sits on today's date, so "the drop point
+  // is gone" can't be a date-existence test when the due is TODAY — count
+  // the points on that date instead: the pay removes exactly the drop point.
+  var cnt = function (pts, d) { var n = 0; pts.forEach(function (p) { if (p.date === d) n++; }); return n; };
+  var cntBefore = cnt(g0pts, targetDue), cntAfter = cnt(g2.pts, targetDue);
+  var paidOK = F.findPaidTxn({ monthPrefix: tToday.slice(0, 7), today: tToday }, { planId: targetPlan.id, date: targetDue, name: roT.name, amount: roT.amount });
+  ok(cntBefore > 0 && cntAfter === cntBefore - 1 && !!paidOK,
+    'v73.57: a chip-paid due removes its drop (' + targetDue + ': ' + cntBefore + ' points -> ' + cntAfter + ', linked=' + !!paidOK + ')');
   // (8) a skipped due REMOVES its drop too.
   var skipPlan = null, skipDue = null;
   Object.keys(expPlanDates).sort().forEach(function (d) {
@@ -1446,7 +1474,207 @@ waitReady().then(async function (F) {
     F.setPlans(origPlans);
     F.renderCoach();
   })().then(function () {
-    console.log('');
+
+  // ============ PART 26: v73.70 - the CC cycle model (boss's S1/S2) ============
+  // The bug this fixes: the app showed the LIVE BALANCE as the due, so a
+  // post-billing charge (3k on the 16th) made the due read 13k instead of
+  // the 10k bill frozen at the 15th.
+  console.log('');
+  console.log('== PART 26: v73.70 - the CC cycle model ============');
+  (function () {
+    function mayaCard(balance, extra) {
+      var c = { id: 'ccsmoke', name: 'Maya CC', kind: 'card', value: balance, balance: balance, limit: 10000, billing_day: 15, due_day: 5 };
+      if (extra) for (var k in extra) c[k] = extra[k];
+      return c;
+    }
+    function mkTxn(id, date, amount, cycle) {
+      var t = { id: id, date: date, account: 'Maya CC', kind: 'card_charge', amount: amount, category: 'Food', note: '' };
+      if (cycle) t.cycle = cycle;
+      return t;
+    }
+    // today = 2026-10-16 -> window (10-10, 10-15], next billing 11-15, due 11-05
+    var T = '2026-10-16';
+    var realBase = F.state.base, realTxns = F.state.txns;
+    var smokeBase = { name: 'smoke', salary: 46615, salary_day: 15, cutoff_day: 15, due_day: 5, prepay_day: 14,
+      accounts: [mayaCard(13000)] };
+    F.state.base = smokeBase;
+    // S1 (5k in bill): balance 13k, 3k charge on the 16th (auto next-cycle) -> due 10k
+    F.state.txns = [mkTxn('s1', '2026-10-16', 3000)];
+    var cd1 = F.cardDueData(smokeBase.accounts[0], F.state.txns, smokeBase, T);
+    ok(cd1.due === 10000, 'v73.70 S1: 13k balance + 3k on the 16th (auto next-cycle) -> due 10k (got ' + cd1.due + ')');
+    ok(cd1.balance === 13000, 'v73.70 S1: the balance is the live 13k (got ' + cd1.balance + ')');
+    ok(cd1.nextCycle === 3000, 'v73.70 S1: the 3k post-billing charge is the next-cycle amount (got ' + cd1.nextCycle + ')');
+    ok(cd1.dueDate === '2026-11-05', 'v73.70 S1: the due date is the card\'s own due day (11-05, got ' + cd1.dueDate + ')');
+    ok(cd1.manual === false, 'v73.70 S1: the due is AUTO (no override set)');
+    // S2 (5k excluded): balance 18k = 10k bill + 3k on the 16th (auto next) + 5k in-window
+    // toggled NEXT CYCLE -> due 10k. The 3k@16th must be a real txn (it's what the auto-next
+    // rule excludes); baking it only into the balance number is invisible to cardDueData —
+    // the first draft of this test fell into exactly that trap (18k - 5k = 13k, not 10k).
+    smokeBase.accounts[0].value = 18000; smokeBase.accounts[0].balance = 18000;
+    F.state.txns = [mkTxn('s1b', '2026-10-16', 3000), mkTxn('s2', '2026-10-12', 5000, 'next')];
+    var cd2 = F.cardDueData(smokeBase.accounts[0], F.state.txns, smokeBase, T);
+    ok(cd2.due === 10000, 'v73.70 S2: 18k balance - 3k (16th, auto) - 5k (in-window, NEXT) -> due 10k (got ' + cd2.due + ')');
+    ok(cd2.balance === 18000, 'v73.70 S2: the balance stays the live 18k (got ' + cd2.balance + ')');
+    ok(cd2.nextCycle === 8000, 'v73.70 S2: next-cycle roll = 3k (16th, auto) + 5k (toggled) = 8k (got ' + cd2.nextCycle + ')');
+    // toggling the 5k back to THIS CYCLE moves the due 10k -> 15k (the 3k stays auto-next)
+    F.state.txns[1].cycle = 'this';
+    var cd2b = F.cardDueData(smokeBase.accounts[0], F.state.txns, smokeBase, T);
+    ok(cd2b.due === 15000, 'v73.70 S2: toggling the 5k to THIS CYCLE -> due 15k (got ' + cd2b.due + ')');
+    ok(cd2b.nextCycle === 3000, 'v73.70 S2: toggling to THIS leaves only the 3k auto-next (got ' + cd2b.nextCycle + ')');
+    // the 15th (on the billing cut) -> in window, THIS cycle, toggle offered
+    var i15 = F.cardCycleInfo(smokeBase.accounts[0], '2026-10-15', smokeBase, T);
+    ok(i15.inWindow === true && i15.autoNext === false, 'v73.70: a charge on the 15th is in the window (this cycle, toggle offered)');
+    // pre-window (the 8th) -> this cycle, NO toggle
+    var i8 = F.cardCycleInfo(smokeBase.accounts[0], '2026-10-08', smokeBase, T);
+    ok(i8.inWindow === false && i8.autoNext === false, 'v73.70: a pre-window charge (8th) counts this cycle with no toggle');
+    // the 16th -> auto next, no toggle
+    var i16 = F.cardCycleInfo(smokeBase.accounts[0], '2026-10-16', smokeBase, T);
+    ok(i16.inWindow === false && i16.autoNext === true, 'v73.70: a charge on the 16th is auto next-cycle (no toggle)');
+    // manual override wins
+    smokeBase.accounts[0].due_override = 9999;
+    var cd3 = F.cardDueData(smokeBase.accounts[0], F.state.txns, smokeBase, T);
+    ok(cd3.due === 9999 && cd3.manual === true, 'v73.70: the manual "Due this cycle" override wins (got ' + cd3.due + ', manual=' + cd3.manual + ')');
+    delete smokeBase.accounts[0].due_override;
+    // per-card dates honored (Maya 15/5, MariBank 20/10)
+    var mb = { id: 'ccsmoke2', name: 'MariBank CC', kind: 'card', value: 4000, balance: 4000, limit: 70000, billing_day: 20, due_day: 10 };
+    var cd4 = F.cardDueData(mb, [], smokeBase, T);
+    ok(cd4.dueDate === '2026-11-10', 'v73.70: MariBank\'s own due day (10th) is honored (got ' + cd4.dueDate + ')');
+    ok(cd4.due === 4000, 'v73.70: MariBank auto due = its balance with no next-cycle charges (got ' + cd4.due + ')');
+    // the pill markup: in-window charge -> toggle; pre-window -> none
+    var tIn = mkTxn('pill1', '2026-10-12', 500); // in-window (10-10..10-15)
+    var pillIn = F.txnCyclePill(tIn); // card found via F.state.base = smokeBase
+    ok(pillIn.indexOf('cyclepill') >= 0 && pillIn.indexOf('THIS CYCLE') >= 0, 'v73.70: an in-window charge gets the THIS CYCLE toggle pill');
+    var tPre = mkTxn('pill2', '2026-10-08', 500);
+    ok(F.txnCyclePill(tPre) === '', 'v73.70: a pre-window charge gets NO pill');
+    // the toggle flips the tag (S2: the due moves back when it flips)
+    // v73.72: the toggle scenario is the S2 ledger (the 3k@16th stays
+    // auto-next) — the expected dues (15k/10k) only hold with it present.
+    F.state.txns = [mkTxn('s1c', '2026-10-16', 3000), mkTxn('tog', '2026-10-12', 5000, 'next')];
+    F.toggleTxnCycle('tog', T); // v73.72: the toggle honors the scenario's "today" (T), not the wall clock
+    var cd5 = F.cardDueData(smokeBase.accounts[0], F.state.txns, smokeBase, T);
+    ok(cd5.due === 15000, 'v73.70: toggling the 5k back to THIS cycle restores the due (got ' + cd5.due + ')');
+    F.toggleTxnCycle('tog', T);
+    var cd6 = F.cardDueData(smokeBase.accounts[0], F.state.txns, smokeBase, T);
+    ok(cd6.due === 10000, 'v73.70: toggling it to NEXT CYCLE again drops the due (got ' + cd6.due + ')');
+    // migrateCardDays stamps per-card days from the globals on import
+    var imp = { accounts: [{ name: 'X CC', kind: 'card', value: 100, limit: 1000 }] };
+    F.migrateCardDays(imp);
+    ok(imp.accounts[0].billing_day === 15 && imp.accounts[0].due_day === 5, 'v73.70: migrateCardDays stamps the globals (15/5) onto an imported card');
+    F.state.base = realBase; F.state.txns = realTxns;
+  })();
+
+  // ============ PART 27: v73.71 - hero This-cycle expandable rows ============
+  // Boss: 'in the hero card, make the card and plan dues expandable'. The
+  // THIS-cycle block's Cards owed row expands to the per-card breakdown
+  // (LIVE effective balances + the v73.70 due date), and the Plan dues row
+  // expands to the specific dues (same resolver as the hero's own
+  // deduction, so the sub-rows sum exactly to the row total). The
+  // v73.69 total-only flattening of the this-cycle Plan dues row is dead.
+  console.log('');
+  console.log('== PART 27: v73.71 - hero This-cycle expandable rows ===========');
+  (function () {
+    var realBase = F.state.base, realTxns = F.state.txns, realAdj = F.state.adj, realPlans = F.state.plans;
+    var base = { name: 'smoke', as_of: '2026-10-11', salary: 46615, salary_day: 15, cutoff_day: 15, due_day: 5, prepay_day: 14, card_util_target: 0, salary_overrides: {}, budgets: {}, budget_overrides: {}, one_offs: {}, debts: {}, sinking: {},
+      accounts: [
+        { id: 'c1', name: 'Maya CC', kind: 'card', value: 13000, limit: 10000, billing_day: 15, due_day: 5 },
+        { id: 'c2', name: 'MariBank CC', kind: 'card', value: 4000, limit: 70000, billing_day: 20, due_day: 10 }
+      ] };
+    F.state.base = base;
+    F.state.txns = [];
+    F.state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {} };
+    F.setPlans([
+      { id: 'smoke27-rent', name: 'Rent', amount: 5000, date: '2026-09-01', repeat: 'monthly', count: null, overrides: {} },
+      { id: 'smoke27-gym', name: 'Gym', amount: 1500, date: '2026-10-20', repeat: 'monthly', count: null, overrides: {} }
+    ]);
+    F.refreshLocalSnapshot();
+    F.state.cycleMode = 'this';
+    F.state.cbCardsOpen = false;
+    F.state.cbThisPlansOpen = false;
+    F.state.cbThisPlansMore = false;
+    // (1) Cards owed row: collapsed by default, renders as a tap target
+    F.renderCycleBlock();
+    var cb = String(byIdStub('cycleBlock').innerHTML || '');
+    ok(cb.indexOf('id="cbCardsRow"') >= 0, 'v73.71: the this-cycle Cards owed row renders (tap target)');
+    ok(cb.indexOf('cbCardsRow" role="button" tabindex="0" aria-expanded="false"') >= 0,
+      'v73.71: the Cards owed row defaults COLLAPSED');
+    ok(cb.indexOf('MariBank CC') < 0, 'v73.71: collapsed = no per-card sub-rows');
+    ok(cb.indexOf('class="cbrow cbcards') >= 0 && cb.indexOf('chev') >= 0, 'v73.71: the Cards owed row carries the chevron');
+    ok(cb.indexOf('− PHP 17,000.00') >= 0, 'v73.71: the row total is both cards (13k + 4k)');
+    // (2) Cards owed row: expanded -> per-card LIVE balances + due dates
+    F.state.cbCardsOpen = true;
+    F.renderCycleBlock();
+    cb = String(byIdStub('cycleBlock').innerHTML || '');
+    ok(cb.indexOf('Maya CC') >= 0 && cb.indexOf('MariBank CC') >= 0, 'v73.71: expanded Cards owed shows BOTH cards');
+    ok(cb.indexOf('Maya CC') < cb.indexOf('MariBank CC'), 'v73.71: the card sub-rows are in account order');
+    ok(cb.indexOf('5 Nov') >= 0, 'v73.71: Maya sub-row carries its due date (5 Nov)');
+    ok(cb.indexOf('10 Nov') >= 0, 'v73.71: MariBank sub-row carries ITS due date (10 Nov, per-card)');
+    ok(cb.indexOf('PHP 10,000.00') >= 0, 'v73.71: the sub-row shows the card limit');
+    ok(cb.indexOf('manual') < 0, 'v73.71: no manual chip (no overrides set)');
+    // the sub-rows use the LIVE effective balances (base + overlay)
+    F.state.adj.card = 500;
+    F.refreshLocalSnapshot();
+    F.renderCycleBlock();
+    cb = String(byIdStub('cycleBlock').innerHTML || '');
+    ok(cb.indexOf('PHP 17,500.00') >= 0, 'v73.71: the row total is LIVE (overlay +500 moves it to 17,500)');
+    ok(cb.indexOf('PHP 13,000.00') >= 0, 'v73.71: the per-card sub-row shows the card balance (13,000)');
+    F.state.adj.card = 0;
+    F.refreshLocalSnapshot();
+    // (3) Plan dues row: the v73.69 flattening is dead — it is a tap target
+    // again, with the per-due list from the SAME resolver as the hero's
+    // deduction (the sub-rows sum exactly to the row total).
+    F.state.cbThisPlansOpen = false;
+    F.renderCycleBlock();
+    cb = String(byIdStub('cycleBlock').innerHTML || '');
+    ok(cb.indexOf('id="cbThisPlansRow"') >= 0, 'v73.71: the this-cycle Plan dues row renders (tap target)');
+    ok(cb.indexOf('details in the coach') < 0, 'v73.71: the v73.69 coach pointer is dead on the this-cycle row');
+    ok(cb.indexOf('Rent') < 0, 'v73.71: collapsed = no per-due sub-rows');
+    // expanded -> the specific dues, summing exactly to the row total
+    F.state.cbThisPlansOpen = true;
+    F.renderCycleBlock();
+    cb = String(byIdStub('cycleBlock').innerHTML || '');
+    ok(cb.indexOf('Rent') >= 0 && cb.indexOf('Gym') >= 0, 'v73.71: expanded Plan dues shows the specific dues');
+    var p = F.cycleProjection('this', 'with');
+    var sum = 0; (p.planShareItems || []).forEach(function (it) { sum += it.amount; });
+    ok(Math.abs(sum - p.planShare) < 0.01, 'v73.71: the sub-rows SUM EXACTLY to the row total (items ' + sum + ' vs ' + p.planShare + ')');
+    ok(Math.abs(sum - F.cyclePlanDeduction()) < 0.01, 'v73.71: the row total is the hero own deduction (cyclePlanDeduction)');
+    ok(cb.indexOf('PHP 5,000.00') >= 0 && cb.indexOf('PHP 1,500.00') >= 0, 'v73.71: the sub-rows show each due amount');
+    // (4) the peek's expandable row is untouched (v73.37/39)
+    F.state.cycleMode = 'next';
+    F.state.cbPlansOpen = true;
+    F.renderCycleBlock();
+    cb = String(byIdStub('cycleBlock').innerHTML || '');
+    ok(cb.indexOf('id="cbPlansRow"') >= 0, 'v73.71: the NEXT-cycle peek keeps its own expandable row');
+    ok(cb.indexOf('id="cbThisPlansRow"') < 0, 'v73.71: the this-cycle row is NOT in the peek');
+    // (5) the tap targets are wired (the handlers exist on the live nodes)
+    F.state.cycleMode = 'this';
+    F.state.cbPlansOpen = false;
+    F.state.cbCardsOpen = false; // (2) left it open — the taps below start from closed
+    F.state.cbThisPlansOpen = false;
+    F.renderCycleBlock();
+    var cardsRow = byIdStub('cbCardsRow'), plansRow = byIdStub('cbThisPlansRow');
+    ok(typeof cardsRow.onclick === 'function', 'v73.71: the Cards owed row is wired');
+    ok(typeof plansRow.onclick === 'function', 'v73.71: the Plan dues row is wired');
+    // tapping flips the flags and re-renders (re-fetch after each render — the
+    // app re-wires the node, and the smoke's byIdStub hands out a fresh
+    // instance per id, so the stale reference has no handler)
+    cardsRow.onclick();
+    ok(F.state.cbCardsOpen === true, 'v73.71: tapping Cards owed opens it');
+    byIdStub('cbCardsRow').onclick();
+    ok(F.state.cbCardsOpen === false, 'v73.71: tapping again closes it');
+    byIdStub('cbThisPlansRow').onclick();
+    ok(F.state.cbThisPlansOpen === true, 'v73.71: tapping Plan dues opens it');
+    byIdStub('cbThisPlansRow').onclick();
+    ok(F.state.cbThisPlansOpen === false, 'v73.71: tapping again closes it');
+    // leave the defaults
+    F.state.cycleMode = 'this';
+    F.state.cbCardsOpen = false;
+    F.state.cbThisPlansOpen = false;
+    F.setPlans(realPlans);
+    F.state.base = realBase; F.state.txns = realTxns; F.state.adj = realAdj;
+    F.refreshLocalSnapshot();
+    F.renderCycleBlock();
+  })();
+      console.log('');
     console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
     process.exit(fails === 0 ? 0 : 1);
   }).catch(function (e) {

@@ -251,7 +251,9 @@ def main():
     check("coach LED is grey, not amber, when the online coach is not ready",
           ".coach-led{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--mut)" in html)
     check("'Your numbers': your name + cc prepay day labels, no stray placeholders",
-          'bnote">your name<' in js and 'bnote">cc prepay day<' in js
+          # v73.70: the global prepay/cutoff/due day rows are NEW-CARD DEFAULTS
+          # now (per-card dates live on the card rows) — the labels moved.
+          'bnote">your name<' in js and 'bnote">new-card prepay day<' in js
           and 'placeholder="YYYY-MM"' not in js and 'placeholder="name"' not in js
           and 'placeholder="debt name"' not in js and 'placeholder="goal name"' not in js
           and 'placeholder="value"' not in js and 'placeholder="limit"' not in js
@@ -578,12 +580,16 @@ def main():
           # v73.31: `amt` is the manual due MINUS the card's own payment
           # logged after the cutoff (the statement window) — paying the due
           # drops the row; the roll-over (balance − amt) is next cycle.
-          and "var manualDue = (c.due != null) ? Number(c.due) : null;" in js
-          and "var amt = (manualDue != null) ? Math.max(0, manualDue - paid) : c.balance;" in js
-          and "c.name + ' is at ' + money(amt) + ' due ' + dueTxt + ' — ' + money(nextBal) + ' rolls to next cycle.'" in js
-          and "c.name + ' is at ' + money(amt) + ' — the bill is due ' + dueTxt + '.'" in js
-          and "act: 'prepay', payload: { amount: amt, date: cc.dueDate, day: cc.due_day, card: c.name }" in js
-          and "rows.push({ cls: cc.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay'" in js
+          # v73.70 SUPERSESSION: the amount is now cardDueData's due (per-card
+          # billing/due day, auto = live balance − in-window NEXT-tagged
+          # charges, manual override wins) and the row dates come from the
+          # card's OWN cycle (cd) — the global cc window no longer drives it.
+          and "var cd = cardDueData(baseCard, state.txns, state.base, d.today, c.balance);" in js
+          and "var amt = cd.due;" in js
+          and "c.name + ' is at ' + money(amt) + ' due ' + dueTxt + prov + ' — ' + money(nextBal) + ' rolls to next cycle.'" in js
+          and "c.name + ' is at ' + money(amt) + ' — the bill is due ' + dueTxt + prov + '.'" in js
+          and "act: 'prepay', payload: { amount: amt, date: cd.dueDate, day: cd.due_day, card: c.name }" in js
+          and "rows.push({ cls: cd.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay'" in js
           and "'73.24': [" in js)
     check("v73.25 (boss: 'collapse the coach card rows by default'): the grouped coach-card sections (Cards, Plans) now render COLLAPSED by default — the header shows the group label + this-cycle total + count, the body is hidden until the boss taps the header to expand. The fold state still lives in coachGroupOpen (re-renders keep the boss's choice); the default flipped from open (coachGroupOpen[g] !== false) to closed (coachGroupOpen[g] === true).",
           "var open = coachGroupOpen[g] === true; // v73.25: default CLOSED (boss: collapse by default)" in js
@@ -657,9 +663,12 @@ def main():
           # the roll-over (balance − amt) is the next-cycle amount.
           # v73.31: amt nets the card's own payment after the cutoff, so the
           # roll-over is balance − amt (before any payment amt = manualDue).
-          and "var manualDue = (c.due != null) ? Number(c.due) : null;" in js
-          and "var amt = (manualDue != null) ? Math.max(0, manualDue - paid) : c.balance;" in js
-          and "var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - amt)) : 0;" in js
+          # v73.70 SUPERSESSION: the manual-due logic moved INTO cardDueData
+          # (due_override → manual due, else auto = balance − nextCycle); the
+          # row reads cd.due and the roll-over is balance − amt.
+          and "due: manual ? r2(Number(card.due_override)) : r2(Math.max(0, bal - nextCycle))," in js
+          and "var amt = cd.due;" in js
+          and "var nextBal = r2(Math.max(0, c.balance - amt));" in js
           # (3) the roll-over rides nextAmt + the roll-over text
           and "nextAmt: nextBal" in js
           and "rolls to next cycle.'" in js
@@ -676,10 +685,13 @@ def main():
           and "if (dd <= payAfter) return; // before the cutoff = prepay (in the manual due)" in js
           and "paidBy[nm] = r2((paidBy[nm] || 0) + a);" in js
           # (3) the row amount = the manual due MINUS the paid amount
-          and "var paid = (manualDue != null) ? r2(paidBy[c.name] || 0) : 0;" in js
-          and "var amt = (manualDue != null) ? Math.max(0, manualDue - paid) : c.balance;" in js
+          # v73.70 SUPERSESSION: the netting moved into cardDueData (auto due
+          # = live balance − nextCycle; a card_payment shrinks the live
+          # balance, so the row drops as the due is paid). The row reads
+          # cd.due; the roll-over is balance − amt.
+          and "var amt = cd.due;" in js
           # (4) the roll-over = balance − amt (NOT balance − manualDue)
-          and "var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - amt)) : 0;" in js
+          and "var nextBal = r2(Math.max(0, c.balance - amt));" in js
           and "'73.31': [" in js)
     check("v73.32 (boss: 'the salary row in coach card is not showing even if its within 10 days already, it should show up as early as the 5th since the salary is every 15th'): the row now targets the NEXT upcoming payday — a cycle STARTS on its payday, so the current cycle's payday is always on/before today and the old sIn <= 2 window could only ever fire on payday itself — and shows from 10 days out (the 5th for a 15th payday); same green row + chip look, the amount comes from the target cycle (its overrides apply)",
           # the old 2-day window is gone (it could only ever fire on payday itself)
@@ -910,7 +922,11 @@ def main():
           and "var events = {};" in js
           and "planAllDates(p).forEach(function (od) {" in js
           and "if (ro && ro.skip) return;" in js
-          and "var day0 = (c.due != null && c.due >= 1 && c.due <= 28) ? Math.round(c.due) : 15;" in js
+          # v73.70 SUPERSESSION: the per-card due day no longer comes from a
+          # day0 default-15 line — cardDueData computes the card's OWN due
+          # date (per-card due_day, default 5) and the drop lands on it.
+          and "var cd = cardDueData(baseCard, state.txns, bBase, today, c.balance);" in js
+          and "if (cd.dueDate >= today && cd.dueDate <= end) ev(cd.dueDate, -owed); // a DROP" in js
           and "ev(salISO, expectedSalaryFor(" in js
           and "pts.push({ label: dayMonth(dISO), v: r2(pts[pts.length - 1].v + events[dISO]), date: dISO });" in js
           # the 2-month window (today -> end of the next 2 months)
@@ -1116,9 +1132,10 @@ def main():
           and "sub.push('Liquid <b>' + money(s.cash ? s.cash.total : 0) + '</b>');" not in js
           and "sub.push(pw + ' <b>' + money(d.prepayAmt) + '</b>');" not in js
           and "left in cycle" in js
-          # (3) the this-cycle Plan dues row is a total (no expansion), the
-          # peek keeps its expandable row
-          and "details in the coach</small>" in js
+          # (3) the this-cycle Plan dues row is a TOTAL with the detail
+          # rows behind its own tap (v73.71 restored the expansion in the
+          # hero — the v73.56 one-liner expansion is still dead)
+          and "id=\"cbThisPlansRow\" role=\"button\"" in js
           and "var openThis = !!state.cbPlansOpen;" not in js
           and "var itemsT = p.planItems || [];" not in js
           # (4) the 3-cell strip + fold (the old text blocks are gone)
@@ -1204,7 +1221,10 @@ def main():
           and "var hDays = d.cycleDaysLeft || daysLeft;" in js  # the render uses the cycle days (calendar when absent)
           and "var hDaily = hDays > 0 ? r2(Math.max(0, free) / hDays) : 0;" in js  # the per-cycle daily
           and "this cycle (to ' + dayMonth(d.cycle.end) + ')'" in js  # the line names the cycle end
-          and "else if (hDaily >= meal) {" in js  # the treat check runs on the per-cycle daily
+          # v73.66/73.72: the treat check moved to the tTxt roast one-liners
+          # (the old insBlock Today block is dead) — it still runs on the
+          # per-cycle hDaily.
+          and "else if (hDaily >= meal) tTxt = 'Eat out OK: a ' + money(meal) + ' treat still leaves you on track" in js  # the treat check runs on the per-cycle daily
           and "'73.11': [" in js)
     check("v73.12 (user: 'the cards owed should be subtracted already from the liquid cash to know how much cash is free/unallocated'): the base snapshot commits the FULL card balance (free = liquid - owed - other outflows), not just the prepay-to-target slice. The v72.42 overlay rule (charge -a free, payoff 0) is unchanged - it is exactly what keeps the identity live (a charge commits free by the full amount; the payoff only drops raw liquid + owed)",
           "var cardOwed = (month === months[0]) ? baseCardTotal(b) : 0;" in js  # the base month commits the full owed
@@ -1655,7 +1675,10 @@ def main():
           and "function prepayRowChip(attr) {" in js  # v73.19: the prepay row-chip's handler body
           and "function salaryRowChip(attr) {" in js  # v73.19: the salary row-chip's handler body
           and ".rowchip{" in html  # v73.20: the row-chip pill styling (the plan-due design for every action row)
-          and "insBlock('This cycle'" in js
+          # v73.69: the insights 'This cycle' block became the cycle strip;
+          # insBlock now renders 'This month' (the v73.11 cycle pins above
+          # assert the per-cycle math).
+          and "insBlock('This month'" in js
           # v73.57: the v72.45 salDelta/proration lines are GONE (the 2-month
           # step chart replaced the base-matrix plot) — the salary now lands
           # as a step event on the next payday (the v73.57 pin asserts it).
