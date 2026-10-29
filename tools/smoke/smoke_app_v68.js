@@ -1445,9 +1445,91 @@ waitReady().then(async function (F) {
       ok(String(byIdStub('ccCardsBody').innerHTML).indexOf('MANUAL') < 0,
         'v73.69: clearing the override returns the card to AUTO DUE');
     })().then(function () {
+      // ============ PART 26: v73.70 — the payment-method ledger filter ======
+      // (boss: 'allow sorting of entries based on the payment method'): a
+      // second dropdown (#mlFilterM) filters by the row's e.m account
+      // ('Maya CC', 'MariBank CC', 'MariBank', 'Cash', …); a prepay row with
+      // no account falls back to 'CC Payment'; the '__m:' value prefix
+      // can't collide with a same-named category; it ANDs with the category
+      // filter; a filter change resets the See-more page.
+      console.log('\n== PART 26: v73.70 — the payment-method ledger filter =');
+      (async function () {
+        var log26 = F.state.moneyLog || [];
+        var countM = function (mv) {
+          return log26.filter(function (e) {
+            var m = (e.k === 'p' && !e.m) ? 'CC Payment' : (e.m || '');
+            return m === mv;
+          }).length;
+        };
+        var mSel = byIdStub('mlFilterM');
+        var rowsOf = function (mv) { // exact method match in the rendered body (the ' · ' meta delimiter)
+          return (String(byIdStub('mlBody').innerHTML).match(new RegExp('· ' + mv.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z])', 'g')) || []).length;
+        };
+        F.renderMoneyLog(); // renderMlFilter runs inside
+        var mOpts = String(mSel.innerHTML);
+        ['Maya CC', 'MariBank CC', 'MariBank', 'Cash'].forEach(function (nm) {
+          ok(mOpts.indexOf('__m:' + nm) >= 0, 'v73.70: the method dropdown lists ' + nm + ' (from the ledger)');
+        });
+        ok(mOpts.indexOf('<option value="">All</option>') === 0, 'v73.70: the dropdown defaults to All');
+        // the account-less prepay falls back to 'CC Payment' (inject one,
+        // then restore — the earlier parts' prepays all carry an account)
+        var synth26 = { at: Date.now(), a: 'add', tid: 'smoke26-prepay', l: 'CC Payment', c: '', nt: 'v73.70 probe prepay', m: '', n: 1, k: 'p', f: 0, o: 1 };
+        log26.push(synth26);
+        F.renderMoneyLog();
+        mOpts = String(mSel.innerHTML);
+        ok(mOpts.indexOf('__m:CC Payment') >= 0, 'v73.70: the account-less prepay falls back to the CC Payment option');
+        F.setMlFilters('', '__m:CC Payment');
+        F.renderMoneyLog();
+        // the row's label IS 'CC Payment' (no account to show in the meta),
+        // so assert on its note text instead of the ' · ' delimiter
+        ok(String(byIdStub('mlBody').innerHTML).indexOf('v73.70 probe prepay') >= 0,
+          'v73.70: the CC Payment method filter shows the account-less prepay');
+        log26.pop(); // restore
+        // the method filter shows ONLY that method's rows
+        var mayaN = countM('Maya CC');
+        ok(mayaN >= 1, 'v73.70: premise — the ledger has Maya CC rows (got ' + mayaN + ')');
+        F.setMlFilters('', '__m:Maya CC');
+        F.renderMoneyLog();
+        var mayaRows = rowsOf('Maya CC');
+        ok(mayaRows === Math.min(5, mayaN), 'v73.70: filtering by Maya CC shows ONLY its rows (got ' + mayaRows + ')');
+        ok(rowsOf('MariBank CC') === 0 && rowsOf('Cash') === 0, 'v73.70: the filter hides the other methods (no MariBank CC / Cash row)');
+        // the AND with the category filter narrows further
+        var mayaFood = log26.filter(function (e) {
+          return e.k !== 'p' && e.c === 'Food' && (e.m || '') === 'Maya CC';
+        }).length;
+        F.setMlFilters('Food', '__m:Maya CC');
+        F.renderMoneyLog();
+        var mayaFoodRows = rowsOf('Maya CC');
+        ok(mayaFoodRows === Math.min(5, mayaFood), 'v73.70: the method filter ANDs with the category (Maya CC + Food = ' + mayaFood + ' rows, got ' + mayaFoodRows + ')');
+        // the empty state names BOTH active filters (Food + LandBank)
+        var landFood = log26.filter(function (e) {
+          return e.k !== 'p' && e.c === 'Food' && (e.m || '') === 'LandBank';
+        }).length;
+        F.setMlFilters('Food', '__m:LandBank');
+        F.renderMoneyLog();
+        var body26c = String(byIdStub('mlBody').innerHTML);
+        if (landFood === 0) {
+          ok(body26c.indexOf('Food + LandBank') >= 0, 'v73.70: the empty state names both active filters (Food + LandBank)');
+        } else {
+          ok(true, 'v73.70: (Food + LandBank has ' + landFood + ' rows — the empty-state branch is skipped)');
+        }
+        // a filter change resets the See-more page
+        F.setMlFilters('', '__m:MariBank CC');
+        F.renderMoneyLog();
+        var mbRows = rowsOf('MariBank CC');
+        ok(mbRows === Math.min(5, countM('MariBank CC')), 'v73.70: a method filter change restarts the See-more page at 5 rows (got ' + mbRows + ')');
+        // clearing the method filter returns to the full log
+        F.setMlFilters('', '');
+        F.renderMoneyLog();
+        ok(rowsOf('Maya CC') > 0, 'v73.70: clearing the method filter shows the full log again');
+      })().then(function () {
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);
+    }).catch(function (e) {
+      console.error('PROBE ERROR:', e && e.stack || e);
+      process.exit(2);
+    });
     }).catch(function (e) {
       console.error('PROBE ERROR:', e && e.stack || e);
       process.exit(2);

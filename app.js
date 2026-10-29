@@ -1781,6 +1781,10 @@
   // v53: ledger category filter. '' = all; '__unsorted__' = entries with no
   // category (shown as Unsorted); anything else matches the category exactly.
   var mlFilterCat = '';
+  // v73.70: the payment-method filter (the row's e.m account). '' = all;
+  // '__m:<name>' matches the method exactly ('CC Payment' = prepays with no
+  // account). Stacks with the category filter (AND).
+  var mlFilterM = '';
   // v72.29 (user edit): "See more" paging for the money log — the first 5
   // rows (newest first) show; the button reveals 5 older ones per tap; a
   // filter change starts the page over. In-memory — resets on reload.
@@ -1805,6 +1809,31 @@
     sel.innerHTML = html;
     sel.value = mlFilterCat;
     if (sel.value !== mlFilterCat) mlFilterCat = sel.value; // filtered category no longer present
+    // v73.70 (boss: 'allow sorting of entries based on the payment method'):
+    // the SECOND dropdown filters by the row's payment method (the e.m
+    // account — 'Maya CC', 'MariBank CC', 'MariBank', 'Cash', …). A prepay
+    // row without an account falls back to 'CC Payment' (the v72.47 name).
+    // '' = all; the value rides the '__m:' prefix so it can't collide with
+    // a category named the same as an account.
+    var msel = byId('mlFilterM');
+    if (msel) {
+      var ms = [];
+      var hasMccpay = false;
+      log.forEach(function (e) {
+        if (!e) return;
+        var mv = (e.k === 'p' && !e.m) ? 'CC Payment' : (e.m || '');
+        if (!mv) return;
+        if (e.k === 'p' && !e.m) { hasMccpay = true; return; }
+        if (ms.indexOf(mv) < 0) ms.push(mv);
+      });
+      ms.sort();
+      var mhtml = '<option value="">All</option>';
+      if (hasMccpay) mhtml += '<option value="__m:CC Payment">CC Payment</option>';
+      ms.forEach(function (c) { mhtml += '<option value="__m:' + esc(c) + '">' + esc(c) + '</option>'; });
+      msel.innerHTML = mhtml;
+      msel.value = mlFilterM;
+      if (msel.value !== mlFilterM) mlFilterM = msel.value; // filtered method no longer present
+    }
   }
   function renderMoneyLog() {
     var el = byId('moneyLog');
@@ -1821,16 +1850,25 @@
       return;
     }
     var shown = log.slice().reverse().filter(function (e) {
-      if (!mlFilterCat) return true;
-      if (mlFilterCat === '__ccpay__') return e.k === 'p'; // v72.47: the CC Payment filter
-      if (mlFilterCat === '__unsorted__') return e.k !== 'p' && !e.c;
-      return e.c === mlFilterCat;
+      if (mlFilterCat) {
+        if (mlFilterCat === '__ccpay__') return e.k === 'p'; // v72.47: the CC Payment filter
+        if (mlFilterCat === '__unsorted__') return e.k !== 'p' && !e.c;
+        if (e.c !== mlFilterCat) return false;
+      }
+      if (mlFilterM) { // v73.70: the payment-method filter (ANDs with the category)
+        var mv = (e.k === 'p' && !e.m) ? 'CC Payment' : (e.m || '');
+        if (mv !== mlFilterM.slice(4)) return false;
+      }
+      return true;
     });
     if (!shown.length) {
       if (noteEl) noteEl.style.display = 'none';
-      body.innerHTML = '<p class="note" style="margin:2px 0">No ' +
-        (mlFilterCat === '__unsorted__' ? 'unsorted' : mlFilterCat === '__ccpay__' ? 'cc payment' : esc(mlFilterCat)) +
-        ' entries — clear the filter to see the rest.</p>';
+      var fLbl = [
+        mlFilterCat ? (mlFilterCat === '__unsorted__' ? 'unsorted' : mlFilterCat === '__ccpay__' ? 'cc payment' : mlFilterCat) : null,
+        mlFilterM ? mlFilterM.slice(4) : null
+      ].filter(Boolean).join(' + ');
+      body.innerHTML = '<p class="note" style="margin:2px 0">No ' + esc(fLbl) +
+        ' entries — clear the filter' + (mlFilterCat && mlFilterM ? 's' : '') + ' to see the rest.</p>';
       return;
     }
     if (noteEl) noteEl.style.display = '';
@@ -7544,12 +7582,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.69, live: new Date(2026, 9, 29, 21, 42) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.70, live: new Date(2026, 9, 29, 22, 25) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.70': [
+      'New: the Ledger tab can filter by PAYMENT METHOD — a second dropdown next to the category one (Maya CC, MariBank CC, MariBank, Cash, …). Stack it with the category filter (Maya CC + Food = only that card\u2019s food rows); a prepay with no account shows up under "CC Payment".'
+    ],
     '73.69': [
       'New: the Cards card on Home — one row per credit card with its limit, live utilization, the live balance, and the due (the manual "due this cycle" override when you set one, else the full balance — this build has no next-cycle split yet). The chip says AUTO DUE or MANUAL so you always know which number is driving it.'
     ],
@@ -8575,6 +8616,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     setPlans: function (ps) { state.plans = ps; }, // v73.67: test hook (smoke seeds an overdue series)
     renderCoach: renderCoach, // v73.18: the coach card render (smoke reads the pay-plan chip in the HTML)
     renderCcCards: renderCcCards, // v73.69: the CC summary card render (smoke drives the 2-cell rows)
+    setMlFilters: function (cat, m) { mlFilterCat = cat; mlFilterM = m || ''; mlShownCount = 5; }, // v73.70: test hook (the smoke drives the method filter without a DOM onchange)
     prefillAdd: prefillAdd, // v73.18: the coach prefill (smoke verifies the chip's target state)
     getAddMode: function () { return addMode; }, // v73.19: the Add sheet's direction (the row chips' prefill proof)
     prepayRowChip: prepayRowChip, // v73.19: the prepay row-chip's handler body (smoke drives it without a DOM)
@@ -8927,6 +8969,8 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     };
     var mlf = byId('mlFilter');
     if (mlf) mlf.onchange = function () { mlFilterCat = mlf.value; mlShownCount = 5; renderMoneyLog(); };
+    var mlfM = byId('mlFilterM'); // v73.70: the payment-method filter
+    if (mlfM) mlfM.onchange = function () { mlFilterM = mlfM.value; mlShownCount = 5; renderMoneyLog(); };
     wireSnackSwipe(); // v72.32: the top banner swipes up to dismiss
 
     window.addEventListener('online', function () { state.online = true; });

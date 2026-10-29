@@ -1712,6 +1712,15 @@ def main():
           and "renderCcCards: renderCcCards" in js
           and "grid-template-columns:1fr 1fr" in html  # the 2-cell grid (the mock's 3-col next-cycle cell is gone)
           and "utilpill" in html and "ccrow" in html)
+    check("v73.70 (boss: 'allow sorting of entries based on the payment method'): a SECOND ledger dropdown (#mlFilterM) filters by the row's payment method (the e.m account — 'Maya CC', 'MariBank CC', 'MariBank', 'Cash', …); a prepay row with no account falls back to 'CC Payment' (the v72.47 name); the value rides the '__m:' prefix so it can't collide with a same-named category; it ANDs with the category filter, and a filter change resets the See-more page",
+          "var mlFilterM = ''" in js
+          and "byId('mlFilterM')" in js
+          and 'id="mlFilterM"' in html
+          and '__m:' in js
+          and "var mv = (e.k === 'p' && !e.m) ? 'CC Payment' : (e.m || '');" in js
+          and "if (mv !== mlFilterM.slice(4)) return false;" in js
+          and "mlfM.onchange = function () { mlFilterM = mlfM.value; mlShownCount = 5; renderMoneyLog(); };" in js
+          and ".ml-fbar select+select" in html)
     check("v72.31 (user: 'add x button in ledger for adjustment, it undoes the record in settings'): an Adjustment row (k='a') carries its own ✕ (data-adj-del = the row's moneyLog index) — it confirms, removes the audit record, and reverses the balance change it filed: the account's Settings value moves by the NEGATIVE of the row's signed diff through the base save with Adjustment-filing SUPPRESSED (deleting an audit record must not file a new one); the account gone from Settings → the row is simply deleted; the toast Undo restores row + value",
           "function findAdjAccount(name)" in js
           and "function askDeleteAdjustment(idx)" in js

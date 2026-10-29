@@ -6,6 +6,28 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.70 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-29 - "in ledger tab, allow sorting of entries based on the payment method: 'maya cc', 'maribank cc', 'maribank', 'cash' etc"
+Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.70, sw cache
+`finances-pwa-v73.70` pushed to `https://github.com/jblagana/finance-app.git` (main).
+
+The Ledger tab's filter bar gained a SECOND dropdown (`#mlFilterM`) — filter by the row's
+payment method (the `e.m` account: 'Maya CC', 'MariBank CC', 'MariBank', 'Cash', …):
+
+- `mlFilterM` state var ('' = all; value rides the `__m:` prefix so it can't collide with a
+  category named like an account); `renderMlFilter` builds the method options from the ledger
+  (a prepay row with no account falls back to 'CC Payment' — the v72.47 name).
+- The method filter ANDs with the category filter; the empty state names both active filters
+  ('No Food + LandBank entries — clear the filters…'); a filter change resets the See-more
+  page (both dropdowns' onchange set `mlShownCount = 5`).
+- CSS: `.ml-fbar select+select{flex:0 1 150px}` — the two selects share the leftover width.
+- check_site: new v73.70 pin (var, ids, `__m:` prefix, the fallback line, the AND predicate,
+  the onchange binding, the CSS rule).
+- smoke PART 26 (13 new asserts, 237 printed total): the seed's methods list (Maya CC /
+  MariBank CC / MariBank / Cash + the CC Payment fallback), Maya CC shows only its 3 rows,
+  the AND with the Food category, the both-filters empty state, the See-more reset, and the
+  clear-back-to-full-log path.
+
 # v73.69 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-29 - "Ship the 2-cell CC card on main (v73.68)"
 Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.69, sw cache

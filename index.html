@@ -347,6 +347,8 @@ border-top:1px solid var(--line);background:var(--card)}
 /* v53: ledger category filter bar (All / Unsorted / per category) */
 .ml-fbar{display:flex;align-items:center;gap:10px;margin:0 0 10px}
 .ml-fbar select{flex:0 1 180px;width:auto;font-size:12.5px;padding:7px 30px 7px 10px;border-radius:9px}
+/* v73.70: the payment-method filter joins the bar — the two selects share the leftover width */
+.ml-fbar select+select{flex:0 1 150px}
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .seg label{display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--line);border-radius:10px;
  padding:9px 10px;font-size:12.5px;font-weight:600;color:var(--mut);cursor:pointer;margin:0}
@@ -823,6 +825,7 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       <div class="ml-fbar">
         <h2 style="margin:0;flex:1">Your expenses</h2>
         <select id="mlFilter" aria-label="Filter by category"></select>
+        <select id="mlFilterM" aria-label="Filter by payment method"></select>
       </div>
       <p class="note" style="margin:0 0 8px">Tap an entry to edit it — <b>✕</b> deletes.</p>
       <div id="moneyLog">
