@@ -1721,6 +1721,13 @@ def main():
           and "if (mv !== mlFilterM.slice(4)) return false;" in js
           and "mlfM.onchange = function () { mlFilterM = mlfM.value; mlShownCount = 5; renderMoneyLog(); };" in js
           and ".ml-fbar select+select" in html)
+    check("v73.71 (the CC-card ≠ hero diagnosis — the boss's cards-owed 12,295.52 vs the CC card's 9,620.75): prepayBy is an INCREMENTAL accumulator (addAdj only writes it when the txn carries the `account` field), so card charges logged before the per-card field existed bumped the TOTAL adj.card but never the per-card split — the CC card rows (and chat) went stale under the authoritative hero total. Fix: migratePrepayBy rebuilds the split from the txns (the same txnAdj deltas) and reconciles it to adj.card (scaling the missing share in proportionally); it runs on boot (after migratePayoffModel) and on import (after the payoff migration), is idempotent (no write when the split already matches), and sanitizeAdj now keeps the per-card split through exports",
+          "function migratePrepayBy()" in js
+          and "migratePrepayBy(); // v73.71: one-shot rebuild of the stale per-card prepay split" in js
+          and "if (hasSec('txns')) migratePrepayBy();" in js
+          and "if (Math.abs(sum - a.card) > 0.004 && sum !== 0) {" in js
+          and "migratePrepayBy: migratePrepayBy" in js
+          and "prepayBy: pb" in js)
     check("v72.31 (user: 'add x button in ledger for adjustment, it undoes the record in settings'): an Adjustment row (k='a') carries its own ✕ (data-adj-del = the row's moneyLog index) — it confirms, removes the audit record, and reverses the balance change it filed: the account's Settings value moves by the NEGATIVE of the row's signed diff through the base save with Adjustment-filing SUPPRESSED (deleting an audit record must not file a new one); the account gone from Settings → the row is simply deleted; the toast Undo restores row + value",
           "function findAdjAccount(name)" in js
           and "function askDeleteAdjustment(idx)" in js

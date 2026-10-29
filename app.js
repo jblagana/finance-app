@@ -606,6 +606,49 @@
     a.mv = ADJ_MODEL_V;
     saveAdj().then(function () { emit('adj'); });
   }
+  // v73.71 (the CC-card ≠ hero diagnosis): prepayBy is an INCREMENTAL
+  // accumulator — it only gets an entry when a card txn carries the `account`
+  // field (addAdj: `if (a.prepay && a.acc)`). Card charges logged BEFORE the
+  // per-card field existed (pre-v72.33) bumped the TOTAL adj.card/prepay but
+  // never the per-card map, so the per-card balances (CC summary card, chat)
+  // drift UNDER the authoritative total: hero 'cards owed' = base + adj.card
+  // stays right, the CC card rows go stale. Self-checking (idempotent WITHOUT
+  // an mv gate — the boss's phone already carries mv 2, so an mv check would
+  // skip exactly the broken phones): rebuild the per-card split from the txns
+  // (the same txnAdj deltas) and only write it when it diverges from the
+  // authoritative total; the missing share (unattributed pre-field charges)
+  // is scaled in proportionally so the split sums to adj.card.
+  function migratePrepayBy() {
+    var a = state.adj;
+    if (!a) return;
+    var by = {};
+    (state.txns || []).forEach(function (t) {
+      var d = txnAdj(t);
+      if (d.prepay && d.acc) {
+        by[d.acc] = r2((by[d.acc] || 0) + d.prepay);
+        if (!by[d.acc]) delete by[d.acc];
+      }
+    });
+    var sum = 0;
+    Object.keys(by).forEach(function (k) { sum += by[k]; });
+    if (Math.abs(sum - a.card) > 0.004 && sum !== 0) {
+      var f = a.card / sum; // reconcile the split to the authoritative total
+      Object.keys(by).forEach(function (k) { by[k] = r2(by[k] * f); });
+    }
+    // write only when it actually differs from the stored split (idempotent
+    // on the next boot — the rebuild then produces the same map)
+    var cur = a.prepayBy || {};
+    var keys = {};
+    Object.keys(by).forEach(function (k) { keys[k] = 1; });
+    Object.keys(cur).forEach(function (k) { keys[k] = 1; });
+    var changed = false;
+    Object.keys(keys).forEach(function (k) {
+      if (r2(by[k] || 0) !== r2(cur[k] || 0)) changed = true;
+    });
+    if (!changed) return;
+    a.prepayBy = by;
+    saveAdj().then(function () { emit('adj'); });
+  }
 
   // ---- live overlay: app entries adjust the sheet snapshot until the sheet catches up ----
   // v72.10: the ledger learns INFLOWS — cash_in (money came to a cash pocket)
@@ -7183,9 +7226,17 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     return out.slice(-ML_CAP);
   }
   function sanitizeAdj(a) {
+    var pb = {};
+    if (a && a.prepayBy && typeof a.prepayBy === 'object') {
+      Object.keys(a.prepayBy).forEach(function (k) {
+        var v = Number(a.prepayBy[k]);
+        if (isFinite(v) && v !== 0) pb[k] = v; // v73.71: the per-card split rides the import (migratePrepayBy reconciles it on boot)
+      });
+    }
     return {
       cash: Number(a && a.cash) || 0, free: Number(a && a.free) || 0,
       card: Number(a && a.card) || 0, prepay: Number(a && a.prepay) || 0,
+      prepayBy: pb,
       mv: Number(a && a.mv) || 0 // v72.43: the model stamp rides the import (0 = pre-migration, migrate on boot)
     };
   }
@@ -7539,6 +7590,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
             state.adjLoaded = true;
             if (!data.adj) computeAdjFromTxns(); // v72.8: a pre-72.8 backup has no adj — recompute from the imported txns
             if (hasSec('txns')) migratePayoffModel(); // v72.43: a pre-v72.42 backup's adj still carries the old payoff model (adj + txns come from the same file)
+            if (hasSec('txns')) migratePrepayBy(); // v73.71: an imported per-card split reconciles against the imported txns immediately (not just next boot)
           }
           // v47: persist the base too. The old code re-derived the snapshot from
           // the imported base in memory (and saved the snapshot) but never wrote
@@ -7582,12 +7634,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.70, live: new Date(2026, 9, 29, 22, 25) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.71, live: new Date(2026, 9, 29, 23, 17) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.71': [
+      'Fixed: the Cards card\u2019s per-card balances could drift under the hero\u2019s "cards owed" total — the per-card split only tracked charges logged with a card name, so older charges counted in the total but not in a specific card. On launch (and on import) the split now rebuilds from your ledger and reconciles to the total, so every card row and the hero always agree.'
+    ],
     '73.70': [
       'New: the Ledger tab can filter by PAYMENT METHOD — a second dropdown next to the category one (Maya CC, MariBank CC, MariBank, Cash, …). Stack it with the category filter (Maya CC + Food = only that card\u2019s food rows); a prepay with no account shows up under "CC Payment".'
     ],
@@ -8670,6 +8725,8 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     effectiveSnap: effectiveSnap,
     payoffModelDelta: payoffModelDelta, // v72.43: the pure old→new overlay delta (smoke drives it)
     migratePayoffModel: migratePayoffModel, // v72.43: the one-shot persisted-overlay migration (smoke drives it)
+    migratePrepayBy: migratePrepayBy, // v73.71: the per-card prepay split rebuild (smoke drives it)
+    sanitizeAdj: sanitizeAdj, // v73.71: the import adj sanitizer (smoke: the per-card split rides the import)
     getAdj: function () { return state.adj; }, // v72.43: the live overlay (smoke simulates a pre-v72.42 phone)
     setAdj: function (a) { state.adj = a; }, // v72.43: test hook (smoke)
     snapSig: snapSig, // v73.13: the rebase trigger (raw inputs only — smoke pins the format)
@@ -8677,6 +8734,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     setAdjSig: function (s) { state.adjSig = s; }, // v73.13: test hook (smoke simulates an old phone's stored sig)
     getAdjSig: function () { return state.adjSig; }, // v73.13: test hook (smoke reads the stored sig)
     getTxns: function () { return state.txns; }, // v72.43: the ledger txns (smoke sums the old prepays)
+    setTxns: function (t) { state.txns = t; }, // v73.71: test hook (smoke drives migratePrepayBy with a known txn list)
     // v72.15: the FAB edge-settle + bubble-anchor geometry (smoke drives the pure math)
     fabSafe: fabSafe,
     fabEdgePos: fabEdgePos,
@@ -9172,6 +9230,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       refreshLocalSnapshot();
       if (!hasAdj && !state.adjSig) computeAdjFromTxns();
       migratePayoffModel(); // v72.43: one-shot re-derivation of a pre-v72.42 persisted overlay
+      migratePrepayBy(); // v73.71: one-shot rebuild of the stale per-card prepay split (AFTER the payoff migration — it re-stamps mv)
       if (!state.adjSig) state.adjSig = snapSig(state.snapshot);
       state.adjLoaded = true;
       persistSnapshot();

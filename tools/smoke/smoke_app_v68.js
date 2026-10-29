@@ -1523,6 +1523,59 @@ waitReady().then(async function (F) {
         F.renderMoneyLog();
         ok(rowsOf('Maya CC') > 0, 'v73.70: clearing the method filter shows the full log again');
       })().then(function () {
+      // ============ PART 27: v73.71 — the per-card prepay split rebuild =====
+      // (the boss's diagnosis: hero 'cards owed' 12,295.52 vs the CC card's
+      // 9,620.75). prepayBy is an INCREMENTAL accumulator — card charges
+      // logged before the per-card `account` field existed bumped the TOTAL
+      // adj.card but never the per-card map, so the CC card rows went stale
+      // under the authoritative hero total. migratePrepayBy rebuilds the split
+      // from the txns and reconciles it to adj.card; idempotent on re-run.
+      console.log('\n== PART 27: v73.71 — the per-card prepay split rebuild =');
+      (async function () {
+        var txns0 = F.getTxns();
+        F.resetAdj();
+        // a KNOWN txn list: charges of 500 (Maya) + 2300 (MariBank) = 2800,
+        // while the stored total is 4946.52 — the pre-field gap the boss's
+        // phone had (total right, per-card split short).
+        F.setTxns([
+          { id: 't27a', date: '2026-10-18', account: 'Maya CC', kind: 'card_charge', category: 'Food', amount: 500 },
+          { id: 't27b', date: '2026-10-20', account: 'MariBank CC', kind: 'card_charge', category: 'Transport', amount: 2300 }
+        ]);
+        F.setAdj({ cash: 0, free: 0, card: 4946.52, prepay: 4946.52,
+          prepayBy: { 'Maya CC': 500, 'MariBank CC': 2300 }, mv: 3 });
+        F.migratePrepayBy();
+        var a27 = F.getAdj();
+        var sum27 = 0;
+        Object.keys(a27.prepayBy).forEach(function (k) { sum27 += a27.prepayBy[k]; });
+        ok(Math.abs(sum27 - 4946.52) < 0.01,
+          'v73.71: the rebuilt split sums to the authoritative adj.card total (got ' + sum27.toFixed(2) + ')');
+        // the missing share lands proportionally (Maya: 500 * 4946.52/2800 = 883.31)
+        ok(Math.abs(a27.prepayBy['Maya CC'] - 883.31) < 0.01 &&
+           Math.abs(a27.prepayBy['MariBank CC'] - 4063.21) < 0.01,
+          'v73.71: the missing share scales in proportionally (Maya got ' + a27.prepayBy['Maya CC'] + ')');
+        // idempotent: a second run rebuilds the same split and writes nothing
+        F.migratePrepayBy();
+        var a27b = F.getAdj();
+        ok(Math.abs(a27b.prepayBy['Maya CC'] - 883.31) < 0.01 &&
+           Math.abs(Object.keys(a27b.prepayBy).reduce(function (s, k) { return s + a27b.prepayBy[k]; }, 0) - 4946.52) < 0.01,
+          'v73.71: the rebuild is idempotent (second run leaves the split untouched)');
+        // the no-op path: a split that already matches the total is left alone
+        F.setTxns([
+          { id: 't27c', date: '2026-10-18', account: 'Maya CC', kind: 'card_charge', category: 'Food', amount: 300 },
+          { id: 't27d', date: '2026-10-20', account: 'MariBank CC', kind: 'card_charge', category: 'Food', amount: 200 }
+        ]);
+        F.setAdj({ cash: 0, free: 0, card: 500, prepay: 500,
+          prepayBy: { 'Maya CC': 300, 'MariBank CC': 200 }, mv: 3 });
+        F.migratePrepayBy();
+        ok(F.getAdj().prepayBy['Maya CC'] === 300 && F.getAdj().prepayBy['MariBank CC'] === 200,
+          'v73.71: a consistent split is a no-op (no write)');
+        // the split rides the import (sanitizeAdj keeps it — pre-v73.71 imports dropped it)
+        var imp27 = F.sanitizeAdj({ cash: 0, free: 0, card: 500, prepay: 500, prepayBy: { 'Maya CC': 300 }, mv: 3 });
+        ok(imp27.prepayBy && imp27.prepayBy['Maya CC'] === 300,
+          'v73.71: sanitizeAdj keeps the per-card split through the import');
+        F.setTxns(txns0); // restore the smoke's ledger
+        F.resetAdj();
+      })().then(function () {
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);
@@ -1538,6 +1591,10 @@ waitReady().then(async function (F) {
     console.error('PROBE ERROR:', e && e.stack || e);
     process.exit(2);
   });
+}).catch(function (e) {
+  console.error('PROBE ERROR:', e && e.stack || e);
+  process.exit(2);
+});
 }).catch(function (e) {
   console.error('PROBE ERROR:', e && e.stack || e);
   process.exit(2);
