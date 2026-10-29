@@ -74,8 +74,8 @@ User mandate (2026-09-12): these apply to every batch in this repo.
      runs a preflight (all gate dependencies present — v73.48), then the
      FULL gate suite in one pass (check_site repo + mirror,
      `test_chat_parser.py`, `node --check` on all JS, both smokes —
-     `tools\smoke\smoke_app_v68.js`, a permanent 237-assertion gate
-     rebuilt in v73.47 (237 as of v73.70; PART 7 = toast lifetime by
+     `tools\smoke\smoke_app_v68.js`, a permanent 257-assertion gate
+     rebuilt in v73.47 (257 as of v73.72; PART 7 = toast lifetime by
      kind; PART 8 = Money-in on a CC = payoff; PART 9 = the cashback
      payoff is NEW money; PART 10 = the skip record + unskip path;
      PART 11 = edit/delete survive a fully-skipped plan; PART 12 =

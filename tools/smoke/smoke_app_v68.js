@@ -1575,7 +1575,98 @@ waitReady().then(async function (F) {
           'v73.71: sanitizeAdj keeps the per-card split through the import');
         F.setTxns(txns0); // restore the smoke's ledger
         F.resetAdj();
-      })().then(function () {
+        // ============ PART 28: v73.72 — ipf-theirs pair + backfill ==========
+        // (boss-approved: 'ipf: file theirs as a card charge' + 'increase free
+        // cash by the same amount' — the credit converted to cash, since the
+        // repayment lands as cash and tmb never files a ledger row. Net on
+        // the boss's own free cash: zero; card owed grows by theirs.)
+        console.log('\n== PART 28: v73.72 — ipf-theirs pair + backfill =');
+        var owed0 = F.getOwed();
+        var txns0b = F.getTxns();
+        var adj0b = F.getAdj();
+          // ---- PART 28's async legs (the awaited owed flow) ----
+          await (async function () {
+            var owed0b = F.getOwed();
+            var txns0c = F.getTxns();
+            var adj0c = F.getAdj();
+            await F.addOwedPerson('Smoke Friend');
+            var pid = F.getOwed().people[F.getOwed().people.length - 1].id;
+            var freeA = F.effectiveSnap().cash.free;
+            var owedA = F.effectiveSnap().card_owed;
+            await F.addOwedEntry(pid, { dir: 'ipf', amt: 100, total: 200, mine: 100, theirs: 100,
+              acc: 'CARD::Maya CC', cat: 'Food', note: 'smoke ipf', d: '2026-10-25' });
+            await new Promise(function (r) { setTimeout(r, 15); });
+            var t28 = F.getTxns();
+            var ch28 = t28.filter(function (t) { return t.kind === 'card_charge' && t.note === 'Owed · Smoke Friend · theirs'; });
+            var ci28 = t28.filter(function (t) { return t.kind === 'cash_in' && t.note === 'Owed · Smoke Friend · theirs'; });
+            var co28 = t28.filter(function (t) { return t.kind === 'card_charge' && t.note === 'Owed · Smoke Friend'; });
+            ok(ch28.length === 1 && ch28[0].amount === 100 && ch28[0].account === 'Maya CC',
+              'v73.72: ipf on a card files THEIRS as a card_charge (got ' + ch28.length + ' x ' + (ch28[0] && ch28[0].amount) + ')');
+            ok(ci28.length === 1 && ci28[0].amount === 100 && ci28[0].account === 'Cash',
+              'v73.72: the cash advance files as a cash_in for the same amount (got ' + ci28.length + ' x ' + (ci28[0] && ci28[0].amount) + ')');
+            ok(co28.length === 1 && co28[0].amount === 100,
+              'v73.72: MINE still files as before (100 card charge for the boss\'s own part)');
+            var es28 = F.effectiveSnap();
+            ok(close(es28.cash.free, freeA - 100),
+              'v73.72: only MINE commits free cash — theirs is neutralized (charge −100, advance +100; got ' + es28.cash.free.toFixed(2) + ' vs ' + (freeA - 100).toFixed(2) + ')');
+            ok(close(es28.card_owed, owedA + 200),
+              'v73.72: card owed grew by the FULL bill (mine + theirs; got ' + es28.card_owed.toFixed(2) + ')');
+            var e28 = F.getOwed().people.filter(function (p) { return p.id === pid; })[0].entries[0];
+            ok(!!e28.theirsTxnId && !!e28.theirsBumpId && e28.theirsTxnId !== e28.theirsBumpId,
+              'v73.72: the entry carries both pair handles (charge + advance)');
+            // ---- the backfill: pre-base entries get the advance only (their
+            // card spend is already in the sheet's base), post-base get both ----
+            F.setOwed({ people: [{ id: 'p28b', name: 'Backfill Buddy', entries: [
+              { id: 'e28pre', d: '2026-09-20', dir: 'ipf', amt: 85, acc: 'CARD::MariBank CC', cat: 'Food', note: 'pre-base' },
+              { id: 'e28post', d: '2026-10-24', dir: 'ipf', amt: 225, acc: 'CARD::Maya CC', cat: 'Food', note: 'post-base' }
+            ], updated: '' }], sort: [] });
+            var freeB = F.effectiveSnap().cash.free;
+            var owedB = F.effectiveSnap().card_owed;
+            F.migrateIpfTheirs();
+            await new Promise(function (r) { setTimeout(r, 25); });
+            var pre28 = F.getOwed().people[0].entries[0];
+            var post28 = F.getOwed().people[0].entries[1];
+            ok(!!pre28.theirsTxnId && !pre28.theirsBumpId,
+              'v73.72: a pre-base ipf gets the advance handle only (no charge — the spend is in the base)');
+            ok(!!post28.theirsTxnId && !!post28.theirsBumpId,
+              'v73.72: a post-base ipf gets both handles (charge + advance)');
+            var es28b = F.effectiveSnap();
+            ok(close(es28b.card_owed, owedB + 225),
+              'v73.72: the backfill grew card owed by the post-base theirs only (got ' + es28b.card_owed.toFixed(2) + ' vs ' + owedB.toFixed(2) + ')');
+            // pre-base: +85 advance only (no charge); post-base: +225 advance
+            // − 225 charge = 0 net → free moves by the PRE-BASE advance only
+            ok(close(es28b.cash.free, freeB + 85),
+              'v73.72: free cash moved by the pre-base advance only (the post-base charge and advance cancel; got ' + es28b.cash.free.toFixed(2) + ' vs ' + (freeB + 85).toFixed(2) + ')');
+            // idempotent: a second run files nothing new
+            var n28 = F.getTxns().length;
+            F.migrateIpfTheirs();
+            await new Promise(function (r) { setTimeout(r, 25); });
+            ok(F.getTxns().length === n28, 'v73.72: the backfill is idempotent (stamp-gated — no second filing)');
+            // ---- editing re-files the pair on the new values ----
+            await F.updateOwedEntry('p28b', 'e28post', { dir: 'ipf', total: 300, mine: 100, theirs: 200,
+              acc: 'CARD::Maya CC', cat: 'Food', note: 'post-base', d: '2026-10-24' });
+            await new Promise(function (r) { setTimeout(r, 25); });
+            var t28d = F.getTxns();
+            var ch28d = t28d.filter(function (t) { return t.kind === 'card_charge' && t.note === 'Owed · Backfill Buddy · theirs' && t.amount === 200; });
+            var ci28d = t28d.filter(function (t) { return t.kind === 'cash_in' && t.note === 'Owed · Backfill Buddy · theirs' && t.amount === 200; }); // the pre-base 85 advance shares the note — amount disambiguates
+            ok(ch28d.length === 1 && ch28d[0].amount === 200,
+              'v73.72: editing re-files the theirs charge on the NEW amount (got ' + ch28d.length + ' x ' + (ch28d[0] && ch28d[0].amount) + ')');
+            ok(ci28d.length === 1 && ci28d[0].amount === 200,
+              'v73.72: editing re-files the advance on the NEW amount (got ' + ci28d.length + ' x ' + (ci28d[0] && ci28d[0].amount) + ')');
+            // after the edit: backfill charge 225 (post) + mine charge 100 (newly
+            // filed — the entry adopted the split) + new theirs charge 200 − old
+            // theirs charge 225 = owedB + 300; free = +85 (pre advance) − 100
+            // (mine) ± 0 (the theirs pairs net out) = freeB − 15
+            var es28c = F.effectiveSnap();
+            ok(close(es28c.card_owed, owedB + 300),
+              'v73.72: card owed reflects the EDITED entry (old pair removed, new filed + mine; got ' + es28c.card_owed.toFixed(2) + ' vs ' + (owedB + 300).toFixed(2) + ')');
+            ok(close(es28c.cash.free, freeB - 15),
+              'v73.72: free cash reflects the edit (pre advance +85, mine −100, theirs pairs net out; got ' + es28c.cash.free.toFixed(2) + ' vs ' + (freeB - 15).toFixed(2) + ')');
+            F.setOwed(owed0b);
+            F.setTxns(txns0c);
+            F.setAdj(adj0c);
+          })();
+        })().then(function () {
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);

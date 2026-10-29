@@ -6362,11 +6362,14 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     if (idx < 0) return;
     var gone = state.owed.people.splice(idx, 1)[0];
     // v72.10: every ledger-filed entry goes with the person — undo brings them back
+    // (v73.72: the theirs pair's txns ride along too)
     var goneTxns = [];
     (gone.entries || []).forEach(function (e) {
-      if (e && e.txnId) {
-        for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === e.txnId) { goneTxns.push(Object.assign({}, state.txns[i])); break; }
-      }
+      if (!e) return;
+      [e.txnId].concat(ipfTheirsTxnIds(e)).forEach(function (tid) {
+        if (!tid) return;
+        for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) { goneTxns.push(Object.assign({}, state.txns[i])); break; }
+      });
     });
     saveOwed().then(function () {
       emitOwed();
@@ -6410,6 +6413,145 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     var ledg = hasM ? M : (hasT ? r2(T - Th) : 0);
     if (owedT < 0 || ledg < 0) return bad('A part cannot be bigger than the total.');
     return { owed: owedT, ledger: ledg, err: '' };
+  }
+  // v73.72 (boss-approved: 'ipf: file theirs as a card charge + increase free
+  // cash by the same amount'): when "I paid for them" is paid on a CARD, the
+  // friend's share (theirs) is real card spend — the bank charged the FULL
+  // bill — so it files as its own card_charge, and the SAME amount comes back
+  // as free cash (a cash_in): the credit converted to cash, because the
+  // repayment lands as cash and tmb never files a ledger row. Net on the
+  // boss's own free cash: zero (the charge commits theirs, the cash_in
+  // releases theirs) — the friend's spend stops touching his numbers.
+  // Cash / debit picks are untouched (a cash ipf already left free cash).
+  function isCardAcc(acc) { return String(acc || '').indexOf('CARD::') === 0; }
+  // the "theirs" share of an ipf entry — v72.49 stores the split parts
+  // explicitly (e.theirs) when the form ran them, and legacy ipf entries
+  // carry theirs as e.amt itself (the debt side); the total−mine fallback
+  // covers a split stored without the theirs part
+  function ipfTheirs(e) {
+    if (!e || e.dir !== 'ipf') return 0;
+    var th = Number(e.theirs) || 0;
+    if (th <= 0) th = Number(e.amt) || 0;
+    if (th <= 0 && e.total && e.mine) th = r2(Number(e.total) - Number(e.mine));
+    return r2(th);
+  }
+  // files the ipf-theirs pair when the entry is an ipf on a card with a
+  // theirs share. `fileCharge` = file the card_charge (the bank's full bill);
+  // `fileBump` = file the cash-advance cash_in (the credit converted to cash).
+  // The backfill passes fileCharge=false for PRE-BASE entries — their card
+  // spend is already inside the sheet's base (filing it would double-count
+  // card owed), so they get the cash advance only. Links e.theirsTxnId (the
+  // charge when filed, else the cash_in — the single undo/restore handle) and
+  // saves the owed book. Returns a settled Promise (no-op when nothing files).
+  function fileIpfTheirs(e, p, fileCharge, fileBump) {
+    var th = ipfTheirs(e);
+    var acc = String(e.acc || '');
+    if (e.dir !== 'ipf' || !isCardAcc(acc) || th <= 0) return Promise.resolve();
+    var cardName = acc.split('::').pop() || 'Cash';
+    var note = 'Owed · ' + p.name + ' · theirs';
+    var step = Promise.resolve();
+    var chargeId = null, bumpId = null;
+    if (fileCharge) {
+      step = step.then(function () {
+        return addTxn({
+          date: e.d, account: cardName, kind: 'card_charge',
+          category: e.cat || 'Unsorted', amount: th, note: note
+        }, { quiet: true }).then(function (id) { chargeId = id; });
+      });
+    }
+    if (fileBump) {
+      step = step.then(function () {
+        return addTxn({
+          date: e.d, account: 'Cash', kind: 'cash_in',
+          category: e.cat || 'Unsorted', amount: th, note: note
+        }, { quiet: true }).then(function (id) { bumpId = id; });
+      });
+    }
+    return step.then(function () {
+      var linkedId = chargeId || bumpId; // read AFTER the legs ran (the ids are set in the callbacks)
+      if (!linkedId) return;
+      e.theirsTxnId = linkedId; // the link persists with the entry (export/import carries it)
+      if (chargeId && bumpId) e.theirsBumpId = bumpId; else delete e.theirsBumpId; // the second leg's handle (undo/restore removes BOTH)
+      return saveOwed();
+    });
+  }
+  // v73.72: the entry's theirs-pair handles (1-2 txn ids, deduped)
+  function ipfTheirsTxnIds(e) {
+    var ids = [];
+    if (e && e.theirsTxnId) ids.push(e.theirsTxnId);
+    if (e && e.theirsBumpId && e.theirsBumpId !== e.theirsTxnId) ids.push(e.theirsBumpId);
+    return ids;
+  }
+  // v73.72 backfill (boss-approved): one-shot — past ipf-on-card entries that
+  // never filed theirs get filed now. Entries dated ON/AFTER the base as-of
+  // get BOTH the charge and the cash advance (their spend is NOT in the
+  // sheet's base); PRE-BASE entries get the cash advance only — their card
+  // spend is already inside the base (filing the charge would double-count
+  // card owed). Idempotent — the theirsTxnId stamp is the gate (no mv: a
+  // phone that already ran it has the stamp on every eligible entry).
+  function migrateIpfTheirs() {
+    var a = state.adj;
+    if (!a) return;
+    var asOf = (state.base && state.base.as_of) ? String(state.base.as_of) : '';
+    var any = false;
+    (state.owed.people || []).forEach(function (p) {
+      (p.entries || []).forEach(function (e) {
+        if (!e || e.dir !== 'ipf' || e.theirsTxnId) return;
+        if (!isCardAcc(e.acc)) return;
+        if (ipfTheirs(e) <= 0) return;
+        any = true;
+        var postBase = !asOf || String(e.d || '') >= asOf;
+        fileIpfTheirs(e, p, postBase, true).then(function () {
+          emitOwed();
+        });
+      });
+    });
+    if (any) saveAdj();
+  }
+  // v73.72: the backfill's promise form — resolves when every filed pair has
+  // stamped its entry (the boot/import call sites fire-and-forget; the smoke
+  // awaits this to assert the handles)
+  function migrateIpfTheirsAll() {
+    var a = state.adj;
+    if (!a) return Promise.resolve();
+    var asOf = (state.base && state.base.as_of) ? String(state.base.as_of) : '';
+    var jobs = [];
+    (state.owed.people || []).forEach(function (p) {
+      (p.entries || []).forEach(function (e) {
+        if (!e || e.dir !== 'ipf' || e.theirsTxnId) return;
+        if (!isCardAcc(e.acc)) return;
+        if (ipfTheirs(e) <= 0) return;
+        var postBase = !asOf || String(e.d || '') >= asOf;
+        jobs.push(fileIpfTheirs(e, p, postBase, true));
+      });
+    });
+    if (!jobs.length) return Promise.resolve();
+    return Promise.all(jobs).then(function () {
+      saveAdj();
+      emitOwed();
+    });
+  }
+  // v73.72: the undo/restore paths remove BOTH linked txns at once — the
+  // money-log rows that reference either id get the exact inverse rebase.
+  function removeTxnsQuiet(ids) {
+    var ids2 = (ids || []).filter(Boolean);
+    if (!ids2.length) return Promise.resolve();
+    var found = [];
+    ids2.forEach(function (tid) {
+      for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) { found.push(state.txns[i]); break; }
+    });
+    if (!found.length) return Promise.resolve();
+    found.forEach(function (t) {
+      state.txns = state.txns.filter(function (x) { return x.id !== t.id; });
+      if (!adjEmpty()) addAdj(txnAdj(t), -1);
+      logMoney('del', t);
+      syncTombAdd('t', t.id);
+    });
+    var puts = found.map(function (t) { return idbDel(STORE_TX, t.id); });
+    return Promise.all(puts).then(function () {
+      if (!adjEmpty()) saveAdj();
+      emit('txn');
+    });
   }
   function addOwedEntry(pid, data) {
     var p = null;
@@ -6470,8 +6612,14 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
         return saveOwed();
       });
     }
+    if (dir === 'ipf') {
+      // v73.72: the friend's share files too — card_charge on the picked
+      // card + the cash-advance cash_in (no-op for cash picks: a cash ipf
+      // already left free cash, so there is nothing to convert)
+      step = step.then(function () { return fileIpfTheirs(e, p, true, true); });
+    }
     if (owed > 0) p.entries.push(e); // v72.49: an ipf add with ONLY yours = a ledger txn, no owed entry
-    saveOwed().then(function () { return step; }).then(function () {
+    return saveOwed().then(function () { return step; }).then(function () {
       emitOwed();
       var msg;
       if (ledger > 0 && owed > 0) msg = OWED_DIRS[e.dir].label + ' ' + money(owed) + ' · ' + money(ledger) + ' in the ledger · ' + esc(p.name);
@@ -6479,8 +6627,9 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       else msg = OWED_DIRS[e.dir].label + ' ' + money(owed) + ' · ' + esc(p.name);
       snack(msg, function () {
         p.entries = p.entries.filter(function (x) { return x.id !== e.id; });
-        var u = e.txnId ? removeTxnQuiet(e.txnId) : Promise.resolve();
-        e.txnId = null;
+        // v73.72: undo removes the theirs pair too (charge + cash advance)
+        var u = removeTxnsQuiet([e.txnId].concat(ipfTheirsTxnIds(e)));
+        e.txnId = null; e.theirsTxnId = null; delete e.theirsBumpId;
         u.then(function () { saveOwed().then(emitOwed); });
       }, 'add');
     });
@@ -6498,14 +6647,25 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     if (gone.txnId) {
       for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === gone.txnId) goneTxn = Object.assign({}, state.txns[i]);
     }
+    // v73.72: the theirs pair (charge + cash advance) goes with the entry too
+    var goneTheirs = [];
+    ipfTheirsTxnIds(gone).forEach(function (tid) {
+      for (var i2 = 0; i2 < state.txns.length; i2++) if (state.txns[i2].id === tid) { goneTheirs.push(Object.assign({}, state.txns[i2])); break; }
+    });
     p.updated = new Date().toISOString(); // v72.7: recent-sort key
     saveOwed().then(function () {
       emitOwed();
-      if (goneTxn) removeTxnQuiet(goneTxn.id);
-      snack('Removed ' + money(gone.amt) + ' entry', function () {
-        p.entries.push(gone);
-        var u = goneTxn ? restoreTxnQuiet(goneTxn) : Promise.resolve();
-        u.then(function () { saveOwed().then(emitOwed); });
+      var u = Promise.resolve();
+      if (goneTxn) u = u.then(function () { return removeTxnQuiet(goneTxn.id); });
+      goneTheirs.forEach(function (t) { u = u.then(function () { return removeTxnQuiet(t.id); }); });
+      u.then(function () {
+        snack('Removed ' + money(gone.amt) + ' entry', function () {
+          p.entries.push(gone);
+          var r = Promise.resolve();
+          if (goneTxn) r = r.then(function () { return restoreTxnQuiet(goneTxn); });
+          goneTheirs.forEach(function (t) { r = r.then(function () { return restoreTxnQuiet(t); }); });
+          r.then(function () { saveOwed().then(emitOwed); });
+        });
       });
     });
   }
@@ -6717,6 +6877,11 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     if (e.txnId) {
       for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === e.txnId) prevTxn = Object.assign({}, state.txns[i]);
     }
+    // v73.72: the theirs pair's txns, snapshotted BEFORE (undo restores them)
+    var prevTheirs = [];
+    ipfTheirsTxnIds(e).forEach(function (tid) {
+      for (var i4 = 0; i4 < state.txns.length; i4++) if (state.txns[i4].id === tid) { prevTheirs.push(Object.assign({}, state.txns[i4])); break; }
+    });
     // v72.49 (the split): the same rule as addOwedEntry — yours files (ipf
     // on the picked account, tpf on Cash), the owed entry carries the debt
     // side. Editing is where OLD entries adopt it: the linked ledger txn is
@@ -6763,34 +6928,43 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       tData.account = acc.split('::').pop() || 'Cash';
       tData.kind = isCard ? 'card_charge' : 'cash_out';
     }
+    // v73.72: the entry's fields move BEFORE the ledger steps — fileIpfTheirs
+    // reads the entry's NEW date / theirs / account, and the OLD theirs pair
+    // is removed first (a re-filed pair replaces it exactly)
+    e.d = next.d; e.amt = next.amt; e.dir = next.dir; e.note = next.note;
+    e.cat = next.cat; // v72.25→v72.28
+    if (data.expr) e.expr = data.expr; else delete e.expr;
+    // v72.49: the split parts — only the ones that are there (ipf: mine +
+    // total; tpf: theirs + total; e.amt IS the debt side)
+    delete e.mine; delete e.theirs; delete e.total;
+    if (isSplitDir) {
+      if (nextDir === 'ipf' && ledger > 0) e.mine = ledger; // v72.51: yours = the filed part (derived when T+Th)
+      if (nextDir === 'tpf' && r2(data.theirs) > 0) e.theirs = r2(data.theirs);
+      if (r2(data.total) > 0) e.total = r2(data.total);
+    }
+    // v72.49: the pick rides on the entry (never on tpf, which files on
+    // Cash implicitly); a legacy empty pick still means "no account"
+    if (nextDir === 'tpf' || !acc) delete e.acc; else e.acc = acc;
+    if (!files) e.txnId = null;
+    e.theirsTxnId = null; delete e.theirsBumpId; // the old pair goes first (re-filed below)
+    p.updated = new Date().toISOString(); // v72.7: recent-sort key
     var step = Promise.resolve();
+    prevTheirs.forEach(function (t) { step = step.then(function () { return removeTxnQuiet(t.id); }); });
     if (prevTxn && files) {
-      step = saveTxnEdit(e.txnId, tData, { quiet: true });
+      step = step.then(function () { return saveTxnEdit(e.txnId, tData, { quiet: true }); });
     } else if (prevTxn && !files) {
-      step = removeTxnQuiet(e.txnId);
+      step = step.then(function () { return removeTxnQuiet(e.txnId); });
     } else if (!prevTxn && files) {
-      step = addTxn(tData, { quiet: true }).then(function (id) {
-        e.txnId = id;
-        return saveOwed();
+      step = step.then(function () {
+        return addTxn(tData, { quiet: true }).then(function (id) { e.txnId = id; });
       });
     }
+    if (nextDir === 'ipf') {
+      // v73.72: the friend's share re-files on the NEW values (no-op for
+      // cash picks / no theirs share)
+      step = step.then(function () { return fileIpfTheirs(e, p, true, true); });
+    }
     return step.then(function () {
-      e.d = next.d; e.amt = next.amt; e.dir = next.dir; e.note = next.note;
-      e.cat = next.cat; // v72.25→v72.28
-      if (data.expr) e.expr = data.expr; else delete e.expr;
-      // v72.49: the split parts — only the ones that are there (ipf: mine +
-      // total; tpf: theirs + total; e.amt IS the debt side)
-      delete e.mine; delete e.theirs; delete e.total;
-      if (isSplitDir) {
-        if (nextDir === 'ipf' && ledger > 0) e.mine = ledger; // v72.51: yours = the filed part (derived when T+Th)
-        if (nextDir === 'tpf' && r2(data.theirs) > 0) e.theirs = r2(data.theirs);
-        if (r2(data.total) > 0) e.total = r2(data.total);
-      }
-      // v72.49: the pick rides on the entry (never on tpf, which files on
-      // Cash implicitly); a legacy empty pick still means "no account"
-      if (nextDir === 'tpf' || !acc) delete e.acc; else e.acc = acc;
-      if (!files) e.txnId = null;
-      p.updated = new Date().toISOString(); // v72.7: recent-sort key
       return saveOwed();
     }).then(function () {
       emitOwed();
@@ -6802,7 +6976,11 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
         if (prev.mine) e.mine = prev.mine; else delete e.mine; // v72.49: the split parts
         if (prev.theirs) e.theirs = prev.theirs; else delete e.theirs;
         if (prev.total) e.total = prev.total; else delete e.total;
+        if (prev.theirsTxnId) e.theirsTxnId = prev.theirsTxnId; else delete e.theirsTxnId; // v73.72
+        if (prev.theirsBumpId) e.theirsBumpId = prev.theirsBumpId; else delete e.theirsBumpId;
         var u = Promise.resolve();
+        // v73.72: undo removes the NEW theirs pair, then restores the old one
+        ipfTheirsTxnIds(e).forEach(function (tid) { u = u.then(function () { return removeTxnQuiet(tid); }); });
         if (prevTxn && files) {
           // re-run the in-place edit with the ORIGINAL values — the exact
           // inverse rebase; position + timestamp stay put
@@ -6815,6 +6993,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
         } else if (undoNewId) {
           u = removeTxnQuiet(undoNewId);
         }
+        prevTheirs.forEach(function (t) { u = u.then(function () { return restoreTxnQuiet(t); }); }); // v73.72: the old pair comes back
         u.then(function () { saveOwed().then(emitOwed); });
       });
       return Promise.resolve();
@@ -7591,6 +7770,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
             if (!data.adj) computeAdjFromTxns(); // v72.8: a pre-72.8 backup has no adj — recompute from the imported txns
             if (hasSec('txns')) migratePayoffModel(); // v72.43: a pre-v72.42 backup's adj still carries the old payoff model (adj + txns come from the same file)
             if (hasSec('txns')) migratePrepayBy(); // v73.71: an imported per-card split reconciles against the imported txns immediately (not just next boot)
+            if (hasSec('owed') && hasSec('txns')) migrateIpfTheirs(); // v73.72: an imported book's un-filed ipf-on-card entries file their theirs pair immediately
           }
           // v47: persist the base too. The old code re-derived the snapshot from
           // the imported base in memory (and saved the snapshot) but never wrote
@@ -7634,12 +7814,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.71, live: new Date(2026, 9, 29, 23, 17) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.72, live: new Date(2026, 9, 30, 2, 26) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.72': [
+      'New: "I paid for them" on a card now files the friend\u2019s share too — it hits the card as its own charge (the bank charged the FULL bill, so the card owes it) and comes back to you as free cash (the credit converted to cash, since they pay you back in cash). Your own free cash is untouched either way. Past entries backfilled on launch — the 225 "Landmark rob sabons" gap and its friends are closed.'
+    ],
     '73.71': [
       'Fixed: the Cards card\u2019s per-card balances could drift under the hero\u2019s "cards owed" total — the per-card split only tracked charges logged with a card name, so older charges counted in the total but not in a specific card. On launch (and on import) the split now rebuilds from your ledger and reconciles to the total, so every card row and the hero always agree.'
     ],
@@ -8726,6 +8909,11 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     payoffModelDelta: payoffModelDelta, // v72.43: the pure old→new overlay delta (smoke drives it)
     migratePayoffModel: migratePayoffModel, // v72.43: the one-shot persisted-overlay migration (smoke drives it)
     migratePrepayBy: migratePrepayBy, // v73.71: the per-card prepay split rebuild (smoke drives it)
+    migrateIpfTheirs: migrateIpfTheirs, // v73.72: the ipf-theirs backfill (boot/import fire-and-forget)
+    migrateIpfTheirsAll: migrateIpfTheirsAll, // v73.72: the promise form (smoke awaits the stamps)
+    ipfTheirs: ipfTheirs, // v73.72: the theirs share of an ipf entry (smoke drives the math)
+    getOwed: function () { return state.owed; }, // v73.72: test hook (smoke reads the book)
+    setOwed: function (o) { state.owed = o; }, // v73.72: test hook (smoke seeds the owed book)
     sanitizeAdj: sanitizeAdj, // v73.71: the import adj sanitizer (smoke: the per-card split rides the import)
     getAdj: function () { return state.adj; }, // v72.43: the live overlay (smoke simulates a pre-v72.42 phone)
     setAdj: function (a) { state.adj = a; }, // v72.43: test hook (smoke)
@@ -9231,6 +9419,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       if (!hasAdj && !state.adjSig) computeAdjFromTxns();
       migratePayoffModel(); // v72.43: one-shot re-derivation of a pre-v72.42 persisted overlay
       migratePrepayBy(); // v73.71: one-shot rebuild of the stale per-card prepay split (AFTER the payoff migration — it re-stamps mv)
+      migrateIpfTheirs(); // v73.72: one-shot backfill — past ipf-on-card entries file their theirs pair (stamp-gated, idempotent)
       if (!state.adjSig) state.adjSig = snapSig(state.snapshot);
       state.adjLoaded = true;
       persistSnapshot();

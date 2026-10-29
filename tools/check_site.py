@@ -1728,6 +1728,18 @@ def main():
           and "if (Math.abs(sum - a.card) > 0.004 && sum !== 0) {" in js
           and "migratePrepayBy: migratePrepayBy" in js
           and "prepayBy: pb" in js)
+    check("v73.72 (boss-approved: 'ipf: file theirs as a card charge' + 'increase free cash by the same amount' — the credit converted to cash, since the repayment lands as cash and tmb never files a ledger row): an 'I paid for them' on a CARD files the friend's share as its own card_charge (the bank charged the FULL bill) + a cash_in for the same amount (the advance); net on the boss's own free cash = mine commits, theirs neutralizes. The entry carries the pair handles (theirsTxnId/theirsBumpId) so add-undo / entry-delete / person-delete / edit all remove-and-restore BOTH legs. The one-shot backfill (migrateIpfTheirs, stamp-gated, idempotent) files past entries: post-base get charge + advance, pre-base get the advance ONLY (their card spend is already inside the sheet's base — filing the charge would double-count card owed); runs on boot (after migratePrepayBy) and on import",
+          "function fileIpfTheirs(e, p, fileCharge, fileBump)" in js
+          and "function migrateIpfTheirs()" in js
+          and "migrateIpfTheirs(); // v73.72: one-shot backfill" in js
+          and "if (hasSec('owed') && hasSec('txns')) migrateIpfTheirs();" in js
+          and "e.theirsTxnId = linkedId;" in js
+          and "e.theirsBumpId = bumpId;" in js
+          and "function ipfTheirsTxnIds(e)" in js
+          and "function removeTxnsQuiet(ids)" in js
+          and "migrateIpfTheirs: migrateIpfTheirs" in js
+          and "if (dir === 'ipf') {" in js
+          and "step = step.then(function () { return fileIpfTheirs(e, p, true, true); });" in js)
     check("v72.31 (user: 'add x button in ledger for adjustment, it undoes the record in settings'): an Adjustment row (k='a') carries its own ✕ (data-adj-del = the row's moneyLog index) — it confirms, removes the audit record, and reverses the balance change it filed: the account's Settings value moves by the NEGATIVE of the row's signed diff through the base save with Adjustment-filing SUPPRESSED (deleting an audit record must not file a new one); the account gone from Settings → the row is simply deleted; the toast Undo restores row + value",
           "function findAdjAccount(name)" in js
           and "function askDeleteAdjustment(idx)" in js
