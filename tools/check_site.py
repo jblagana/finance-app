@@ -824,7 +824,7 @@ def main():
           and "byId('planEditClose')" not in js
           and "'73.47': [" in js)
     check("v73.49 (boss: 'i tried resetting live numbers, confirm and toast are there. but it didnt write in ledger'): the reset files its k='r' audit rows into state.moneyLog, but the 'adj' emit key never repainted renderMoneyLog — the rows existed in state yet the Ledger card stayed stale until an unrelated emit. renderMoneyLog is now on the 'adj' repaint list, so the audit rows show immediately on confirm (the smoke gate's old 'renders in the ledger' assertion called F.renderMoneyLog() BY HAND, which is why this wiring hole passed every gate)",
-          "adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderMoneyLog, renderCoachNote, renderMood]," in js
+          "adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCcCards, renderMoneyLog, renderCoachNote, renderMood]," in js  # v73.69 retarget: the adj key grew renderCcCards (the CC card repaints on an overlay change)
           and "'73.49': [" in js)
     check("v73.50 (boss: 'make the toast persist until swiped'): the snack banner's 7s auto-hide is gone — snack() no longer schedules setTimeout(hideSnack, 7000); the banner lives until the swipe-up release (the pointerup path calls hideSnack), Undo, or a newer toast replaces it. The `ms` parameter stays for call-compat but is ignored",
           "snackTimer = null;" in js
@@ -1695,7 +1695,23 @@ def main():
           and "mlShownCount = Math.max(5, mlShownCount - 5);" in js
           and "names.push('Owed')" not in js
           and "prevTxn.category || 'Unsorted'" in js
-          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood]" in js)  # v73.0: renderMood + v73.2: the pulse ride the snap key; v73.14: the due strip left the list; v73.33: the pulse (renderRecap) left the list
+          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood]" in js  # v73.0: renderMood + v73.2: the pulse ride the snap key; v73.14: the due strip left the list; v73.33: the pulse (renderRecap) left the list
+          # v73.69 retarget: the snap key grew renderCcCards (the CC card repaints on a base save) — the ledger tail moved
+          and "updateChargeHint, renderHero, renderCcCards, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood]" in js)
+    check("v73.69 (boss-approved 2-cell CC summary card, the parked mock's v73.68-shippable subset): one row per CC under the hero — name + limit + utilization pill, two cells (Balance = the card's LIVE balance; Due = the manual 'due this cycle' override when set, else the full balance — v73.68 has no next-cycle tagging, so the balance IS the bill), the due date is the GLOBAL due day (per-card dates + the Next-cycle cell are v73.70 data and stay off), and the provenance chip is AUTO DUE / MANUAL (warn-styled); repaints on txn/plan/snap/adj/ui (a card charge or a Settings override must move the card)",
+          "function renderCcCards()" in js
+          and 'id="ccCardsBody"' in html
+          and 'id="ccCards"' in html
+          and "var manualDue = (c.due != null) ? Number(c.due) : null;" in js
+          and "var dueAmt = (manualDue != null) ? Math.max(0, manualDue) : bal;" in js
+          and "'AUTO DUE'" in js and "'MANUAL'" in js
+          and "src' + (manualDue != null ? ' manual' : '')" in js
+          and "renderHero, renderCcCards, renderDonut" in js  # the ui key (the txn key shares the renderHero, renderCcCards adjacency)
+          and "updateChargeHint, renderHero, renderCcCards, renderBaseStatus" in js  # the snap key
+          and "updateChargeHint, renderHero, renderCcCards, renderMoneyLog" in js  # the adj key
+          and "renderCcCards: renderCcCards" in js
+          and "grid-template-columns:1fr 1fr" in html  # the 2-cell grid (the mock's 3-col next-cycle cell is gone)
+          and "utilpill" in html and "ccrow" in html)
     check("v72.31 (user: 'add x button in ledger for adjustment, it undoes the record in settings'): an Adjustment row (k='a') carries its own ✕ (data-adj-del = the row's moneyLog index) — it confirms, removes the audit record, and reverses the balance change it filed: the account's Settings value moves by the NEGATIVE of the row's signed diff through the base save with Adjustment-filing SUPPRESSED (deleting an audit record must not file a new one); the account gone from Settings → the row is simply deleted; the toast Undo restores row + value",
           "function findAdjAccount(name)" in js
           and "function askDeleteAdjustment(idx)" in js

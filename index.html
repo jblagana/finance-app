@@ -403,6 +403,27 @@ padding:7px 14px;font-size:12.5px}
 .hero-v.bad{color:var(--bad)}
 .hero-sub{color:var(--mut);font-size:12.5px;margin-top:6px;line-height:1.5}
 .hero-sub b{color:var(--ink)}
+/* v73.69: the CC summary card (2-cell variant — no next-cycle cell, no
+   per-card dates: v73.68 has no cycle tagging and only the global due day) */
+.ccrow{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px 12px 10px;margin-bottom:10px}
+.ccrow .r1{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.ccrow .nm{font-size:14px;font-weight:800;letter-spacing:.2px}
+.ccrow .nm small{display:block;font-size:10.5px;color:var(--mut);font-weight:600;letter-spacing:.3px;margin-top:1px}
+.utilpill{flex:0 0 auto;background:rgba(55,211,155,.08);border:1px solid rgba(55,211,155,.4);color:var(--ok);
+border-radius:999px;padding:4px 11px;font-size:12px;font-weight:800;font-variant-numeric:tabular-nums}
+.utilpill small{display:block;font-size:9px;font-weight:700;letter-spacing:.5px;color:var(--mut);text-align:center;margin-top:-1px}
+.utilpill.warn{background:rgba(255,196,92,.08);border-color:rgba(255,196,92,.4);color:var(--warn)}
+.utilpill.bad{background:rgba(255,107,107,.08);border-color:rgba(255,107,107,.4);color:var(--bad)}
+.ccgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;border-top:1px solid var(--line);padding-top:10px}
+.ccgrid .cell .lab{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--mut);margin-bottom:3px}
+.ccgrid .cell .val{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.2px}
+.ccgrid .cell .val.due{color:var(--ok);font-size:19px}
+.ccgrid .cell .sub{font-size:10px;color:var(--mut);margin-top:2px}
+.ccrow .foot{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11px;color:var(--mut)}
+.ccrow .foot .src{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:2px 9px;
+font-size:10px;font-weight:800;letter-spacing:.4px;color:var(--mut)}
+.ccrow .foot .src.manual{color:var(--warn);border-color:rgba(255,196,92,.4)}
+.ccrow .foot .hint{flex:1}
 /* v73.34: the cycle block (This/Next cycle + the With/Without salary
    toggle on the peek) — the free cash's projection, inside the hero */
 .cycleblock{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
@@ -715,6 +736,13 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
            Painted by renderCycleBlock (a display-only projection). -->
       <div class="cycleblock" id="cycleBlock" style="display:none"></div>
       <div class="spark" id="sparkBox"></div>
+    </section>
+
+    <!-- v73.69: the CC summary card (2-cell variant — Balance | Due, the
+         manual override wins with a MANUAL chip). Painted by renderCcCards. -->
+    <section id="ccCards" class="card" style="display:none">
+      <h2>Cards</h2>
+      <div id="ccCardsBody"></div>
     </section>
 
     <!-- v73.33: the money-pulse HOME CARD is gone (boss: 'remove the recap card

@@ -45,19 +45,19 @@
     // payment must repaint the Money tab's list, not just the coach card.
     // v73.33: renderRecap left every key — the Home recap card is gone (the
     // recap sheet stands alone; the coach note carries the month story)
-    txn: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderPlans],
-    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCoachNote, renderMood],
+    txn: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCcCards, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderPlans],
+    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCcCards, renderCoachNote, renderMood],
     // v72.30: a base save can file 'Adjustment' ledger rows — the Ledger tab follows
     // v73.42: renderSummary/renderObligations/renderSinking are GONE (their
     // cards were cut from the Money tab) — the repaint lists drop them.
-    snap: [renderCoach, renderInsights, renderProjection, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood],
+    snap: [renderCoach, renderInsights, renderProjection, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderCcCards, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood],
     // v73.49: renderMoneyLog on 'adj' — a reset files its audit rows (k='r')
     // into the money log, but 'adj' never repainted the Ledger tab, so the
     // rows existed in state.moneyLog yet the card stayed stale until the next
     // unrelated emit.
-    adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderMoneyLog, renderCoachNote, renderMood],
+    adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCcCards, renderMoneyLog, renderCoachNote, renderMood],
     owed: [renderOwed],
-    ui: [seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood]
+    ui: [seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderCcCards, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -4480,6 +4480,55 @@
     renderCycleBlock();
     renderSpark();
   }
+  // v73.69 (boss-approved, the 2-cell variant of the parked CC summary card):
+  // one row per credit card — name + limit + utilization pill, then two
+  // cells: Balance (the card's LIVE balance, what the bank shows) and Due
+  // (the manual "due this cycle" override when set, else the full balance —
+  // v73.68 has no next-cycle tagging, so the balance IS the bill). The due
+  // DATE is the global due day (the 5th) — the 2-cell variant drops the
+  // per-card bill/due dates and the Next-cycle cell (both are v73.70 data
+  // that doesn't exist here). The provenance chip is AUTO DUE / MANUAL.
+  function renderCcCards() {
+    var el = byId('ccCards'); if (!el) return;
+    var b = state.base;
+    var cards = b ? (b.accounts || []).filter(function (a) { return a.kind === 'card'; }) : [];
+    if (!cards.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = '';
+    var cc = ccDue();
+    var dueDate = cc ? cc.dueDate : '';
+    var dueIn = cc ? cc.dueIn : null;
+    var dueLbl = dueDate ? dayMonth(dueDate) : '';
+    var dueTxt = dueIn == null ? '' : (dueIn === 0 ? 'today' : (dueIn === 1 ? 'tomorrow' : 'in ' + dueIn + ' days'));
+    var s = effectiveSnap();
+    var liveBy = {};
+    (s && s.cards || []).forEach(function (c) { liveBy[c.name] = c; });
+    var h = '';
+    cards.forEach(function (c) {
+      var bal = (liveBy[c.name] != null) ? (Number(liveBy[c.name].balance) || 0) : (Number(c.value) || 0);
+      var limit = Number(c.limit) || 0;
+      var util = limit > 0 ? (bal / limit * 100) : null;
+      var pillCls = util == null ? '' : (util >= 85 ? ' bad' : (util >= 60 ? ' warn' : ''));
+      var manualDue = (c.due != null) ? Number(c.due) : null;
+      var dueAmt = (manualDue != null) ? Math.max(0, manualDue) : bal;
+      var prov = (manualDue != null) ? 'MANUAL' : 'AUTO DUE';
+      var hint = (manualDue != null)
+        ? 'you set this — it wins over the ledger'
+        : (bal > 0.004 ? 'the full balance is this bill' : 'nothing on the card');
+      h += '<div class="ccrow">'
+        + '<div class="r1"><div class="nm">' + esc(c.name) + '<small>limit ' + money(limit)
+        + (dueLbl ? ' · due ' + dueLbl : '') + '</small></div>'
+        + (util != null ? '<div class="utilpill' + pillCls + '">' + util.toFixed(1) + '%<small>of limit</small></div>' : '')
+        + '</div>'
+        + '<div class="ccgrid">'
+        + '<div class="cell"><div class="lab">Balance</div><div class="val">' + money(bal) + '</div><div class="sub">live · what the bank shows</div></div>'
+        + '<div class="cell"><div class="lab">Due' + (dueLbl ? ' · ' + dueLbl : '') + '</div><div class="val due">' + money(dueAmt) + '</div><div class="sub">'
+        + (dueTxt ? dueTxt + ' · ' : '') + hint + '</div></div>'
+        + '</div>'
+        + '<div class="foot"><span class="src' + (manualDue != null ? ' manual' : '') + '">' + prov + '</span><span class="hint">' + (manualDue != null ? 'override — clear it in Settings to go back to auto' : 'auto — the balance IS this bill (no next-cycle split in v73.68)') + '</span></div>'
+        + '</div>';
+    });
+    byId('ccCardsBody').innerHTML = h;
+  }
   // v73.34 (boss: 'peek on the next cycles numbers ... current cycle should
   // be shown by default, peek only shows if i want to'): the hero's cycle
   // block. This cycle = always-with-salary (the Without toggle is a
@@ -7495,12 +7544,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.68, live: new Date(2026, 9, 28, 1, 37) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.69, live: new Date(2026, 9, 29, 21, 42) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.69': [
+      'New: the Cards card on Home — one row per credit card with its limit, live utilization, the live balance, and the due (the manual "due this cycle" override when you set one, else the full balance — this build has no next-cycle split yet). The chip says AUTO DUE or MANUAL so you always know which number is driving it.'
+    ],
     '73.68': [
       'New: the coach\u2019s plan-due rows now span the WHOLE current cycle (not a 10-day window) — every due from today to the cycle end is in the list, and overdue dues still stay forever. The group collapses to its first 4 rows + a tappable "+N more\u2026" so a long cycle never floods the card.'
     ],
@@ -8522,6 +8574,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     planRefAlive: planRefAlive, // v73.17: does an explicit link still point at a live occurrence (v73.67: full-series check — the smoke drives the overdue case)
     setPlans: function (ps) { state.plans = ps; }, // v73.67: test hook (smoke seeds an overdue series)
     renderCoach: renderCoach, // v73.18: the coach card render (smoke reads the pay-plan chip in the HTML)
+    renderCcCards: renderCcCards, // v73.69: the CC summary card render (smoke drives the 2-cell rows)
     prefillAdd: prefillAdd, // v73.18: the coach prefill (smoke verifies the chip's target state)
     getAddMode: function () { return addMode; }, // v73.19: the Add sheet's direction (the row chips' prefill proof)
     prepayRowChip: prepayRowChip, // v73.19: the prepay row-chip's handler body (smoke drives it without a DOM)

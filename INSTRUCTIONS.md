@@ -6,6 +6,38 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.69 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-29 - "Ship the 2-cell CC card on main (v73.68)"
+Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.69, sw cache
+`finances-pwa-v73.69` pushed to `https://github.com/jblagana/finance-app.git` (main).
+
+The parked CC summary card (mock: C:\Users\Jan\Muji\mockup_cc_cardrow.html) shipped as its
+v73.68-shippable 2-cell variant — the parts the current data model can honestly show:
+
+- New Home card `#ccCards` under the hero: one `.ccrow` per CC — name + limit + utilization
+  pill (warn >= 60%, bad >= 85%), then a 2-cell grid: **Balance** (the card's LIVE balance,
+  overlay applied) and **Due** (the manual `c.due` override when set, else the full balance —
+  v73.68 has no next-cycle tagging, so the balance IS the bill). Due date label = the GLOBAL
+  due day (the 5th, next on/after today). Foot: AUTO DUE / MANUAL chip (warn-styled) + a
+  provenance hint.
+- `renderCcCards()` in app.js; repaints on txn/plan/snap/adj/ui (a charge or a Settings
+  override moves the card); exported on FinApp for the smoke.
+- The mock's Next-cycle cell and per-card bill/due dates are OFF (v73.70 data — per-card
+  billing dates + cycle tagging live on the `wip` branch only).
+- check_site: new v73.69 pin (renderer, ids, override math, chips, 2-col grid, repaint keys);
+  the v72.30 snap-key tail and the v73.49 adj-key pins retargeted for the inserted
+  `renderCcCards`.
+- smoke PART 25 (12 new asserts, 223 printed total): rows render, live balance + limit + pill, AUTO chip
+  by default, due-date label, manual override flips to MANUAL + shows the override amount +
+  warn chip, clearing returns to AUTO.
+- Gate slip caught: the v73.57 chip-paid/skip assertions picked the FIRST unpaid due, which on
+  a run date landing ON a due (2026-10-29) merges with the chart's start point — the point can
+  never disappear. Both targets now require `d > today`. Pre-existing on clean HEAD (verified
+  via stash), not caused by this change.
+
+Live-verify: the CDN fetch from this machine keeps timing out (same as v73.63-68) — the gates
+are the verification; the phone pull is the final confirmation.
+
 # v73.68 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-28 - "extend the plan due rows... on second thoughts, make it 'this cycle's dues, initially collapsed to 4 +x more rows"
 Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.68, sw cache
