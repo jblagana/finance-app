@@ -45,7 +45,7 @@
     // payment must repaint the Money tab's list, not just the coach card.
     // v73.33: renderRecap left every key — the Home recap card is gone (the
     // recap sheet stands alone; the coach note carries the month story)
-    txn: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCcCards, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderPlans],
+    txn: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCcCards, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderPlans, reconRender],
     plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCcCards, renderCoachNote, renderMood],
     // v72.30: a base save can file 'Adjustment' ledger rows — the Ledger tab follows
     // v73.42: renderSummary/renderObligations/renderSinking are GONE (their
@@ -598,7 +598,11 @@
   }
   function migratePayoffModel() {
     var a = state.adj;
+    // v73.73: with NO txns there is nothing to rebuild from — the stored
+    // overlay IS the truth (an import may carry adj without the txn history).
+    // Running the rebuild on an empty ledger zeroed the stored overlay.
     if (!a || a.mv === ADJ_MODEL_V) return;
+    if (!(state.txns || []).length) { a.mv = ADJ_MODEL_V; return; }
     var lastO = 0;
     (state.moneyLog || []).forEach(function (e) { if (e.k === 'a' && e.at && e.at > lastO) lastO = e.at; });
     var d = payoffModelDelta(state.txns, lastO);
@@ -817,6 +821,352 @@
         });
       });
     });
+  }
+  // ---------- v73.73: Reconcile (boss-approved mockup_reconcile_money.html) ----------
+  // A SEPARATE feature from rebase: rebase = "my anchor was wrong, re-orient"
+  // (Settings → Your numbers, files 'Adjustment' = new base − old base).
+  // Reconcile = "my running numbers drifted from reality" (Money tab, files
+  // 'Reconcile · <account>' = NEW − LIVE, the discrepancy found — not the
+  // delta from the anchor). Both zero the overlay (the overlay is txn-derived,
+  // so re-anchoring base to live IS the reset); the row labels differ so the
+  // ledger never conflates the two.
+  //
+  // The hierarchy (boss's logging discipline — cash and debit are one wallet,
+  // transfers between them are unlogged):
+  //   Cards        → each CC, individually (per-card live via prepayBy)
+  //   Total cash   → Cash (virtual until first absorbed edit creates it)
+  //                  + the debit accounts
+  // Only the DIRECTLY-edited row files. Edit Total cash → the correction is
+  // absorbed by the Cash account (debits stay put) → ONE 'Reconcile · Cash'
+  // row. Edit Cash or a debit → its own row, the total mirrors. No zero rows.
+  //
+  // The one approximation: the cash overlay (adj.cash) is GLOBAL — it can't
+  // be split per debit account, so each debit's displayed live value
+  // distributes the overlay proportionally to the base values (exact when the
+  // overlay is zero, which is the common case after a reconcile). The TOTAL
+  // is always exact (base + adj.cash — the overlay ADDS to the base, the
+  // v72.25 sign convention). A reconcile re-anchors the base to the live
+  // values and zeroes the overlay, so the approximation is always transient.
+  var reconState = null; // { touch: 'maya' | 'cash' | 'total' | <debit name>, vals: {key: number} }
+  function reconData() {
+    var b = state.base;
+    var s = effectiveSnap();
+    if (!b || !s) return null;
+    var cards = (b.accounts || []).filter(function (a) { return a.kind === 'card'; });
+    var debits = (b.accounts || []).filter(function (a) { return a.kind === 'debit'; });
+    var liveBy = {};
+    (s.cards || []).forEach(function (c) { liveBy[c.name] = c; });
+    var cardRows = cards.map(function (c) {
+      var live = (liveBy[c.name] != null) ? (Number(liveBy[c.name].balance) || 0) : (Number(c.value) || 0);
+      return { name: c.name, limit: Number(c.limit) || 0, live: r2(live) };
+    });
+    var totalLive = r2(s.cash ? s.cash.total : 0);
+    var baseDebitSum = r2(debits.reduce(function (t, a) { return t + (Number(a.value) || 0); }, 0));
+    var otherDebits = debits.filter(function (a) { return String(a.name || '').trim().toLowerCase() !== 'cash'; });
+    var cashAcc = null;
+    debits.forEach(function (a) { if (!cashAcc && String(a.name || '').trim().toLowerCase() === 'cash') cashAcc = a; });
+    // the virtual Cash row: total live − the other debits' proportional live
+    var otherLive = 0;
+    var debRows = otherDebits.map(function (a) {
+      var baseV = Number(a.value) || 0;
+      var live = baseDebitSum > 0.004
+        ? r2(baseV - (adjActive() ? r2(state.adj.cash * baseV / baseDebitSum) : 0))
+        : r2(baseV);
+      otherLive += live;
+      return { name: a.name, live: live, isCash: false };
+    });
+    var cashLive = r2(totalLive - otherLive);
+    debRows.unshift({ name: 'Cash', live: cashLive, isCash: true, real: !!cashAcc });
+    return { cards: cardRows, debits: debRows, totalLive: totalLive, hasCards: cardRows.length > 0, hasCash: debRows.length > 0 };
+  }
+  function reconRowFilesAs(key) {
+    // which account a row's correction lands on (the mock's absorption rule)
+    if (key === 'total') return 'Cash';
+    if (key === 'cash') return 'Cash';
+    return key; // a card name or a debit name files under itself
+  }
+  function reconChanged(d) {
+    // exactly ONE row files per save — the directly-edited one (or Cash, when
+    // the total was edited); no zero rows. The delta is always NEW − LIVE of
+    // the row that was EDITED: a total edit measures against the total's
+    // live (the correction lands on Cash, but the discrepancy is the
+    // total's — the bank said X for the whole wallet, the app said Y).
+    if (!reconState || !reconState.touch || !d) return null;
+    var t = reconState.touch;
+    var v = reconState.vals[t];
+    if (v == null || !isFinite(v)) return null;
+    var key, live;
+    if (t === 'total') {
+      key = 'Cash';
+      live = d.totalLive;
+    } else if (t === 'cash') {
+      key = 'Cash';
+      d.debits.forEach(function (r) { if (r.isCash) live = r.live; });
+    } else {
+      key = t;
+      d.cards.forEach(function (r) { if (r.name === key) live = r.live; });
+      if (live == null) d.debits.forEach(function (r) { if (r.name === key) live = r.live; });
+    }
+    if (live == null) return null;
+    var delta = r2(v - live);
+    if (Math.abs(delta) <= 0.004) return null;
+    return { key: key, delta: delta };
+  }
+  function reconRender() {
+    var el = byId('reconcile');
+    if (!el) return;
+    var d = reconData();
+    if (!d || (!d.hasCards && !d.hasCash)) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = '';
+    var cc = ccDue();
+    var dueLbl = cc ? dayMonth(cc.dueDate) : '';
+    var h = '';
+    if (d.hasCards) {
+      h += '<section class="card reconcard"><h2 style="margin-top:0">Cards</h2>'
+        + '<div class="reconrows">';
+      d.cards.forEach(function (c) {
+        h += reconRowHTML({ id: c.name, name: c.name, live: c.live, sub2: 'limit ' + money(c.limit) + (dueLbl ? ' · due ' + dueLbl : '') });
+      });
+      h += '</div></section>';
+    }
+    if (d.hasCash) {
+      h += '<section class="card reconcard"><h2 style="margin-top:0">Cash &amp; Debit</h2>'
+        + '<p class="note" style="margin:0 0 8px">Total cash = Cash (actual) + all debit accounts (the app\u2019s \u201ccash\u201d)</p>'
+        + '<div class="reconrows">';
+      h += reconRowHTML({ id: 'total', name: 'Total cash', live: d.totalLive, isTotal: true });
+      d.debits.forEach(function (r) {
+        h += reconRowHTML({ id: r.isCash ? 'cash' : r.name, name: r.name, live: r.live, isChild: true });
+      });
+      h += '</div><p class="note" style="margin:8px 0 0">Editing <b>Total cash</b> files one <b>Reconcile \u00b7 Cash</b> row \u2014 the correction is absorbed by the <b>Cash</b> row (your cash/debit are one wallet, so the total is what matters). Editing <b>Cash</b> or a debit account files its own row; the total mirrors.</p></section>';
+    }
+    var ch = reconChanged(d);
+    h += '<section class="card reconcard"><h2 style="margin-top:0">Will file on save</h2><div class="reconfilebox" id="reconFileBox">'
+      + (ch
+        ? '<div class="reconfile"><span>Reconcile \u00b7 ' + esc(ch.key) + '</span><b style="color:' + (ch.delta > 0 ? 'var(--ok)' : 'var(--bad)') + '">' + (ch.delta > 0 ? '+' : '\u2212') + money(Math.abs(ch.delta)) + '</b></div>'
+        : '<div class="note" style="margin:0">Nothing changed \u2014 untouched accounts file nothing (no zero rows).</div>')
+      + '</div><p class="note" style="margin:8px 0 0">Reconcile rows are audit-only \u2014 rebase keeps its \u201cAdjustment\u201d rows. A reconciled card balance flows straight into its due. The overlay resets, so \u201csince last reconcile\u201d starts clean.</p></section>';
+    el.innerHTML = h;
+    var bar = byId('reconBar');
+    if (bar) {
+      if (ch) {
+        bar.classList.add('show');
+        byId('reconBarLbl').innerHTML = '1 account will be reconciled \u00b7 net ' + (ch.delta >= 0 ? '+' : '\u2212') + money(Math.abs(ch.delta));
+        byId('reconBarGo').textContent = 'Reconcile (1)';
+      } else bar.classList.remove('show');
+    }
+    reconBind();
+  }
+  function reconBind() {
+    var el = byId('reconcile');
+    if (!el) return;
+    el.querySelectorAll('input[data-recon]').forEach(function (inp) {
+      inp.oninput = function () {
+        var v = parseFloat(inp.value);
+        if (isNaN(v)) return;
+        reconSetInput(inp.getAttribute('data-recon'), v);
+      };
+    });
+    var go = byId('reconBarGo');
+    if (go) go.onclick = reconSave;
+    var cx = byId('reconBarCancel');
+    if (cx) cx.onclick = reconCancel;
+  }
+  function reconRowHTML(a) {
+    var cur = a.live;
+    var d = reconState && reconState.vals[a.id] != null ? r2(reconState.vals[a.id] - a.live) : 0;
+    var filesAs = reconRowFilesAs(a.id);
+    var filLine = '';
+    if (reconState && reconState.touch === a.id && Math.abs(d) > 0.004) {
+      filLine = '<span class="fil">will file Reconcile \u00b7 ' + esc(filesAs) + ' ' + (d > 0 ? '+' : '\u2212') + money(Math.abs(d)) + '</span>';
+    } else if (a.id === 'cash' && reconState && reconState.touch === 'total' && Math.abs(d) > 0.004) {
+      filLine = '<span class="fil">absorbed from Total cash \u2014 same row</span>';
+    } else if (a.isTotal) {
+      filLine = '<span class="fil">moves with the accounts below \u2014 no row filed</span>';
+    } else if (reconState && reconState.touch && reconState.touch !== a.id && Math.abs(d) > 0.004) {
+      filLine = '<span class="fil">no row filed</span>';
+    }
+    var delta = Math.abs(d) > 0.004
+      ? '<div class="recondelta ' + (d > 0 ? 'up' : 'dn') + '">' + (d > 0 ? '+' : '\u2212') + money(Math.abs(d)) + filLine + '</div>'
+      : '';
+    return '<div class="reconrow' + (a.isChild ? ' child' : '') + (a.isTotal ? ' total' : '') + '">'
+      + '<div class="rn1"><span class="nm">' + esc(a.name) + ' <span class="livchip">LIVE</span></span>'
+      + (a.sub2 ? '<div class="sub2">' + a.sub2 + '</div>' : '')
+      + delta
+      + '</div>'
+      + '<div class="ramt"><input type="text" inputmode="decimal" autocomplete="off" value="' + cur.toFixed(2) + '" data-recon="' + esc(a.id) + '"></div></div>';
+  }
+  // The audit row — k='a' (the Adjustment family: signed n, before = f − n /
+  // o − n, and the ✕ REVERSES the base move it filed — exactly right for a
+  // reconcile: removing the record puts the account back). The label/category
+  // are 'Reconcile' so the ledger never confuses it with a rebase 'Adjustment'
+  // (k='a' + label 'Adjustment') or a v73.45 reset record (k='r', no reversal).
+  function fileReconcileRow(name, kind, diff) {
+    var s = effectiveSnap();
+    if (!s) return;
+    var e = {
+      at: Date.now(), a: 'add',
+      l: 'Reconcile', c: 'Reconcile', nt: 'reconciled to the bank', m: name || '',
+      n: r2(diff), k: 'a'
+    };
+    e.f = r2(s.cash ? s.cash.free : 0);
+    if (kind === 'card') e.o = r2(s.card_owed || 0);
+    state.moneyLog.push(e);
+    if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
+    idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
+  }
+  // the total row: if the TOTAL was edited it shows the typed total (the
+  // correction lands on Cash); otherwise it mirrors the children — the sum
+  // of (edited value or live) across cash + the debits
+  function reconTotalShown(d) {
+    if (!reconState) return d.totalLive;
+    if (reconState.vals.total != null) return r2(reconState.vals.total);
+    var t = 0, used = false;
+    d.debits.forEach(function (r) {
+      var id = r.isCash ? 'cash' : r.name;
+      var v = (reconState.vals[id] != null) ? reconState.vals[id] : r.live;
+      t += v; used = true;
+    });
+    return used ? r2(t) : d.totalLive;
+  }
+  function reconSetInput(id, v) {
+    if (v == null || !isFinite(v)) return;
+    if (!reconState) reconState = { touch: null, vals: {} };
+    reconState.vals[id] = v;
+    if (id === 'total') {
+      // the correction is absorbed by Cash: debits stay put, Cash = total − debits
+      var d = reconData();
+      if (!d) return;
+      var other = 0;
+      d.debits.forEach(function (r) { if (!r.isCash) other += r.live; });
+      reconState.vals.cash = r2(v - other);
+    }
+    reconState.touch = id; // the LAST edit decides which row files
+    // PARTIAL update — the inputs stay put (typing keeps focus/caret): only
+    // the affected rows' delta lines + the file box + the save bar refresh.
+    var d = reconData();
+    if (!d) return;
+    var el = byId('reconcile');
+    if (!el) return;
+    var affected = { cash: true };
+    if (id === 'total') d.debits.forEach(function (r) { affected[r.isCash ? 'cash' : r.name] = true; });
+    else affected[id] = true;
+    el.querySelectorAll('.reconrow').forEach(function (row) {
+      var inp = row.querySelector('input[data-recon]');
+      if (!inp) return;
+      var rid = inp.getAttribute('data-recon');
+      if (!affected[rid]) return;
+      var shown = (rid === 'total') ? reconTotalShown(d) : (reconState.vals[rid] != null ? reconState.vals[rid] : null);
+      var live = null;
+      if (rid === 'total') live = d.totalLive;
+      else if (rid === 'cash') d.debits.forEach(function (r) { if (r.isCash) live = r.live; });
+      else { d.cards.forEach(function (r) { if (r.name === rid) live = r.live; }); d.debits.forEach(function (r) { if (r.name === rid) live = r.live; }); }
+      var dd = (shown != null && live != null) ? r2(shown - live) : 0;
+      var filesAs = reconRowFilesAs(rid);
+      var filLine = '';
+      if (reconState.touch === rid && Math.abs(dd) > 0.004) filLine = '<span class="fil">will file Reconcile \u00b7 ' + esc(filesAs) + ' ' + (dd > 0 ? '+' : '\u2212') + money(Math.abs(dd)) + '</span>';
+      else if (rid === 'cash' && reconState.touch === 'total' && Math.abs(dd) > 0.004) filLine = '<span class="fil">absorbed from Total cash \u2014 same row</span>';
+      else if (rid === 'total') filLine = '<span class="fil">moves with the accounts below \u2014 no row filed</span>';
+      else if (reconState.touch && reconState.touch !== rid && Math.abs(dd) > 0.004) filLine = '<span class="fil">no row filed</span>';
+      var deltaEl = row.querySelector('.recondelta');
+      var html = Math.abs(dd) > 0.004
+        ? '<div class="recondelta ' + (dd > 0 ? 'up' : 'dn') + '">' + (dd > 0 ? '+' : '\u2212') + money(Math.abs(dd)) + filLine + '</div>'
+        : '';
+      if (deltaEl) deltaEl.outerHTML = html || '<div class="recondelta" data-empty="1"></div>';
+      else if (html) {
+        var anchor = row.querySelector('.rn1');
+        if (anchor) anchor.insertAdjacentHTML('afterend', html);
+      }
+    });
+    var ch = reconChanged(d);
+    var fb = byId('reconFileBox');
+    if (fb) fb.innerHTML = ch
+      ? '<div class="reconfile"><span>Reconcile \u00b7 ' + esc(ch.key) + '</span><b style="color:' + (ch.delta > 0 ? 'var(--ok)' : 'var(--bad)') + '">' + (ch.delta > 0 ? '+' : '\u2212') + money(Math.abs(ch.delta)) + '</b></div>'
+      : '<div class="note" style="margin:0">Nothing changed \u2014 untouched accounts file nothing (no zero rows).</div>';
+    var bar = byId('reconBar');
+    if (bar) {
+      if (ch) {
+        bar.classList.add('show');
+        byId('reconBarLbl').innerHTML = '1 account will be reconciled \u00b7 net ' + (ch.delta >= 0 ? '+' : '\u2212') + money(Math.abs(ch.delta));
+        byId('reconBarGo').textContent = 'Reconcile (1)';
+      } else bar.classList.remove('show');
+    }
+  }
+  function reconSave() {
+    var d = reconData();
+    var ch = reconChanged(d);
+    if (!d || !ch) return;
+    var b = state.base;
+    var acc = null;
+    (b.accounts || []).forEach(function (a) {
+      if (!acc && (a.kind === 'card' || a.kind === 'debit') && String(a.name || '').trim().toLowerCase() === ch.key.toLowerCase()) acc = a;
+    });
+    var kind = acc ? acc.kind : null;
+    if (!acc) {
+      if (ch.key === 'Cash') {
+        acc = { name: 'Cash', kind: 'debit', value: 0, limit: 0, note: '' };
+        b.accounts.push(acc); // first absorbed total-cash edit creates the real Cash account
+        kind = 'debit';
+      } else return; // an unknown account can't be reconciled
+    }
+    if (ch.key === 'Cash') {
+      // a cash-side reconcile re-anchors the WHOLE pool: every debit's base
+      // moves to its live value (the proportional split, exact once the
+      // overlay zeroes) and Cash carries (new total − the other debits' live)
+      // so the base total lands on the new total exactly.
+      var newTotal = reconState.touch === 'total'
+        ? r2(reconState.vals.total)
+        : r2(d.totalLive + ch.delta);
+      // the other debits take the live values reconData just computed (same
+      // proportional split the UI displayed — NOT a recompute from state.adj,
+      // which a previous reconcile in this save batch may have already zeroed)
+      var otherLive = 0;
+      (b.accounts || []).forEach(function (a) {
+        if (a.kind !== 'debit' || String(a.name || '').trim().toLowerCase() === 'cash') return;
+        var row = null;
+        (d.debits || []).forEach(function (r) { if (!row && !r.isCash && String(r.name || '').trim().toLowerCase() === String(a.name || '').trim().toLowerCase()) row = r; });
+        a.value = row ? r2(row.live) : r2(Number(a.value) || 0);
+        otherLive += Number(a.value) || 0;
+      });
+      // the cards' prepayBy shares zero with the overlay — their bases must
+      // carry the live values or the untouched cards lose their share
+      (b.accounts || []).forEach(function (a) {
+        if (a.kind !== 'card') return;
+        var row = null;
+        (d.cards || []).forEach(function (r) { if (!row && r.name === a.name) row = r; });
+        if (row) a.value = r2(row.live);
+      });
+      acc.value = r2(newTotal - otherLive);
+    } else {
+      // a card reconcile: the reconciled card's base moves straight to the
+      // typed value, and the OTHER cards' bases move to their live values —
+      // the prepayBy overlay zeroes, so every card's base must carry its
+      // live number or the untouched cards would lose their share.
+      (b.accounts || []).forEach(function (a) {
+        if (a.kind !== 'card' || String(a.name || '').trim().toLowerCase() === ch.key.toLowerCase()) return;
+        var row = null;
+        (d.cards || []).forEach(function (r) { if (!row && r.name === a.name) row = r; });
+        if (row) a.value = r2(row.live);
+      });
+      acc.value = r2((Number(reconState.vals[ch.key]) || 0));
+    }
+    // re-anchor: the base now carries the live values, the overlay zeroes —
+    // same reset as rebase, but the filed row is NEW − LIVE (the discrepancy).
+    // Rebuild the snapshot DIRECTLY (not via refreshLocalSnapshot — that
+    // function re-zeros the overlay whenever the sig changes, and the card's
+    // prepayBy share must be dropped, not re-applied, on the new base).
+    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
+    state.snapshot = state.base && !baseIsEmpty(state.base) ? baseToSnapshot(state.base) : null;
+    state.adjSig = snapSig(state.snapshot);
+    persistSnapshot();
+    fileReconcileRow(ch.key, kind, ch.delta);
+    saveBase(b, { skipAdjustment: true }); // the Reconcile row IS the audit — no Adjustment on top
+    reconState = null;
+    emit('txn');
+    snack('Reconciled ' + esc(ch.key) + ' — filed ' + (ch.delta > 0 ? '+' : '\u2212') + money(Math.abs(ch.delta)), function () {});
+  }
+  function reconCancel() {
+    reconState = null;
+    reconRender();
   }
   function effectiveSnap() {
     var s = state.snapshot;
@@ -7814,12 +8164,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.72, live: new Date(2026, 9, 30, 2, 26) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.73, live: new Date(2026, 9, 30, 20, 57) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.73': [
+      'New: Reconcile, on the Money tab — match the app\u2019s running numbers to what the bank actually shows. Two cards: your CCs (each with its live balance) and Cash & Debit (Total cash, with Cash and your debit accounts under it). Type the real number, and the app files one \u201cReconcile \u00b7 <account>\u201d row for exactly the discrepancy you found — rebase keeps its \u201cAdjustment\u201d rows, so the two never blur. Editing Total cash lands the correction on Cash (your cash/debit are one wallet); editing an account files its own row. A reconciled card balance flows straight into its due.'
+    ],
     '73.72': [
       'New: "I paid for them" on a card now files the friend\u2019s share too — it hits the card as its own charge (the bank charged the FULL bill, so the card owes it) and comes back to you as free cash (the credit converted to cash, since they pay you back in cash). Your own free cash is untouched either way. Past entries backfilled on launch — the 225 "Landmark rob sabons" gap and its friends are closed.'
     ],
@@ -8854,6 +9207,14 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     setPlans: function (ps) { state.plans = ps; }, // v73.67: test hook (smoke seeds an overdue series)
     renderCoach: renderCoach, // v73.18: the coach card render (smoke reads the pay-plan chip in the HTML)
     renderCcCards: renderCcCards, // v73.69: the CC summary card render (smoke drives the 2-cell rows)
+    reconData: reconData, // v73.73: the Reconcile card data (smoke drives the live values + hierarchy)
+    reconSetInput: reconSetInput, // v73.73: the row edit (smoke drives the absorption rule)
+    reconChanged: reconChanged, // v73.73: which single row files (the mock's no-double-count rule)
+    reconSave: reconSave, // v73.73: the save (re-anchor + the 'Reconcile' row)
+    reconCancel: reconCancel, // v73.73: the cancel (the edit is dropped)
+    reconRender: reconRender, // v73.73: the render (smoke reads the card HTML)
+    reconRowFilesAs: reconRowFilesAs, // v73.73: the absorption rule (smoke checks total→Cash)
+    fileReconcileRow: fileReconcileRow, // v73.73: the audit row (smoke checks the ledger)
     setMlFilters: function (cat, m) { mlFilterCat = cat; mlFilterM = m || ''; mlShownCount = 5; }, // v73.70: test hook (the smoke drives the method filter without a DOM onchange)
     prefillAdd: prefillAdd, // v73.18: the coach prefill (smoke verifies the chip's target state)
     getAddMode: function () { return addMode; }, // v73.19: the Add sheet's direction (the row chips' prefill proof)
@@ -8923,6 +9284,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     getAdjSig: function () { return state.adjSig; }, // v73.13: test hook (smoke reads the stored sig)
     getTxns: function () { return state.txns; }, // v72.43: the ledger txns (smoke sums the old prepays)
     setTxns: function (t) { state.txns = t; }, // v73.71: test hook (smoke drives migratePrepayBy with a known txn list)
+    setBase: function (b) { state.base = b; }, // v73.73: test hook (smoke seeds the accounts the Reconcile cards read)
     // v72.15: the FAB edge-settle + bubble-anchor geometry (smoke drives the pure math)
     fabSafe: fabSafe,
     fabEdgePos: fabEdgePos,

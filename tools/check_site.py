@@ -420,7 +420,7 @@ def main():
           # v73.33: renderRecap left every key, so the "renderMood, render*"
           # count is now 1 (txn: …renderMood, renderPlans]) and renderMood is
           # the LAST fn on the other three keys (snap/adj/ui end "renderMood]")
-          and js.count("renderMood, renderPlans]") == 1 and js.count("renderMood]") == 4  # txn + plan/snap/adj/ui — every data key (the export line is renderMood: renderMood,; v73.14: the plan key's due strip left the list; v73.33: the pulse left the list)
+          and js.count("renderMood, renderPlans, reconRender]") == 1  # v73.73: the txn key gains the Reconcile render and js.count("renderMood]") == 4  # txn + plan/snap/adj/ui — every data key (the export line is renderMood: renderMood,; v73.14: the plan key's due strip left the list; v73.33: the pulse left the list)
           and "if (!editId && (kind === 'cash_in' || kind === 'card_payment')) happyMoodFlash(1800);" in js
           and 'class="spark-today"' in js
           and "'73.0': [" in js)
@@ -1728,6 +1728,22 @@ def main():
           and "if (Math.abs(sum - a.card) > 0.004 && sum !== 0) {" in js
           and "migratePrepayBy: migratePrepayBy" in js
           and "prepayBy: pb" in js)
+    check("v73.73 (boss-approved mockup_reconcile_money.html): the RECONCILE feature on the Money tab - match the app's running numbers to what the bank shows, SEPARATE from rebase (rebase keeps its 'Adjustment' rows; reconcile files 'Reconcile · <account>' = NEW - LIVE, the discrepancy found, not the delta from the anchor). Two cards: Cards (each CC, live balance, limit + due line) and Cash & Debit (Total cash -> Cash + the debit accounts, the boss's one-wallet hierarchy). Only the DIRECTLY-edited row files: edit Total cash -> the correction is absorbed by Cash (debits stay put) -> ONE Reconcile · Cash row; edit Cash or a debit -> its own row, the total mirrors; no zero rows. The save re-anchors the base to the live values and zeroes the overlay (like rebase), files the Reconcile row (k='a' family so the ✕ reverses the base move; label 'Reconcile' keeps it distinct from a rebase 'Adjustment'), and skips the Adjustment (skipAdjustment). A reconciled card balance flows straight into its due (the due derives from the live balance). The per-debit live display distributes the global cash overlay proportionally to the base values (exact when the overlay is zero); the total is always exact (base - adj.cash)",
+          "function reconData()" in js
+          and "function reconSetInput(id, v)" in js
+          and "function reconChanged(d)" in js
+          and "function reconSave()" in js
+          and "function fileReconcileRow(name, kind, diff)" in js
+          and "l: 'Reconcile', c: 'Reconcile', nt: 'reconciled to the bank'" in js
+          and "saveBase(b, { skipAdjustment: true }); // the Reconcile row IS the audit" in js
+          and "reconState.vals.cash = r2(v - other);" in js
+          and "reconData: reconData" in js
+          and "reconSave: reconSave" in js
+          and "renderPlans, reconRender]" in js
+          and 'id="reconcile"' in html
+          and 'id="reconBar"' in html
+          and ".reconbar.show{display:flex}" in html
+          and ".reconrow{display:flex" in html)
     check("v73.72 (boss-approved: 'ipf: file theirs as a card charge' + 'increase free cash by the same amount' — the credit converted to cash, since the repayment lands as cash and tmb never files a ledger row): an 'I paid for them' on a CARD files the friend's share as its own card_charge (the bank charged the FULL bill) + a cash_in for the same amount (the advance); net on the boss's own free cash = mine commits, theirs neutralizes. The entry carries the pair handles (theirsTxnId/theirsBumpId) so add-undo / entry-delete / person-delete / edit all remove-and-restore BOTH legs. The one-shot backfill (migrateIpfTheirs, stamp-gated, idempotent) files past entries: post-base get charge + advance, pre-base get the advance ONLY (their card spend is already inside the sheet's base — filing the charge would double-count card owed); runs on boot (after migratePrepayBy) and on import",
           "function fileIpfTheirs(e, p, fileCharge, fileBump)" in js
           and "function migrateIpfTheirs()" in js

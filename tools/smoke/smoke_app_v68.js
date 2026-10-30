@@ -1622,8 +1622,11 @@ waitReady().then(async function (F) {
             ], updated: '' }], sort: [] });
             var freeB = F.effectiveSnap().cash.free;
             var owedB = F.effectiveSnap().card_owed;
-            F.migrateIpfTheirs();
-            await new Promise(function (r) { setTimeout(r, 25); });
+            // await the PROMISE form (migrateIpfTheirsAll) — the fire-and-forget
+            // form + a flat 25ms wait is a race: the addTxn legs are async IDB
+            // writes, and on a slow tick the stamps aren't set yet (flaky
+            // 'post-base ipf gets both handles' on standalone runs).
+            await F.migrateIpfTheirsAll();
             var pre28 = F.getOwed().people[0].entries[0];
             var post28 = F.getOwed().people[0].entries[1];
             ok(!!pre28.theirsTxnId && !pre28.theirsBumpId,
@@ -1639,8 +1642,7 @@ waitReady().then(async function (F) {
               'v73.72: free cash moved by the pre-base advance only (the post-base charge and advance cancel; got ' + es28b.cash.free.toFixed(2) + ' vs ' + (freeB + 85).toFixed(2) + ')');
             // idempotent: a second run files nothing new
             var n28 = F.getTxns().length;
-            F.migrateIpfTheirs();
-            await new Promise(function (r) { setTimeout(r, 25); });
+            await F.migrateIpfTheirsAll();
             ok(F.getTxns().length === n28, 'v73.72: the backfill is idempotent (stamp-gated — no second filing)');
             // ---- editing re-files the pair on the new values ----
             await F.updateOwedEntry('p28b', 'e28post', { dir: 'ipf', total: 300, mine: 100, theirs: 200,
@@ -1666,7 +1668,81 @@ waitReady().then(async function (F) {
             F.setTxns(txns0c);
             F.setAdj(adj0c);
           })();
-        })().then(function () {
+        })().then(async function () {
+      // ============ PART 29: v73.73 — Reconcile (Money tab) ==========
+      // The boss-approved mockup (mockup_reconcile_money.html): match the
+      // app's running numbers to what the bank shows. SEPARATE from rebase —
+      // rebase files 'Adjustment' (new base − old base); reconcile files
+      // 'Reconcile · <account>' = NEW − LIVE (the discrepancy found).
+      // Hierarchy: Cards (each CC) + Cash & Debit (Total cash → Cash + the
+      // debits); only the directly-edited row files, no zero rows. A save
+      // re-anchors the base to the live values and zeroes the overlay.
+      console.log('\n== PART 29: v73.73 — Reconcile (Money tab) =');
+      var tick = function (ms) { return new Promise(function (r) { setTimeout(r, ms || 25); }); };
+      // NOTE: earlier parts (the reset probe, ipf backfill) mutated the
+      // overlay, so the expected values are computed from the LIVE snapshot
+      // at this point — never from the raw seed numbers.
+      var d29 = F.reconData();
+      var snap29 = F.effectiveSnap();
+      var mayaLive29 = snap29.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance;
+      ok(d29 && d29.cards.length === 2, 'v73.73: the Cards card lists both CCs (got ' + (d29 && d29.cards.length) + ')');
+      var maya29 = d29 && d29.cards.filter(function (c) { return c.name === 'Maya CC'; })[0];
+      ok(maya29 && close(maya29.live, mayaLive29), 'v73.73: Maya CC live = the live card balance (got ' + (maya29 && maya29.live) + ' vs ' + mayaLive29 + ')');
+      ok(d29 && close(d29.totalLive, snap29.cash.total), 'v73.73: Total cash live = the live cash total (got ' + (d29 && d29.totalLive) + ' vs ' + snap29.cash.total + ')');
+      var cash29 = d29 && d29.debits.filter(function (r) { return r.isCash; })[0];
+      ok(cash29 && close(cash29.live, d29.totalLive - d29.debits.filter(function (r) { return !r.isCash; }).reduce(function (t, r) { return t + r.live; }, 0)), 'v73.73: the Cash row = total − the other debits (got ' + (cash29 && cash29.live) + ')');
+      ok(F.reconRowFilesAs('total') === 'Cash', 'v73.73: editing Total cash files under Cash (the absorption rule)');
+      ok(F.reconRowFilesAs('Maya CC') === 'Maya CC', 'v73.73: a card row files under itself');
+      ok(!F.reconChanged(F.reconData()), 'v73.73: nothing edited → nothing files (no zero rows)');
+      // S1: Maya CC (live mayaLive29) → 3900
+      var delta29 = Math.round((3900 - mayaLive29) * 100) / 100;
+      var adjBefore29 = (F.state.moneyLog || []).filter(function (e) { return e.l === 'Adjustment'; }).length;
+      F.reconSetInput('Maya CC', 3900);
+      var ch29 = F.reconChanged(F.reconData());
+      ok(ch29 && ch29.key === 'Maya CC' && close(ch29.delta, delta29), 'v73.73: editing Maya CC files Reconcile · Maya CC +delta (got ' + JSON.stringify(ch29) + ' vs delta ' + delta29 + ')');
+      var owed29 = F.effectiveSnap().card_owed;
+      F.reconSave();
+      await tick();
+      var es29 = F.effectiveSnap();
+      var rows29 = (F.state.moneyLog || []).filter(function (e) { return e.l === 'Reconcile'; });
+      ok(rows29.length === 1 && close(rows29[0].n, delta29), 'v73.73: the card reconcile files ONE Reconcile row for the discrepancy (got ' + rows29.length + ' x ' + (rows29[0] && rows29[0].n) + ')');
+      ok(close(es29.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance, 3900), 'v73.73: Maya CC live = the typed value after the save (got ' + es29.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance + ')');
+      ok(close(es29.card_owed, owed29 + delta29), 'v73.73: the reconciled card balance flows into cards owed (got ' + es29.card_owed.toFixed(2) + ' vs ' + (owed29 + delta29).toFixed(2) + ')');
+      ok((F.state.moneyLog || []).filter(function (e) { return e.l === 'Adjustment'; }).length === adjBefore29, 'v73.73: no Adjustment row — the Reconcile row IS the audit (skipAdjustment)');
+      ok(!F.reconChanged(F.reconData()), 'v73.73: the edit is cleared after the save');
+      // S2: Total cash → 74000 (absorbed by Cash — the debits stay put).
+      // S1's save re-anchored the overlay, so re-read the live total now.
+      var totalLive29b = F.effectiveSnap().cash.total;
+      F.reconSetInput('total', 74000);
+      var ch29b = F.reconChanged(F.reconData());
+      ok(ch29b && ch29b.key === 'Cash' && close(ch29b.delta, 74000 - totalLive29b), 'v73.73: editing Total cash lands the correction on Cash, delta = new − total live (got ' + JSON.stringify(ch29b) + ' vs ' + (74000 - totalLive29b).toFixed(2) + ')');
+      F.reconSave();
+      await tick();
+      var es29b = F.effectiveSnap();
+      var rows29b = (F.state.moneyLog || []).filter(function (e) { return e.l === 'Reconcile'; });
+      ok(rows29b.length === 2 && close(rows29b[1].n, 74000 - totalLive29b), 'v73.73: the total edit files ONE Reconcile · Cash row for the discrepancy (got ' + rows29b.length + ' x ' + (rows29b[1] && rows29b[1].n) + ')');
+      ok(close(es29b.cash.total, 74000), 'v73.73: Total cash = the typed value after the save (got ' + es29b.cash.total + ')');
+      var cashBase29 = F.state.base.accounts.filter(function (a) { return a.name === 'Cash'; })[0];
+      ok(cashBase29 && close(cashBase29.value, -2727.79), 'v73.73: Cash absorbs the total (base = new total − the other debits; got ' + (cashBase29 && cashBase29.value) + ')');
+      // S3: LandBank → 44200 (its own row; the total mirrors). After S2 the
+      // overlay is zeroed, so LandBank's live = its base (55815.67) → delta
+      // −11615.67 and the total lands on 62384.33.
+      F.reconSetInput('LandBank', 44200);
+      var ch29c = F.reconChanged(F.reconData());
+      ok(ch29c && ch29c.key === 'LandBank' && close(ch29c.delta, -11615.67), 'v73.73: editing a debit files its own row (got ' + JSON.stringify(ch29c) + ')');
+      F.reconSave();
+      await tick();
+      var es29c = F.effectiveSnap();
+      var rows29c = (F.state.moneyLog || []).filter(function (e) { return e.l === 'Reconcile'; });
+      ok(rows29c.length === 3 && close(rows29c[2].n, -11615.67), 'v73.73: the debit reconcile files ONE Reconcile · LandBank row (got ' + rows29c.length + ' x ' + (rows29c[2] && rows29c[2].n) + ')');
+      ok(close(es29c.cash.total, 62384.33), 'v73.73: the total mirrors the debit edit (got ' + es29c.cash.total.toFixed(2) + ')');
+      // cancel: the edit is dropped, nothing files
+      F.reconSetInput('Maya CC', 1);
+      await tick();
+      F.reconCancel();
+      await tick();
+      ok(!F.reconChanged(F.reconData()), 'v73.73: cancel drops the edit (nothing files)');
+      ok(close(F.state.base.accounts.filter(function (a) { return a.name === 'Maya CC'; })[0].value, 3900), 'v73.73: cancel leaves the base untouched');
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);

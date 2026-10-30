@@ -6,6 +6,43 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.73 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-30 - "Approve — build v73.73 on this mockup" (Reconcile feature, boss-approved mockup_reconcile_money.html)
+Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.73, sw cache
+`finances-pwa-v73.73` pushed to `https://github.com/jblagana/finance-app.git` (main).
+
+The RECONCILE feature on the Money tab (above the money log) — a SEPARATE feature from rebase
+(rebase = "my anchor was wrong, re-orient", files 'Adjustment' = new base − old base; reconcile
+= "my running numbers drifted from reality", files 'Reconcile · <account>' = NEW − LIVE, the
+discrepancy found — not the delta from the anchor). Option A scope (boss-approved): cards
+individually + Total cash as one pool.
+
+- Two cards: **Cards** (each CC — name + LIVE chip, row two 'limit ₱x · due <date>', editable
+  live balance) and **Cash & Debit** (Total cash → Cash → the debit accounts, the boss's
+  one-wallet hierarchy; no TOTAL chip, no 'absorbs' label — per the approved mockup edits).
+- Only the DIRECTLY-edited row files: edit Total cash → the correction is absorbed by Cash
+  (debits stay put) → ONE 'Reconcile · Cash' row (the first absorbed edit CREATES the real
+  `kind:'debit'` Cash account, base = new total − the other debits); edit Cash or a debit → its
+  own row, the total mirrors; no zero rows. The 'Will file on save' box + the sticky save bar
+  ('1 account will be reconciled · net ±X') preview the single row before saving.
+- The save re-anchors the base to the live values and zeroes the overlay (like rebase), files
+  the Reconcile row (k='a' family so the ✕ reverses the base move; label 'Reconcile' keeps it
+  distinct from a rebase 'Adjustment'), and skips the Adjustment (skipAdjustment). A reconciled
+  card balance flows straight into its due (the due derives from the live balance).
+- The per-debit live display distributes the global cash overlay proportionally to the base
+  values (exact when the overlay is zero — the common case after a reconcile); the TOTAL is
+  always exact. The recon inputs are `type="text"` (the v71.1 rule: no `type="number"` anywhere
+  in app.js — a gate pin).
+- `reconData` / `reconSetInput` / `reconChanged` / `reconSave` / `reconCancel` /
+  `fileReconcileRow` exported on FinApp for the smoke; `reconRender` on the txn repaint key.
+- check_site: new v73.73 pin; the v73.33 repaint-count pin retargeted
+  ('renderMood, renderPlans, reconRender]').
+- smoke PART 29 (22 new asserts, 280 printed total): both CCs listed with live balances, Total
+  cash live, Cash row = total − other debits, the absorption rule, the no-zero-rows rule, a
+  card reconcile (one row, live = typed, flows into card_owed, no Adjustment, edit cleared),
+  the total edit (one Reconcile · Cash row, Cash base absorbs), a debit edit (own row, total
+  mirrors), and cancel (drops the edit, base untouched).
+
 # v73.70 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-29 - "in ledger tab, allow sorting of entries based on the payment method: 'maya cc', 'maribank cc', 'maribank', 'cash' etc"
 Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.70, sw cache
