@@ -45,19 +45,22 @@
     // payment must repaint the Money tab's list, not just the coach card.
     // v73.33: renderRecap left every key — the Home recap card is gone (the
     // recap sheet stands alone; the coach note carries the month story)
-    txn: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCcCards, renderDonut, renderPace, renderMoneyLog, renderCoachNote, renderMood, renderPlans, reconRender],
-    plan: [renderPlans, renderInsights, renderCoach, renderProjection, renderHero, renderCcCards, renderCoachNote, renderMood],
+    // v73.75: renderProjection/renderPace dropped from every key — the Money
+    // tab's Projection card and the Ledger tab's Spend-pace card are GONE
+    // (boss-approved mockup_compact_livenumbers.html).
+    txn: [renderCoach, renderInsights, updateChargeHint, renderHero, renderCcCards, renderDonut, renderMoneyLog, renderCoachNote, renderMood, renderPlans, reconRender],
+    plan: [renderPlans, renderInsights, renderCoach, renderHero, renderCcCards, renderCoachNote, renderMood],
     // v72.30: a base save can file 'Adjustment' ledger rows — the Ledger tab follows
     // v73.42: renderSummary/renderObligations/renderSinking are GONE (their
     // cards were cut from the Money tab) — the repaint lists drop them.
-    snap: [renderCoach, renderInsights, renderProjection, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderCcCards, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender],
+    snap: [renderCoach, renderInsights, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderCcCards, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender],
     // v73.49: renderMoneyLog on 'adj' — a reset files its audit rows (k='r')
     // into the money log, but 'adj' never repainted the Ledger tab, so the
     // rows existed in state.moneyLog yet the card stayed stale until the next
     // unrelated emit.
-    adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCcCards, renderMoneyLog, renderCoachNote, renderMood, reconRender],
+    adj: [renderCoach, renderInsights, updateChargeHint, renderHero, renderCcCards, renderMoneyLog, renderCoachNote, renderMood, reconRender],
     owed: [renderOwed],
-    ui: [seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderCcCards, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood, reconRender]
+    ui: [seedAccounts, seedCategories, renderCoach, renderInsights, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderCcCards, renderDonut, renderMoneyLog, renderOwed, renderCoachNote, renderMood, reconRender]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -912,54 +915,64 @@
     if (Math.abs(delta) <= 0.004) return null;
     return { key: key, delta: delta };
   }
+  // v73.75 (boss-approved mockup_compact_livenumbers.html): the Reconcile UI
+  // is now ONE compact card on the Ledger tab (the old Spend-pace slot) —
+  // "Live numbers": a Cards group + a Cash & Debit group, TAP-TO-EDIT
+  // amounts (no permanent inputs, no LIVE chips, no audit-only note, no
+  // always-visible Will-file box). The Will-file preview appears only while
+  // an amount is being edited. The file-one-row rules are unchanged (the
+  // directly-edited row files; a total edit is absorbed by Cash; no zero
+  // rows).
   function reconRender() {
     var el = byId('reconcile');
     if (!el) return;
     var d = reconData();
-    if (!d || (!d.hasCards && !d.hasCash)) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    if (!d || (!d.hasCards && !d.hasCash)) { el.style.display = 'none'; el.innerHTML = ''; reconBarUpdate(null); return; }
     el.style.display = '';
     var cc = ccDue();
     var dueLbl = cc ? dayMonth(cc.dueDate) : '';
-    var h = '';
+    var h = '<section class="card ln"><h2 style="margin-top:0">Live numbers</h2>';
     if (d.hasCards) {
-      h += '<section class="card reconcard"><h2 style="margin-top:0">Cards</h2>'
-        + '<div class="reconrows">';
+      h += '<div class="lngrp">Cards</div>';
       d.cards.forEach(function (c) {
         h += reconRowHTML({ id: c.name, name: c.name, live: c.live, sub2: 'limit ' + money(c.limit) + (dueLbl ? ' · due ' + dueLbl : '') });
       });
-      h += '</div></section>';
     }
     if (d.hasCash) {
-      h += '<section class="card reconcard"><h2 style="margin-top:0">Cash &amp; Debit</h2>'
-        + '<p class="note" style="margin:0 0 8px">Total cash = Cash (actual) + all debit accounts (the app\u2019s \u201ccash\u201d)</p>'
-        + '<div class="reconrows">';
+      h += '<div class="lngrp">Cash &amp; Debit</div>';
       h += reconRowHTML({ id: 'total', name: 'Total cash', live: d.totalLive, isTotal: true });
       d.debits.forEach(function (r) {
         h += reconRowHTML({ id: r.isCash ? 'cash' : r.name, name: r.name, live: r.live, isChild: true });
       });
-      h += '</div><p class="note" style="margin:8px 0 0">Editing <b>Total cash</b> files one <b>Reconcile \u00b7 Cash</b> row \u2014 the correction is absorbed by the <b>Cash</b> row (your cash/debit are one wallet, so the total is what matters). Editing <b>Cash</b> or a debit account files its own row; the total mirrors.</p></section>';
     }
     var ch = reconChanged(d);
-    h += '<section class="card reconcard"><h2 style="margin-top:0">Will file on save</h2><div class="reconfilebox" id="reconFileBox">'
+    h += '<div class="reconfilebox" id="reconFileBox" style="display:' + (ch ? '' : 'none') + '">'
+      + '<div class="lnfileh">Will file on save</div>'
       + (ch
         ? '<div class="reconfile"><span>Reconcile \u00b7 ' + esc(ch.key) + '</span><b style="color:' + (ch.delta > 0 ? 'var(--ok)' : 'var(--bad)') + '">' + (ch.delta > 0 ? '+' : '\u2212') + money(Math.abs(ch.delta)) + '</b></div>'
-        : '<div class="note" style="margin:0">Nothing changed \u2014 untouched accounts file nothing (no zero rows).</div>')
-      + '</div><p class="note" style="margin:8px 0 0">Reconcile rows are audit-only \u2014 rebase keeps its \u201cAdjustment\u201d rows. A reconciled card balance flows straight into its due. The overlay resets, so \u201csince last reconcile\u201d starts clean.</p></section>';
+        : '')
+      + '</div></section>';
     el.innerHTML = h;
-    var bar = byId('reconBar');
-    if (bar) {
-      if (ch) {
-        bar.classList.add('show');
-        byId('reconBarLbl').innerHTML = '1 account will be reconciled \u00b7 net ' + (ch.delta >= 0 ? '+' : '\u2212') + money(Math.abs(ch.delta));
-        byId('reconBarGo').textContent = 'Reconcile (1)';
-      } else bar.classList.remove('show');
-    }
+    reconBarUpdate(ch);
     reconBind();
+  }
+  function reconBarUpdate(ch) {
+    var bar = byId('reconBar');
+    if (!bar) return;
+    if (ch) {
+      bar.classList.add('show');
+      byId('reconBarLbl').innerHTML = '1 account will be reconciled \u00b7 net ' + (ch.delta >= 0 ? '+' : '\u2212') + money(Math.abs(ch.delta));
+      byId('reconBarGo').textContent = 'Reconcile (1)';
+    } else bar.classList.remove('show');
   }
   function reconBind() {
     var el = byId('reconcile');
     if (!el) return;
+    el.querySelectorAll('.lnrow[data-recon]').forEach(function (row) {
+      row.onclick = function () { reconStartEdit(row.getAttribute('data-recon')); };
+    });
     el.querySelectorAll('input[data-recon]').forEach(function (inp) {
+      inp.onclick = function (ev) { ev.stopPropagation(); };
       inp.oninput = function () {
         var v = parseFloat(inp.value);
         if (isNaN(v)) return;
@@ -971,12 +984,31 @@
     var cx = byId('reconBarCancel');
     if (cx) cx.onclick = reconCancel;
   }
+  // v73.75: tap an amount to start editing it — the row re-renders with the
+  // input focused and selected (the rest of the card is untouched).
+  function reconStartEdit(id) {
+    if (!reconState) reconState = { touch: null, vals: {} };
+    var d = reconData();
+    if (!d) return;
+    var live = null;
+    if (id === 'total') live = d.totalLive;
+    else if (id === 'cash') d.debits.forEach(function (r) { if (r.isCash) live = r.live; });
+    else { d.cards.forEach(function (r) { if (r.name === id) live = r.live; }); d.debits.forEach(function (r) { if (r.name === id) live = r.live; }); }
+    if (live == null) return;
+    reconState.touch = id;
+    reconState.vals[id] = live;
+    reconRender();
+    var el = byId('reconcile');
+    var inp = el && el.querySelector('input[data-recon="' + id + '"]');
+    if (inp) { inp.focus(); inp.select(); }
+  }
   function reconRowHTML(a) {
-    var cur = a.live;
-    var d = reconState && reconState.vals[a.id] != null ? r2(reconState.vals[a.id] - a.live) : 0;
+    var editing = reconState && reconState.touch === a.id;
+    var cur = (editing && reconState.vals[a.id] != null) ? reconState.vals[a.id] : a.live;
+    var d = editing && reconState.vals[a.id] != null ? r2(reconState.vals[a.id] - a.live) : 0;
     var filesAs = reconRowFilesAs(a.id);
     var filLine = '';
-    if (reconState && reconState.touch === a.id && Math.abs(d) > 0.004) {
+    if (editing && Math.abs(d) > 0.004) {
       filLine = '<span class="fil">will file Reconcile \u00b7 ' + esc(filesAs) + ' ' + (d > 0 ? '+' : '\u2212') + money(Math.abs(d)) + '</span>';
     } else if (a.id === 'cash' && reconState && reconState.touch === 'total' && Math.abs(d) > 0.004) {
       filLine = '<span class="fil">absorbed from Total cash \u2014 same row</span>';
@@ -988,12 +1020,12 @@
     var delta = Math.abs(d) > 0.004
       ? '<div class="recondelta ' + (d > 0 ? 'up' : 'dn') + '">' + (d > 0 ? '+' : '\u2212') + money(Math.abs(d)) + filLine + '</div>'
       : '';
-    return '<div class="reconrow' + (a.isChild ? ' child' : '') + (a.isTotal ? ' total' : '') + '">'
-      + '<div class="rn1"><span class="nm">' + esc(a.name) + ' <span class="livchip">LIVE</span></span>'
-      + (a.sub2 ? '<div class="sub2">' + a.sub2 + '</div>' : '')
-      + delta
-      + '</div>'
-      + '<div class="ramt"><input type="text" inputmode="decimal" autocomplete="off" value="' + cur.toFixed(2) + '" data-recon="' + esc(a.id) + '"></div></div>';
+    var amt = editing
+      ? '<input type="text" inputmode="decimal" autocomplete="off" value="' + (editing && reconState.vals[a.id] != null ? reconState.vals[a.id] : cur).toFixed(2) + '" data-recon="' + esc(a.id) + '">'
+      : '<b>' + money(cur) + '</b>';
+    return '<div class="lnrow' + (a.isChild ? ' child' : '') + (a.isTotal ? ' total' : '') + '" data-recon="' + esc(a.id) + '">'
+      + '<div class="lnnm">' + esc(a.name) + (a.sub2 ? '<div class="sub2">' + a.sub2 + '</div>' : '') + '</div>'
+      + '<div class="lnr">' + amt + delta + '</div></div>';
   }
   // The audit row — k='a' (the Adjustment family: signed n, before = f − n /
   // o − n, and the ✕ REVERSES the base move it filed — exactly right for a
@@ -1041,55 +1073,27 @@
       reconState.vals.cash = r2(v - other);
     }
     reconState.touch = id; // the LAST edit decides which row files
-    // PARTIAL update — the inputs stay put (typing keeps focus/caret): only
-    // the affected rows' delta lines + the file box + the save bar refresh.
-    var d = reconData();
-    if (!d) return;
+    // v73.75: full re-render on every keystroke, then focus/caret restore on
+    // the edited row's input — the card is ~7 rows, so a full repaint is
+    // cheap and keeps the delta lines / Will-file box / save bar in lockstep
+    // (the v73.73 partial-update DOM surgery was a bug farm).
+    reconRender();
     var el = byId('reconcile');
-    if (!el) return;
-    var affected = { cash: true };
-    if (id === 'total') d.debits.forEach(function (r) { affected[r.isCash ? 'cash' : r.name] = true; });
-    else affected[id] = true;
-    el.querySelectorAll('.reconrow').forEach(function (row) {
-      var inp = row.querySelector('input[data-recon]');
-      if (!inp) return;
-      var rid = inp.getAttribute('data-recon');
-      if (!affected[rid]) return;
-      var shown = (rid === 'total') ? reconTotalShown(d) : (reconState.vals[rid] != null ? reconState.vals[rid] : null);
-      var live = null;
-      if (rid === 'total') live = d.totalLive;
-      else if (rid === 'cash') d.debits.forEach(function (r) { if (r.isCash) live = r.live; });
-      else { d.cards.forEach(function (r) { if (r.name === rid) live = r.live; }); d.debits.forEach(function (r) { if (r.name === rid) live = r.live; }); }
-      var dd = (shown != null && live != null) ? r2(shown - live) : 0;
-      var filesAs = reconRowFilesAs(rid);
-      var filLine = '';
-      if (reconState.touch === rid && Math.abs(dd) > 0.004) filLine = '<span class="fil">will file Reconcile \u00b7 ' + esc(filesAs) + ' ' + (dd > 0 ? '+' : '\u2212') + money(Math.abs(dd)) + '</span>';
-      else if (rid === 'cash' && reconState.touch === 'total' && Math.abs(dd) > 0.004) filLine = '<span class="fil">absorbed from Total cash \u2014 same row</span>';
-      else if (rid === 'total') filLine = '<span class="fil">moves with the accounts below \u2014 no row filed</span>';
-      else if (reconState.touch && reconState.touch !== rid && Math.abs(dd) > 0.004) filLine = '<span class="fil">no row filed</span>';
-      var deltaEl = row.querySelector('.recondelta');
-      var html = Math.abs(dd) > 0.004
-        ? '<div class="recondelta ' + (dd > 0 ? 'up' : 'dn') + '">' + (dd > 0 ? '+' : '\u2212') + money(Math.abs(dd)) + filLine + '</div>'
-        : '';
-      if (deltaEl) deltaEl.outerHTML = html || '<div class="recondelta" data-empty="1"></div>';
-      else if (html) {
-        var anchor = row.querySelector('.rn1');
-        if (anchor) anchor.insertAdjacentHTML('afterend', html);
-      }
-    });
-    var ch = reconChanged(d);
-    var fb = byId('reconFileBox');
-    if (fb) fb.innerHTML = ch
-      ? '<div class="reconfile"><span>Reconcile \u00b7 ' + esc(ch.key) + '</span><b style="color:' + (ch.delta > 0 ? 'var(--ok)' : 'var(--bad)') + '">' + (ch.delta > 0 ? '+' : '\u2212') + money(Math.abs(ch.delta)) + '</b></div>'
-      : '<div class="note" style="margin:0">Nothing changed \u2014 untouched accounts file nothing (no zero rows).</div>';
-    var bar = byId('reconBar');
-    if (bar) {
-      if (ch) {
-        bar.classList.add('show');
-        byId('reconBarLbl').innerHTML = '1 account will be reconciled \u00b7 net ' + (ch.delta >= 0 ? '+' : '\u2212') + money(Math.abs(ch.delta));
-        byId('reconBarGo').textContent = 'Reconcile (1)';
-      } else bar.classList.remove('show');
+    var inp = el && el.querySelector('input[data-recon="' + id + '"]');
+    if (inp) {
+      var caret = inp.selectionStart != null ? inp.selectionStart : (inp.value ? inp.value.length : 0);
+      inp.focus();
+      try { inp.setSelectionRange(caret, caret); } catch (e) {}
     }
+  }
+  // v73.75 helper — the live value of a recon row id (reconStartEdit uses it)
+  function reconLiveOf(d, rid) {
+    if (rid === 'total') return d.totalLive;
+    if (rid === 'cash') { var c = null; d.debits.forEach(function (r) { if (r.isCash) c = r.live; }); return c; }
+    var v = null;
+    d.cards.forEach(function (r) { if (r.name === rid) v = r.live; });
+    if (v == null) d.debits.forEach(function (r) { if (r.name === rid) v = r.live; });
+    return v;
   }
   function reconSave() {
     var d = reconData();
@@ -2300,30 +2304,14 @@
         } else if (isAdj && e.o != null) {
           extra = '<span class="ml-x">card ' + money(r2(e.o - e.n)) + ' → ' + money(e.o) + '</span>';
         }
-        if (e.s != null) {
-          // v73.9 (user: 'still shows it on the ledger entries wrong (which
-          // should be correct already and hidden)'): the salary row's s value
-          // is correct now (v73.7 — the line doesn't move), but the flat
-          // "month spent X → X" chip still rendered on it. Income is not
-          // spend — the cycle's own salary row shows NO month-spent line;
-          // refunds still net the audit line, so their chip stays.
-          // v73.10: the chip hide follows the SAME amount rule as monthEffect
-          // (salaryIsTxn) — the v73.9 identity (salaryTxnIdInMonth) only
-          // covered the month's earliest salary-sized txn, so a late-logged
-          // salary still got its chip.
-          var isSalRow = add && e.k === 'i' && salaryIsTxn(
-            (function () { for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === e.tid) return state.txns[i]; return null; })()
-          );
-          if (!isSalRow) {
-            var sBefore = r2(e.s + (add ? (e.k === 'i' ? e.n : -e.n) : (e.k === 'i' ? -e.n : e.n)));
-            extra += '<span class="ml-x">month spent ' + money(sBefore) + ' → ' + money(e.s) + '</span>';
-          }
-        }
+        // v73.75 (boss-approved mockup_compact_livenumbers.html): the
+        // "month spent X → X" chip is GONE (the v73.9/v73.10 salary guard
+        // dies with it — the chip never renders, for any row).
         var p = mlParts(e);
-        // v71: add rows with a live txn are editable — tap the row (not the ✕).
-        // Adjustment rows carry no txn: they are the audit record (a wrong
-        // override is corrected by the next one).
-        var editAttr = (add && e.tid) ? ' data-ml-edit="' + esc(e.tid) + '" title="Tap to edit" style="cursor:pointer"' : '';
+        // v73.75: the row is NO LONGER a tap target — each editable entry
+        // carries its own ✎ (opens the edit sheet) beside the ✕ (delete).
+        var editBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-edit="' + esc(e.tid) +
+          '" aria-label="Edit this entry" title="Edit this entry">\u270e</button>' : '';
         var delBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-del="' + esc(e.tid) +
           '" aria-label="Delete this expense" title="Delete this expense">\u2715</button>' : '';
         // v72.31: Adjustment rows (no txn behind them) get their own ✕ — it
@@ -2342,12 +2330,12 @@
           if (cardRow) freeTxt = ''; // a card override never moves free
         }
         if (e.k === 'p' && !cbRow) freeTxt = ''; // v72.44 (user edit): a plain payoff never moves free — show only the card balance change; v73.53: a cashback payoff DOES move free (it is new money)
-        return '<div class="ml-row' + (add ? '' : ' del') + '"' + editAttr + '>' +
+        return '<div class="ml-row' + (add ? '' : ' del') + '">' +
           '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
           (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
           '<div class="ml-meta">' + mlDate(e.at) + (p.m ? ' · ' + esc(p.m) : '') + '</div></div>' +
           '<div class="ml-r"><b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b>' +
-          freeTxt + extra + delBtn + adjDel + '</div></div>';
+          freeTxt + extra + editBtn + delBtn + adjDel + '</div></div>';
       }).join('') +
       // v72.30 (user edit: 'see less beside see more'): the buttons share one
       // row — See less re-hides 5 per tap down to the first page (hidden there)
@@ -4575,23 +4563,10 @@
     else { mCls = 'good'; mTxt = 'On track: at this pace about ' + money(freeAfterPace) + ' stays free at month end' + (monthPlanCount ? ', before your ' + monthPlanCount + ' plan' + (monthPlanCount === 1 ? '' : 's') : '') + '. Suspiciously fine — do not log anything else.'; }
     return insBlock('This month', mLines, mCls, mTxt);
   }
-  function renderProjection() {
-    var wrap = byId('projection'), body = byId('projBody');
-    if (!wrap || !body) return;
-    var d = insightsData();
-    if (!d) { wrap.style.display = 'none'; var pa = byId('projAdj'); if (pa) pa.innerHTML = ''; return; }
-    wrap.style.display = '';
-    body.innerHTML = '<h2 style="margin-top:0">Projection · ' + esc(monthLabel(d.s.month)) + '</h2>' + monthBlock(d);
-    // v73.42: the overlay "reset to my numbers" bar moved here — it used to
-    // live in the (now removed) summary tiles, so the projection card carries
-    // it. renderProjection runs on every txn/snap/adj/ui repaint, same cadence.
-    var pa = byId('projAdj');
-    if (pa) {
-      pa.innerHTML = adjBar();
-      var rb = byId('resetAdj');
-      if (rb) rb.onclick = resetAdj;
-    }
-  }
+  // v73.75 (boss-approved mockup_compact_livenumbers.html): renderProjection
+  // is GONE — the Money tab's Projection card (and the overlay reset bar that
+  // lived inside it) was removed. resetAdj/adjBar stay (exported; the smoke
+  // drives resetAdj directly).
   function fmtNum(v) { return Math.round(Number(v) || 0).toLocaleString('en-US'); }
   // v73.42: renderObligations is GONE (the Obligations card was removed from
   // the Money tab — boss: 'remove the rest'). The obligations DATA is intact:
@@ -5719,48 +5694,9 @@
     });
     leg.innerHTML = html;
   }
-  function renderPace() {
-    var wrap = byId('pace'), box = byId('paceBox'), note = byId('paceNote'), rng = byId('paceRange');
-    if (!wrap || !box) return;
-    // v72.52 (user: 'consolidate records per cycle, not per month'): the bucket is the
-    // CURRENT SALARY CYCLE — cycleDataFor already computes spent/elapsed/pace with the
-    // cycle's salary cash_in excluded from spend (the v72.45 rule).
-    var b = state.base || {};
-    var cd = cycleDataFor(currentCycleMonth(b, todayISO()), b);
-    var spent = cd.spent, elapsed = cd.elapsed, daily = cd.pace, dim = cd.days;
-    var projected = r2(daily * dim);
-    if (!spent && !state.txns.length) { wrap.style.display = 'none'; return; }
-    wrap.style.display = '';
-    if (rng) rng.textContent = cycleLabelFor(cd);
-    box.innerHTML =
-      '<div class="p"><div class="k">Spent · this cycle</div><div class="v">' + money(spent) + '</div></div>' +
-      '<div class="p"><div class="k">Avg / day (' + elapsed + ' of ' + dim + 'd)</div><div class="v">' + money(daily) + '</div></div>' +
-      '<div class="p"><div class="k">Projected · ' + dim + 'd</div><div class="v">' + money(projected) + '</div></div>';
-    if (note) {
-      var s = effectiveSnap();
-      if (!s) { note.style.display = 'none'; return; }
-      var free = s.cash ? s.cash.free : 0;
-      note.style.display = '';
-      note.innerHTML = projected > free
-        ? '<span class="low">At this pace, this cycle\'s spend (' + money(projected) + ') would exceed free cash (' + money(free) + ').</span>'
-        : 'Leaves ' + money(r2(free - projected)) + ' of free cash unspent at this pace.';
-      // v72.52: the previous-cycle comparison (cycleDataFor already computes it)
-      if (cd.prev && cd.prev.spent > 0) {
-        var diff = r2(spent - cd.prev.spent);
-        note.innerHTML += '<div class="pace-anom"><span' + (diff > 0 ? ' class="low"' : '') + '>' +
-          (diff > 0 ? 'Up ' + money(diff) : (diff < 0 ? 'Down ' + money(-diff) : 'Level')) +
-          ' vs last cycle (' + money(cd.prev.spent) + ' · ' + esc(cycleLabelFor(cd.prev)) + ').</span></div>';
-      }
-      // v68 item 4: per-category pace anomalies (still calendar-month — a Home insight)
-      var dP = insightsData();
-      var anoms = (dP && dP.catPace || []).slice(0, 3);
-      if (anoms.length) {
-        note.innerHTML += '<div class="pace-anom">' + anoms.map(function (c) {
-          return '<span class="low">' + esc(c.cat) + ' is ' + c.over + '% over its usual pace (' + money(c.dailyNow) + '/day vs ' + money(c.dailyTr) + ').</span>';
-        }).join(' ') + '</div>';
-      }
-    }
-  }
+  // v73.75 (boss-approved mockup_compact_livenumbers.html): renderPace is
+  // GONE — the Ledger tab's Spend-pace card (pace bar, range, note) was
+  // removed; its old slot now carries the compact Reconcile live-numbers card.
   function renderAddEmpty() {
     var el = byId('addEmpty');
     if (el) el.style.display = (state.base && !baseIsEmpty(state.base)) ? 'none' : '';
@@ -8164,12 +8100,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.74, live: new Date(2026, 9, 30, 22, 50) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.75, live: new Date(2026, 9, 31, 1, 14) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.75': [
+      'New: the Reconcile cards are now ONE compact \u201cLive numbers\u201d card on the Ledger tab (where the Spend-pace card used to be) — tap an amount to edit it, and the \u201cWill file on save\u201d preview only appears while you\u2019re editing. The Money tab\u2019s Projection card is gone (the tab is just Coming up now), and the ledger entries lost the \u201cmonth spent X \u2192 X\u201d chip — each entry now has its own \u270e edit button next to the \u2715.'
+    ],
     '73.74': [
       'Fixed: the Reconcile cards (new in 73.73) never appeared on the Money tab — the render was wired to the wrong repaint key, so it only ran when a ledger entry changed, never at boot. The cards now render on launch and on every base/overlay change.'
     ],
@@ -9217,6 +9156,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     reconSave: reconSave, // v73.73: the save (re-anchor + the 'Reconcile' row)
     reconCancel: reconCancel, // v73.73: the cancel (the edit is dropped)
     reconRender: reconRender, // v73.73: the render (smoke reads the card HTML)
+    reconStartEdit: reconStartEdit, // v73.75: the tap-to-edit (smoke drives the input appearing)
     reconRowFilesAs: reconRowFilesAs, // v73.73: the absorption rule (smoke checks total→Cash)
     fileReconcileRow: fileReconcileRow, // v73.73: the audit row (smoke checks the ledger)
     setMlFilters: function (cat, m) { mlFilterCat = cat; mlFilterM = m || ''; mlShownCount = 5; }, // v73.70: test hook (the smoke drives the method filter without a DOM onchange)
@@ -9243,7 +9183,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     getPlanLinkRef: function () { return state.planLinkRef; },
     coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut); v73.68: the cycle-window + no-4-cap assertions
     insightsData: insightsData, // v73.2: the insight math (coachRows' input)
-    renderProjection: renderProjection, // v73.42: the Money tab's projection card (smoke drives it; it now carries the adj bar)
+    // v73.75: renderProjection is GONE with the card (the v73.42 export dies too)
     adjActive: adjActive, // v73.42: is the overlay live (the adj bar's gate)
     adjEmpty: adjEmpty, // v73.45: is the overlay fully empty (the delete/edit no-op guard)
     resetAdj: resetAdj, // v73.45: the two-tap reset (confirm + audit row + toast Undo)

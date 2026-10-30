@@ -426,25 +426,25 @@ border-radius:999px;padding:4px 11px;font-size:12px;font-weight:800;font-variant
 font-size:10px;font-weight:800;letter-spacing:.4px;color:var(--mut)}
 .ccrow .foot .src.manual{color:var(--warn);border-color:rgba(255,196,92,.4)}
 .ccrow .foot .hint{flex:1}
-/* v73.73: the Reconcile cards (Money tab, above the money log) */
-.reconrow{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
-.reconrow:last-child{border-bottom:0}
-.reconrow .rn1{flex:1;min-width:0}
-.reconrow .nm{font-size:14px;font-weight:800;letter-spacing:.2px}
-.reconrow .sub2{font-size:10.5px;color:var(--mut);font-weight:600;margin-top:2px}
-.reconrow.child{padding-left:18px}
-.reconrow.child .nm{font-size:13px;font-weight:700}
-.reconrow.total .nm{font-size:14.5px}
-.livchip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:1px 8px;
-font-size:9.5px;font-weight:800;letter-spacing:.5px;color:var(--mut);vertical-align:2px}
+/* v73.75: the compact Live-numbers card (Ledger tab, the old Spend-pace
+   slot) — tap-to-edit rows, no LIVE chips, Will-file box only while editing */
+.lngrp{font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin:12px 0 2px}
+.lnrow{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:6px 2px;cursor:pointer}
+.lnrow .lnnm{flex:1;min-width:0;font-size:13.5px;font-weight:700}
+.lnrow .sub2{font-size:10.5px;color:var(--mut);font-weight:600;margin-top:2px}
+.lnrow.child{padding-left:16px}
+.lnrow.child .lnnm{font-size:12.5px}
+.lnrow.total .lnnm{font-size:14px;font-weight:800}
+.lnrow .lnr{text-align:right;font-size:14px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.lnrow .lnr input{width:118px;background:var(--card2);border:1px solid var(--line);border-radius:9px;color:var(--ink);
+font:800 14px inherit;font-variant-numeric:tabular-nums;padding:6px 8px;text-align:right}
+.lnrow .lnr input:focus{outline:none;border-color:var(--acc)}
 .recondelta{font-size:11.5px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
 .recondelta.up{color:var(--ok)}
 .recondelta.dn{color:var(--bad)}
 .recondelta .fil{display:block;font-weight:500;color:var(--mut);margin-top:1px}
-.ramt input{width:118px;background:var(--card2);border:1px solid var(--line);border-radius:9px;color:var(--ink);
-font:800 14px inherit;font-variant-numeric:tabular-nums;padding:8px 10px;text-align:right}
-.ramt input:focus{outline:none;border-color:var(--acc)}
-.reconfilebox{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.lnfileh{font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-bottom:6px}
+.reconfilebox{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:12px}
 .reconfile{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;font-weight:600}
 .reconbar{position:fixed;left:0;right:0;bottom:calc(80px + env(safe-area-inset-bottom));z-index:8;
 background:rgba(12,18,32,.98);border-top:1px solid var(--line);backdrop-filter:blur(10px);
@@ -809,28 +809,10 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
   </div>
 
   <div id="tab-money" style="display:none">
-    <!-- v73.73 (boss-approved mockup_reconcile_money.html): the Reconcile
-         cards — match the app's running numbers to what the bank shows.
-         SEPARATE from rebase (Settings): rebase files 'Adjustment' (new
-         base − old base); reconcile files 'Reconcile · <account>' (new −
-         live, the discrepancy found). Hierarchy: Cards (each CC) and
-         Cash & Debit (Total cash → Cash + the debit accounts); only the
-         directly-edited row files, no zero rows. -->
-    <div id="reconcile" style="display:none"></div>
-    <div class="reconbar" id="reconBar">
-      <div class="reconbarlbl" id="reconBarLbl"></div>
-      <button type="button" class="act ghost" id="reconBarCancel">Cancel</button>
-      <button type="button" class="act" id="reconBarGo">Reconcile</button>
-    </div>
-    <!-- v73.42 (boss: 'reorder to projection then coming up, remove the rest'):
-         the summary tiles / Obligations / Sinking cards are GONE — the tab is
-         just the Projection card, then Coming up. The overlay reset button
-         (adjBar) moved into the projection card (#projAdj) so it isn't lost. -->
-    <section id="projection" class="card" style="display:none">
-      <div id="projBody"></div>
-      <div id="projAdj"></div>
-    </section>
-
+    <!-- v73.75 (boss-approved mockup_compact_livenumbers.html): the Money tab
+         is just Coming up — the Projection card (and the overlay reset bar
+         that lived inside it) is GONE, and the Reconcile cards moved to the
+         Ledger tab (the old Spend-pace slot, compact). -->
     <!-- v73.14: the Money tab's plans heading is now just "Coming up" (boss call) -->
     <!-- v73.15: the add form collapsed to a one-line trigger — it now lives in
          the plan sheet (#planSheet), same bottom-sheet family as the edit sheet -->
@@ -853,12 +835,21 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       </div>
     </section>
 
-    <section id="pace" class="card" style="display:none">
-      <h2 style="margin-top:0">Spend pace · this cycle</h2>
-      <p class="note" id="paceRange" style="margin:0 0 8px"></p>
-      <div class="pace" id="paceBox"></div>
-      <p class="note" id="paceNote" style="margin:10px 0 0"></p>
-    </section>
+    <!-- v73.75 (boss-approved mockup_compact_livenumbers.html): the Spend-pace
+         card is GONE; its old slot now carries the Reconcile cards (moved
+         here from the Money tab, compact) — match the app's running numbers
+         to what the bank shows. SEPARATE from rebase (Settings): rebase
+         files 'Adjustment' (new base − old base); reconcile files
+         'Reconcile · <account>' (new − live, the discrepancy found).
+         Hierarchy: Cards (each CC) and Cash & Debit (Total cash → Cash +
+         the debit accounts); only the directly-edited row files, no zero
+         rows. -->
+    <div id="reconcile" style="display:none"></div>
+    <div class="reconbar" id="reconBar">
+      <div class="reconbarlbl" id="reconBarLbl"></div>
+      <button type="button" class="act ghost" id="reconBarCancel">Cancel</button>
+      <button type="button" class="act" id="reconBarGo">Reconcile</button>
+    </div>
 
     <section class="card" id="txnCard">
       <div class="ml-fbar">
@@ -866,7 +857,6 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
         <select id="mlFilter" aria-label="Filter by category"></select>
         <select id="mlFilterM" aria-label="Filter by payment method"></select>
       </div>
-      <p class="note" style="margin:0 0 8px">Tap an entry to edit it — <b>✕</b> deletes.</p>
       <div id="moneyLog">
         <div id="mlBody"></div>
       </div>

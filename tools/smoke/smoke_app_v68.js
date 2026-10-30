@@ -1694,7 +1694,32 @@ waitReady().then(async function (F) {
       F.emit('ui');
       ok(reconEl29.style.display === '', 'v73.74: boot (emit ui) unhides #reconcile (got ' + JSON.stringify(reconEl29.style.display) + ')');
       ok(reconEl29.innerHTML.indexOf('Maya CC') !== -1 && reconEl29.innerHTML.indexOf('Total cash') !== -1, 'v73.74: the card rows render into #reconcile (Maya CC + Total cash present)');
-      ok(reconEl29.innerHTML.indexOf('Will file on save') !== -1, 'v73.74: the Will-file box renders');
+      // ---- v73.75: the COMPACT Live-numbers card (one card, two groups,
+      // tap-to-edit, no LIVE chips, no audit-only note, Will-file box only
+      // while editing) ----
+      ok(reconEl29.innerHTML.indexOf('Live numbers') !== -1, 'v73.75: the compact card is titled Live numbers');
+      ok((reconEl29.innerHTML.match(/class="lngrp"/g) || []).length === 2, 'v73.75: the card has the Cards + Cash & Debit groups (got ' + (reconEl29.innerHTML.match(/class="lngrp"/g) || []).length + ')');
+      ok(reconEl29.innerHTML.indexOf('livchip') === -1, 'v73.75: no LIVE chips in the compact card');
+      ok(reconEl29.innerHTML.indexOf('Reconcile rows are audit-only') === -1, 'v73.75: the audit-only note is gone');
+      ok(reconEl29.innerHTML.indexOf('<input') === -1, 'v73.75: no permanent inputs (tap-to-edit)');
+      ok(reconEl29.innerHTML.indexOf('class="reconfile"') === -1, 'v73.75: the Will-file row is NOT rendered until an edit');
+      // ---- v73.75: tap-to-edit — reconStartEdit turns the amount into an input ----
+      F.reconStartEdit('Maya CC');
+      ok(reconEl29.innerHTML.indexOf('data-recon="Maya CC"') !== -1, 'v73.75: tapping Maya CC renders its amount as an input');
+      ok((reconEl29.innerHTML.match(/<input/g) || []).length === 1, 'v73.75: only the tapped row has an input (got ' + (reconEl29.innerHTML.match(/<input/g) || []).length + ')');
+      // the Will-file row appears only once the edit moves the number (no zero rows)
+      F.reconSetInput('Maya CC', 3900);
+      ok(reconEl29.innerHTML.indexOf('class="reconfile"') !== -1, 'v73.75: the Will-file row appears while the edit has a delta');
+      F.reconCancel();
+      ok(reconEl29.innerHTML.indexOf('<input') === -1, 'v73.75: cancel re-renders back to plain amounts');
+      // ---- v73.75: the ledger entries — no 'month spent' chip, ✎ per entry ----
+      var mlEl29 = __elMap['mlBody'];
+      ok(mlEl29.innerHTML.indexOf('month spent') === -1, 'v73.75: the money-log rows carry no month-spent chip');
+      ok(mlEl29.innerHTML.indexOf('\u270e</button>') !== -1, 'v73.75: editable entries carry their own ✎ button');
+      ok(mlEl29.innerHTML.indexOf('title="Tap to edit"') === -1, 'v73.75: the row is no longer the tap-to-edit target');
+      // ---- v73.75: the projection + pace cards are gone ----
+      ok(!__elMap['projection'], 'v73.75: the projection element is gone');
+      ok(!__elMap['pace'], 'v73.75: the pace element is gone');
       // NOTE: earlier parts (the reset probe, ipf backfill) mutated the
       // overlay, so the expected values are computed from the LIVE snapshot
       // at this point — never from the raw seed numbers.

@@ -162,7 +162,9 @@ def main():
               "homeGreet", "greetHello", "greetDate",
               "coachOv", "coachFab", "botFace",
               "addEmpty",
-              "projection", "projBody", "projAdj",
+              # v73.75: "projection"/"projBody"/"projAdj" REMOVED — the Money
+              # tab's Projection card (and the overlay reset bar inside it) is
+              # gone (boss-approved mockup_compact_livenumbers.html)
               "addForm", "planForm", "plans", "coach", "insights", "foot", "setFoot",
               "f_amount", "f_dateLabel", "p_dateLabel",
               "f_category", "f_account", "f_date", "f_note", "chargeHint",
@@ -174,7 +176,11 @@ def main():
               "impBtn", "impFile", "snack", "swToast", "swReload",
               "hero", "heroFree", "heroSub", "sparkBox", "digBody", "coachActs",
               "coachNoteBlock", "coachNoteBody", "coachNoteSub", "coachNoteRefresh",
-              "donut", "donutSvg", "donutLegend", "donutRange", "pace", "paceBox", "paceNote", "paceRange",
+              "donut", "donutSvg", "donutLegend", "donutRange",
+              # v73.75: "pace"/"paceBox"/"paceNote"/"paceRange" REMOVED — the
+              # Ledger tab's Spend-pace card is gone (its slot is the compact
+              # Live-numbers card, #reconcile)
+              "reconcile", "reconBar",
               "p_repeat", "p_count", "p_countWrap", "expJson", "expCsv",
               "planSheet", "planAddBtn", "planAddClose",
               "planEditSheet", "pe_name", "pe_amount", "pe_date", "pe_scope", "peSave", "peSkip", "peDeleteAll", "peClose",
@@ -303,10 +309,10 @@ def main():
           "function confirmAsk" in js and "function askDeleteTxn" in js)
     check("chat.js persists only chat history (no financial writes)",
           chatjs.count("idbPut") == 1 and "F.idbPut(F.STORE_CHAT" in chatjs)
-    check("coach rows + hero/spark/donut/pace renders",
+    check("coach rows + hero/spark/donut renders",
           "function coachRows" in js and "function renderHero" in js
           and "function renderSpark" in js and "function renderDonut" in js
-          and "function renderPace" in js)
+          and "function renderPace" not in js)  # v73.75: the Spend-pace card is gone
     check("recurring plans: monthly repeat + 3-month expansion",
           "function planOccurrences" in js and "function shiftMonth" in js)
     check("chat parses stories into validated changes (local scorer, no model)",
@@ -349,16 +355,12 @@ def main():
           and "var ipfMine = Number(e.mine) || (e.dir === 'ipf' && e.total && Number(e.total) > (Number(e.amt) || 0) ? r2(e.total - (Number(e.amt) || 0)) : 0);" in js
           and "var preIpFMine = (preDir === 'ipf') ? (Number(ee.mine) || (ee.total && Number(ee.total) > (Number(ee.amt) || 0) ? r2(ee.total - (Number(ee.amt) || 0)) : 0)) : 0;" in js
           and "'72.51': [" in js)
-    check("v72.52 (user: 'i want the stats in the ledger tab to consolidate records per cycle, not per month'): the Ledger tab's two stat cards bucket by the CURRENT SALARY CYCLE (the v72.45 window anchored on the salary_day) instead of the calendar month — a record dated the 1st lands in the cycle that started on the 15th, and the cycle's own salary cash_in is excluded from the spend (the v72.45 rule, via cycleDataFor's received id). The donut filters txns by the cycle window (w.start..min(w.end, today)) and the pace card is driven straight from cycleDataFor (spent/elapsed/pace/days + the previous-cycle comparison line); both headings carry the cycle's date range (cycleLabelFor) and the pace reads 'Spent · this cycle' / 'Avg / day (N of Md)'. The cat-pace anomalies stay calendar-month (a Home insight) and the expenses list stays the full ledger",
+    check("v72.52 (user: 'i want the stats in the ledger tab to consolidate records per cycle, not per month'): the Ledger tab's stat cards bucket by the CURRENT SALARY CYCLE (the v72.45 window anchored on the salary_day) instead of the calendar month — a record dated the 1st lands in the cycle that started on the 15th, and the cycle's own salary cash_in is excluded from the spend (the v72.45 rule, via cycleDataFor's received id). The donut filters txns by the cycle window (w.start..min(w.end, today)) and its heading carries the cycle's date range (cycleLabelFor). v73.75 retarget: the Spend-pace card (and its cycleDataFor-driven lines) is GONE — the donut is the Ledger tab's only stat card now",
           "function cycleLabelFor(w) {" in js
           and "if (d < w.start || d > hi) return; // v72.52: the cycle window, not the calendar month" in js
           and "if (cd.received && t.id && t.id === cd.received.id) return; // the cycle's salary is income, not spend (the v72.45 rule)" in js
           and "var cd = cycleDataFor(currentCycleMonth(b, todayISO()), b);" in js
-          and "'<div class=\"p\"><div class=\"k\">Spent · this cycle</div><div class=\"v\">' + money(spent) + '</div></div>'" in js
-          and "Avg / day (' + elapsed + ' of ' + dim + 'd)</div><div class=\"v\">' + money(daily)" in js
-          and "note.innerHTML += '<div class=\"pace-anom\"><span' + (diff > 0 ? ' class=\"low\"' : '') + '>' +" in js
-          and "vs last cycle (" in js
-          and 'id="donutRange"' in html and 'id="paceRange"' in html
+          and 'id="donutRange"' in html and 'id="paceRange"' not in html
           and 'This cycle · by category' in html
           and "'72.52': [" in js)
     check("v72.53 (user: 'add a loading screen for fin.ai' — design C, coach + status ticker): the #boot overlay (Coach Fin's face via the #botFace symbol + name + cycling status line + INDETERMINATE bar — no fake percentages) is static HTML shown by default; hideBoot() fades it (.off class) when the first render lands on BOTH init() paths (IDB success + catch) and stops the ticker; a 4s safety timer in init() guarantees a stuck load can never trap the UI",
@@ -775,8 +777,9 @@ def main():
           and "todayISO: todayISO" in js
           and "savePlanOccurrence: savePlanOccurrence" in js
           and "'73.41': [" in js)
-    check("v73.42 (boss: 'in money tab, reorder to: projection then coming up, remove the rest'): the Money tab is just the Projection card + Coming up — the summary tiles, Obligations card, and Sinking card are GONE (renderSummary/tile/renderObligations/renderSinking/ringSVG deleted, .tiles CSS cut); the overlay 'reset to my numbers' bar moved into the projection card (#projAdj, painted by renderProjection); the obligations/sinking DATA is intact (snapshot + coach still read it)",
-          'id="projAdj"' in html
+    check("v73.42 (boss: 'in money tab, reorder to: projection then coming up, remove the rest'): the summary tiles, Obligations card, and Sinking card are GONE (renderSummary/tile/renderObligations/renderSinking/ringSVG deleted, .tiles CSS cut); the obligations/sinking DATA is intact (snapshot + coach still read it). v73.75 retarget: the Projection card (and the #projAdj reset bar that lived inside it) is ALSO gone — the Money tab is just Coming up",
+          'id="projAdj"' not in html
+          and 'id="projection"' not in html
           and 'id="summary"' not in html
           and 'id="obligations"' not in html
           and 'id="sinking"' not in html
@@ -786,8 +789,8 @@ def main():
           and "function tile(" not in js
           and "function ringSVG(" not in js
           and 'class="tiles"' not in js
-          and "pa.innerHTML = adjBar();" in js
-          and "snap: [renderCoach, renderInsights, renderProjection, seedAccounts, renderAddEmpty" in js)
+          and "function adjBar" in js  # v73.75: adjBar/resetAdj stay (exported; the smoke drives resetAdj) — the #projAdj host is gone
+          and "snap: [renderCoach, renderInsights, seedAccounts, renderAddEmpty" in js)
     check("v73.44 (boss: 'move the oct15->nov14 below the this cycle, the date is not hidden by the toggle'): the cycle block's window label now sits BELOW the This/Next tag — .cbtitle is a column (flex-direction:column, align-items:flex-start) and .win lost its ellipsis, so on a narrow hero the toggle can no longer squeeze the dates",
           ".cbtitle{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0}" in html
           and ".cbtitle .win{color:var(--mut);font-size:12px;white-space:nowrap}" in html
@@ -825,7 +828,7 @@ def main():
           and "byId('planEditClose')" not in js
           and "'73.47': [" in js)
     check("v73.49 (boss: 'i tried resetting live numbers, confirm and toast are there. but it didnt write in ledger'): the reset files its k='r' audit rows into state.moneyLog, but the 'adj' emit key never repainted renderMoneyLog — the rows existed in state yet the Ledger card stayed stale until an unrelated emit. renderMoneyLog is now on the 'adj' repaint list, so the audit rows show immediately on confirm (the smoke gate's old 'renders in the ledger' assertion called F.renderMoneyLog() BY HAND, which is why this wiring hole passed every gate)",
-          "adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCcCards, renderMoneyLog, renderCoachNote, renderMood, reconRender]," in js  # v73.74 retarget: the adj key gained reconRender (a reconcile save zeroes the overlay — the card must repaint on 'adj'); v73.69: it grew renderCcCards
+          "adj: [renderCoach, renderInsights, updateChargeHint, renderHero, renderCcCards, renderMoneyLog, renderCoachNote, renderMood, reconRender]," in js  # v73.75 retarget: renderProjection left the key with the card; v73.74: the adj key gained reconRender (a reconcile save zeroes the overlay — the card must repaint on 'adj'); v73.69: it grew renderCcCards
           and "'73.49': [" in js)
     check("v73.50 (boss: 'make the toast persist until swiped'): the snack banner's 7s auto-hide is gone — snack() no longer schedules setTimeout(hideSnack, 7000); the banner lives until the swipe-up release (the pointerup path calls hideSnack), Undo, or a newer toast replaces it. The `ms` parameter stays for call-compat but is ignored",
           "snackTimer = null;" in js
@@ -1165,15 +1168,15 @@ def main():
           and "if (amM) amM.onclick = function () { setAddMode('moneyin'); };" in js
           and "'Money in' : 'Add expense'" in js
           and "'73.8': [" in js)
-    check("v73.9 (user: 'the money spent bug is fixed, but still shows it on the ledger entries wrong (which should be correct already and hidden)'): the salary row's s VALUE was already right (v73.7 — the line does not move), but the flat 'month spent X → X' chip still rendered on it. Income is not spend — the cycle's own salary row (salaryTxnIdInMonth identity, same rule as v73.7) now shows NO month-spent chip at all; a refund's chip stays (it still nets the audit line)",
-          "var isSalRow = add && e.k === 'i' && salaryIsTxn(" in js  # v73.10: the pin moved from the salaryTxnIdInMonth identity to the amount rule (same guard, wider net)
-          and "if (!isSalRow) {" in js
+    check("v73.9 (user: 'the money spent bug is fixed, but still shows it on the ledger entries wrong (which should be correct already and hidden)'): the salary row's s VALUE was already right (v73.7 — the line does not move), and the 'month spent X → X' chip no longer renders on it. v73.75 retarget: the chip is GONE for EVERY row (the isSalRow guard dies with it)",
+          "var isSalRow" not in js
+          and "'month spent ' + money(sBefore) + ' → ' + money(e.s)" not in js
           and "'73.9': [" in js)
     check("v73.10 (user: 'i now have 73.9 in phone but still when i log money in entries, the month spent's still there and wrongly changing'): the v73.7 identity had a DATE window (1st..payday+2 - an early-payday allowance for cycleDataFor's RECEIVED display), but salaryTxnIdInMonth is ALSO the money-log's swing guard - and the Money in tab (v73.8) defaults the date to TODAY, so a salary logged on the 25th fell outside the window, was classified as a 'refund', and swung the line by the full salary (reproduced live in Chromium: 100 -> -44,900, chip rendered). The identity is now the AMOUNT: any cash_in of >= 90% of the month's expected salary is the salary, any date (a real refund is never 90% of the salary; earliest date wins on ties)",
           "function salaryIsTxn(t, amt) {" in js  # the amount-based identity (amt overrides t.amount — the rebase path passes the live amount)
           and "if (kind === 'cash_in') return salaryIsTxn(t, amt) ? 0 : -amt;" in js  # monthEffect routes through it
           and "salaryIsTxn: salaryIsTxn" in js  # exported (smoke drives it)
-          and "var isSalRow = add && e.k === 'i' && salaryIsTxn(" in js  # the chip hide follows the same rule (v73.9's identity was the one-salary-per-month tie-break)
+          # v73.75: the isSalRow chip-hide pin is gone with the chip (the chip never renders now)
           and "if (amt < 0.9 * expected) return;" in js  # salaryTxnIdInMonth keeps its amount gate (the v73.7 pins + row identity still use it)
           and "if (d < lo || d > hi) return;" in js  # cycleDataFor's received display still uses its own window
           and "'73.10': [" in js)
@@ -1744,7 +1747,28 @@ def main():
           and 'id="reconcile"' in html
           and 'id="reconBar"' in html
           and ".reconbar.show{display:flex}" in html
-          and ".reconrow{display:flex" in html)
+          # v73.75: ".reconrow{display:flex" retargeted to ".lnrow{" — the compact
+          # Live-numbers card rows (the reconrow markup died with the old UI)
+          and ".lnrow{display:flex" in html)
+    check("v73.75 (boss-approved mockup_compact_livenumbers.html): the Money tab's PROJECTION card (and the overlay reset bar that lived inside it) + the Ledger tab's SPEND-PACE card are GONE; the Reconcile UI is now ONE compact 'Live numbers' card in the pace card's old slot (Cards group + Cash & Debit group, tap-to-edit amounts, no LIVE chips, no audit-only note, Will-file box only while editing); the ledger entries lose the 'month spent X → X' chip and the row-tap edit — each entry gets its own ✎ (opens the edit sheet) beside the ✕",
+          "function renderProjection" not in js
+          and "function renderPace" not in js
+          and "function reconStartEdit(id) {" in js
+          and "reconStartEdit: reconStartEdit" in js
+          and "Live numbers" in js
+          and "class=\"lngrp\">Cards</div>" in js
+          and "class=\"lngrp\">Cash &amp; Debit</div>" in js
+          and "livchip" not in js
+          and "Reconcile rows are audit-only" not in js
+          and "Tap an entry to edit it" not in js
+          and "data-ml-edit=\"" in js
+          and "\\u270e</button>" in js  # the ✎ per entry
+          and "'month spent ' + money(sBefore)" not in js
+          and "data-ml-edit=\"' + esc(e.tid) + '\" title=\"Tap to edit\"" not in js
+          and 'id="projection"' not in html
+          and "paceBox" not in html
+          and ".lnrow{display:flex" in html
+          and ".lngrp{" in html)
     check("v73.72 (boss-approved: 'ipf: file theirs as a card charge' + 'increase free cash by the same amount' — the credit converted to cash, since the repayment lands as cash and tmb never files a ledger row): an 'I paid for them' on a CARD files the friend's share as its own card_charge (the bank charged the FULL bill) + a cash_in for the same amount (the advance); net on the boss's own free cash = mine commits, theirs neutralizes. The entry carries the pair handles (theirsTxnId/theirsBumpId) so add-undo / entry-delete / person-delete / edit all remove-and-restore BOTH legs. The one-shot backfill (migrateIpfTheirs, stamp-gated, idempotent) files past entries: post-base get charge + advance, pre-base get the advance ONLY (their card spend is already inside the sheet's base — filing the charge would double-count card owed); runs on boot (after migratePrepayBy) and on import",
           "function fileIpfTheirs(e, p, fileCharge, fileBump)" in js
           and "function migrateIpfTheirs()" in js

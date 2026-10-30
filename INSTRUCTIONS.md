@@ -6,6 +6,41 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.75 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-30 - "approved, build and ship" (mockup_compact_livenumbers.html — projection + pace cards out, compact Live-numbers card in the pace slot, ✎+✕ per ledger entry, no month-spent chip)
+Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.75, sw cache
+`finances-pwa-v73.75` pushed to `https://github.com/jblagana/finance-app.git` (main).
+
+Boss-approved mockup (C:\Users\Jan\Muji\mockup_compact_livenumbers.html):
+- Money tab: the PROJECTION card (and the overlay reset bar that lived inside
+  it, #projAdj) is GONE — the tab is just Coming up now. renderProjection
+  deleted; adjBar/resetAdj stay (exported; the smoke drives resetAdj).
+- Ledger tab: the SPEND-PACE card is GONE (renderPace deleted); its old slot
+  carries the Reconcile UI as ONE compact "Live numbers" card (moved from the
+  Money tab): Cards group (each CC, limit/due on row two) + Cash & Debit
+  group (Total cash → Cash → debits). Tap-to-edit amounts (no permanent
+  inputs, no LIVE chips, no audit-only note); the Will-file box renders only
+  while an edit has a delta. File-one-row rules unchanged (the directly-edited
+  row files; a total edit is absorbed by Cash; no zero rows).
+- Ledger entries: the "month spent X → X" chip is GONE for every row (the
+  v73.9/v73.10 isSalRow guard dies with it); the row is no longer the tap
+  target — each editable entry carries its own ✎ (opens the edit sheet)
+  beside the ✕.
+
+Gates: release.ps1 v73.75 all green — check_site (repo + root mirror; v73.42/
+v72.52/v73.9/v73.10 pins retargeted to the removals, new v73.75 pin), parser,
+node --check ×4, both smokes — PART 29 grew the v73.75 DOM asserts (compact
+card title/groups, no chips/note/permanent inputs, tap-to-edit input appears,
+Will-file row appears with a delta, no month-spent chip, ✎ per entry, row no
+longer the edit target, projection/pace elements gone).
+
+Mid-gate fixes: the v73.73 partial-update DOM surgery in reconSetInput was a
+bug farm (querySelectorAll on the stub, outerHTML focus loss) — replaced with
+a full reconRender + focus/caret restore (the card is ~7 rows; cheap).
+Smoke asserts retargeted to the stub's real behavior (rows carry data-recon
+for tap-binding; money-log rows render into #mlBody; the Will-file row needs
+a non-zero delta).
+
 # v73.74 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-30 - "Fix the repaint wiring and ship v73.73.1" (the Reconcile card never appeared on the boss's phone — boss check: v73.73 shell, Money tab fully rendered, card absent)
 Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.74, sw cache
