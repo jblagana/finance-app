@@ -73,6 +73,10 @@ function byIdStub(id) {
   if (!elMap[id]) elMap[id] = makeStub();
   return elMap[id];
 }
+// v73.74: the probe reads the stub elements back (the #reconcile DOM assert
+// must hit the SAME instance the app's byId('reconcile') wrote to).
+global.__elMap = elMap;
+
 global.window = global;
 global.addEventListener = function () {};
 global.removeEventListener = function () {};
@@ -1679,6 +1683,18 @@ waitReady().then(async function (F) {
       // re-anchors the base to the live values and zeroes the overlay.
       console.log('\n== PART 29: v73.73 — Reconcile (Money tab) =');
       var tick = function (ms) { return new Promise(function (r) { setTimeout(r, ms || 25); }); };
+      // v73.74: the DOM wiring assert — the boss's phone ran the v73.73
+      // shell with the card INVISIBLE because reconRender was only on the
+      // 'txn' key (boot emits 'ui', setTab emits nothing). Drive the boot
+      // path (emit 'ui') and assert the #reconcile element is un-hidden and
+      // carries the card rows — a data-layer-only assert can never catch a
+      // repaint-wiring hole again.
+      var reconEl29 = __elMap['reconcile'] || (__elMap['reconcile'] = makeStub());
+      reconEl29.style.display = 'none'; // the index.html static state
+      F.emit('ui');
+      ok(reconEl29.style.display === '', 'v73.74: boot (emit ui) unhides #reconcile (got ' + JSON.stringify(reconEl29.style.display) + ')');
+      ok(reconEl29.innerHTML.indexOf('Maya CC') !== -1 && reconEl29.innerHTML.indexOf('Total cash') !== -1, 'v73.74: the card rows render into #reconcile (Maya CC + Total cash present)');
+      ok(reconEl29.innerHTML.indexOf('Will file on save') !== -1, 'v73.74: the Will-file box renders');
       // NOTE: earlier parts (the reset probe, ipf backfill) mutated the
       // overlay, so the expected values are computed from the LIVE snapshot
       // at this point — never from the raw seed numbers.

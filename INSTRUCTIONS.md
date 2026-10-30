@@ -6,6 +6,37 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.74 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-30 - "Fix the repaint wiring and ship v73.73.1" (the Reconcile card never appeared on the boss's phone — boss check: v73.73 shell, Money tab fully rendered, card absent)
+Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.74, sw cache
+`finances-pwa-v73.74` pushed to `https://github.com/jblagana/finance-app.git` (main).
+
+Diagnosis (boss-ordered, no ship until found): the v73.73 `reconRender` was wired ONLY to the
+`txn` repaint key, but the boot path is `init() → render() → emit('ui')` and `setTab` emits
+nothing — so the function that un-hides `#reconcile` (static `display:none` in index.html)
+never ran at boot. The footer proves the phone had the v73.73 app.js (it reads SHELL_RELEASE
+from app.js itself), and the hide-condition (zero cards AND zero debits) can't be true for the
+boss's data — so it was pure wiring, not a gate and not a stale cache. The v73.73 smoke passed
+because PART 29 drove `reconData()`/`reconSave()` directly and never inspected the `#reconcile`
+element — a data-layer assert can't catch a repaint-wiring hole.
+
+- `reconRender` added to the `ui`, `snap` and `adj` repaint lists (boot, base save, and
+  reconcile-save all repaint the card; `txn` keeps its entry).
+- `emit` exported on FinApp so the smoke can drive the real boot path.
+- smoke PART 29 gains 3 DOM asserts: set `#reconcile` to its static `display:none`, call
+  `F.emit('ui')`, assert the element is un-hidden and carries the card rows (Maya CC +
+  Total cash) + the Will-file box — the wiring is now gate-covered, not just the math.
+- check_site: the v73.33 repaint-count pin retargeted (`renderMood, reconRender]` ×3 =
+  snap/adj/ui; the plan key is the only one still ending in bare `renderMood]`), the v73.49
+  adj-line pin and the two snap-line pins (v63 re-seed + v72.30) retargeted to the new tails.
+- SHELL_NOTES 73.74 (What's-new: the Reconcile cards now render on launch).
+- Version is 73.74, not "73.73.1": release.ps1's version grammar is `NN.M` (two-part) — the
+  boss's "v73.73.1" ask maps to the next dot.
+- Gate slip fixed along the way: the first smoke run died at line 78 — `global.window.__elMap`
+  ran before `global.window = global` (line 83); moved to `global.__elMap` after the stubs.
+- Full gate suite green (check_site repo + root mirror, parser, node --check ×4, both smokes —
+  282 printed asserts, ALL PASS).
+
 # v73.73 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-30 - "Approve — build v73.73 on this mockup" (Reconcile feature, boss-approved mockup_reconcile_money.html)
 Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.73, sw cache

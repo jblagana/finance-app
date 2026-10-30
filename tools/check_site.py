@@ -418,9 +418,10 @@ def main():
           and "if (readUtilMax() > 70) return 'worried';" in js
           and "if (c && c.projectedNet < 0) return 'worried';" in js
           # v73.33: renderRecap left every key, so the "renderMood, render*"
-          # count is now 1 (txn: …renderMood, renderPlans]) and renderMood is
-          # the LAST fn on the other three keys (snap/adj/ui end "renderMood]")
-          and js.count("renderMood, renderPlans, reconRender]") == 1  # v73.73: the txn key gains the Reconcile render and js.count("renderMood]") == 4  # txn + plan/snap/adj/ui — every data key (the export line is renderMood: renderMood,; v73.14: the plan key's due strip left the list; v73.33: the pulse left the list)
+          # count is now 1 (txn: …renderMood, renderPlans]) — the plan key is
+          # the only one still ending in bare "renderMood]".
+          and js.count("renderMood, renderPlans, reconRender]") == 1  # v73.73: the txn key gains the Reconcile render
+          and js.count("renderMood, reconRender]") == 3  # v73.74: snap/adj/ui ALSO end in reconRender — the boot path emits 'ui' (setTab emits nothing), so the Reconcile card must repaint on ui or it never appears at boot (the boss's phone: v73.73 shell, card invisible); a base save (snap) or a reconcile save (adj) must repaint it too
           and "if (!editId && (kind === 'cash_in' || kind === 'card_payment')) happyMoodFlash(1800);" in js
           and 'class="spark-today"' in js
           and "'73.0': [" in js)
@@ -824,7 +825,7 @@ def main():
           and "byId('planEditClose')" not in js
           and "'73.47': [" in js)
     check("v73.49 (boss: 'i tried resetting live numbers, confirm and toast are there. but it didnt write in ledger'): the reset files its k='r' audit rows into state.moneyLog, but the 'adj' emit key never repainted renderMoneyLog — the rows existed in state yet the Ledger card stayed stale until an unrelated emit. renderMoneyLog is now on the 'adj' repaint list, so the audit rows show immediately on confirm (the smoke gate's old 'renders in the ledger' assertion called F.renderMoneyLog() BY HAND, which is why this wiring hole passed every gate)",
-          "adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCcCards, renderMoneyLog, renderCoachNote, renderMood]," in js  # v73.69 retarget: the adj key grew renderCcCards (the CC card repaints on an overlay change)
+          "adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCcCards, renderMoneyLog, renderCoachNote, renderMood, reconRender]," in js  # v73.74 retarget: the adj key gained reconRender (a reconcile save zeroes the overlay — the card must repaint on 'adj'); v73.69: it grew renderCcCards
           and "'73.49': [" in js)
     check("v73.50 (boss: 'make the toast persist until swiped'): the snack banner's 7s auto-hide is gone — snack() no longer schedules setTimeout(hideSnack, 7000); the banner lives until the swipe-up release (the pointerup path calls hideSnack), Undo, or a newer toast replaces it. The `ms` parameter stays for call-compat but is ignored",
           "snackTimer = null;" in js
@@ -1315,8 +1316,8 @@ def main():
     check("add-sheet options = base budget names; Unsorted default when none",
           "Object.keys((state.base && state.base.budgets) || {})" in js
           and "'>Unsorted</option>" in js and "selected>Unsorted</option>" in html)
-    check("re-seeded automatically when the base changes (snap render list; v72.30: renderMoneyLog follows — a base save can file 'Adjustment' rows; v73.0: renderMood rides the same key; v73.2: the money pulse; v73.14: the due strip left the list; v73.33: renderRecap left — the Home recap card is gone)",
-          "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood]" in js)
+    check("re-seeded automatically when the base changes (snap render list; v72.30: renderMoneyLog follows — a base save can file 'Adjustment' rows; v73.0: renderMood rides the same key; v73.2: the money pulse; v73.14: the due strip left the list; v73.33: renderRecap left — the Home recap card is gone; v73.74: reconRender rides the same key — a base save must repaint the Reconcile card)",
+          "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender]" in js)
     check("chat matches only stored budget names: no hint list, no 'Other' fallback",
           "function mentionedBudget(t, ctx)" in chatjs
           and "cat: mentionedBudget(t, ctx)" in chatjs
@@ -1695,9 +1696,9 @@ def main():
           and "mlShownCount = Math.max(5, mlShownCount - 5);" in js
           and "names.push('Owed')" not in js
           and "prevTxn.category || 'Unsorted'" in js
-          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood]" in js  # v73.0: renderMood + v73.2: the pulse ride the snap key; v73.14: the due strip left the list; v73.33: the pulse (renderRecap) left the list
+          and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender]" in js  # v73.74: the snap key gained reconRender (a base save must repaint the Reconcile card); v73.0: renderMood + v73.2: the pulse ride the snap key; v73.14: the due strip left the list; v73.33: the pulse (renderRecap) left the list
           # v73.69 retarget: the snap key grew renderCcCards (the CC card repaints on a base save) — the ledger tail moved
-          and "updateChargeHint, renderHero, renderCcCards, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood]" in js)
+          and "updateChargeHint, renderHero, renderCcCards, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender]" in js)
     check("v73.69 (boss-approved 2-cell CC summary card, the parked mock's v73.68-shippable subset): one row per CC under the hero — name + limit + utilization pill, two cells (Balance = the card's LIVE balance; Due = the manual 'due this cycle' override when set, else the full balance — v73.68 has no next-cycle tagging, so the balance IS the bill), the due date is the GLOBAL due day (per-card dates + the Next-cycle cell are v73.70 data and stay off), and the provenance chip is AUTO DUE / MANUAL (warn-styled); repaints on txn/plan/snap/adj/ui (a card charge or a Settings override must move the card)",
           "function renderCcCards()" in js
           and 'id="ccCardsBody"' in html

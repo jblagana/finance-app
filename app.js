@@ -50,14 +50,14 @@
     // v72.30: a base save can file 'Adjustment' ledger rows — the Ledger tab follows
     // v73.42: renderSummary/renderObligations/renderSinking are GONE (their
     // cards were cut from the Money tab) — the repaint lists drop them.
-    snap: [renderCoach, renderInsights, renderProjection, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderCcCards, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood],
+    snap: [renderCoach, renderInsights, renderProjection, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderCcCards, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender],
     // v73.49: renderMoneyLog on 'adj' — a reset files its audit rows (k='r')
     // into the money log, but 'adj' never repainted the Ledger tab, so the
     // rows existed in state.moneyLog yet the card stayed stale until the next
     // unrelated emit.
-    adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCcCards, renderMoneyLog, renderCoachNote, renderMood],
+    adj: [renderCoach, renderInsights, renderProjection, updateChargeHint, renderHero, renderCcCards, renderMoneyLog, renderCoachNote, renderMood, reconRender],
     owed: [renderOwed],
-    ui: [seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderCcCards, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood]
+    ui: [seedAccounts, seedCategories, renderCoach, renderInsights, renderProjection, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderCcCards, renderDonut, renderPace, renderMoneyLog, renderOwed, renderCoachNote, renderMood, reconRender]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -8164,12 +8164,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.73, live: new Date(2026, 9, 30, 20, 57) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.74, live: new Date(2026, 9, 30, 22, 50) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.74': [
+      'Fixed: the Reconcile cards (new in 73.73) never appeared on the Money tab — the render was wired to the wrong repaint key, so it only ran when a ledger entry changed, never at boot. The cards now render on launch and on every base/overlay change.'
+    ],
     '73.73': [
       'New: Reconcile, on the Money tab — match the app\u2019s running numbers to what the bank actually shows. Two cards: your CCs (each with its live balance) and Cash & Debit (Total cash, with Cash and your debit accounts under it). Type the real number, and the app files one \u201cReconcile \u00b7 <account>\u201d row for exactly the discrepancy you found — rebase keeps its \u201cAdjustment\u201d rows, so the two never blur. Editing Total cash lands the correction on Cash (your cash/debit are one wallet); editing an account files its own row. A reconciled card balance flows straight into its due.'
     ],
@@ -9172,6 +9175,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     updateCashbackRow: updateCashbackRow, // v73.53: the cashback row's visibility (smoke drives it)
     setAddMode: setAddMode, // v73.52: the direction toggle (smoke drives the mode switch)
     renderCoach: renderCoach, // v73.66: the coach card render (smoke drives the roasty copy)
+    emit: emit, // v73.74: the repaint dispatcher (smoke drives the boot path to prove the Reconcile card unhides)
     // v72.38: the running shell dot (smoke drives the What's-new fallback
     // check). v73.0: the dot SURVIVES — 73.0 is a whole number, so String()
     // prints "73" while the SHELL_NOTES key is "73.0"; re-append a dropped
