@@ -1,3 +1,27 @@
+# v73.77 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-31 - "in reconciliation card, editing the entries, it types right to left instead of left to right, also allow quicksum like the other fields and use the full keyboard, plan first" -> "Build and ship v73.77"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.77, sw cache
+finances-pwa-v73.77 pushed to https://github.com/jblagana/finance-app.git (main).
+
+Diagnosis (verified in code): the recon amount input carried inputmode="decimal" - the
+numeric keypad anchors the caret at the right edge (digits appeared right-to-left) and has
+no operators, so quick sums were impossible. The rest of the app already solved both (v71:
+f_amount is a plain text input, full keyboard, parsed through evalExpr).
+- app.js: reconRowHTML drops inputmode (plain text, full keyboard, L-to-R caret); the
+  input handler routes the typed value through reconParseInput (evalExpr quick sums -
+  '12850+22754.04' / '35604-225' compute live; a mid-typing expression like '12000-'
+  evaluates to null and falls back to the plain number so the delta / Will-file preview
+  never blanks out). reconParseInput exported on FinApp for the smoke.
+- smoke PART 29: +5 asserts (quick sum, plus-sum, mid-typing fallback, plain number,
+  no inputmode in the rendered input, plain text field).
+- check_site: new v73.77 pin (reconParseInput + full-keyboard input + export).
+- SHELL_NOTES 73.77; sw cache finances-pwa-v73.77.
+
+Gates: release.ps1 v73.77 all green - check_site (repo + root mirror; new v73.77 pin),
+parser, node --check x4, both smokes (PART 29 v73.77 asserts passing). Gate slip fixed
+mid-run: first gate run was red on "SHELL_NOTES has a note for the RUNNING version" -
+the 73.77 What's-new note was missing; added, re-ran green.
+
 # Fin.AI — instruction log
 
 The instruction log for this project (crash-recovery record).

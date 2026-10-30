@@ -1787,6 +1787,17 @@ waitReady().then(async function (F) {
       var rows29c = (F.state.moneyLog || []).filter(function (e) { return e.l === 'Reconcile'; });
       ok(rows29c.length === 3 && close(rows29c[2].n, -11615.67), 'v73.73: the debit reconcile files ONE Reconcile · LandBank row (got ' + rows29c.length + ' x ' + (rows29c[2] && rows29c[2].n) + ')');
       ok(close(es29c.cash.total, 62384.33), 'v73.73: the total mirrors the debit edit (got ' + es29c.cash.total.toFixed(2) + ')');
+      // ---- v73.77: quick sums + full keyboard in the recon inputs ----
+      ok(F.reconParseInput('10000-500') === 9500, 'v73.77: a quick sum computes (10000-500 -> 9500; got ' + F.reconParseInput('10000-500') + ')');
+      ok(F.reconParseInput('12850+22754.04') === 35604.04, 'v73.77: a plus-sum computes (got ' + F.reconParseInput('12850+22754.04') + ')');
+      ok(F.reconParseInput('12000-') === 12000, 'v73.77: a mid-typing expression falls back to the plain number (got ' + F.reconParseInput('12000-') + ')');
+      ok(F.reconParseInput('35604') === 35604, 'v73.77: a plain number still parses (got ' + F.reconParseInput('35604') + ')');
+      F.reconStartEdit('Maya CC');
+      await tick();
+      ok(reconEl29.innerHTML.indexOf('inputmode="decimal"') === -1, 'v73.77: the recon input has no inputmode (full keyboard, L-to-R caret)');
+      ok(reconEl29.innerHTML.indexOf('type="text" autocomplete="off" value=') !== -1, 'v73.77: the recon input is a plain text field');
+      F.reconCancel();
+      await tick();
       // cancel: the edit is dropped, nothing files
       F.reconSetInput('Maya CC', 1);
       await tick();

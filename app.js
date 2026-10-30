@@ -986,8 +986,10 @@
     el.querySelectorAll('input[data-recon]').forEach(function (inp) {
       inp.onclick = function (ev) { ev.stopPropagation(); };
       inp.oninput = function () {
-        var v = parseFloat(inp.value);
-        if (isNaN(v)) return;
+        // v73.77: quick sums — the typed value runs through reconParseInput
+        // (evalExpr + last-valid fallback), so '12850+22754.04' computes live.
+        var v = reconParseInput(inp.value);
+        if (v == null || isNaN(v)) return;
         reconSetInput(inp.getAttribute('data-recon'), v);
       };
     });
@@ -1034,7 +1036,10 @@
       ? '<div class="recondelta ' + (d > 0 ? 'up' : 'dn') + '">' + (d > 0 ? '+' : '\u2212') + money(Math.abs(d)) + filLine + '</div>'
       : '';
     var amt = editing
-      ? '<input type="text" inputmode="decimal" autocomplete="off" value="' + (editing && reconState.vals[a.id] != null ? reconState.vals[a.id] : cur).toFixed(2) + '" data-recon="' + esc(a.id) + '">'
+      // v73.77: FULL keyboard (no inputmode) — the numeric keypad anchors the
+      // caret right (digits appeared right-to-left) and has no operators, so
+      // quick sums were impossible. Same treatment as f_amount (v71).
+      ? '<input type="text" autocomplete="off" value="' + (editing && reconState.vals[a.id] != null ? reconState.vals[a.id] : cur).toFixed(2) + '" data-recon="' + esc(a.id) + '">'
       : '<b>' + money(cur) + '</b>';
     return '<div class="lnrow' + (a.isChild ? ' child' : '') + (a.isTotal ? ' total' : '') + '" data-recon="' + esc(a.id) + '">'
       + '<div class="lnnm">' + esc(a.name) + (a.sub2 ? '<div class="sub2">' + a.sub2 + '</div>' : '') + '</div>'
@@ -1072,6 +1077,16 @@
       t += v; used = true;
     });
     return used ? r2(t) : d.totalLive;
+  }
+  // v73.77: parse a typed recon amount — evalExpr (the same quick-sum
+  // evaluator f_amount uses) first, so '12850+22754.04' or '35604-225'
+  // compute live; a mid-typing expression ('12000-') evaluates to null, in
+  // which case fall back to the plain number so the delta / Will-file
+  // preview never blanks out while you type.
+  function reconParseInput(raw) {
+    var v = evalExpr(raw);
+    if (v == null) v = parseFloat(raw);
+    return v;
   }
   function reconSetInput(id, v) {
     if (v == null || !isFinite(v)) return;
@@ -8115,12 +8130,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.76, live: new Date(2026, 9, 31, 2, 7) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.77, live: new Date(2026, 9, 31, 3, 16) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.77': [
+      'Fixed: the \u201cLive numbers\u201d edit field typed right-to-left (the numeric keypad anchored the caret at the right edge). It now uses the full keyboard like the Add sheet — and quick sums work in it too: type 12850+22754.04 or 35604-225 and it computes as you type.'
+    ],
     '73.76': [
       'New: the \u201cLive numbers\u201d card now folds by default \u2014 just a header bar with a chevron. Tap the header to expand it, or tap any amount to open it straight into editing. After you save (or cancel) a reconcile it folds back.'
     ],
@@ -9170,6 +9188,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     renderCcCards: renderCcCards, // v73.69: the CC summary card render (smoke drives the 2-cell rows)
     reconData: reconData, // v73.73: the Reconcile card data (smoke drives the live values + hierarchy)
     reconSetInput: reconSetInput, // v73.73: the row edit (smoke drives the absorption rule)
+    reconParseInput: reconParseInput, // v73.77: the quick-sum parser (evalExpr + fallback)
     reconChanged: reconChanged, // v73.73: which single row files (the mock's no-double-count rule)
     reconSave: reconSave, // v73.73: the save (re-anchor + the 'Reconcile' row)
     reconCancel: reconCancel, // v73.73: the cancel (the edit is dropped)

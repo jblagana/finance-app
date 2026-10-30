@@ -1783,6 +1783,13 @@ def main():
           and "reconToggle: reconToggle" in js
           and ".ln .lnchev.open{transform:rotate(90deg)}" in html
           and ".ln.folded .lnbody{display:none}" in html)
+    check("v73.77 (boss: 'types right to left' + 'allow quicksum like the other fields and use the full keyboard'): the recon amount input drops inputmode=decimal (the numeric keypad anchored the caret right and had no operators) -> plain text, full keyboard, same as f_amount (v71); the typed value runs through reconParseInput (evalExpr quick sums + last-valid-number fallback so a mid-typing '12000-' never blanks the delta/Will-file preview); reconParseInput exported for the smoke",
+          "function reconParseInput(raw) {" in js
+          and "var v = evalExpr(raw);" in js
+          and "if (v == null) v = parseFloat(raw);" in js
+          and "var v = reconParseInput(inp.value);" in js
+          and "reconParseInput: reconParseInput" in js
+          and "type=\"text\" autocomplete=\"off\" value=\"" in js)
     check("v73.72 (boss-approved: 'ipf: file theirs as a card charge' + 'increase free cash by the same amount' — the credit converted to cash, since the repayment lands as cash and tmb never files a ledger row): an 'I paid for them' on a CARD files the friend's share as its own card_charge (the bank charged the FULL bill) + a cash_in for the same amount (the advance); net on the boss's own free cash = mine commits, theirs neutralizes. The entry carries the pair handles (theirsTxnId/theirsBumpId) so add-undo / entry-delete / person-delete / edit all remove-and-restore BOTH legs. The one-shot backfill (migrateIpfTheirs, stamp-gated, idempotent) files past entries: post-base get charge + advance, pre-base get the advance ONLY (their card spend is already inside the sheet's base — filing the charge would double-count card owed); runs on boot (after migratePrepayBy) and on import",
           "function fileIpfTheirs(e, p, fileCharge, fileBump)" in js
           and "function migrateIpfTheirs()" in js
