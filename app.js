@@ -923,6 +923,13 @@
   // an amount is being edited. The file-one-row rules are unchanged (the
   // directly-edited row files; a total edit is absorbed by Cash; no zero
   // rows).
+  // v73.76: the card FOLDS BY DEFAULT — collapsed state is just the header
+  // bar with a chevron. Tapping the header toggles it; tapping an amount
+  // auto-expands (reconStartEdit sets reconOpen). While an edit is in
+  // progress the card stays open (a keystroke re-render must not collapse
+  // it mid-edit); cancel/save close the edit and the card folds back.
+  var reconOpen = false;
+  function reconToggle() { reconOpen = !reconOpen; reconRender(); }
   function reconRender() {
     var el = byId('reconcile');
     if (!el) return;
@@ -931,7 +938,10 @@
     el.style.display = '';
     var cc = ccDue();
     var dueLbl = cc ? dayMonth(cc.dueDate) : '';
-    var h = '<section class="card ln"><h2 style="margin-top:0">Live numbers</h2>';
+    var open = reconOpen || !!(reconState && reconState.touch);
+    var h = '<section class="card ln' + (open ? '' : ' folded') + '">'
+      + '<div class="lnhead" id="lnHead"><h2 style="margin-top:0">Live numbers</h2><span class="lnchev' + (open ? ' open' : '') + '">\u25b8</span></div>'
+      + '<div class="lnbody">';
     if (d.hasCards) {
       h += '<div class="lngrp">Cards</div>';
       d.cards.forEach(function (c) {
@@ -951,7 +961,7 @@
       + (ch
         ? '<div class="reconfile"><span>Reconcile \u00b7 ' + esc(ch.key) + '</span><b style="color:' + (ch.delta > 0 ? 'var(--ok)' : 'var(--bad)') + '">' + (ch.delta > 0 ? '+' : '\u2212') + money(Math.abs(ch.delta)) + '</b></div>'
         : '')
-      + '</div></section>';
+      + '</div></div></section>';
     el.innerHTML = h;
     reconBarUpdate(ch);
     reconBind();
@@ -968,6 +978,8 @@
   function reconBind() {
     var el = byId('reconcile');
     if (!el) return;
+    var head = el.querySelector('#lnHead');
+    if (head) head.onclick = reconToggle;
     el.querySelectorAll('.lnrow[data-recon]').forEach(function (row) {
       row.onclick = function () { reconStartEdit(row.getAttribute('data-recon')); };
     });
@@ -995,6 +1007,7 @@
     else if (id === 'cash') d.debits.forEach(function (r) { if (r.isCash) live = r.live; });
     else { d.cards.forEach(function (r) { if (r.name === id) live = r.live; }); d.debits.forEach(function (r) { if (r.name === id) live = r.live; }); }
     if (live == null) return;
+    reconOpen = true; // v73.76: tapping an amount auto-expands a folded card
     reconState.touch = id;
     reconState.vals[id] = live;
     reconRender();
@@ -1165,11 +1178,13 @@
     fileReconcileRow(ch.key, kind, ch.delta);
     saveBase(b, { skipAdjustment: true }); // the Reconcile row IS the audit — no Adjustment on top
     reconState = null;
+    reconOpen = false; // v73.76: a finished edit folds the card back
     emit('txn');
     snack('Reconciled ' + esc(ch.key) + ' — filed ' + (ch.delta > 0 ? '+' : '\u2212') + money(Math.abs(ch.delta)), function () {});
   }
   function reconCancel() {
     reconState = null;
+    reconOpen = false; // v73.76: a dropped edit folds the card back
     reconRender();
   }
   function effectiveSnap() {
@@ -8100,12 +8115,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.75, live: new Date(2026, 9, 31, 1, 14) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.76, live: new Date(2026, 9, 31, 2, 7) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.76': [
+      'New: the \u201cLive numbers\u201d card now folds by default \u2014 just a header bar with a chevron. Tap the header to expand it, or tap any amount to open it straight into editing. After you save (or cancel) a reconcile it folds back.'
+    ],
     '73.75': [
       'New: the Reconcile cards are now ONE compact \u201cLive numbers\u201d card on the Ledger tab (where the Spend-pace card used to be) — tap an amount to edit it, and the \u201cWill file on save\u201d preview only appears while you\u2019re editing. The Money tab\u2019s Projection card is gone (the tab is just Coming up now), and the ledger entries lost the \u201cmonth spent X \u2192 X\u201d chip — each entry now has its own \u270e edit button next to the \u2715.'
     ],
@@ -9157,6 +9175,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     reconCancel: reconCancel, // v73.73: the cancel (the edit is dropped)
     reconRender: reconRender, // v73.73: the render (smoke reads the card HTML)
     reconStartEdit: reconStartEdit, // v73.75: the tap-to-edit (smoke drives the input appearing)
+    reconToggle: reconToggle, // v73.76: the fold/unfold (smoke drives the default-fold state)
     reconRowFilesAs: reconRowFilesAs, // v73.73: the absorption rule (smoke checks total→Cash)
     fileReconcileRow: fileReconcileRow, // v73.73: the audit row (smoke checks the ledger)
     setMlFilters: function (cat, m) { mlFilterCat = cat; mlFilterM = m || ''; mlShownCount = 5; }, // v73.70: test hook (the smoke drives the method filter without a DOM onchange)

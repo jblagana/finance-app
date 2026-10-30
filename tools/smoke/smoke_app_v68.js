@@ -1694,6 +1694,14 @@ waitReady().then(async function (F) {
       F.emit('ui');
       ok(reconEl29.style.display === '', 'v73.74: boot (emit ui) unhides #reconcile (got ' + JSON.stringify(reconEl29.style.display) + ')');
       ok(reconEl29.innerHTML.indexOf('Maya CC') !== -1 && reconEl29.innerHTML.indexOf('Total cash') !== -1, 'v73.74: the card rows render into #reconcile (Maya CC + Total cash present)');
+      // ---- v73.76: the card FOLDS BY DEFAULT (boss-approved mockup) —
+      // collapsed state = header bar + chevron only; tap to expand; a
+      // tap-to-edit auto-expands; save/cancel fold it back ----
+      ok(/class="card ln folded"/.test(reconEl29.innerHTML), 'v73.76: the Live-numbers card is folded by default at boot');
+      ok(reconEl29.innerHTML.indexOf('lnchev') !== -1, 'v73.76: the folded card shows the chevron header');
+      F.reconToggle();
+      ok(!/class="card ln folded"/.test(reconEl29.innerHTML), 'v73.76: tapping the header expands the card');
+      ok(/lnchev open/.test(reconEl29.innerHTML), 'v73.76: the chevron flips to open');
       // ---- v73.75: the COMPACT Live-numbers card (one card, two groups,
       // tap-to-edit, no LIVE chips, no audit-only note, Will-file box only
       // while editing) ----
@@ -1710,8 +1718,10 @@ waitReady().then(async function (F) {
       // the Will-file row appears only once the edit moves the number (no zero rows)
       F.reconSetInput('Maya CC', 3900);
       ok(reconEl29.innerHTML.indexOf('class="reconfile"') !== -1, 'v73.75: the Will-file row appears while the edit has a delta');
+      ok(!/class="card ln folded"/.test(reconEl29.innerHTML), 'v73.76: a tap-to-edit auto-expands the folded card');
       F.reconCancel();
       ok(reconEl29.innerHTML.indexOf('<input') === -1, 'v73.75: cancel re-renders back to plain amounts');
+      ok(/class="card ln folded"/.test(reconEl29.innerHTML), 'v73.76: cancel folds the card back');
       // ---- v73.75: the ledger entries — no 'month spent' chip, ✎ per entry ----
       var mlEl29 = __elMap['mlBody'];
       ok(mlEl29.innerHTML.indexOf('month spent') === -1, 'v73.75: the money-log rows carry no month-spent chip');

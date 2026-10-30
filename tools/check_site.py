@@ -1769,6 +1769,20 @@ def main():
           and "paceBox" not in html
           and ".lnrow{display:flex" in html
           and ".lngrp{" in html)
+    check("v73.76 (boss-approved mockup edit): the compact Live-numbers card FOLDS BY DEFAULT — collapsed state is just the header bar with a chevron; tapping the header toggles it, tapping an amount auto-expands (reconStartEdit sets reconOpen), and save/cancel fold it back. reconToggle exported for the smoke",
+          "var reconOpen = false;" in js
+          and "function reconToggle() { reconOpen = !reconOpen; reconRender(); }" in js
+          and "var open = reconOpen || !!(reconState && reconState.touch);" in js
+          and "class=\"card ln'" in js
+          and "(open ? '' : ' folded')" in js
+          and 'id="lnHead"' in js
+          and "head.onclick = reconToggle;" in js
+          and "reconOpen = true; // v73.76: tapping an amount auto-expands a folded card" in js
+          and "reconOpen = false; // v73.76: a finished edit folds the card back" in js
+          and "reconOpen = false; // v73.76: a dropped edit folds the card back" in js
+          and "reconToggle: reconToggle" in js
+          and ".ln .lnchev.open{transform:rotate(90deg)}" in html
+          and ".ln.folded .lnbody{display:none}" in html)
     check("v73.72 (boss-approved: 'ipf: file theirs as a card charge' + 'increase free cash by the same amount' — the credit converted to cash, since the repayment lands as cash and tmb never files a ledger row): an 'I paid for them' on a CARD files the friend's share as its own card_charge (the bank charged the FULL bill) + a cash_in for the same amount (the advance); net on the boss's own free cash = mine commits, theirs neutralizes. The entry carries the pair handles (theirsTxnId/theirsBumpId) so add-undo / entry-delete / person-delete / edit all remove-and-restore BOTH legs. The one-shot backfill (migrateIpfTheirs, stamp-gated, idempotent) files past entries: post-base get charge + advance, pre-base get the advance ONLY (their card spend is already inside the sheet's base — filing the charge would double-count card owed); runs on boot (after migratePrepayBy) and on import",
           "function fileIpfTheirs(e, p, fileCharge, fileBump)" in js
           and "function migrateIpfTheirs()" in js

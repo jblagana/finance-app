@@ -6,6 +6,36 @@ The instruction log for this project (crash-recovery record).
 (`https://github.com/jblagana/finance-app.git`, branch `main`) — a local
 commit is not done.
 
+# v73.76 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-31 - "fold the live numbers card by default, show mock" -> "Approve - build v73.76 on this mockup"
+Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.76, sw cache
+`finances-pwa-v73.76` pushed to `https://github.com/jblagana/finance-app.git` (main).
+
+Boss-approved mockup edit (C:\Users\Jan\Muji\mockup_compact_livenumbers.html): the compact
+"Live numbers" card (v73.75) now FOLDS BY DEFAULT — collapsed state is just the header bar
+with a chevron. Tapping the header toggles it; tapping an amount auto-expands straight into
+editing; save/cancel fold it back.
+- app.js: `reconOpen` flag + `reconToggle()`; reconRender renders the header bar
+  (`#lnHead` + `.lnchev`, open class rotates the chevron) and the `.lnbody` wrapper; the
+  section carries `folded` when `!reconOpen && no edit in progress` (an edit keeps the card
+  open across keystroke re-renders). reconBind wires `#lnHead` onclick -> reconToggle.
+  reconStartEdit sets reconOpen=true (auto-expand); reconSave/reconCancel reset it to false
+  (fold back). reconToggle exported on FinApp for the smoke.
+- index.html: `.ln .lnhead` (flex header, uppercase title), `.lnchev` (+ `.open` rotate),
+  `.ln.folded .lnbody{display:none}`.
+- SHELL_NOTES 73.76; sw cache finances-pwa-v73.76.
+
+Gates: release.ps1 v73.76 all green — check_site (repo + root mirror; new v73.76 pin),
+parser, node --check x4, both smokes — PART 29 grew the fold asserts (folded at boot,
+chevron present, toggle expands + chevron flips, tap-to-edit auto-expands, cancel folds
+back).
+
+Gate slip fixed mid-run: the v73.76 pin's first two attempts at the folded-class clause
+failed on python string-literal escaping (`"class=\"card ln'..." in js` — the backslash
+escapes in the pin source were NOT the bytes in app.js; diagnosed with a byte-level probe
+evaluating each clause, then split the clause into two plain substrings with no escapes:
+`class="card ln'` + `(open ? '' : ' folded')`).
+
 # v73.75 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-30 - "approved, build and ship" (mockup_compact_livenumbers.html — projection + pace cards out, compact Live-numbers card in the pace slot, ✎+✕ per ledger entry, no month-spent chip)
 Status: **done** — commit (this one, one-commit release) with SHELL_RELEASE 73.75, sw cache

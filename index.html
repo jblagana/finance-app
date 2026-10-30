@@ -427,7 +427,14 @@ font-size:10px;font-weight:800;letter-spacing:.4px;color:var(--mut)}
 .ccrow .foot .src.manual{color:var(--warn);border-color:rgba(255,196,92,.4)}
 .ccrow .foot .hint{flex:1}
 /* v73.75: the compact Live-numbers card (Ledger tab, the old Spend-pace
-   slot) — tap-to-edit rows, no LIVE chips, Will-file box only while editing */
+   slot) — tap-to-edit rows, no LIVE chips, Will-file box only while editing
+   v73.76: the card FOLDS BY DEFAULT — header bar + chevron only, tap to
+   expand, tap an amount to auto-expand */
+.ln .lnhead{display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin:0}
+.ln .lnhead h2{font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--mut);margin:0}
+.ln .lnchev{font-size:12px;color:var(--mut);transition:transform .15s}
+.ln .lnchev.open{transform:rotate(90deg)}
+.ln.folded .lnbody{display:none}
 .lngrp{font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin:12px 0 2px}
 .lnrow{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:6px 2px;cursor:pointer}
 .lnrow .lnnm{flex:1;min-width:0;font-size:13.5px;font-weight:700}
