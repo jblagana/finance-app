@@ -1796,6 +1796,23 @@ waitReady().then(async function (F) {
       await tick();
       ok(reconEl29.innerHTML.indexOf('inputmode="decimal"') === -1, 'v73.77: the recon input has no inputmode (full keyboard, L-to-R caret)');
       ok(reconEl29.innerHTML.indexOf('type="text" autocomplete="off" value=') !== -1, 'v73.77: the recon input is a plain text field');
+      // ---- v73.78: the input shows the RAW typed text (caret + quick-sum
+      // fix) — re-rendering with the parsed number reset the caret to 0
+      // (digits typed right-to-left: 4→34→234→5234) and clobbered mid-typing
+      // expressions ----
+      F.reconSetInput('Maya CC', 4325, '4325');
+      await tick();
+      ok(reconEl29.innerHTML.indexOf('value="4325"') !== -1, 'v73.78: the input keeps the RAW typed text (4325, not 4325.00) (got ' + (reconEl29.innerHTML.match(/value="([^"]*)"/) || [])[1] + ')');
+      F.reconSetInput('Maya CC', 9500, '10000-500');
+      await tick();
+      ok(reconEl29.innerHTML.indexOf('value="10000-500"') !== -1, 'v73.78: a mid-typing quick-sum expression is NOT clobbered by the parsed value');
+      // the delta is the COMPUTED value minus live (9500 − 3900 = 5,600 —
+      // Maya CC was reconciled to 3900 earlier in this part) — the expression
+      // is the input text, the computed number drives the preview
+      ok(reconEl29.innerHTML.indexOf('5,600.00') !== -1, 'v73.78: the delta preview shows the COMPUTED value (9500 − live 3900 = 5,600.00) while the input shows the expression');
+      F.reconSetInput('Maya CC', 12000, '12000-');
+      await tick();
+      ok(reconEl29.innerHTML.indexOf('value="12000-"') !== -1, 'v73.78: a trailing operator mid-typing stays in the input (fallback number drives the preview)');
       F.reconCancel();
       await tick();
       // cancel: the edit is dropped, nothing files

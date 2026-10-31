@@ -1,3 +1,30 @@
+# v73.78 entry (prepended to INSTRUCTIONS.md)
+## 2026-10-31 - "typing still rtl. example when i wanna type 4325, it types 4 then the cursor is moves to the left so when i type 3, the whole thing becomes 34, then typing 2 puts it again at the left giving 234, and finally 5234, find this bug" -> "Build and ship v73.78"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.78, sw cache
+finances-pwa-v73.78 pushed to https://github.com/jblagana/finance-app.git (main).
+
+Diagnosis (traced in code, the boss's exact sequence reproduced): v73.77's full-keyboard
+fix was correct but incomplete — reconSetInput re-renders the whole card on EVERY
+keystroke and recreated the input with value = parsed number .toFixed(2), then restored
+the caret from the NEW input's selectionStart, which is always 0 (the fresh element was
+never focused). Caret 0 + each keystroke re-render = every digit inserted at the left
+edge: 4 → 34 → 234 → 5234. The same re-render also clobbered quick-sum text mid-typing
+(typing '12000+' got replaced by '12000.00' once the expression first evaluated).
+- app.js: reconState.raw keeps the EXACT typed text per row; reconRowHTML renders the
+  input value from reconInputValue(id) (raw text, seeded from live.toFixed(2) on
+  reconStartEdit) instead of the parsed number; reconSetInput captures selectionStart
+  from the OLD input BEFORE reconRender() and restores it (clamped to the new value's
+  length) on the new input; the oninput handler passes inp.value through as raw.
+- smoke PART 29: +4 asserts (raw text kept: '4325' not '4325.00'; expression
+  '10000-500' survives the re-render; the delta preview shows the COMPUTED 9,500.00
+  while the input shows the expression; trailing operator '12000-' stays in the input).
+- check_site: new v73.78 pin (reconInputValue + raw passthrough + pre-render caret
+  capture).
+- SHELL_NOTES 73.78; sw cache finances-pwa-v73.78.
+
+Gates: release.ps1 v73.78 all green - check_site (repo + root mirror; new v73.78 pin),
+parser, node --check x4, both smokes (PART 29 v73.78 asserts passing).
+
 # v73.77 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-31 - "in reconciliation card, editing the entries, it types right to left instead of left to right, also allow quicksum like the other fields and use the full keyboard, plan first" -> "Build and ship v73.77"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.77, sw cache

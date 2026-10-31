@@ -988,9 +988,12 @@
       inp.oninput = function () {
         // v73.77: quick sums — the typed value runs through reconParseInput
         // (evalExpr + last-valid fallback), so '12850+22754.04' computes live.
+        // v73.78: the RAW text is passed through too — the input must keep
+        // showing what was typed (an expression, a trailing '-'), never the
+        // parsed number, or the text clobbers mid-typing.
         var v = reconParseInput(inp.value);
         if (v == null || isNaN(v)) return;
-        reconSetInput(inp.getAttribute('data-recon'), v);
+        reconSetInput(inp.getAttribute('data-recon'), v, inp.value);
       };
     });
     var go = byId('reconBarGo');
@@ -1039,7 +1042,10 @@
       // v73.77: FULL keyboard (no inputmode) — the numeric keypad anchors the
       // caret right (digits appeared right-to-left) and has no operators, so
       // quick sums were impossible. Same treatment as f_amount (v71).
-      ? '<input type="text" autocomplete="off" value="' + (editing && reconState.vals[a.id] != null ? reconState.vals[a.id] : cur).toFixed(2) + '" data-recon="' + esc(a.id) + '">'
+      // v73.78: value = the RAW typed text (reconInputValue), never the parsed
+      // number — the parsed value reset the caret to 0 and destroyed
+      // mid-typing quick-sum expressions.
+      ? '<input type="text" autocomplete="off" value="' + esc(reconInputValue(a.id)) + '" data-recon="' + esc(a.id) + '">'
       : '<b>' + money(cur) + '</b>';
     return '<div class="lnrow' + (a.isChild ? ' child' : '') + (a.isTotal ? ' total' : '') + '" data-recon="' + esc(a.id) + '">'
       + '<div class="lnnm">' + esc(a.name) + (a.sub2 ? '<div class="sub2">' + a.sub2 + '</div>' : '') + '</div>'
@@ -1088,10 +1094,21 @@
     if (v == null) v = parseFloat(raw);
     return v;
   }
-  function reconSetInput(id, v) {
+  // v73.78: the input shows the RAW typed text (reconState.raw), never the
+  // parsed number — re-rendering with the parsed value is what clobbered
+  // quick-sum text mid-typing AND reset the caret (the fresh input's
+  // selectionStart is 0, so each digit landed at the left edge: 4→34→234→5234).
+  function reconInputValue(id) {
+    if (reconState && reconState.raw && reconState.raw[id] != null) return reconState.raw[id];
+    var v = reconState && reconState.vals[id] != null ? reconState.vals[id] : 0;
+    return (v || 0).toFixed(2);
+  }
+  function reconSetInput(id, v, raw) {
     if (v == null || !isFinite(v)) return;
-    if (!reconState) reconState = { touch: null, vals: {} };
+    if (!reconState) reconState = { touch: null, vals: {}, raw: {} };
+    if (!reconState.raw) reconState.raw = {}; // reconStartEdit creates it without raw
     reconState.vals[id] = v;
+    if (raw != null) reconState.raw[id] = raw; // keep the exact typed text
     if (id === 'total') {
       // the correction is absorbed by Cash: debits stay put, Cash = total − debits
       var d = reconData();
@@ -1101,6 +1118,12 @@
       reconState.vals.cash = r2(v - other);
     }
     reconState.touch = id; // the LAST edit decides which row files
+    // v73.78: capture the caret from the OLD input BEFORE the re-render —
+    // the old input is the focused one; reading selectionStart after
+    // reconRender() hit the NEW input, where it's always 0 (left edge).
+    var el0 = byId('reconcile');
+    var old = el0 && el0.querySelector('input[data-recon="' + id + '"]');
+    var caret = old && old.selectionStart != null ? old.selectionStart : (old && old.value ? old.value.length : 0);
     // v73.75: full re-render on every keystroke, then focus/caret restore on
     // the edited row's input — the card is ~7 rows, so a full repaint is
     // cheap and keeps the delta lines / Will-file box / save bar in lockstep
@@ -1109,7 +1132,8 @@
     var el = byId('reconcile');
     var inp = el && el.querySelector('input[data-recon="' + id + '"]');
     if (inp) {
-      var caret = inp.selectionStart != null ? inp.selectionStart : (inp.value ? inp.value.length : 0);
+      var max = inp.value ? inp.value.length : 0;
+      if (caret > max) caret = max;
       inp.focus();
       try { inp.setSelectionRange(caret, caret); } catch (e) {}
     }
@@ -8130,12 +8154,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.77, live: new Date(2026, 9, 31, 3, 16) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.78, live: new Date(2026, 9, 31, 13, 36) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.78': [
+      'Fixed: the \u201cLive numbers\u201d edit field still typed right-to-left (4 \u2192 34 \u2192 234 \u2192 5234) \u2014 every keystroke re-rendered the field with the parsed number, which reset the caret to the left edge. The field now keeps your exact typed text, so digits land left-to-right and quick sums like 12850+22754.04 are no longer clobbered mid-typing.'
+    ],
     '73.77': [
       'Fixed: the \u201cLive numbers\u201d edit field typed right-to-left (the numeric keypad anchored the caret at the right edge). It now uses the full keyboard like the Add sheet — and quick sums work in it too: type 12850+22754.04 or 35604-225 and it computes as you type.'
     ],

@@ -1734,7 +1734,7 @@ def main():
           and "prepayBy: pb" in js)
     check("v73.73 (boss-approved mockup_reconcile_money.html): the RECONCILE feature on the Money tab - match the app's running numbers to what the bank shows, SEPARATE from rebase (rebase keeps its 'Adjustment' rows; reconcile files 'Reconcile · <account>' = NEW - LIVE, the discrepancy found, not the delta from the anchor). Two cards: Cards (each CC, live balance, limit + due line) and Cash & Debit (Total cash -> Cash + the debit accounts, the boss's one-wallet hierarchy). Only the DIRECTLY-edited row files: edit Total cash -> the correction is absorbed by Cash (debits stay put) -> ONE Reconcile · Cash row; edit Cash or a debit -> its own row, the total mirrors; no zero rows. The save re-anchors the base to the live values and zeroes the overlay (like rebase), files the Reconcile row (k='a' family so the ✕ reverses the base move; label 'Reconcile' keeps it distinct from a rebase 'Adjustment'), and skips the Adjustment (skipAdjustment). A reconciled card balance flows straight into its due (the due derives from the live balance). The per-debit live display distributes the global cash overlay proportionally to the base values (exact when the overlay is zero); the total is always exact (base - adj.cash)",
           "function reconData()" in js
-          and "function reconSetInput(id, v)" in js
+          and "function reconSetInput(id, v, raw)" in js
           and "function reconChanged(d)" in js
           and "function reconSave()" in js
           and "function fileReconcileRow(name, kind, diff)" in js
@@ -1790,6 +1790,13 @@ def main():
           and "var v = reconParseInput(inp.value);" in js
           and "reconParseInput: reconParseInput" in js
           and "type=\"text\" autocomplete=\"off\" value=\"" in js)
+    check("v73.78 (boss: 'typing still rtl — 4 then 34 then 234 then 5234'): the recon input now shows the RAW typed text (reconState.raw / reconInputValue), never the parsed number — the parsed value reset the caret to 0 on every keystroke re-render (digits landed at the left edge) and clobbered mid-typing quick-sum expressions. The caret is captured from the OLD input BEFORE reconRender() and restored (clamped) on the new one; the oninput handler passes the raw text through to reconSetInput",
+          "function reconInputValue(id) {" in js
+          and "reconState.raw[id] = raw; // keep the exact typed text" in js
+          and "reconSetInput(inp.getAttribute('data-recon'), v, inp.value);" in js
+          and "var old = el0 && el0.querySelector('input[data-recon=\"' + id + '\"]');" in js
+          and "var caret = old && old.selectionStart != null ? old.selectionStart : (old && old.value ? old.value.length : 0);" in js
+          and "value=\"' + esc(reconInputValue(a.id)) + '\"" in js)
     check("v73.72 (boss-approved: 'ipf: file theirs as a card charge' + 'increase free cash by the same amount' — the credit converted to cash, since the repayment lands as cash and tmb never files a ledger row): an 'I paid for them' on a CARD files the friend's share as its own card_charge (the bank charged the FULL bill) + a cash_in for the same amount (the advance); net on the boss's own free cash = mine commits, theirs neutralizes. The entry carries the pair handles (theirsTxnId/theirsBumpId) so add-undo / entry-delete / person-delete / edit all remove-and-restore BOTH legs. The one-shot backfill (migrateIpfTheirs, stamp-gated, idempotent) files past entries: post-base get charge + advance, pre-base get the advance ONLY (their card spend is already inside the sheet's base — filing the charge would double-count card owed); runs on boot (after migratePrepayBy) and on import",
           "function fileIpfTheirs(e, p, fileCharge, fileBump)" in js
           and "function migrateIpfTheirs()" in js
