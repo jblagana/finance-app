@@ -1116,7 +1116,7 @@
     var el = byId('reconcile');
     if (!el) return;
     var d = reconData();
-    if (!d || (!d.hasCards && !d.hasCash)) { el.style.display = 'none'; el.innerHTML = ''; reconBarUpdate(null); return; }
+    if (!d || (!d.hasCards && !d.hasCash)) { el.style.display = 'none'; el.innerHTML = ''; return; }
     el.style.display = '';
     var cc = ccDue();
     var dueLbl = cc ? dayMonth(cc.dueDate) : '';
@@ -1143,19 +1143,17 @@
       + (ch
         ? '<div class="reconfile"><span>Reconcile \u00b7 ' + esc(ch.key) + '</span><b style="color:' + (ch.delta > 0 ? 'var(--ok)' : 'var(--bad)') + '">' + (ch.delta > 0 ? '+' : '\u2212') + money(Math.abs(ch.delta)) + '</b></div>'
         : '')
-      + '</div></div></section>';
+      + '</div>'
+      // v73.85: the save/cancel actions live INSIDE the card (a button row
+      // under the Will-file box, visible only while an edit is in progress)
+      // — the old floating bottom band (reconBar) is gone: it covered the
+      // ledger below and read as a separate system, not part of the card.
+      + (ch
+        ? '<div class="lnacts"><button type="button" class="act ghost" id="reconCancelBtn">Cancel</button><button type="button" class="act" id="reconGoBtn">Reconcile</button></div>'
+        : '')
+      + '</div></section>';
     el.innerHTML = h;
-    reconBarUpdate(ch);
     reconBind();
-  }
-  function reconBarUpdate(ch) {
-    var bar = byId('reconBar');
-    if (!bar) return;
-    if (ch) {
-      bar.classList.add('show');
-      byId('reconBarLbl').innerHTML = '1 account will be reconciled \u00b7 net ' + (ch.delta >= 0 ? '+' : '\u2212') + money(Math.abs(ch.delta));
-      byId('reconBarGo').textContent = 'Reconcile (1)';
-    } else bar.classList.remove('show');
   }
   function reconBind() {
     var el = byId('reconcile');
@@ -1178,9 +1176,11 @@
         reconSetInput(inp.getAttribute('data-recon'), v, inp.value);
       };
     });
-    var go = byId('reconBarGo');
+    // v73.85: the actions render inside the card (reconGoBtn / reconCancelBtn)
+    // — the floating band's ids are gone.
+    var go = byId('reconGoBtn');
     if (go) go.onclick = reconSave;
-    var cx = byId('reconBarCancel');
+    var cx = byId('reconCancelBtn');
     if (cx) cx.onclick = reconCancel;
   }
   // v73.75: tap an amount to start editing it — the row re-renders with the
@@ -1227,7 +1227,10 @@
       // v73.78: value = the RAW typed text (reconInputValue), never the parsed
       // number — the parsed value reset the caret to 0 and destroyed
       // mid-typing quick-sum expressions.
-      ? '<input type="text" autocomplete="off" value="' + esc(reconInputValue(a.id)) + '" data-recon="' + esc(a.id) + '">'
+      // v73.85: same field treatment as the Add sheet's f_amount — text,
+      // full keyboard (no inputmode), autocomplete off, and the quick-sum
+      // placeholder, so the Reconcile field behaves exactly like Amount.
+      ? '<input type="text" autocomplete="off" placeholder="0.00, or a quick sum like 300-125+10" value="' + esc(reconInputValue(a.id)) + '" data-recon="' + esc(a.id) + '">'
       : '<b>' + money(cur) + '</b>';
     return '<div class="lnrow' + (a.isChild ? ' child' : '') + (a.isTotal ? ' total' : '') + '" data-recon="' + esc(a.id) + '">'
       + '<div class="lnnm">' + esc(a.name) + (a.sub2 ? '<div class="sub2">' + a.sub2 + '</div>' : '') + '</div>'
@@ -8420,12 +8423,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.84, live: new Date(2026, 10, 1, 23, 21) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.85, live: new Date(2026, 10, 2, 0, 9) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.85': [
+      'Live numbers: the Reconcile amount field now behaves exactly like the Add sheet\u2019s Amount (full keyboard, quick sums, same look) \u2014 and the Cancel / Reconcile buttons moved INTO the card itself, replacing the floating bottom band.'
+    ],
     '73.84': [
       'Fixed: a charge on a debit card (e.g. MariBank debit) showed up on the Cash line in Live numbers — the spend landed on the wallet residual instead of the account it was logged on. Now a spend (and a money-in) lands on the account you picked only; Cash carries only the legacy rows with no account. Phones already off show the true per-account split on the next boot.'
     ],

@@ -1690,6 +1690,18 @@ waitReady().then(async function (F) {
       F.reconCancel();
       ok(reconEl29.innerHTML.indexOf('<input') === -1, 'v73.75: cancel re-renders back to plain amounts');
       ok(/class="card ln folded"/.test(reconEl29.innerHTML), 'v73.76: cancel folds the card back');
+      // ---- v73.85: the actions live INSIDE the card (no floating band) ----
+      ok(reconEl29.innerHTML.indexOf('class="lnacts"') === -1, 'v73.85: no action row while no edit is in progress');
+      F.reconStartEdit('Maya CC');
+      // the recon edit input now carries the Add-sheet f_amount treatment
+      // (text + full keyboard + autocomplete off + the quick-sum placeholder)
+      ok(reconEl29.innerHTML.indexOf('placeholder="0.00, or a quick sum like 300-125+10"') !== -1, 'v73.85: the recon input matches the Add sheet f_amount (quick-sum placeholder)');
+      ok(reconEl29.innerHTML.indexOf('id="reconBar"') === -1, 'v73.85: the floating reconbar band is gone from the render');
+      F.reconSetInput('Maya CC', 3900);
+      ok(reconEl29.innerHTML.indexOf('class="lnacts"') !== -1, 'v73.85: the action row appears INSIDE the card while the edit has a delta');
+      ok(reconEl29.innerHTML.indexOf('id="reconGoBtn"') !== -1 && reconEl29.innerHTML.indexOf('id="reconCancelBtn"') !== -1, 'v73.85: the card carries its own Reconcile + Cancel buttons');
+      F.reconCancel();
+      ok(reconEl29.innerHTML.indexOf('class="lnacts"') === -1, 'v73.85: cancel drops the action row (back to plain amounts)');
       // ---- v73.75: the ledger entries — no 'month spent' chip, ✎ per entry ----
       var mlEl29 = __elMap['mlBody'];
       ok(mlEl29.innerHTML.indexOf('month spent') === -1, 'v73.75: the money-log rows carry no month-spent chip');
@@ -1763,7 +1775,9 @@ waitReady().then(async function (F) {
       F.reconStartEdit('Maya CC');
       await tick();
       ok(reconEl29.innerHTML.indexOf('inputmode="decimal"') === -1, 'v73.77: the recon input has no inputmode (full keyboard, L-to-R caret)');
-      ok(reconEl29.innerHTML.indexOf('type="text" autocomplete="off" value=') !== -1, 'v73.77: the recon input is a plain text field');
+      // v73.85 retarget: the attribute order gained the placeholder between
+      // autocomplete and value (the f_amount match)
+      ok(reconEl29.innerHTML.indexOf('type="text" autocomplete="off" placeholder="0.00, or a quick sum like 300-125+10" value=') !== -1, 'v73.77: the recon input is a plain text field');
       // ---- v73.78: the input shows the RAW typed text (caret + quick-sum
       // fix) — re-rendering with the parsed number reset the caret to 0
       // (digits typed right-to-left: 4→34→234→5234) and clobbered mid-typing

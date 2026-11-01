@@ -180,7 +180,7 @@ def main():
               # v73.75: "pace"/"paceBox"/"paceNote"/"paceRange" REMOVED — the
               # Ledger tab's Spend-pace card is gone (its slot is the compact
               # Live-numbers card, #reconcile)
-              "reconcile", "reconBar",
+              "reconcile",
               "p_repeat", "p_count", "p_countWrap", "expJson", "expCsv",
               "planSheet", "planAddBtn", "planAddClose",
               "planEditSheet", "pe_name", "pe_amount", "pe_date", "pe_scope", "peSave", "peSkip", "peDeleteAll", "peClose",
@@ -1744,8 +1744,13 @@ def main():
           and "reconSave: reconSave" in js
           and "renderPlans, reconRender]" in js
           and 'id="reconcile"' in html
-          and 'id="reconBar"' in html
-          and ".reconbar.show{display:flex}" in html
+          # v73.85: the floating reconbar band is GONE (retargeted) — the
+          # Cancel / Reconcile actions render inside the card (.lnacts row)
+          and 'id="reconBar"' not in html
+          and "reconBarUpdate" not in js
+          and ".lnacts{display:flex" in html
+          and 'id="reconGoBtn"' in js
+          and 'id="reconCancelBtn"' in js
           # v73.75: ".reconrow{display:flex" retargeted to ".lnrow{" — the compact
           # Live-numbers card rows (the reconrow markup died with the old UI)
           and ".lnrow{display:flex" in html)
@@ -1788,14 +1793,18 @@ def main():
           and "if (v == null) v = parseFloat(raw);" in js
           and "var v = reconParseInput(inp.value);" in js
           and "reconParseInput: reconParseInput" in js
-          and "type=\"text\" autocomplete=\"off\" value=\"" in js)
+          # v73.85 retarget: the recon input line gained the quick-sum
+          # placeholder (the f_amount match) between autocomplete and value
+          and "type=\"text\" autocomplete=\"off\" placeholder=\"0.00, or a quick sum like 300-125+10\" value=\"" in js)
     check("v73.78 (boss: 'typing still rtl — 4 then 34 then 234 then 5234'): the recon input now shows the RAW typed text (reconState.raw / reconInputValue), never the parsed number — the parsed value reset the caret to 0 on every keystroke re-render (digits landed at the left edge) and clobbered mid-typing quick-sum expressions. The caret is captured from the OLD input BEFORE reconRender() and restored (clamped) on the new one; the oninput handler passes the raw text through to reconSetInput",
           "function reconInputValue(id) {" in js
           and "reconState.raw[id] = raw; // keep the exact typed text" in js
           and "reconSetInput(inp.getAttribute('data-recon'), v, inp.value);" in js
           and "var old = el0 && el0.querySelector('input[data-recon=\"' + id + '\"]');" in js
           and "var caret = old && old.selectionStart != null ? old.selectionStart : (old && old.value ? old.value.length : 0);" in js
-          and "value=\"' + esc(reconInputValue(a.id)) + '\"" in js)
+          # v73.85 retarget: the input line gained the quick-sum placeholder
+          # (the f_amount match), so the value pin now includes it
+          and "value=\"' + esc(reconInputValue(a.id)) + '\" data-recon=\"" in js)
     check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
           "function seedPayTo()" in js
           and "function seedPayWith()" in js
@@ -1825,6 +1834,16 @@ def main():
           and "var attrTotal = attributedCashTotal(state.txns, lastR);" in js
           and "co.funder = cf;" in js
           and "ci.funder = cf;" in js)
+    check("v73.85 (boss: 'make the Reconcile field match the Add sheet's amount field exactly' + 'cancel/reconcile buttons in the card itself instead of a floating band'): the recon edit input now carries the Add-sheet f_amount treatment (text + full keyboard + autocomplete off + the quick-sum placeholder), and the save/cancel actions render INSIDE the Live-numbers card as the .lnacts row (reconGoBtn / reconCancelBtn) while an edit is in progress — the floating bottom band (reconBar / reconBarGo / reconBarCancel / reconBarUpdate) and its CSS are deleted",
+          """placeholder="0.00, or a quick sum like 300-125+10" value="' + esc(reconInputValue(a.id)) + '" data-recon="'""" in js
+          and 'id="reconGoBtn"' in js
+          and 'id="reconCancelBtn"' in js
+          and "var go = byId('reconGoBtn');" in js
+          and "var cx = byId('reconCancelBtn');" in js
+          and "reconBarUpdate" not in js
+          and 'id="reconBar"' not in html
+          and ".reconbar" not in html
+          and ".lnacts{display:flex" in html)
     check("v73.82 (boss: 'card balances go absurd after reconcile' — Maya CC 17,821.85 > its 10,000 limit, MariBank CC −10,770.75; diagnosis approved, fix shipped): the boot-time migratePrepayBy rebuilt the per-card split from the FULL txn history and rescaled it to the post-reconcile overlay, re-applying every pre-reconcile charge/prepay already absorbed into the reconciled base. The rebuild is now gated on lastReconAt() (the last rebasing override — money-log 'a' rows: reconcile / balance adjustment / reset): only txns logged AFTER that stamp may ride the overlay. A stored split that sums to the overlay total but is NOT the post-reconcile rebuild is the old code's smear — it is detected and replaced, so already-drifted phones self-heal on the first boot after this release. The constraint guard (cardClamp) clamps the reconciled base to [0, limit] at the entry point (typed value + the untouched cards' re-anchor) — never in the ledger math, so the discrepancy audit stays honest",
           "function lastReconAt()" in js
           and "if (created && created < lastR) return; // absorbed into the base by the later reconcile" in js

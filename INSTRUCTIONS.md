@@ -1,3 +1,30 @@
+# v73.85 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-02 - "RECONCILE CARD - Check how the Add sheet's amount field (keyboard behavior) is implemented and make the Reconcile field match it exactly. - add the 'cancel' and 'reconcile' buttons in the card itself when there's an edit, instead of a floating band"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.85, sw cache
+finances-pwa-v73.85 pushed to https://github.com/jblagana/finance-app.git (main).
+
+Change (boss-directed, no diagnosis needed):
+- The recon edit input now carries the Add sheet's f_amount treatment exactly:
+  text + full keyboard (no inputmode — quick sums need the operators) +
+  autocomplete off + the quick-sum placeholder ("0.00, or a quick sum like
+  300-125+10"). The recon field was already text/full-keyboard (v73.77); the
+  placeholder + the global input styling (15px / 11px 12px padding / 10px
+  radius, right-aligned + tabular) close the last visual gap.
+- The Cancel / Reconcile actions moved INSIDE the Live-numbers card: a .lnacts
+  button row (reconGoBtn / reconCancelBtn) renders under the Will-file box only
+  while an edit is in progress. The floating bottom band (reconBar /
+  reconBarGo / reconBarCancel + reconBarUpdate + its fixed-position CSS) is
+  deleted from index.html + app.js — it covered the ledger below and read as a
+  separate system.
+
+Gates: release.ps1 v73.85 all green - check_site (repo + root mirror; new
+v73.85 pin, 8 clauses; the v73.73 reconBar pins + the v73.77/v73.78 input-line
+pins retargeted for the placeholder), parser, node --check x4, both smokes.
+smoke PART 29 v73.85 block: the recon input carries the quick-sum placeholder;
+no action row while no edit; the action row + both buttons appear INSIDE the
+card while the edit has a delta; cancel drops the row; the floating band is
+gone from the render.
+
 # v73.84 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-01 - "i added an expense charge on maribank debit but the live numbers shows it was charged on cash, diagnose" -> "Approve the spend-attribution fix (funder from t.account + widened gate + self-heal)"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.84, sw cache

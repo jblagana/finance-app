@@ -422,9 +422,17 @@ padding:7px 14px;font-size:12.5px}
 .lnrow.child .lnnm{font-size:12.5px}
 .lnrow.total .lnnm{font-size:14px;font-weight:800}
 .lnrow .lnr{text-align:right;font-size:14px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
-.lnrow .lnr input{width:118px;background:var(--card2);border:1px solid var(--line);border-radius:9px;color:var(--ink);
-font:800 14px inherit;font-variant-numeric:tabular-nums;padding:6px 8px;text-align:right}
+/* v73.85: the edit input matches the Add sheet's f_amount exactly — the
+   global input treatment (15px, 11px 12px padding, 10px radius, full-width
+   within its cell), right-aligned + tabular. No inputmode = the FULL
+   keyboard (quick sums need the operators). */
+.lnrow .lnr{min-width:150px}
+.lnrow .lnr input{width:150px;text-align:right;font-variant-numeric:tabular-nums}
 .lnrow .lnr input:focus{outline:none;border-color:var(--acc)}
+/* v73.85: the in-card action row (Cancel / Reconcile) — replaces the
+   floating bottom band; visible only while an edit is in progress. */
+.lnacts{display:flex;gap:8px;margin-top:12px}
+.lnacts .act{flex:1;padding:11px 12px;font-size:14px;border-radius:10px}
 .recondelta{font-size:11.5px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
 .recondelta.up{color:var(--ok)}
 .recondelta.dn{color:var(--bad)}
@@ -432,12 +440,9 @@ font:800 14px inherit;font-variant-numeric:tabular-nums;padding:6px 8px;text-ali
 .lnfileh{font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-bottom:6px}
 .reconfilebox{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:12px}
 .reconfile{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;font-weight:600}
-.reconbar{position:fixed;left:0;right:0;bottom:calc(80px + env(safe-area-inset-bottom));z-index:8;
-background:rgba(12,18,32,.98);border-top:1px solid var(--line);backdrop-filter:blur(10px);
-padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:none;gap:8px;align-items:center}
-.reconbar.show{display:flex}
-.reconbarlbl{flex:1;font-size:11.5px;color:var(--mut);line-height:1.4}
-.reconbarlbl b{color:var(--ink)}
+/* v73.85: the floating recon-bar CSS (position:fixed bottom band + its
+   label styles) is removed — the actions live in the .lnacts row inside
+   the card. */
 /* v73.34: the cycle block (This/Next cycle + the With/Without salary
    toggle on the peek) — the free cash's projection, inside the hero */
 .cycleblock{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
@@ -824,11 +829,9 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
          the debit accounts); only the directly-edited row files, no zero
          rows. -->
     <div id="reconcile" style="display:none"></div>
-    <div class="reconbar" id="reconBar">
-      <div class="reconbarlbl" id="reconBarLbl"></div>
-      <button type="button" class="act ghost" id="reconBarCancel">Cancel</button>
-      <button type="button" class="act" id="reconBarGo">Reconcile</button>
-    </div>
+    <!-- v73.85: the floating reconbar band is GONE — the Cancel / Reconcile
+         actions render INSIDE the Live-numbers card (reconGoBtn /
+         reconCancelBtn in the .lnacts row) while an edit is in progress. -->
 
     <section class="card" id="txnCard">
       <div class="ml-fbar">
