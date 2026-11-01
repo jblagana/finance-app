@@ -1406,48 +1406,16 @@ waitReady().then(async function (F) {
     F.setPlans(origPlans);
     F.renderCoach();
   })().then(function () {
-    // ============ PART 25: v73.69 — the CC summary card (2-cell) ==========
-    // (boss: 'ship the 2-cell CC card on main (v73.68)'): one row per CC —
-    // name + limit + util pill, Balance | Due cells, AUTO DUE / MANUAL chip.
-    // v73.68 has no next-cycle tagging, so the auto due IS the full balance;
-    // a manual c.due override wins with the MANUAL chip.
-    console.log('\n== PART 25: v73.69 — the CC summary card (2-cell) =');
+    // ============ PART 25: v73.79 — the CC summary card is REMOVED =======
+    // (boss: 'remove the card summary in the home tab'): the v73.69 2-cell
+    // card is gone — renderCcCards is a no-op that writes nothing, and the
+    // #ccCards/#ccCardsBody ids are out of index.html (asserted in
+    // check_site). The export keeps the function for call-compat.
+    console.log('\n== PART 25: v73.79 — the CC summary card is removed =');
     (async function () {
-      var cards25 = F.state.base.accounts.filter(function (a) { return a.kind === 'card'; });
-      ok(cards25.length >= 2, 'v73.69: premise — the seed has >= 2 CCs (got ' + cards25.length + ')');
+      ok(typeof F.renderCcCards === 'function', 'v73.79: renderCcCards is still exported (call-compat)');
       F.renderCcCards();
-      var ccBody = String(byIdStub('ccCardsBody').innerHTML);
-      ok(ccBody.indexOf('ccrow') >= 0, 'v73.69: the card rows render (ccrow present)');
-      var live = F.effectiveSnap().cards;
-      var maya = live.filter(function (c) { return c.name === 'Maya CC'; })[0];
-      var money25 = function (v) { return 'PHP ' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
-      ok(ccBody.indexOf(money25(maya.balance)) >= 0, 'v73.69: the Balance cell is the LIVE balance (overlay applied, ' + money25(maya.balance) + ')');
-      ok(ccBody.indexOf('limit ' + money25(10000)) >= 0, 'v73.69: the name row carries the stored limit (Maya 10,000)');
-      ok(ccBody.indexOf('utilpill') >= 0, 'v73.69: the utilization pill renders');
-      ok(ccBody.indexOf('AUTO DUE') >= 0, 'v73.69: the AUTO DUE provenance chip renders (no manual due set)');
-      ok(ccBody.indexOf('MANUAL') < 0, 'v73.69: no MANUAL chip while the overrides are all null');
-      // the due date label is the GLOBAL due day (the 5th) — the 2-cell
-      // variant drops per-card dates (v73.70 data that v73.68 lacks).
-      // dayMonth renders "5 Nov" (day + short month).
-      var cc25 = F.ccDue();
-      var moName = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      var dueLbl = cc25 ? Number(cc25.dueDate.slice(8, 10)) + ' ' + moName[Number(cc25.dueDate.slice(5, 7)) - 1] : '';
-      ok(cc25 && dueLbl && ccBody.indexOf('due ' + dueLbl) >= 0,
-        'v73.69: the due date label is present (global due day, next on/after today: ' + dueLbl + ')');
-      // the manual override wins: set Maya's due, re-render, MANUAL chip +
-      // the override amount in the Due cell
-      var mayaBase = F.state.base.accounts.filter(function (a) { return a.name === 'Maya CC'; })[0];
-      var origDue = mayaBase.due;
-      mayaBase.due = 777.77;
-      F.renderCcCards();
-      var ccBody2 = String(byIdStub('ccCardsBody').innerHTML);
-      ok(ccBody2.indexOf('MANUAL') >= 0, 'v73.69: a manual "due this cycle" override flips the chip to MANUAL');
-      ok(ccBody2.indexOf(money25(777.77)) >= 0, 'v73.69: the Due cell shows the OVERRIDE amount, not the balance');
-      ok(ccBody2.indexOf('src manual') >= 0, 'v73.69: the MANUAL chip wears the warn styling (src manual)');
-      mayaBase.due = origDue;
-      F.renderCcCards();
-      ok(String(byIdStub('ccCardsBody').innerHTML).indexOf('MANUAL') < 0,
-        'v73.69: clearing the override returns the card to AUTO DUE');
+      ok(String(byIdStub('ccCardsBody').innerHTML) === '', 'v73.79: renderCcCards writes nothing (no-op)');
     })().then(function () {
       // ============ PART 26: v73.70 — the payment-method ledger filter ======
       // (boss: 'allow sorting of entries based on the payment method'): a

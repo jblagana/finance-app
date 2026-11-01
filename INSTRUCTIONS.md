@@ -1,3 +1,31 @@
+# v73.79 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-01 - "remove the card summary in the home tab" -> "throw away what was done in 73.79. just remove the card summary in home tab and ur done."
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.79, sw cache
+finances-pwa-v73.79 pushed to https://github.com/jblagana/finance-app.git (main).
+
+The 2-cell CC summary card (v73.69, the parked mock's v73.68-shippable subset) is
+REMOVED from the Home tab:
+- index.html: the #ccCards section (under the hero) is out; its CSS block
+  (.ccrow / .utilpill / .ccgrid) is deleted.
+- app.js: renderCcCards is a no-op kept for export call-compat (the smoke and the
+  export still reference it); it is off every repaint key (txn / plan / snap / adj /
+  ui).
+- The v73.79 work that had accumulated uncommitted in the tree (the Pay-card
+  "Pay to" / "Paid with" sheet + the recon keyboard follow-up) was DISCARDED per
+  the boss's explicit "throw away what was done in 73.79" - git restore of
+  README.md / app.js / sw.js / smoke before this change; only the card removal
+  ships.
+
+Gates: release.ps1 v73.79 all green - check_site (repo + root mirror; the v73.69 pin
+replaced by a v73.79 removal pin; the v73.49 adj-key pin + the v73.57 snap-key pin
+retargeted to the new list tails), parser, node --check x4, both smokes (PART 25
+retargeted to the no-op: still exported, writes nothing).
+
+Gate slips fixed mid-run (both mine): (1) the removal pin's 'ccrow' not in html
+false-matched the .oent-accrow CSS (retargeted to '.ccrow'); (2) the smoke's second
+assert read a Proxy stub whose unset style.display returns a function, not ''
+(dropped the element-touch clause - the no-op is proven by the empty ccCardsBody).
+
 # v73.78 entry (prepended to INSTRUCTIONS.md)
 ## 2026-10-31 - "typing still rtl. example when i wanna type 4325, it types 4 then the cursor is moves to the left so when i type 3, the whole thing becomes 34, then typing 2 puts it again at the left giving 234, and finally 5234, find this bug" -> "Build and ship v73.78"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.78, sw cache

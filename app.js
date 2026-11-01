@@ -48,19 +48,19 @@
     // v73.75: renderProjection/renderPace dropped from every key — the Money
     // tab's Projection card and the Ledger tab's Spend-pace card are GONE
     // (boss-approved mockup_compact_livenumbers.html).
-    txn: [renderCoach, renderInsights, updateChargeHint, renderHero, renderCcCards, renderDonut, renderMoneyLog, renderCoachNote, renderMood, renderPlans, reconRender],
-    plan: [renderPlans, renderInsights, renderCoach, renderHero, renderCcCards, renderCoachNote, renderMood],
+    txn: [renderCoach, renderInsights, updateChargeHint, renderHero, renderDonut, renderMoneyLog, renderCoachNote, renderMood, renderPlans, reconRender],
+    plan: [renderPlans, renderInsights, renderCoach, renderHero, renderCoachNote, renderMood],
     // v72.30: a base save can file 'Adjustment' ledger rows — the Ledger tab follows
     // v73.42: renderSummary/renderObligations/renderSinking are GONE (their
     // cards were cut from the Money tab) — the repaint lists drop them.
-    snap: [renderCoach, renderInsights, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderCcCards, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender],
+    snap: [renderCoach, renderInsights, seedAccounts, renderAddEmpty, updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender],
     // v73.49: renderMoneyLog on 'adj' — a reset files its audit rows (k='r')
     // into the money log, but 'adj' never repainted the Ledger tab, so the
     // rows existed in state.moneyLog yet the card stayed stale until the next
     // unrelated emit.
-    adj: [renderCoach, renderInsights, updateChargeHint, renderHero, renderCcCards, renderMoneyLog, renderCoachNote, renderMood, reconRender],
+    adj: [renderCoach, renderInsights, updateChargeHint, renderHero, renderMoneyLog, renderCoachNote, renderMood, reconRender],
     owed: [renderOwed],
-    ui: [seedAccounts, seedCategories, renderCoach, renderInsights, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderCcCards, renderDonut, renderMoneyLog, renderOwed, renderCoachNote, renderMood, reconRender]
+    ui: [seedAccounts, seedCategories, renderCoach, renderInsights, renderAddEmpty, renderPlans, renderFooter, updateChargeHint, renderHero, renderDonut, renderMoneyLog, renderOwed, renderCoachNote, renderMood, reconRender]
   };
   function emit(keys) {
     var list = (typeof keys === 'string' ? [keys] : keys) || ['ui'];
@@ -4948,47 +4948,11 @@
   // DATE is the global due day (the 5th) — the 2-cell variant drops the
   // per-card bill/due dates and the Next-cycle cell (both are v73.70 data
   // that doesn't exist here). The provenance chip is AUTO DUE / MANUAL.
-  function renderCcCards() {
-    var el = byId('ccCards'); if (!el) return;
-    var b = state.base;
-    var cards = b ? (b.accounts || []).filter(function (a) { return a.kind === 'card'; }) : [];
-    if (!cards.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
-    el.style.display = '';
-    var cc = ccDue();
-    var dueDate = cc ? cc.dueDate : '';
-    var dueIn = cc ? cc.dueIn : null;
-    var dueLbl = dueDate ? dayMonth(dueDate) : '';
-    var dueTxt = dueIn == null ? '' : (dueIn === 0 ? 'today' : (dueIn === 1 ? 'tomorrow' : 'in ' + dueIn + ' days'));
-    var s = effectiveSnap();
-    var liveBy = {};
-    (s && s.cards || []).forEach(function (c) { liveBy[c.name] = c; });
-    var h = '';
-    cards.forEach(function (c) {
-      var bal = (liveBy[c.name] != null) ? (Number(liveBy[c.name].balance) || 0) : (Number(c.value) || 0);
-      var limit = Number(c.limit) || 0;
-      var util = limit > 0 ? (bal / limit * 100) : null;
-      var pillCls = util == null ? '' : (util >= 85 ? ' bad' : (util >= 60 ? ' warn' : ''));
-      var manualDue = (c.due != null) ? Number(c.due) : null;
-      var dueAmt = (manualDue != null) ? Math.max(0, manualDue) : bal;
-      var prov = (manualDue != null) ? 'MANUAL' : 'AUTO DUE';
-      var hint = (manualDue != null)
-        ? 'you set this — it wins over the ledger'
-        : (bal > 0.004 ? 'the full balance is this bill' : 'nothing on the card');
-      h += '<div class="ccrow">'
-        + '<div class="r1"><div class="nm">' + esc(c.name) + '<small>limit ' + money(limit)
-        + (dueLbl ? ' · due ' + dueLbl : '') + '</small></div>'
-        + (util != null ? '<div class="utilpill' + pillCls + '">' + util.toFixed(1) + '%<small>of limit</small></div>' : '')
-        + '</div>'
-        + '<div class="ccgrid">'
-        + '<div class="cell"><div class="lab">Balance</div><div class="val">' + money(bal) + '</div><div class="sub">live · what the bank shows</div></div>'
-        + '<div class="cell"><div class="lab">Due' + (dueLbl ? ' · ' + dueLbl : '') + '</div><div class="val due">' + money(dueAmt) + '</div><div class="sub">'
-        + (dueTxt ? dueTxt + ' · ' : '') + hint + '</div></div>'
-        + '</div>'
-        + '<div class="foot"><span class="src' + (manualDue != null ? ' manual' : '') + '">' + prov + '</span><span class="hint">' + (manualDue != null ? 'override — clear it in Settings to go back to auto' : 'auto — the balance IS this bill (no next-cycle split in v73.68)') + '</span></div>'
-        + '</div>';
-    });
-    byId('ccCardsBody').innerHTML = h;
-  }
+  // v73.79 (boss: 'remove the card summary in the home tab'): the 2-cell CC
+  // summary card (v73.69) is GONE — the section is out of index.html, its
+  // repaint-list entries are off every key, and this is a no-op kept for
+  // export/smoke call-compat (it writes nothing).
+  function renderCcCards() { /* v73.79: no-op — the card was removed */ }
   // v73.34 (boss: 'peek on the next cycles numbers ... current cycle should
   // be shown by default, peek only shows if i want to'): the hero's cycle
   // block. This cycle = always-with-salary (the Without toggle is a
@@ -8154,12 +8118,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.78, live: new Date(2026, 9, 31, 13, 36) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.79, live: new Date(2026, 10, 1, 16, 33) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.79': [
+      'Removed: the \u201cCards\u201d summary card on the Home tab is gone \u2014 the card balances and dues you need are already in the hero and the \u201cLive numbers\u201d card on the Ledger tab.'
+    ],
     '73.78': [
       'Fixed: the \u201cLive numbers\u201d edit field still typed right-to-left (4 \u2192 34 \u2192 234 \u2192 5234) \u2014 every keystroke re-rendered the field with the parsed number, which reset the caret to the left edge. The field now keeps your exact typed text, so digits land left-to-right and quick sums like 12850+22754.04 are no longer clobbered mid-typing.'
     ],
@@ -9212,7 +9179,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     planRefAlive: planRefAlive, // v73.17: does an explicit link still point at a live occurrence (v73.67: full-series check — the smoke drives the overdue case)
     setPlans: function (ps) { state.plans = ps; }, // v73.67: test hook (smoke seeds an overdue series)
     renderCoach: renderCoach, // v73.18: the coach card render (smoke reads the pay-plan chip in the HTML)
-    renderCcCards: renderCcCards, // v73.69: the CC summary card render (smoke drives the 2-cell rows)
+    renderCcCards: renderCcCards, // v73.79: no-op kept for export call-compat (the CC card was removed)
     reconData: reconData, // v73.73: the Reconcile card data (smoke drives the live values + hierarchy)
     reconSetInput: reconSetInput, // v73.73: the row edit (smoke drives the absorption rule)
     reconParseInput: reconParseInput, // v73.77: the quick-sum parser (evalExpr + fallback)

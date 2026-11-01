@@ -828,7 +828,7 @@ def main():
           and "byId('planEditClose')" not in js
           and "'73.47': [" in js)
     check("v73.49 (boss: 'i tried resetting live numbers, confirm and toast are there. but it didnt write in ledger'): the reset files its k='r' audit rows into state.moneyLog, but the 'adj' emit key never repainted renderMoneyLog — the rows existed in state yet the Ledger card stayed stale until an unrelated emit. renderMoneyLog is now on the 'adj' repaint list, so the audit rows show immediately on confirm (the smoke gate's old 'renders in the ledger' assertion called F.renderMoneyLog() BY HAND, which is why this wiring hole passed every gate)",
-          "adj: [renderCoach, renderInsights, updateChargeHint, renderHero, renderCcCards, renderMoneyLog, renderCoachNote, renderMood, reconRender]," in js  # v73.75 retarget: renderProjection left the key with the card; v73.74: the adj key gained reconRender (a reconcile save zeroes the overlay — the card must repaint on 'adj'); v73.69: it grew renderCcCards
+          "adj: [renderCoach, renderInsights, updateChargeHint, renderHero, renderMoneyLog, renderCoachNote, renderMood, reconRender]," in js  # v73.79 retarget: renderCcCards left every key with the CC card (boss: 'remove the card summary in the home tab'); v73.74: the adj key gained reconRender (a reconcile save zeroes the overlay — the card must repaint on 'adj')
           and "'73.49': [" in js)
     check("v73.50 (boss: 'make the toast persist until swiped'): the snack banner's 7s auto-hide is gone — snack() no longer schedules setTimeout(hideSnack, 7000); the banner lives until the swipe-up release (the pointerup path calls hideSnack), Undo, or a newer toast replaces it. The `ms` parameter stays for call-compat but is ignored",
           "snackTimer = null;" in js
@@ -1700,22 +1700,15 @@ def main():
           and "names.push('Owed')" not in js
           and "prevTxn.category || 'Unsorted'" in js
           and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender]" in js  # v73.74: the snap key gained reconRender (a base save must repaint the Reconcile card); v73.0: renderMood + v73.2: the pulse ride the snap key; v73.14: the due strip left the list; v73.33: the pulse (renderRecap) left the list
-          # v73.69 retarget: the snap key grew renderCcCards (the CC card repaints on a base save) — the ledger tail moved
-          and "updateChargeHint, renderHero, renderCcCards, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender]" in js)
-    check("v73.69 (boss-approved 2-cell CC summary card, the parked mock's v73.68-shippable subset): one row per CC under the hero — name + limit + utilization pill, two cells (Balance = the card's LIVE balance; Due = the manual 'due this cycle' override when set, else the full balance — v73.68 has no next-cycle tagging, so the balance IS the bill), the due date is the GLOBAL due day (per-card dates + the Next-cycle cell are v73.70 data and stay off), and the provenance chip is AUTO DUE / MANUAL (warn-styled); repaints on txn/plan/snap/adj/ui (a card charge or a Settings override must move the card)",
-          "function renderCcCards()" in js
-          and 'id="ccCardsBody"' in html
-          and 'id="ccCards"' in html
-          and "var manualDue = (c.due != null) ? Number(c.due) : null;" in js
-          and "var dueAmt = (manualDue != null) ? Math.max(0, manualDue) : bal;" in js
-          and "'AUTO DUE'" in js and "'MANUAL'" in js
-          and "src' + (manualDue != null ? ' manual' : '')" in js
-          and "renderHero, renderCcCards, renderDonut" in js  # the ui key (the txn key shares the renderHero, renderCcCards adjacency)
-          and "updateChargeHint, renderHero, renderCcCards, renderBaseStatus" in js  # the snap key
-          and "updateChargeHint, renderHero, renderCcCards, renderMoneyLog" in js  # the adj key
-          and "renderCcCards: renderCcCards" in js
-          and "grid-template-columns:1fr 1fr" in html  # the 2-cell grid (the mock's 3-col next-cycle cell is gone)
-          and "utilpill" in html and "ccrow" in html)
+          # v73.79 retarget: renderCcCards left every key with the CC card (boss: 'remove the card summary in the home tab') — the ledger tail moved back
+          and "updateChargeHint, renderHero, renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender]" in js)
+    check("v73.79 (boss: 'remove the card summary in the home tab'): the 2-cell CC summary card (v73.69) is GONE — the #ccCards section is out of index.html, its CSS (ccrow/utilpill/ccgrid) is deleted, renderCcCards is a no-op kept for export call-compat, and it is off every repaint key (txn/plan/snap/adj/ui)",
+          "function renderCcCards() { /* v73.79" in js  # the no-op (em-dash avoided: v73.76 pin-escaping lesson)
+          and 'id="ccCards"' not in html
+          and 'id="ccCardsBody"' not in html
+          and "utilpill" not in html and ".ccrow" not in html and "ccgrid" not in html  # .ccrow (the class def) — bare 'ccrow' false-matches .oent-accrow
+          and "renderCcCards" not in js.replace("function renderCcCards() { /* v73.79: no-op", "").replace("renderCcCards: renderCcCards", "")
+          and "renderCcCards: renderCcCards" in js)
     check("v73.70 (boss: 'allow sorting of entries based on the payment method'): a SECOND ledger dropdown (#mlFilterM) filters by the row's payment method (the e.m account — 'Maya CC', 'MariBank CC', 'MariBank', 'Cash', …); a prepay row with no account falls back to 'CC Payment' (the v72.47 name); the value rides the '__m:' prefix so it can't collide with a same-named category; it ANDs with the category filter, and a filter change resets the See-more page",
           "var mlFilterM = ''" in js
           and "byId('mlFilterM')" in js
