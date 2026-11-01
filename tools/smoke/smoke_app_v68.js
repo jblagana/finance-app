@@ -1809,6 +1809,12 @@ waitReady().then(async function (F) {
       ok(payWithEl.style.display !== 'none', 'v73.80: Paid with (f_paywith) is visible in Pay card mode');
       ok(catEl30.style.display === 'none', 'v73.80: Category (f_category) is hidden in Pay card mode');
       ok(accEl30.style.display === 'none', 'v73.80: the old Paid with (f_account) is hidden in Pay card mode');
+      // v73.81: the f_account LABEL hides with its select — v73.80 left a
+      // stray "Paid with" label beside the Date field (boss screenshot).
+      ok(byIdStub('f_accountLabel').style.display === 'none',
+        'v73.81: the old Paid with LABEL (f_accountLabel) is hidden in Pay card mode');
+      ok(byIdStub('f_paywithLabel').style.display !== 'none',
+        'v73.81: the Pay-card Paid with label (f_paywithLabel) is visible in Pay card mode');
       var payToOpts = (payToEl.innerHTML || '').split('<option');
       ok(payToOpts.some(function (o) { return o.indexOf('value="Maya CC"') >= 0; }),
         'v73.80: Pay to offers Maya CC (bare name, not TYPE::Name)');
@@ -1830,6 +1836,8 @@ waitReady().then(async function (F) {
       ok(accEl30.style.display !== 'none', 'v73.80: Paid with (f_account) is visible in Spend mode');
       ok(payToEl.style.display === 'none', 'v73.80: Pay to is hidden in Spend mode');
       ok(payWithEl.style.display === 'none', 'v73.80: Paid with (f_paywith) is hidden in Spend mode');
+      ok(byIdStub('f_accountLabel').style.display !== 'none',
+        'v73.81: the Spend Paid with label (f_accountLabel) is visible in Spend mode');
       // the payoff math (the v72.42 rule, unchanged): a payoff lands on the
       // CARD (owed drops, free untouched, raw liquid drops). The funder is
       // recorded (t.payWith) and shown in the ledger row (e.w).

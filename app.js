@@ -5823,7 +5823,11 @@
     }
     show('f_categoryLabel', !pre); show('f_category', !pre);
     show('f_paytoLabel', pre); show('f_payto', pre);
-    show('f_account', !pre); show('f_paywithLabel', pre); show('f_paywith', pre);
+    // v73.81: the f_account LABEL hides with its select too — v73.80 hid
+    // only the select, leaving a stray "Paid with" label beside the Date
+    // field in Pay card mode (boss screenshot 2026-11-01).
+    show('f_accountLabel', !pre); show('f_account', !pre);
+    show('f_paywithLabel', pre); show('f_paywith', pre);
     if (pre) { seedPayTo(); seedPayWith(); } else { seedAccounts(); }
   }
   function seedAccounts() {
@@ -8226,12 +8230,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.80, live: new Date(2026, 10, 1, 17, 29) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.81, live: new Date(2026, 10, 1, 17, 29) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.81': [
+      'Fixed: the Pay card sheet showed the "Paid with" label twice — the old Spend-mode label stayed visible beside the Date field. Now exactly one label sits above the funder dropdown.'
+    ],
     '73.80': [
       'New: the Pay card sheet now asks the two real questions — Pay to (which card is being paid, e.g. Maya CC) and Paid with (which cash/debit account is paying, e.g. MariBank debit). The Category field is gone from this sheet. A payoff of 2,000 to Maya CC from MariBank debit drops Maya CC owed by 2,000, leaves the MariBank debit cash down by 2,000, and leaves FREE cash untouched (the spend was committed at charge time). The ledger row shows both sides: "to: Maya CC · from: MariBank debit".'
     ],

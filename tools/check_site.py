@@ -1808,6 +1808,9 @@ def main():
           and "wTxt = (e.k === 'p' && e.w)" in js
           and "if (t.kind === 'card_payment' && o.payWith) t.payWith = o.payWith;" in js
           and "if (pre) { seedPayTo(); seedPayWith(); } else { seedAccounts(); }" in js)
+    check("v73.81 (boss: 'the Paid with label is duplicated in the Pay card sheet'): the Spend-mode f_account LABEL (f_accountLabel) hides with its select in Pay card mode — v73.80 hid only the select, leaving a stray 'Paid with' label beside the Date field (boss screenshot 2026-11-01). updateAddModeFields now toggles f_accountLabel alongside f_account, so Pay card shows exactly ONE 'Paid with' label (f_paywithLabel, above the funder dropdown)",
+          'id="f_accountLabel"' in html
+          and "show('f_accountLabel', !pre); show('f_account', !pre);" in js)
     check("v73.72 (boss-approved: 'ipf: file theirs as a card charge' + 'increase free cash by the same amount' — the credit converted to cash, since the repayment lands as cash and tmb never files a ledger row): an 'I paid for them' on a CARD files the friend's share as its own card_charge (the bank charged the FULL bill) + a cash_in for the same amount (the advance); net on the boss's own free cash = mine commits, theirs neutralizes. The entry carries the pair handles (theirsTxnId/theirsBumpId) so add-undo / entry-delete / person-delete / edit all remove-and-restore BOTH legs. The one-shot backfill (migrateIpfTheirs, stamp-gated, idempotent) files past entries: post-base get charge + advance, pre-base get the advance ONLY (their card spend is already inside the sheet's base — filing the charge would double-count card owed); runs on boot (after migratePrepayBy) and on import",
           "function fileIpfTheirs(e, p, fileCharge, fileBump)" in js
           and "function migrateIpfTheirs()" in js
