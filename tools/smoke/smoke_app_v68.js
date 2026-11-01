@@ -1942,7 +1942,72 @@ waitReady().then(async function (F) {
         if (c.balance < 0 || (lim > 0 && c.balance > lim)) inBounds31 = false;
       });
       ok(inBounds31, 'v73.82: after the recompute every card balance is inside [0, limit]');
-      // cleanup: delete the probe txn (the overlay + ledger row go with it)
+      // ============ PART 32: v73.83 — the payoff lands on the FUNDER only ============
+      // The boss's screenshot (2026-11-01): a 6,156.27 payoff to MariBank CC
+      // FROM MariBank debit smeared across ALL cash accounts (Cash −50.13,
+      // MariBank −2,969.69, LandBank −3,136.45 — the proportional split of
+      // the global adj.cash overlay). Correct: ONLY the funder moves.
+      console.log('\n== PART 32: v73.83 - the payoff lands on the funder (the boss\'s acceptance test) =');
+      function debLive32(name) {
+        var d = F.reconData();
+        var r = null;
+        (d.debits || []).forEach(function (x) { if (x.name === name) r = x; });
+        return r ? r.live : null;
+      }
+      // PRE state (the boss's before-screenshot, live): read the rows
+      var mbBefore32 = debLive32('MariBank'), lbBefore32 = debLive32('LandBank'), cashBefore32 = debLive32('Cash');
+      var totalBefore32 = F.effectiveSnap().cash.total;
+      ok(mbBefore32 != null && lbBefore32 != null && cashBefore32 != null, 'v73.83: the pre-state reads all three cash rows (MariBank ' + mbBefore32 + ' / LandBank ' + lbBefore32 + ' / Cash ' + cashBefore32 + ')');
+      // THE PAYOFF: MariBank CC 6,156.27, PAID WITH MariBank debit (the boss's exact row)
+      var id32 = await F.addTxn({ kind: 'card_payment', category: '', account: 'MariBank CC', amount: 6156.27, note: 'v73.83 acceptance payoff', date: '2026-11-01', payWith: 'MariBank' }, { quiet: true });
+      await tick();
+      // TRIGGER THE RECOMPUTE PATH (what every boot runs)
+      F.migrateCashBy();
+      await tick();
+      var mbAfter32 = debLive32('MariBank'), lbAfter32 = debLive32('LandBank'), cashAfter32 = debLive32('Cash');
+      var totalAfter32 = F.effectiveSnap().cash.total;
+      ok(close(mbAfter32, mbBefore32 - 6156.27), 'v73.83: MariBank debit drops by EXACTLY 6,156.27 (got ' + mbBefore32 + ' -> ' + mbAfter32 + ')');
+      ok(close(lbAfter32, lbBefore32), 'v73.83: LandBank is UNTOUCHED (got ' + lbBefore32 + ' -> ' + lbAfter32 + ')');
+      ok(close(cashAfter32, cashBefore32), 'v73.83: Cash is UNTOUCHED (got ' + cashBefore32 + ' -> ' + cashAfter32 + ')');
+      ok(close(totalAfter32, totalBefore32 - 6156.27), 'v73.83: the TOTAL cash drops by 6,156.27 (got ' + totalBefore32 + ' -> ' + totalAfter32 + ')');
+      ok(F.state.adj.cashBy['MariBank'] === 6156.27, 'v73.83: the funder attribution rides the overlay (cashBy.MariBank = 6,156.27, got ' + F.state.adj.cashBy['MariBank'] + ')');
+      ok(!('LandBank' in F.state.adj.cashBy) && !('Cash' in F.state.adj.cashBy), 'v73.83: no attribution to the non-paying accounts (got ' + JSON.stringify(F.state.adj.cashBy) + ')');
+      // LEGACY payoff (no payWith — a pre-v73.80 row): the funder is unknown,
+      // so it lands on the Cash residual row — the NAMED debits stay untouched
+      var mbL32 = debLive32('MariBank'), lbL32 = debLive32('LandBank'), cashL32 = debLive32('Cash');
+      var id32b = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 100, note: 'v73.83 legacy payoff (no funder)', date: '2026-11-01' }, { quiet: true });
+      await tick();
+      F.migrateCashBy();
+      await tick();
+      ok(close(debLive32('MariBank'), mbL32) && close(debLive32('LandBank'), lbL32), 'v73.83: a legacy payoff (no funder) leaves the named debits untouched');
+      ok(close(debLive32('Cash'), cashL32 - 100), 'v73.83: the legacy payoff lands on the Cash residual (got ' + cashL32 + ' -> ' + debLive32('Cash') + ')');
+      // SELF-HEAL: corrupt the stored split the way the old code displayed it
+      // (a proportional smear that sums to the payoff total) — the rebuild
+      // must detect it and replace it, leaving the rows exactly where they are
+      var mbH32 = debLive32('MariBank');
+      F.state.adj.cashBy = { 'MariBank': 5900, 'LandBank': 356.27 }; // sums to 6,156.27 = the payoff total
+      F.migrateCashBy();
+      await tick();
+      ok(F.state.adj.cashBy['MariBank'] === 6156.27 && !('LandBank' in F.state.adj.cashBy), 'v73.83: a smeared stored split is REPLACED by the funder rebuild (got ' + JSON.stringify(F.state.adj.cashBy) + ')');
+      ok(close(debLive32('MariBank'), mbH32), 'v73.83: the self-heal leaves the rows untouched (MariBank ' + mbH32 + ')');
+      // an UNATTRIBUTED move (a plain spend) rides the Cash residual — the
+      // funder-attributed payoff split stays exact
+      var cashU32 = debLive32('Cash'), mbU32 = debLive32('MariBank');
+      var id32c = await F.addTxn({ kind: 'cash_out', category: 'Food', account: 'LandBank', amount: 250, note: 'v73.83 unattributed spend', date: '2026-11-01' }, { quiet: true });
+      await tick();
+      ok(close(debLive32('Cash'), cashU32 - 250), 'v73.83: an unattributed spend lands on the Cash residual (got ' + cashU32 + ' -> ' + debLive32('Cash') + ')');
+      ok(close(debLive32('MariBank'), mbU32) && close(debLive32('LandBank'), lbL32), 'v73.83: the spend does not smear onto the named debits');
+      // cleanup: delete the probe txns (the overlay + ledger rows go with them)
+      await F.deleteTxn(id32);
+      await tick();
+      await F.deleteTxn(id32b);
+      await tick();
+      await F.deleteTxn(id32c);
+      await tick();
+      F.migrateCashBy(); // the boot recompute after the deletes (idempotent)
+      await tick();
+
+      // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
       await F.deleteTxn(id31);

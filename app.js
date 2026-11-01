@@ -23,7 +23,7 @@
     plans: [],
     base: null,
     snapshot: null,
-    adj: { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: 2 }, // mv = the txnAdj model version (v72.43)
+    adj: { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: 2 }, // mv = the txnAdj model version (v72.43); cashBy = per-funder payoff split (v73.83)
     adjSig: '',
     adjLoaded: false,
     coachMem: null,
@@ -703,6 +703,64 @@
     a.prepayBy = by;
     saveAdj().then(function () { emit('adj'); });
   }
+  // v73.83 (the proportional-smear diagnosis, boss-approved): the payoff's
+  // raw delta used to ride the GLOBAL adj.cash scalar, and reconData
+  // displayed each debit as base − adj.cash × (base/total) — a payoff from
+  // MariBank debit smeared across Cash / MariBank / LandBank (boss's
+  // screenshot: −50.13 / −2,969.69 / −3,136.45 for a 6,156.27 payoff).
+  // cashBy attributes the payoff delta to the funder (addAdj, fed by
+  // t.payWith), so reconData lands it per-debit. This rebuild is the
+  // boot-time self-heal for phones whose stored split predates cashBy (or
+  // carries the old smear): same lastReconAt() gate as migratePrepayBy —
+  // only post-reconcile payoffs may ride the overlay; a stored split that
+  // sums to the overlay total but is NOT the post-reconcile rebuild is
+  // replaced (already-smeared phones heal on the first boot after this
+  // release, no data surgery).
+  function migrateCashBy() {
+    var a = state.adj;
+    if (!a) return;
+    var lastR = lastReconAt();
+    var by = {};
+    (state.txns || []).forEach(function (t) {
+      if (lastR) {
+        var created = Date.parse(t.created) || 0;
+        if (created && created < lastR) return; // absorbed into the base by the later reconcile
+      }
+      var d = txnAdj(t);
+      if (d.cash && d.funder) {
+        by[d.funder] = r2((by[d.funder] || 0) + d.cash);
+        if (!by[d.funder]) delete by[d.funder];
+      }
+    });
+    var payTotal = payoffCashTotal(state.txns, lastR); // the gate's own scope (post-reconcile payoffs)
+    var cur = a.cashBy || {};
+    var curSum = 0;
+    Object.keys(cur).forEach(function (k) { curSum += cur[k] || 0; });
+    // a stored split that sums to the post-reconcile payoff total is
+    // CONSISTENT — but if it isn't the post-reconcile rebuild it is stale
+    // (pre-cashBy phones stored {}, which sums to 0 and is replaced whenever
+    // a post-reconcile payoff exists; smeared phones store the old smear,
+    // which is replaced too). The comparison runs against the PAYOFF total,
+    // NOT adj.cash — adj.cash also carries cash_out / cash_in moves, which
+    // are unattributed and never ride cashBy.
+    var stale = Math.abs(curSum - payTotal) <= 0.004 && (function () {
+      var keys = {};
+      Object.keys(by).forEach(function (k) { keys[k] = 1; });
+      Object.keys(cur).forEach(function (k) { keys[k] = 1; });
+      for (var k in keys) if (r2(by[k] || 0) !== r2(cur[k] || 0)) return true;
+      return false;
+    })();
+    var keys2 = {};
+    Object.keys(by).forEach(function (k) { keys2[k] = 1; });
+    Object.keys(cur).forEach(function (k) { keys2[k] = 1; });
+    var changed = stale;
+    Object.keys(keys2).forEach(function (k) {
+      if (r2(by[k] || 0) !== r2(cur[k] || 0)) changed = true;
+    });
+    if (!changed) return;
+    a.cashBy = by;
+    saveAdj().then(function () { emit('adj'); });
+  }
 
   // ---- live overlay: app entries adjust the sheet snapshot until the sheet catches up ----
   // v72.10: the ledger learns INFLOWS — cash_in (money came to a cash pocket)
@@ -719,6 +777,24 @@
   // card_payment {+a, 0,  -a, -a} payoff: free unchanged, raw leaves the bank
   // (overlay: effective free = snap.free − adj.free, raw = snap.total − adj.cash,
   // owed = snap + adj.card; the liquidity floor runs on the raw number.)
+  // v73.83: the overlay's PAYOFF cash total (plain payoffs only — the part
+  // that cashBy attributes per funder). adj.cash also carries cash_out /
+  // cash_in moves (unattributed — they hit the wallet, not a funder), so the
+  // per-funder split is usable only when it sums to THIS, not to adj.cash.
+  // lastR scopes to the overlay's own window: a reconcile (or rebase) zeroes
+  // the overlay, so pre-reconcile payoffs are in the BASE, not the overlay.
+  function payoffCashTotal(txns, lastR) {
+    var s = 0;
+    (txns || []).forEach(function (t) {
+      if (t.kind !== 'card_payment' || t.cashback) return;
+      if (lastR) {
+        var created = Date.parse(t.created) || 0;
+        if (created && created < lastR) return; // absorbed into the base by the later reconcile
+      }
+      s += Number(t.amount) || 0;
+    });
+    return r2(s);
+  }
   function txnAdj(t) {
     var amt = Number(t.amount) || 0;
     // v72.33: the card rows carry the card name (acc) so the overlay tracks the
@@ -736,7 +812,16 @@
       // untouched, free RISES by the full amount (the debt it erased),
       // owed drops, card balance drops (prepay: -amt via prepayBy).
       if (t.cashback) return { cash: 0, free: -amt, card: -amt, prepay: -amt, acc: t.account };
-      return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };
+      // v73.83: the raw delta is attributed to the FUNDER (t.payWith — the
+      // "Paid with" pick, v73.80) via funder, so the per-debit display lands
+      // the payoff on the paying account only; legacy rows (no payWith) fall
+      // back to 'Cash' (the wallet residual — the old proportional behaviour).
+      // v73.83: the v72.42 tuple stays the pinned literal; the funder is
+      // attached to the returned object right after (legacy rows — no
+      // payWith — attribute to 'Cash', the wallet residual).
+      var plain = { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };
+      plain.funder = payWithOf(t) || 'Cash';
+      return plain;
     }
     if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };
     return { cash: amt, free: amt, card: 0, prepay: 0 }; // cash_out (default, legacy rows)
@@ -751,9 +836,17 @@
       state.adj.prepayBy[a.acc] = r2((state.adj.prepayBy[a.acc] || 0) + a.prepay * sign);
       if (!state.adj.prepayBy[a.acc]) delete state.adj.prepayBy[a.acc]; // nets to zero → tidy
     }
+    // v73.83: the per-funder cash split — the payoff's raw delta rides the
+    // paying account (a.funder), so reconData can land it per-debit instead
+    // of smearing adj.cash proportionally across every cash account.
+    if (a.cash && a.funder) {
+      if (!state.adj.cashBy) state.adj.cashBy = {};
+      state.adj.cashBy[a.funder] = r2((state.adj.cashBy[a.funder] || 0) + a.cash * sign);
+      if (!state.adj.cashBy[a.funder]) delete state.adj.cashBy[a.funder]; // nets to zero → tidy
+    }
   }
   function computeAdjFromTxns() {
-    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
+    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V };
     state.txns.forEach(function (t) { addAdj(txnAdj(t), 1); });
   }
   function saveAdj() {
@@ -802,7 +895,7 @@
     state.snapshot = snap;
     var sig = snapSig(snap);
     // Sheet numbers moved (Balances/Config edited in the sheet) -> rebase: the sheet is source of truth again.
-    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
+    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V };
     state.adjSig = sig;
   }
   // v73.45 (the 1k-reset incident): the old reset was ONE tap, no confirm, no
@@ -824,7 +917,7 @@
     var before = effectiveSnap();
     var freeBefore = before && before.cash ? before.cash.free : 0;
     var cardBefore = before ? (before.card_owed || 0) : 0;
-    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
+    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V };
     var preview = effectiveSnap();
     state.adj = prev; // restore — the reset only happens on confirm
     var freeAfter = preview && preview.cash ? preview.cash.free : 0;
@@ -842,7 +935,7 @@
     confirmAsk('This makes ' + freeTxt + cardTxt +
       ' — the live view jumps back to your Settings numbers. You can undo right after.',
       'Reset', function () {
-      state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
+      state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V };
       state.adjSig = snapSig(state.snapshot);
       // the audit rows — same family as 'a' (one delta per row): n is the
       // actual move (after − before), f/o are the AFTER values; the render
@@ -890,13 +983,14 @@
   // absorbed by the Cash account (debits stay put) → ONE 'Reconcile · Cash'
   // row. Edit Cash or a debit → its own row, the total mirrors. No zero rows.
   //
-  // The one approximation: the cash overlay (adj.cash) is GLOBAL — it can't
-  // be split per debit account, so each debit's displayed live value
-  // distributes the overlay proportionally to the base values (exact when the
-  // overlay is zero, which is the common case after a reconcile). The TOTAL
-  // is always exact (base + adj.cash — the overlay ADDS to the base, the
-  // v72.25 sign convention). A reconcile re-anchors the base to the live
-  // values and zeroes the overlay, so the approximation is always transient.
+  // v73.83: the per-debit live is EXACT, not an approximation — adj.cashBy
+  // attributes the payoff's raw delta to its funder (the "Paid with" pick,
+  // v73.80), so a payoff from MariBank debit moves ONLY the MariBank line.
+  // The TOTAL is always exact (base − adj.cash — the overlay ADDS to the
+  // base, the v72.25 sign convention). A reconcile re-anchors the base to
+  // the live values and zeroes the overlay. The proportional split survives
+  // only as a one-render fallback for pre-v73.83 phones whose stored
+  // cashBy hasn't been rebuilt yet (see reconData).
   var reconState = null; // { touch: 'maya' | 'cash' | 'total' | <debit name>, vals: {key: number} }
   function reconData() {
     var b = state.base;
@@ -915,16 +1009,37 @@
     var otherDebits = debits.filter(function (a) { return String(a.name || '').trim().toLowerCase() !== 'cash'; });
     var cashAcc = null;
     debits.forEach(function (a) { if (!cashAcc && String(a.name || '').trim().toLowerCase() === 'cash') cashAcc = a; });
-    // the virtual Cash row: total live − the other debits' proportional live
+    // v73.83: the per-debit live is EXACT — each debit carries its own
+    // funder-attributed overlay share (adj.cashBy, the payoff's "Paid with"
+    // pick). The old proportional split (base − adj.cash × base/total) smeared
+    // every payoff across ALL cash accounts (boss's screenshot: a 6,156.27
+    // payoff from MariBank debit moved Cash −50.13, MariBank −2,969.69,
+    // LandBank −3,136.45). Fallback: phones whose stored cashBy is empty
+    // while the overlay is nonzero (a pre-v73.83 phone mid-boot, before
+    // migrateCashBy lands) keep the proportional split for that one render —
+    // it is exact once the overlay zeroes and the rebuild is idempotent.
+    var cashBy = state.adj.cashBy || {};
+    var cashBySum = 0;
+    Object.keys(cashBy).forEach(function (k) { cashBySum += cashBy[k] || 0; });
+    // usable = the stored split holds exactly the payoff portion of the
+    // overlay (NOT all of adj.cash — cash_out / cash_in moves are
+    // unattributed and ride the Cash residual row, never cashBy)
+    var cashByUsable = Math.abs(cashBySum - payoffCashTotal(state.txns, lastReconAt())) <= 0.004;
     var otherLive = 0;
     var debRows = otherDebits.map(function (a) {
       var baseV = Number(a.value) || 0;
-      var live = baseDebitSum > 0.004
-        ? r2(baseV - (adjActive() ? r2(state.adj.cash * baseV / baseDebitSum) : 0))
+      var live = adjActive()
+        ? (cashByUsable
+            ? r2(baseV - (cashBy[a.name] || 0))
+            : r2(baseV - r2(state.adj.cash * baseV / baseDebitSum)))
         : r2(baseV);
       otherLive += live;
       return { name: a.name, live: live, isCash: false };
     });
+    // the virtual Cash row: total live − the other debits' live. It is the
+    // wallet residual — legacy payoffs (no funder recorded) attribute to
+    // 'Cash' in the overlay, so they land here, exactly where the old
+    // proportional model's residual lived.
     var cashLive = r2(totalLive - otherLive);
     debRows.unshift({ name: 'Cash', live: cashLive, isCash: true, real: !!cashAcc });
     return { cards: cardRows, debits: debRows, totalLive: totalLive, hasCards: cardRows.length > 0, hasCash: debRows.length > 0 };
@@ -1213,15 +1328,17 @@
     }
     if (ch.key === 'Cash') {
       // a cash-side reconcile re-anchors the WHOLE pool: every debit's base
-      // moves to its live value (the proportional split, exact once the
-      // overlay zeroes) and Cash carries (new total − the other debits' live)
-      // so the base total lands on the new total exactly.
+      // moves to its live value (v73.83: the EXACT per-funder live —
+      // base − cashBy[name], never a smeared display value) and Cash
+      // carries (new total − the other debits' live) so the base total
+      // lands on the new total exactly.
       var newTotal = reconState.touch === 'total'
         ? r2(reconState.vals.total)
         : r2(d.totalLive + ch.delta);
-      // the other debits take the live values reconData just computed (same
-      // proportional split the UI displayed — NOT a recompute from state.adj,
-      // which a previous reconcile in this save batch may have already zeroed)
+      // the other debits take the live values reconData just computed (the
+      // exact per-funder split the UI displayed — NOT a recompute from
+      // state.adj, which a previous reconcile in this save batch may have
+      // already zeroed)
       var otherLive = 0;
       (b.accounts || []).forEach(function (a) {
         if (a.kind !== 'debit' || String(a.name || '').trim().toLowerCase() === 'cash') return;
@@ -1262,7 +1379,7 @@
     // Rebuild the snapshot DIRECTLY (not via refreshLocalSnapshot — that
     // function re-zeros the overlay whenever the sig changes, and the card's
     // prepayBy share must be dropped, not re-applied, on the new base).
-    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
+    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V };
     state.snapshot = state.base && !baseIsEmpty(state.base) ? baseToSnapshot(state.base) : null;
     state.adjSig = snapSig(state.snapshot);
     persistSnapshot();
@@ -1588,7 +1705,7 @@
     state.snapshot = state.base && !baseIsEmpty(state.base) ? baseToSnapshot(state.base) : null;
     var sig = snapSig(state.snapshot);
     // The base numbers moved (edited in Settings) -> rebase: the base is source of truth again.
-    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: ADJ_MODEL_V };
+    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V };
     state.adjSig = sig;
   }
   function persistSnapshot() {
@@ -8238,6 +8355,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
             if (!data.adj) computeAdjFromTxns(); // v72.8: a pre-72.8 backup has no adj — recompute from the imported txns
             if (hasSec('txns')) migratePayoffModel(); // v72.43: a pre-v72.42 backup's adj still carries the old payoff model (adj + txns come from the same file)
             if (hasSec('txns')) migratePrepayBy(); // v73.71: an imported per-card split reconciles against the imported txns immediately (not just next boot)
+            if (hasSec('txns')) migrateCashBy(); // v73.83: the imported per-funder split reconciles against the imported txns too
             if (hasSec('owed') && hasSec('txns')) migrateIpfTheirs(); // v73.72: an imported book's un-filed ipf-on-card entries file their theirs pair immediately
           }
           // v47: persist the base too. The old code re-derived the snapshot from
@@ -8282,12 +8400,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.82, live: new Date(2026, 10, 1, 18, 49) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.83, live: new Date(2026, 10, 1, 21, 19) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.83': [
+      'Fixed: paying a card due moved ALL your cash accounts — a payoff from MariBank debit used to smear across Cash, MariBank, and LandBank in proportion to their balances. Now the payoff lands on the account that actually paid (the "Paid with" pick) only — Cash and the other accounts stay untouched. Phones already smeared self-correct on the next cash reconcile.'
+    ],
     '73.82': [
       'Fixed: card balances drifting back to absurd values after a reconcile (Maya CC above its limit, MariBank CC negative). A boot-time recompute re-applied the ENTIRE card history onto the freshly reconciled base — the fix only rebuilds the per-card split from transactions logged AFTER your last reconcile, so a reconciled balance now stays put. Already-drifted phones self-heal on the first boot after this release.',
       'New: card balances are guarded at reconcile — a value you type (or the re-anchor of the other card) is clamped to stay between 0 and the card\'s credit limit, with a toast telling you when it clamps.'
@@ -9369,6 +9490,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     reconRowFilesAs: reconRowFilesAs, // v73.73: the absorption rule (smoke checks total→Cash)
     migratePrepayBy: migratePrepayBy, // v73.82: the boot per-card rebuild (smoke drives the reconcile-then-recompute acceptance test)
     lastReconAt: lastReconAt, // v73.82: the last rebasing override (smoke asserts the gate)
+    migrateCashBy: migrateCashBy, // v73.83: the boot per-funder cash split rebuild (smoke drives the payoff-lands-on-funder acceptance test)
     fileReconcileRow: fileReconcileRow, // v73.73: the audit row (smoke checks the ledger)
     setMlFilters: function (cat, m) { mlFilterCat = cat; mlFilterM = m || ''; mlShownCount = 5; }, // v73.70: test hook (the smoke drives the method filter without a DOM onchange)
     prefillAdd: prefillAdd, // v73.18: the coach prefill (smoke verifies the chip's target state)
@@ -9958,6 +10080,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       if (!hasAdj && !state.adjSig) computeAdjFromTxns();
       migratePayoffModel(); // v72.43: one-shot re-derivation of a pre-v72.42 persisted overlay
       migratePrepayBy(); // v73.71: one-shot rebuild of the stale per-card prepay split (AFTER the payoff migration — it re-stamps mv)
+      migrateCashBy(); // v73.83: rebuild the per-funder cash split (lastReconAt-gated; self-heals smeared phones)
       migrateIpfTheirs(); // v73.72: one-shot backfill — past ipf-on-card entries file their theirs pair (stamp-gated, idempotent)
       if (!state.adjSig) state.adjSig = snapSig(state.snapshot);
       state.adjLoaded = true;
