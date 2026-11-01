@@ -1796,15 +1796,29 @@ def main():
           # v73.85 retarget: the recon input line gained the quick-sum
           # placeholder (the f_amount match) between autocomplete and value
           and "type=\"text\" autocomplete=\"off\" placeholder=\"0.00, or a quick sum like 300-125+10\" value=\"" in js)
-    check("v73.78 (boss: 'typing still rtl — 4 then 34 then 234 then 5234'): the recon input now shows the RAW typed text (reconState.raw / reconInputValue), never the parsed number — the parsed value reset the caret to 0 on every keystroke re-render (digits landed at the left edge) and clobbered mid-typing quick-sum expressions. The caret is captured from the OLD input BEFORE reconRender() and restored (clamped) on the new one; the oninput handler passes the raw text through to reconSetInput",
+    check("v73.78 (boss: 'typing still rtl — 4 then 34 then 234 then 5234'): the recon input now shows the RAW typed text (reconState.raw / reconInputValue), never the parsed number — the parsed value reset the caret to 0 on every keystroke re-render (digits landed at the left edge) and clobbered mid-typing quick-sum expressions. The oninput handler passes the raw text through to reconSetInput (v73.86: the caret-capture dance is gone with the per-keystroke re-render — the input node is stable, see the v73.86 pin)",
           "function reconInputValue(id) {" in js
           and "reconState.raw[id] = raw; // keep the exact typed text" in js
           and "reconSetInput(inp.getAttribute('data-recon'), v, inp.value);" in js
-          and "var old = el0 && el0.querySelector('input[data-recon=\"' + id + '\"]');" in js
-          and "var caret = old && old.selectionStart != null ? old.selectionStart : (old && old.value ? old.value.length : 0);" in js
+          # v73.86 retarget: the caret-capture dance (old selectionStart +
+          # setSelectionRange on the re-rendered node) is DELETED — the input
+          # node is now stable across keystrokes, so there is no new node to
+          # restore the caret onto (the v73.86 pin covers the new mechanism)
+          and "reconSetInputLive(id);" in js
           # v73.85 retarget: the input line gained the quick-sum placeholder
           # (the f_amount match), so the value pin now includes it
           and "value=\"' + esc(reconInputValue(a.id)) + '\" data-recon=\"" in js)
+    check("v73.86 (boss: 'the recon field's 123/ABC mode resets to ABC after every digit'): the per-keystroke re-render is GONE — reconSetInput no longer calls reconRender() (that replaced the input node each keystroke, and a fresh <input> re-negotiates with the IME, resetting the 123/ABC mode per digit). Instead reconSetInputLive surgically updates only what a keystroke changes: the edited row's delta line (the row's <input> stays the SAME node), the Cash row's delta on a Total edit, and the Will-file box + .lnacts button row (appear at the first nonzero delta, vanish at zero). reconRender() stays for the state transitions (start/save/cancel/external repaints). The card HTML is built by reconCardHTML (shared by reconRender and the smoke) and the delta/fil-line HTML by reconDeltaHTML/reconFilLine (shared by the full render and the surgical update — one code path, the v73.73 lesson). Smoke PART 29 v73.86 block: the input node is the same object across keystrokes, the delta/box/buttons update in place, and a Total edit re-derives the Cash row in place",
+          "function reconSetInputLive(id) {" in js
+          and "function reconCardHTML() {" in js
+          and "function reconDeltaHTML(d, filLine) {" in js
+          and "function reconFilLine(a, d) {" in js
+          and "reconSetInputLive(id);" in js
+          and "var h = reconCardHTML();" in js
+          and "lnr.appendChild(nd);" in js
+          # the per-keystroke re-render + caret dance are gone
+          and "var caret = old && old.selectionStart" not in js
+          and "inp.setSelectionRange(caret, caret);" not in js)
     check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
           "function seedPayTo()" in js
           and "function seedPayWith()" in js

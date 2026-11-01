@@ -1,3 +1,47 @@
+# v73.86 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-02 - "my full keyboard has 2 modes: ABC and 123. whenever i input digits to the field in add expense, i switch to 123 and the full keyboard remains at 123... its different for the reconcile card: i switch to 123 and when i enter the first digit, the mode switch back to ABC... diagnose" -> "Approve the stable-input fix (no per-keystroke re-render, surgical updates, retargeted smoke)"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.86, sw cache
+finances-pwa-v73.86 pushed to https://github.com/jblagana/finance-app.git (main).
+
+Diagnosis (boss-approved): the Add sheet's f_amount has NO oninput handler —
+the node persists and the IME keeps its 123 mode. The recon field's oninput
+called reconSetInput -> reconRender() (el.innerHTML = h) on EVERY keystroke:
+the input was destroyed and re-created each time (the v73.78 caret-capture
+dance only papered over it), and a fresh <input> re-negotiates with the IME,
+so Android's 123/ABC mode reset to ABC after every digit.
+
+Fix (the approved shape):
+- reconSetInput no longer re-renders. The input node is created ONCE by
+  reconStartEdit's render and never touched per keystroke — its value already
+  holds the exact typed text (the oninput handler never writes it), so caret,
+  focus, and keyboard mode all survive. The v73.78 caret-capture dance
+  (old selectionStart + setSelectionRange on the re-rendered node) is deleted.
+- New reconSetInputLive(id): the per-keystroke surgical update — repaints ONLY
+  (1) the edited row's delta line (the row's <input> stays the SAME node; the
+  delta div is swapped out/in, built programmatically), (2) the Cash row's
+  delta on a Total edit (absorption), (3) the Will-file box + the .lnacts
+  button row (appear at the first nonzero delta, vanish at zero).
+- reconRender() stays for the state transitions (start / save / cancel /
+  external repaints). The card HTML is now built by reconCardHTML (shared by
+  reconRender + the smoke) and the delta/fil-line HTML by reconDeltaHTML /
+  reconFilLine (shared by the full render and the surgical update — ONE code
+  path; the v73.73 partial-update bug farm was two code paths, not partial
+  updates).
+
+Gates: release.ps1 v73.86 all green - check_site (repo + root mirror; new
+v73.86 pin, 10 clauses including the negative pins for the deleted caret
+dance; the v73.78 pin retargeted off the caret lines), parser, node --check
+x4, both smokes. smoke PART 29 v73.86 block (14 asserts): the input node is
+the SAME OBJECT across keystrokes (the IME keeps its 123 mode), the card
+still repaints per keystroke, the delta line / Will-file box / .lnacts row
+update in place, the node survives the delta returning to zero (delta line +
+box + buttons removed in place), and a Total edit re-derives the Cash row in
+place. The v73.78 raw-text asserts were retargeted to the live node's value
+(driving the real oninput path) since the value no longer round-trips through
+innerHTML. The smoke harness gained a minimal real element tree (shimEl /
+parseShim / shimQ) for #reconcile — makeStub's querySelector returns a fresh
+throwaway per call, which would make the node-identity assert meaningless.
+
 # v73.85 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-02 - "RECONCILE CARD - Check how the Add sheet's amount field (keyboard behavior) is implemented and make the Reconcile field match it exactly. - add the 'cancel' and 'reconcile' buttons in the card itself when there's an edit, instead of a floating band"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.85, sw cache

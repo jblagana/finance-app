@@ -1112,12 +1112,14 @@
   // it mid-edit); cancel/save close the edit and the card folds back.
   var reconOpen = false;
   function reconToggle() { reconOpen = !reconOpen; reconRender(); }
-  function reconRender() {
-    var el = byId('reconcile');
-    if (!el) return;
+  // v73.86: the card's full HTML, extracted from reconRender so the
+  // per-keystroke update (reconSetInputLive) and the state-transition render
+  // share ONE builder — the v73.73 partial-update DOM surgery was a bug farm
+  // because the pieces had two code paths, not because partial updates are
+  // wrong.
+  function reconCardHTML() {
     var d = reconData();
-    if (!d || (!d.hasCards && !d.hasCash)) { el.style.display = 'none'; el.innerHTML = ''; return; }
-    el.style.display = '';
+    if (!d || (!d.hasCards && !d.hasCash)) return null;
     var cc = ccDue();
     var dueLbl = cc ? dayMonth(cc.dueDate) : '';
     var open = reconOpen || !!(reconState && reconState.touch);
@@ -1152,6 +1154,14 @@
         ? '<div class="lnacts"><button type="button" class="act ghost" id="reconCancelBtn">Cancel</button><button type="button" class="act" id="reconGoBtn">Reconcile</button></div>'
         : '')
       + '</div></section>';
+    return h;
+  }
+  function reconRender() {
+    var el = byId('reconcile');
+    if (!el) return;
+    var h = reconCardHTML();
+    if (h == null) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = '';
     el.innerHTML = h;
     reconBind();
   }
@@ -1202,24 +1212,38 @@
     var inp = el && el.querySelector('input[data-recon="' + id + '"]');
     if (inp) { inp.focus(); inp.select(); }
   }
+  // v73.86: the row's "will file" sub-line, extracted from reconRowHTML so
+  // the per-keystroke surgical update (reconSetInput) and the full render
+  // share ONE source — the v73.73 partial-update DOM surgery was a bug farm
+  // because the pieces had two code paths, not because partial updates are
+  // wrong.
+  function reconFilLine(a, d) {
+    var editing = reconState && reconState.touch === a.id;
+    if (editing && Math.abs(d) > 0.004) {
+      return '<span class="fil">will file Reconcile \u00b7 ' + esc(reconRowFilesAs(a.id)) + ' ' + (d > 0 ? '+' : '\u2212') + money(Math.abs(d)) + '</span>';
+    }
+    if (a.id === 'cash' && reconState && reconState.touch === 'total' && Math.abs(d) > 0.004) {
+      return '<span class="fil">absorbed from Total cash \u2014 same row</span>';
+    }
+    if (a.isTotal) {
+      return '<span class="fil">moves with the accounts below \u2014 no row filed</span>';
+    }
+    if (reconState && reconState.touch && reconState.touch !== a.id && Math.abs(d) > 0.004) {
+      return '<span class="fil">no row filed</span>';
+    }
+    return '';
+  }
+  function reconDeltaHTML(d, filLine) {
+    return Math.abs(d) > 0.004
+      ? '<div class="recondelta ' + (d > 0 ? 'up' : 'dn') + '">' + (d > 0 ? '+' : '\u2212') + money(Math.abs(d)) + filLine + '</div>'
+      : '';
+  }
   function reconRowHTML(a) {
     var editing = reconState && reconState.touch === a.id;
     var cur = (editing && reconState.vals[a.id] != null) ? reconState.vals[a.id] : a.live;
     var d = editing && reconState.vals[a.id] != null ? r2(reconState.vals[a.id] - a.live) : 0;
-    var filesAs = reconRowFilesAs(a.id);
-    var filLine = '';
-    if (editing && Math.abs(d) > 0.004) {
-      filLine = '<span class="fil">will file Reconcile \u00b7 ' + esc(filesAs) + ' ' + (d > 0 ? '+' : '\u2212') + money(Math.abs(d)) + '</span>';
-    } else if (a.id === 'cash' && reconState && reconState.touch === 'total' && Math.abs(d) > 0.004) {
-      filLine = '<span class="fil">absorbed from Total cash \u2014 same row</span>';
-    } else if (a.isTotal) {
-      filLine = '<span class="fil">moves with the accounts below \u2014 no row filed</span>';
-    } else if (reconState && reconState.touch && reconState.touch !== a.id && Math.abs(d) > 0.004) {
-      filLine = '<span class="fil">no row filed</span>';
-    }
-    var delta = Math.abs(d) > 0.004
-      ? '<div class="recondelta ' + (d > 0 ? 'up' : 'dn') + '">' + (d > 0 ? '+' : '\u2212') + money(Math.abs(d)) + filLine + '</div>'
-      : '';
+    var filLine = reconFilLine(a, d);
+    var delta = reconDeltaHTML(d, filLine);
     var amt = editing
       // v73.77: FULL keyboard (no inputmode) — the numeric keypad anchors the
       // caret right (digits appeared right-to-left) and has no operators, so
@@ -1303,24 +1327,96 @@
       reconState.vals.cash = r2(v - other);
     }
     reconState.touch = id; // the LAST edit decides which row files
-    // v73.78: capture the caret from the OLD input BEFORE the re-render —
-    // the old input is the focused one; reading selectionStart after
-    // reconRender() hit the NEW input, where it's always 0 (left edge).
-    var el0 = byId('reconcile');
-    var old = el0 && el0.querySelector('input[data-recon="' + id + '"]');
-    var caret = old && old.selectionStart != null ? old.selectionStart : (old && old.value ? old.value.length : 0);
-    // v73.75: full re-render on every keystroke, then focus/caret restore on
-    // the edited row's input — the card is ~7 rows, so a full repaint is
-    // cheap and keeps the delta lines / Will-file box / save bar in lockstep
-    // (the v73.73 partial-update DOM surgery was a bug farm).
-    reconRender();
+    // v73.86: NO re-render on a keystroke — the v73.78 caret-capture dance
+    // (capture from the old node, reconRender, refocus + setSelectionRange on
+    // the NEW node) existed only because reconRender replaced the input; a
+    // fresh <input> also re-negotiates with the IME, so Android's 123/ABC
+    // mode reset to ABC after EVERY digit (the boss's per-digit dance). The
+    // input node is now created ONCE by reconStartEdit's render and never
+    // touched here — its value already holds the exact typed text (the
+    // oninput handler never writes it), so caret, focus, and keyboard mode
+    // all survive untouched.
+    reconSetInputLive(id);
+  }
+  // v73.86: the per-keystroke surgical update — after reconSetInput moves
+  // reconState, repaint ONLY the three things a keystroke can change,
+  // sharing reconRowHTML's exact HTML builders so the output is identical
+  // to a full render:
+  //   1. the edited row's delta line (the row's .lnr keeps the untouched input)
+  //   2. the Cash row's delta line (a Total-cash edit re-derives it)
+  //   3. the Will-file box + the .lnacts button row (appear at the first
+  //      nonzero delta, vanish when it returns to zero)
+  // reconRender() stays for the real state transitions (start / save /
+  // cancel / external repaints) — those are one-shot, not per-keystroke.
+  function reconSetInputLive(id) {
     var el = byId('reconcile');
-    var inp = el && el.querySelector('input[data-recon="' + id + '"]');
-    if (inp) {
-      var max = inp.value ? inp.value.length : 0;
-      if (caret > max) caret = max;
-      inp.focus();
-      try { inp.setSelectionRange(caret, caret); } catch (e) {}
+    if (!el) return;
+    var d = reconData();
+    if (!d) return;
+    var liveOf = function (rid) {
+      if (rid === 'total') return d.totalLive;
+      if (rid === 'cash') { var c = null; d.debits.forEach(function (r) { if (r.isCash) c = r.live; }); return c; }
+      var v = null;
+      d.cards.forEach(function (r) { if (r.name === rid) v = r.live; });
+      if (v == null) d.debits.forEach(function (r) { if (r.name === rid) v = r.live; });
+      return v;
+    };
+    var paintRow = function (rid) {
+      var row = el.querySelector('.lnrow[data-recon="' + rid + '"]');
+      if (!row) return;
+      var lnr = row.querySelector('.lnr');
+      if (!lnr) return;
+      var live = liveOf(rid);
+      var val = reconState.vals[rid];
+      var dv = (val != null && live != null) ? r2(val - live) : 0;
+      var a = { id: rid, isTotal: rid === 'total' };
+      // swap ONLY the delta div — the row's <input> (when this row is the
+      // edited one) must stay the same node, or the stable-input guarantee
+      // is void. The delta node is built programmatically (no innerHTML
+      // parse): the text is the signed amount, the .fil sub-line rides as a
+      // child span (same DOM shape reconRowHTML's string produces).
+      var old = lnr.querySelector('.recondelta');
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      if (Math.abs(dv) > 0.004) {
+        var nd = document.createElement('div');
+        nd.className = 'recondelta ' + (dv > 0 ? 'up' : 'dn');
+        nd.textContent = (dv > 0 ? '+' : '\u2212') + money(Math.abs(dv));
+        var fil = reconFilLine(a, dv);
+        if (fil) {
+          var fs = document.createElement('span');
+          fs.className = 'fil';
+          fs.textContent = fil.replace(/^<span class="fil">/, '').replace(/<\/span>$/, '');
+          nd.appendChild(fs);
+        }
+        lnr.appendChild(nd);
+      }
+    };
+    paintRow(id);
+    if (id === 'total') paintRow('cash'); // the absorbed correction re-derives the Cash row
+    var ch = reconChanged(d);
+    var box = el.querySelector('#reconFileBox');
+    if (box) {
+      box.style.display = ch ? '' : 'none';
+      box.innerHTML = '<div class="lnfileh">Will file on save</div>'
+        + (ch
+          ? '<div class="reconfile"><span>Reconcile \u00b7 ' + esc(ch.key) + '</span><b style="color:' + (ch.delta > 0 ? 'var(--ok)' : 'var(--bad)') + '">' + (ch.delta > 0 ? '+' : '\u2212') + money(Math.abs(ch.delta)) + '</b></div>'
+          : '');
+    }
+    var body = el.querySelector('.lnbody');
+    if (body) {
+      var acts = body.querySelector('.lnacts');
+      if (ch && !acts) {
+        var div = document.createElement('div');
+        div.className = 'lnacts';
+        div.innerHTML = '<button type="button" class="act ghost" id="reconCancelBtn">Cancel</button><button type="button" class="act" id="reconGoBtn">Reconcile</button>';
+        body.appendChild(div);
+        var go = byId('reconGoBtn');
+        if (go) go.onclick = reconSave;
+        var cx = byId('reconCancelBtn');
+        if (cx) cx.onclick = reconCancel;
+      } else if (!ch && acts) {
+        acts.parentNode && acts.parentNode.removeChild(acts);
+      }
     }
   }
   // v73.75 helper — the live value of a recon row id (reconStartEdit uses it)
@@ -8423,12 +8519,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.85, live: new Date(2026, 10, 2, 0, 9) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.86, live: new Date(2026, 10, 2, 1, 49) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.86': [
+      'Fixed: typing in the Live-numbers edit field kept snapping the keyboard back to ABC after every digit (you had to flip to 123 again for the next one). The field was being rebuilt on every keystroke, and a fresh field resets the keyboard mode — now the field stays put while you type, so 123 stays 123, and the delta / Will-file / buttons still update live.'
+    ],
     '73.85': [
       'Live numbers: the Reconcile amount field now behaves exactly like the Add sheet\u2019s Amount (full keyboard, quick sums, same look) \u2014 and the Cancel / Reconcile buttons moved INTO the card itself, replacing the floating bottom band.'
     ],

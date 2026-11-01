@@ -70,6 +70,11 @@ elMap['pe_date'].id = 'pe_date';
 // call, so the app wrote to a throwaway element and the "renders in the
 // ledger" assertion tested an empty string — green gates, broken UI.
 function byIdStub(id) {
+  // v73.86: #reconcile is a REAL shim tree (see shimEl above) — the
+  // per-keystroke surgical update + the stable-input identity assert need
+  // querySelector to return the same node object twice. Every other id
+  // stays on the forgiving makeStub.
+  if (id === 'reconcile' && !elMap[id]) elMap[id] = shimEl('div', { id: 'reconcile' });
   if (!elMap[id]) elMap[id] = makeStub();
   return elMap[id];
 }
@@ -77,6 +82,146 @@ function byIdStub(id) {
 // must hit the SAME instance the app's byId('reconcile') wrote to).
 global.__elMap = elMap;
 
+// v73.86: a minimal REAL element tree for the #reconcile card — the
+// per-keystroke surgical update (reconSetInputLive) mutates the row's
+// .lnr / the Will-file box / the .lnacts row on the LIVE tree, and the
+// stable-input guarantee (the input node is never replaced while typing)
+// can only be asserted against a tree where querySelector returns the
+// same node object twice. makeStub's querySelector returns a fresh
+// throwaway per call, which would make the node-identity assert meaningless.
+// Supports the selector shapes the recon code uses: '#id', '.cls',
+// '.cls[attr="v"]', 'tag[attr="v"]'.
+function shimEl(tag, attrs) {
+  var el = {
+    tagName: String(tag || 'div').toUpperCase(),
+    attrs: attrs || {},
+    children: [],
+    parentNode: null,
+    style: {},
+    dataset: {},
+    textContent: ''
+  };
+  // className maps onto attrs['class'] — the app sets el.className on the
+  // nodes it builds (the .recondelta line, the .lnacts row), and the
+  // selectors match on attrs['class'].
+  Object.defineProperty(el, 'className', {
+    get: function () { return el.attrs['class'] || ''; },
+    set: function (v) { el.attrs['class'] = String(v); }
+  });
+  // the input's value: the live typed text — a plain property that falls
+  // back to the parsed value="..." attribute (reconSetInput reads inp.value,
+  // the oninput handler passes it through as raw).
+  Object.defineProperty(el, 'value', {
+    get: function () {
+      if (el._v !== undefined) return el._v;
+      return el.attrs.value !== undefined ? el.attrs.value : '';
+    },
+    set: function (v) { el._v = v; }
+  });
+  Object.defineProperty(el, 'innerHTML', {
+    get: function () { return shimSerialize(el.children); },
+    set: function (html) {
+      el.children = parseShim(String(html == null ? '' : html));
+      el.children.forEach(function (c) { if (c.parentNode === null) c.parentNode = el; });
+    }
+  });
+  el.getAttribute = function (k) { return (k in el.attrs) ? el.attrs[k] : null; };
+  el.setAttribute = function (k, v) { el.attrs[k] = String(v); };
+  el.querySelector = function (sel) { var r = shimQ(el, sel); return r.length ? r[0] : null; };
+  el.querySelectorAll = function (sel) { return shimQ(el, sel); };
+  el.appendChild = function (c) { c.parentNode = el; el.children.push(c); };
+  el.removeChild = function (c) {
+    var i = el.children.indexOf(c);
+    if (i >= 0) el.children.splice(i, 1);
+    c.parentNode = null;
+  };
+  el.focus = function () {};
+  el.select = function () {};
+  el.blur = function () {};
+  el.click = function () {};
+  return el;
+}
+function shimSerialize(nodes) {
+  return nodes.map(function (n) {
+    if (n.type === 'text') return n.data;
+    var a = Object.keys(n.attrs).map(function (k) { return ' ' + k + '="' + n.attrs[k] + '"'; }).join('');
+    var t = n.tagName.toLowerCase();
+    if (t === 'input' || t === 'br' || t === 'img') {
+      // an input's value attribute reflects the LIVE value (the typed text),
+      // keeping its original position in the attribute order
+      if (n.tagName === 'INPUT') {
+        var v = n.value;
+        a = a.replace(/\svalue="[^"]*"/, v !== '' ? ' value="' + v + '"' : '');
+      }
+      return '<' + t + a + '>';
+    }
+    return '<' + t + a + '>' + shimSerialize(n.children) + '</' + t + '>';
+  }).join('');
+}
+function parseShim(html) {
+  var roots = [];
+  var stack = []; // open elements (children attach to the top)
+  var re = /<\/?([a-zA-Z][a-zA-Z0-9]*)((?:\s+[a-zA-Z][a-zA-Z0-9_-]*="[^"]*")*)\s*\/?>|([^<]+)/g;
+  var m;
+  while ((m = re.exec(html)) !== null) {
+    if (m[3] !== undefined) {
+      var txt = m[3].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+      if (txt) (stack.length ? stack[stack.length - 1].children : roots).push({ type: 'text', data: txt, parentNode: null });
+      continue;
+    }
+    var tag = m[1].toLowerCase();
+    var attrs = {};
+    var ar = /([a-zA-Z][a-zA-Z0-9_-]*)="([^"]*)"/g;
+    var am;
+    while ((am = ar.exec(m[2] || '')) !== null) attrs[am[1]] = am[2];
+    if (m[0].charAt(1) === '/') {
+      // closing tag: pop the nearest matching open node
+      for (var i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].tagName === tag.toUpperCase()) { stack.splice(i, 1); break; }
+      }
+      continue;
+    }
+    var el = shimEl(tag, attrs);
+    if (m[0].slice(-2) === '/>' || tag === 'input' || tag === 'br' || tag === 'img') {
+      (stack.length ? stack[stack.length - 1].children : roots).push(el);
+    } else {
+      (stack.length ? stack[stack.length - 1].children : roots).push(el);
+      stack.push(el);
+    }
+  }
+  return roots;
+}
+function shimParseSel(sel) {
+  var p = { tag: null, cls: null, id: null, attr: null, attrVal: null };
+  var idm = sel.match(/^#([A-Za-z0-9_-]+)$/);
+  if (idm) { p.id = idm[1]; return p; }
+  var tagm = sel.match(/^([a-zA-Z][a-zA-Z0-9]*)/);
+  if (tagm) p.tag = tagm[1].toLowerCase();
+  var clsm = sel.match(/\.([A-Za-z0-9_-]+)/);
+  if (clsm) p.cls = clsm[1];
+  var atm = sel.match(/\[([a-zA-Z][a-zA-Z0-9_-]*)="([^"]*)"\]/);
+  if (atm) { p.attr = atm[1]; p.attrVal = atm[2]; }
+  return p;
+}
+function shimMatch(node, p) {
+  if (node.type === 'text') return false;
+  if (p.tag && node.tagName.toLowerCase() !== p.tag) return false;
+  if (p.cls && (node.attrs['class'] || '').split(/\s+/).indexOf(p.cls) === -1) return false;
+  if (p.id && node.attrs.id !== p.id) return false;
+  if (p.attr && node.attrs[p.attr] !== p.attrVal) return false;
+  return true;
+}
+function shimQ(root, sel) {
+  var p = shimParseSel(sel);
+  var out = [];
+  (function walk(e) {
+    e.children.forEach(function (c) {
+      if (shimMatch(c, p)) out.push(c);
+      if (c.type !== 'text') walk(c);
+    });
+  })(root);
+  return out;
+}
 global.window = global;
 global.addEventListener = function () {};
 global.removeEventListener = function () {};
@@ -90,7 +235,10 @@ global.document = {
   querySelector: function () { return makeStub(); },
   querySelectorAll: function () { return []; },
   addEventListener: function () {},
-  createElement: function () { return makeStub(); },
+  // v73.86: createElement returns a REAL shim node — reconSetInputLive builds
+  // the delta line via document.createElement('div') and appends it to the
+  // #reconcile tree, so the smoke's .recondelta selector must find it.
+  createElement: function (tag) { return shimEl(tag); },
   createTextNode: function () { return makeStub(); }
 };
 global.location = { protocol: 'https:', host: 'x', href: 'https://x/', search: '' };
@@ -1657,7 +1805,9 @@ waitReady().then(async function (F) {
       // path (emit 'ui') and assert the #reconcile element is un-hidden and
       // carries the card rows — a data-layer-only assert can never catch a
       // repaint-wiring hole again.
-      var reconEl29 = __elMap['reconcile'] || (__elMap['reconcile'] = makeStub());
+      // v73.86: byIdStub returns the REAL shim tree for #reconcile (the
+      // stable-input + surgical-update asserts need live-node identity).
+      var reconEl29 = byIdStub('reconcile');
       reconEl29.style.display = 'none'; // the index.html static state
       F.emit('ui');
       ok(reconEl29.style.display === '', 'v73.74: boot (emit ui) unhides #reconcile (got ' + JSON.stringify(reconEl29.style.display) + ')');
@@ -1782,19 +1932,68 @@ waitReady().then(async function (F) {
       // fix) — re-rendering with the parsed number reset the caret to 0
       // (digits typed right-to-left: 4→34→234→5234) and clobbered mid-typing
       // expressions ----
-      F.reconSetInput('Maya CC', 4325, '4325');
+      // v73.86 retarget: with the per-keystroke re-render gone, the RAW
+      // typed text lives in the input's LIVE value (the node is never
+      // replaced, so the value is never re-written from reconInputValue) —
+      // drive the REAL oninput path (set the value, fire the handler) and
+      // assert on the live node
+      var rawInp86 = reconEl29.querySelector('input[data-recon="Maya CC"]');
+      rawInp86.value = '4325';
+      rawInp86.oninput();
       await tick();
-      ok(reconEl29.innerHTML.indexOf('value="4325"') !== -1, 'v73.78: the input keeps the RAW typed text (4325, not 4325.00) (got ' + (reconEl29.innerHTML.match(/value="([^"]*)"/) || [])[1] + ')');
-      F.reconSetInput('Maya CC', 9500, '10000-500');
+      ok(reconEl29.querySelector('input[data-recon="Maya CC"]').value === '4325', 'v73.78: the input keeps the RAW typed text (4325, not 4325.00) (got ' + reconEl29.querySelector('input[data-recon="Maya CC"]').value + ')');
+      rawInp86.value = '10000-500';
+      rawInp86.oninput();
       await tick();
-      ok(reconEl29.innerHTML.indexOf('value="10000-500"') !== -1, 'v73.78: a mid-typing quick-sum expression is NOT clobbered by the parsed value');
+      ok(reconEl29.querySelector('input[data-recon="Maya CC"]').value === '10000-500', 'v73.78: a mid-typing quick-sum expression is NOT clobbered by the parsed value');
       // the delta is the COMPUTED value minus live (9500 − 3900 = 5,600 —
       // Maya CC was reconciled to 3900 earlier in this part) — the expression
       // is the input text, the computed number drives the preview
       ok(reconEl29.innerHTML.indexOf('5,600.00') !== -1, 'v73.78: the delta preview shows the COMPUTED value (9500 − live 3900 = 5,600.00) while the input shows the expression');
-      F.reconSetInput('Maya CC', 12000, '12000-');
+      rawInp86.value = '12000-';
+      rawInp86.oninput();
       await tick();
-      ok(reconEl29.innerHTML.indexOf('value="12000-"') !== -1, 'v73.78: a trailing operator mid-typing stays in the input (fallback number drives the preview)');
+      ok(reconEl29.querySelector('input[data-recon="Maya CC"]').value === '12000-', 'v73.78: a trailing operator mid-typing stays in the input (fallback number drives the preview)');
+      // ---- v73.86: the input node is STABLE across keystrokes (the IME
+      // reset fix) — the old code re-rendered the whole card per keystroke,
+      // so every digit typed into a fresh <input> and Android's IME reset
+      // its 123/ABC mode to ABC each time. Now the node created by
+      // reconStartEdit is never replaced while typing; only the delta line,
+      // the Will-file box, and the .lnacts row update in place.
+      var inp86 = reconEl29.querySelector('input[data-recon="Maya CC"]');
+      ok(!!inp86, 'v73.86: the edited row carries a live input node (shim tree)');
+      var before86 = reconEl29.innerHTML;
+      inp86.value = '12000'; // a real keystroke: '12000-' -> '12000' (the delta moves)
+      inp86.oninput(); // the handler reads inp.value
+      var inp86b = reconEl29.querySelector('input[data-recon="Maya CC"]');
+      ok(inp86b === inp86, 'v73.86: a keystroke does NOT replace the input node (same object — the IME keeps its 123 mode)');
+      ok(reconEl29.innerHTML !== before86, 'v73.86: the card still repaints per keystroke (the delta/Will-file update in place)');
+      inp86.value = '12000';
+      inp86.oninput();
+      ok(reconEl29.querySelector('input[data-recon="Maya CC"]') === inp86, 'v73.86: the node stays stable across multiple keystrokes');
+      ok(reconEl29.querySelector('.lnrow[data-recon="Maya CC"]').querySelector('.recondelta') !== null, 'v73.86: the delta line updates in place under the untouched input');
+      // the Will-file box + the .lnacts row are present while the delta is
+      // nonzero (they appeared on the first keystroke, not on a re-render)
+      var box86 = reconEl29.querySelector('#reconFileBox');
+      ok(box86 && box86.style.display !== 'none', 'v73.86: the Will-file box is visible while the edit has a delta');
+      ok(!!reconEl29.querySelector('.lnacts'), 'v73.86: the .lnacts button row is present in the card while the edit has a delta');
+      // typing back to the live value: the delta line + box + buttons vanish
+      // in place (the input node survives)
+      inp86.value = '3900';
+      inp86.oninput();
+      ok(reconEl29.querySelector('input[data-recon="Maya CC"]') === inp86, 'v73.86: the node survives the delta returning to zero');
+      ok(reconEl29.querySelector('.lnrow[data-recon="Maya CC"]').querySelector('.recondelta') === null, 'v73.86: the delta line is removed in place at zero delta');
+      ok(reconEl29.querySelector('#reconFileBox').style.display === 'none', 'v73.86: the Will-file box hides in place at zero delta');
+      ok(reconEl29.querySelector('.lnacts') === null, 'v73.86: the .lnacts row is removed in place at zero delta');
+      // a Total-cash edit re-derives the Cash row's delta in place too
+      F.reconStartEdit('total');
+      await tick();
+      var tot86 = reconEl29.querySelector('input[data-recon="total"]');
+      ok(!!tot86, 'v73.86: the Total row edit carries a live input node');
+      tot86.value = '99999';
+      tot86.oninput();
+      ok(reconEl29.querySelector('input[data-recon="total"]') === tot86, 'v73.86: the Total input node is stable across keystrokes');
+      ok(reconEl29.querySelector('.lnrow[data-recon="cash"]').querySelector('.recondelta') !== null, 'v73.86: a Total edit re-derives the Cash row delta in place (absorption)');
       F.reconCancel();
       await tick();
       // cancel: the edit is dropped, nothing files
