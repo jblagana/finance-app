@@ -23,7 +23,7 @@
     plans: [],
     base: null,
     snapshot: null,
-    adj: { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: 2 }, // mv = the txnAdj model version (v72.43); cashBy = per-funder payoff split (v73.83)
+    adj: { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: 2 }, // mv = the txnAdj model version (v72.43); cashBy = per-funder split of the attributed cash moves (payoffs v73.83 + spends/inflows v73.84)
     adjSig: '',
     adjLoaded: false,
     coachMem: null,
@@ -708,14 +708,17 @@
   // displayed each debit as base − adj.cash × (base/total) — a payoff from
   // MariBank debit smeared across Cash / MariBank / LandBank (boss's
   // screenshot: −50.13 / −2,969.69 / −3,136.45 for a 6,156.27 payoff).
-  // cashBy attributes the payoff delta to the funder (addAdj, fed by
-  // t.payWith), so reconData lands it per-debit. This rebuild is the
-  // boot-time self-heal for phones whose stored split predates cashBy (or
-  // carries the old smear): same lastReconAt() gate as migratePrepayBy —
-  // only post-reconcile payoffs may ride the overlay; a stored split that
-  // sums to the overlay total but is NOT the post-reconcile rebuild is
-  // replaced (already-smeared phones heal on the first boot after this
-  // release, no data surgery).
+  // v73.84 (the spend-attribution fix, boss-approved): the SAME gap applied
+  // to spends — a charge on MariBank debit landed on the Cash residual
+  // because cash_out / cash_in deltas carried no funder. cashBy now
+  // attributes the payoff delta (addAdj, fed by t.payWith) AND the spend /
+  // inflow delta (fed by t.account), so reconData lands every attributed
+  // move per-debit. This rebuild is the boot-time self-heal for phones
+  // whose stored split predates cashBy (or carries the old smear): same
+  // lastReconAt() gate as migratePrepayBy — only post-reconcile moves may
+  // ride the overlay; a stored split that sums to the attributed total but
+  // is NOT the post-reconcile rebuild is replaced (already-smeared phones
+  // heal on the first boot, no data surgery).
   function migrateCashBy() {
     var a = state.adj;
     if (!a) return;
@@ -732,18 +735,19 @@
         if (!by[d.funder]) delete by[d.funder];
       }
     });
-    var payTotal = payoffCashTotal(state.txns, lastR); // the gate's own scope (post-reconcile payoffs)
+    var attrTotal = attributedCashTotal(state.txns, lastR); // the gate's own scope (post-reconcile attributed moves)
     var cur = a.cashBy || {};
     var curSum = 0;
     Object.keys(cur).forEach(function (k) { curSum += cur[k] || 0; });
-    // a stored split that sums to the post-reconcile payoff total is
+    // a stored split that sums to the post-reconcile ATTRIBUTED total is
     // CONSISTENT — but if it isn't the post-reconcile rebuild it is stale
     // (pre-cashBy phones stored {}, which sums to 0 and is replaced whenever
-    // a post-reconcile payoff exists; smeared phones store the old smear,
-    // which is replaced too). The comparison runs against the PAYOFF total,
-    // NOT adj.cash — adj.cash also carries cash_out / cash_in moves, which
-    // are unattributed and never ride cashBy.
-    var stale = Math.abs(curSum - payTotal) <= 0.004 && (function () {
+    // a post-reconcile attributed move exists; smeared phones store the old
+    // smear, which is replaced too). The comparison runs against the
+    // ATTRIBUTED total (v73.84: payoffs + spends/inflows), NOT adj.cash —
+    // adj.cash also carries unattributed moves (legacy rows with no account
+    // recorded), which ride the Cash residual, never cashBy.
+    var stale = Math.abs(curSum - attrTotal) <= 0.004 && (function () {
       var keys = {};
       Object.keys(by).forEach(function (k) { keys[k] = 1; });
       Object.keys(cur).forEach(function (k) { keys[k] = 1; });
@@ -777,21 +781,24 @@
   // card_payment {+a, 0,  -a, -a} payoff: free unchanged, raw leaves the bank
   // (overlay: effective free = snap.free − adj.free, raw = snap.total − adj.cash,
   // owed = snap + adj.card; the liquidity floor runs on the raw number.)
-  // v73.83: the overlay's PAYOFF cash total (plain payoffs only — the part
-  // that cashBy attributes per funder). adj.cash also carries cash_out /
-  // cash_in moves (unattributed — they hit the wallet, not a funder), so the
-  // per-funder split is usable only when it sums to THIS, not to adj.cash.
-  // lastR scopes to the overlay's own window: a reconcile (or rebase) zeroes
-  // the overlay, so pre-reconcile payoffs are in the BASE, not the overlay.
-  function payoffCashTotal(txns, lastR) {
+  // v73.83: the overlay's ATTRIBUTED cash total — the part cashBy splits
+  // per funder. v73.84: plain payoffs (funder = payWith || 'Cash') AND
+  // cash_out / cash_in moves (funder = t.account, 'Cash' fallback) — the
+  // same attribution txnAdj applies, so this sums exactly what rides
+  // cashBy. adj.cash also carries UNATTRIBUTED moves (legacy rows with no
+  // account recorded), so the per-funder split is usable only when it sums
+  // to THIS, not to adj.cash. lastR scopes to the overlay's own window: a
+  // reconcile (or rebase) zeroes the overlay, so pre-reconcile moves are in
+  // the BASE, not the overlay.
+  function attributedCashTotal(txns, lastR) {
     var s = 0;
     (txns || []).forEach(function (t) {
-      if (t.kind !== 'card_payment' || t.cashback) return;
       if (lastR) {
         var created = Date.parse(t.created) || 0;
         if (created && created < lastR) return; // absorbed into the base by the later reconcile
       }
-      s += Number(t.amount) || 0;
+      var d = txnAdj(t);
+      if (d.cash && d.funder) s += d.cash;
     });
     return r2(s);
   }
@@ -823,8 +830,20 @@
       plain.funder = payWithOf(t) || 'Cash';
       return plain;
     }
-    if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };
-    return { cash: amt, free: amt, card: 0, prepay: 0 }; // cash_out (default, legacy rows)
+    // v73.84 (the spend-attribution fix, boss-approved): a spend / inflow
+    // attributes to the account it was logged on (t.account — the sheet's
+    // "Paid with" pick in Spend / Money-in modes), so reconData lands it on
+    // that debit only. Legacy rows with no account (or a card account,
+    // which can't hold cash) fall back to 'Cash' — the wallet residual.
+    var cf = (t.account && String(t.account).trim()) || 'Cash';
+    if (t.kind === 'cash_in') {
+      var ci = { cash: -amt, free: -amt, card: 0, prepay: 0 };
+      ci.funder = cf;
+      return ci;
+    }
+    var co = { cash: amt, free: amt, card: 0, prepay: 0 }; // cash_out (default, legacy rows)
+    co.funder = cf;
+    return co;
   }
   function addAdj(a, sign) {
     state.adj.cash = r2(state.adj.cash + a.cash * sign);
@@ -1021,10 +1040,11 @@
     var cashBy = state.adj.cashBy || {};
     var cashBySum = 0;
     Object.keys(cashBy).forEach(function (k) { cashBySum += cashBy[k] || 0; });
-    // usable = the stored split holds exactly the payoff portion of the
-    // overlay (NOT all of adj.cash — cash_out / cash_in moves are
-    // unattributed and ride the Cash residual row, never cashBy)
-    var cashByUsable = Math.abs(cashBySum - payoffCashTotal(state.txns, lastReconAt())) <= 0.004;
+    // usable = the stored split holds exactly the ATTRIBUTED portion of the
+    // overlay (v73.84: payoffs + spends/inflows — NOT all of adj.cash, which
+    // also carries unattributed legacy rows that ride the Cash residual row,
+    // never cashBy)
+    var cashByUsable = Math.abs(cashBySum - attributedCashTotal(state.txns, lastReconAt())) <= 0.004;
     var otherLive = 0;
     var debRows = otherDebits.map(function (a) {
       var baseV = Number(a.value) || 0;
@@ -8400,12 +8420,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.83, live: new Date(2026, 10, 1, 21, 19) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.84, live: new Date(2026, 10, 1, 23, 21) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.84': [
+      'Fixed: a charge on a debit card (e.g. MariBank debit) showed up on the Cash line in Live numbers — the spend landed on the wallet residual instead of the account it was logged on. Now a spend (and a money-in) lands on the account you picked only; Cash carries only the legacy rows with no account. Phones already off show the true per-account split on the next boot.'
+    ],
     '73.83': [
       'Fixed: paying a card due moved ALL your cash accounts — a payoff from MariBank debit used to smear across Cash, MariBank, and LandBank in proportion to their balances. Now the payoff lands on the account that actually paid (the "Paid with" pick) only — Cash and the other accounts stay untouched. Phones already smeared self-correct on the next cash reconcile.'
     ],

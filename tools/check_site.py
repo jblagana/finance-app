@@ -1474,7 +1474,7 @@ def main():
           and "var r = removeTxnRow(tid, true); // keep the persistent row (see above)" in js)
     check("owed entries: only 'they paid for me' is a real ledger txn (v72.10, the filing rule was finalized in the v72.28 follow-ups — the ledger records CONSUMPTION, not loans: ipf/itb/tmb are ledger-silent, tpf always files a Cash cash_out): cash_in remains the exact inverse of cash_out (txnAdj, manual ledger use); v72.42: card_payment settles the debt instead of inverting the charge (raw liquid + owed drop, free untouched — the v72.42 check pins it), the log row flavor i/p renders before→after correctly and nets month spend, the Account section stays on ipf/itb/tmb as an informational record (user edit: 'dont drop it anymore' — never a txn), subentries edit the linked txn in place (v72.9) and delete/undo cover entry + txn together; 'Owed' joined the add-sheet categories (out again in v72.30); the v72.28 sections + filing rules are the NEXT check",
           "var plain = { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js  # v72.42 plain-payoff tuple (the v73.53 cashback branch sits above it); v73.83: the funder attaches to the same object
-          and "if (t.kind === 'cash_in') return { cash: -amt, free: -amt, card: 0, prepay: 0 };" in js
+          and "var ci = { cash: -amt, free: -amt, card: 0, prepay: 0 };" in js  # v73.84 retarget: the cash_in tuple now rides in `ci` (the funder attaches after, same as the plain payoff)
           and "k: t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x'" in js
           and '<select class="oent-acc">' in js and "owedAccOptions('CASH::Cash')" in js
           and "function owedTxnKind" not in js
@@ -1602,7 +1602,7 @@ def main():
           and "migratePayoffModel(); // v72.43: one-shot re-derivation of a pre-v72.42 persisted overlay" in js
           and "if (hasSec('txns')) migratePayoffModel();" in js
           and "prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V" in js  # v73.83: the per-funder cash split rides every zeroed/fresh overlay
-          and "prepayBy: {}, cashBy: {}, mv: 2 }, // mv = the txnAdj model version (v72.43); cashBy = per-funder payoff split (v73.83)" in js)
+          and "prepayBy: {}, cashBy: {}, mv: 2 }, // mv = the txnAdj model version (v72.43); cashBy = per-funder split of the attributed cash moves (payoffs v73.83 + spends/inflows v73.84)" in js)
     check("v72.44 (user: 'the hey jan card disappered after i logged the prepay. also should we include the prepay in the ledger summary'): (1) the paid-prepay 'Handled' row of the home coach card read an undefined variable (prepaid instead of prepayPaid) — the ReferenceError was swallowed by emit's per-render try/catch AFTER the card was made visible, so the card rendered BLANK after a prepay was logged; (2) the spend aggregates (donut, pace, spent-today, pace anomalies, the coach-note snapshot) now use ONE rule — the same one the money-log 's' line has used since v72.10: card_payment is not spend (the charge already counted), cash_in nets spend down",
           "prepaid.amount" not in js
           # v73.23: the "Partly handled — … logged on …" row is GONE (the
@@ -1813,14 +1813,18 @@ def main():
           and "show('f_accountLabel', !pre); show('f_account', !pre);" in js)
     check("v73.83 (boss: 'after paying a card due, the total-cash change is distributed across ALL cash accounts' — a 6,156.27 payoff from MariBank debit moved Cash −50.13, MariBank −2,969.69, LandBank −3,136.45; diagnosis approved, fix shipped): the payoff's raw delta rode the GLOBAL adj.cash scalar and reconData displayed each debit as base − adj.cash × (base/total) — the proportional smear. The payoff delta is now attributed to its FUNDER (adj.cashBy, fed by the v73.80 payWith pick via txnAdj/addAdj), so reconData lands it per-debit (base − cashBy[name]) and ONLY the paying account moves; legacy payoffs (no funder) + unattributed cash_out/cash_in ride the Cash residual row. migrateCashBy (boot + import) rebuilds the split lastReconAt-gated — same gate as migratePrepayBy — and replaces a stored split that isn't the post-reconcile rebuild, so already-smeared phones self-heal on the first boot; reconSave anchors from the exact live values, never a smeared display",
           "function migrateCashBy()" in js
-          and "function payoffCashTotal(txns, lastR) {" in js
           and "plain.funder = payWithOf(t) || 'Cash';" in js
           and "if (a.cash && a.funder) {" in js
           and "migrateCashBy(); // v73.83: rebuild the per-funder cash split (lastReconAt-gated; self-heals smeared phones)" in js
           and "if (hasSec('txns')) migrateCashBy();" in js
-          and "var cashByUsable = Math.abs(cashBySum - payoffCashTotal(state.txns, lastReconAt())) <= 0.004;" in js
           and "r2(baseV - (cashBy[a.name] || 0))" in js
-          and "migrateCashBy: migrateCashBy" in js)
+          and "migrateCashBy: migrateCashBy" in js)  # v73.84 retarget: the usable-gate pin moved to the v73.84 check (attributedCashTotal)
+    check("v73.84 (boss: 'i added an expense charge on maribank debit but the live numbers shows it was charged on cash' — diagnosis approved, fix shipped): the SAME attribution gap v73.83 fixed for payoffs applied to SPENDS — a cash_out / cash_in delta carried no funder, so it rode the global adj.cash scalar and reconData's Cash residual row (total − other debits) absorbed it: a MariBank-debit expense displayed as a Cash charge. txnAdj now attributes cash_out / cash_in to t.account (the sheet's account pick; legacy rows with no account, or a card account, fall back to 'Cash'), the usable-gate + migrateCashBy compare against attributedCashTotal (payoffs + spends/inflows — the exact sum that rides cashBy), and the rebuild self-heals v73.83-era splits (payoff-only) into the attributed ones",
+          "function attributedCashTotal(txns, lastR) {" in js
+          and "var cashByUsable = Math.abs(cashBySum - attributedCashTotal(state.txns, lastReconAt())) <= 0.004;" in js
+          and "var attrTotal = attributedCashTotal(state.txns, lastR);" in js
+          and "co.funder = cf;" in js
+          and "ci.funder = cf;" in js)
     check("v73.82 (boss: 'card balances go absurd after reconcile' — Maya CC 17,821.85 > its 10,000 limit, MariBank CC −10,770.75; diagnosis approved, fix shipped): the boot-time migratePrepayBy rebuilt the per-card split from the FULL txn history and rescaled it to the post-reconcile overlay, re-applying every pre-reconcile charge/prepay already absorbed into the reconciled base. The rebuild is now gated on lastReconAt() (the last rebasing override — money-log 'a' rows: reconcile / balance adjustment / reset): only txns logged AFTER that stamp may ride the overlay. A stored split that sums to the overlay total but is NOT the post-reconcile rebuild is the old code's smear — it is detected and replaced, so already-drifted phones self-heal on the first boot after this release. The constraint guard (cardClamp) clamps the reconciled base to [0, limit] at the entry point (typed value + the untouched cards' re-anchor) — never in the ledger math, so the discrepancy audit stays honest",
           "function lastReconAt()" in js
           and "if (created && created < lastR) return; // absorbed into the base by the later reconcile" in js

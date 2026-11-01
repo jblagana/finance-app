@@ -1,3 +1,50 @@
+# v73.84 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-01 - "i added an expense charge on maribank debit but the live numbers shows it was charged on cash, diagnose" -> "Approve the spend-attribution fix (funder from t.account + widened gate + self-heal)"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.84, sw cache
+finances-pwa-v73.84 pushed to https://github.com/jblagana/finance-app.git (main).
+
+Diagnosis (tool-verified, boss-approved before the fix): v73.83 attached a funder to
+PAYOFFS only (t.payWith). A cash_out / cash_in delta carried no funder, so it rode the
+global adj.cash scalar and reconData's Cash residual row (total − other debits) absorbed
+it — a MariBank-debit expense displayed as a Cash charge. The account pick (t.account)
+was recorded on the row but ignored by the overlay attribution.
+
+Fix (app.js):
+- txnAdj attributes cash_out / cash_in to t.account (the sheet's account pick; legacy
+  rows with no account — or a card account, which can't hold cash — fall back to
+  'Cash', the wallet residual).
+- The usable-gate + migrateCashBy now compare against attributedCashTotal (payoffs +
+  spends/inflows — the exact sum that rides cashBy, replacing payoffCashTotal).
+- migrateCashBy self-heals v73.83-era splits (payoff-only) into the attributed ones on
+  the first boot; lastReconAt-gated as before.
+- check_site: the v72.10 cash_in-tuple pin retargeted (var ci = {...}); the v73.83 pin
+  retargeted (usable-gate line moved to the new v73.84 pin); new v73.84 pin (4 clauses).
+
+Gates: release.ps1 v73.84 all green - check_site (repo + root mirror), parser,
+node --check x4, both smokes. smoke PART 32 retargeted + PART 32 v73.84 block: a
+LandBank spend drops LandBank by exactly 250 with Cash/MariBank UNTOUCHED; the boss's
+exact case (a MariBank-debit spend) lands on MariBank only; a MariBank inflow raises
+MariBank only; a legacy spend (no account) still rides the Cash residual; a v73.83-era
+stored split is replaced by the attributed rebuild, rows untouched. The v73.83 asserts
+retargeted for the post-PART-31-re-anchor overlay (seed legacy moves live in the base).
+
+# v73.83 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-01 - "DIAGNOSE (no shipping yet): after paying a card due, the total-cash change is distributed across ALL cash accounts..." -> "SHIP the cashBy fix now"
+Status: **done** - commit 2a2ce30 with SHELL_RELEASE 73.83, sw cache finances-pwa-v73.83
+pushed to https://github.com/jblagana/finance-app.git (main).
+
+Diagnosis (tool-verified, boss-approved before the fix): a card_payment's raw delta rode
+the GLOBAL adj.cash scalar, and reconData displayed each debit as base − adj.cash ×
+(base/total) — the proportional smear (boss's before/after: Cash −50.13, MariBank
+−2,969.69, LandBank −3,136.45 for a 6,156.27 payoff from MariBank debit).
+
+Fix (app.js): the payoff delta is attributed to its funder (adj.cashBy, fed by
+t.payWith via txnAdj/addAdj); reconData lands it per-debit (base − cashBy[name]);
+migrateCashBy (boot + import) rebuilds the split lastReconAt-gated and replaces a
+stored split that isn't the post-reconcile rebuild (self-heal); reconSave anchors from
+the exact live values. Acceptance test verbatim in smoke PART 32 (13 asserts).
+(Entry back-filled 2026-11-01 — the v73.84 session found the log missing this entry.)
+
 # v73.82 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-01 - "Diagnose why the card balances go absurd after reconcile ... Do NOT ship yet" -> "SHIP the migratePrepayBy fix now ... Acceptance test: reconcile Maya CC to 2141.80 and MariBank CC to 10864.27, then trigger the migrate/recompute path - balances must STAY at those values. Also add the constraint guard: card balance >= 0 and <= credit limit."
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.82, sw cache
