@@ -846,7 +846,11 @@ def main():
           "if (mode === 'salary' || mode === 'moneyin') return type === 'CARD' ? 'card_payment' : 'cash_in';" in js
           and "var moneyin = addMode === 'moneyin';" in js
           and "esc(a.name + (a.type === 'card' && moneyin ? ' · CC' : ''))" in js
-          and "seedAccounts();" in js.split("function setAddMode")[1].split("function prefillAdd")[0]
+          # v73.80 retarget: setAddMode's re-seed is now updateAddModeFields (the
+          # field swap — the non-prepay branch still re-seeds f_account, the
+          # prepay branch seeds f_payto/f_paywith); the v73.52 pin was the
+          # direct seedAccounts() call.
+          and "updateAddModeFields();" in js.split("function setAddMode")[1].split("function prefillAdd")[0]
           and "seedAccounts: seedAccounts, // v73.52" in js
           and "setAddMode: setAddMode, // v73.52" in js
           and "if (rawAcc.indexOf('CARD::') === 0) { el.style.display = 'none'; return; }" in js
@@ -1583,7 +1587,9 @@ def main():
           and "rowchip" in js
           and "function chipAttr(rw) {" in js
           and "function prepayRowChip(attr) {" in js
-          and "card ? 'CARD::' + card : null, 'prepay');" in js
+          # v73.80 retarget: the chip now passes the bare card name (it lands
+          # in f_payto, "Pay to" — f_payto's values are names, not TYPE::Name).
+          and "card || null, 'prepay');" in js
           and "addSheetKind: addSheetKind" in js)
     check("v72.42 (the payoff bug, user: 'fix the payoff bug and keep both numbers — floor stays on raw bank cash'): a card_payment settles the debt — it is NOT the exact inverse of card_charge (the charge already spent the free cash; the credit limit isn't money). The payoff drops the RAW liquid (adj.cash +a → effective total −a) and the owed/prepay, and leaves free UNTOUCHED (tuple free: 0, freeEffect → 0): a charge+payoff cycle nets free −amt and liquid −amt with owed 0 (the expense is real, the debt is settled) instead of erasing the expense; the money-log 'p' row renders free unchanged (before = f) while its card sub-line still shows the owed dropping; cash.free and cash.total stay separate and the liquidity floor keeps running on the raw cash.total",
           "return { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js  # the PLAIN payoff rule (v73.53: the cashback branch above it is the new-money variant)
@@ -1790,6 +1796,18 @@ def main():
           and "var old = el0 && el0.querySelector('input[data-recon=\"' + id + '\"]');" in js
           and "var caret = old && old.selectionStart != null ? old.selectionStart : (old && old.value ? old.value.length : 0);" in js
           and "value=\"' + esc(reconInputValue(a.id)) + '\"" in js)
+    check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
+          "function seedPayTo()" in js
+          and "function seedPayWith()" in js
+          and "function updateAddModeFields()" in js
+          and "function payWithOf(t) {" in js
+          and "seedPayTo: seedPayTo" in js and "seedPayWith: seedPayWith" in js and "payWithOf: payWithOf" in js
+          and 'id="f_payto"' in html and 'id="f_paywith"' in html and 'id="paywithNote"' in html
+          and "if (data.payWith) t.payWith = data.payWith;" in js
+          and "if (t.kind === 'card_payment') e.w = payWithOf(t);" in js
+          and "wTxt = (e.k === 'p' && e.w)" in js
+          and "if (t.kind === 'card_payment' && o.payWith) t.payWith = o.payWith;" in js
+          and "if (pre) { seedPayTo(); seedPayWith(); } else { seedAccounts(); }" in js)
     check("v73.72 (boss-approved: 'ipf: file theirs as a card charge' + 'increase free cash by the same amount' — the credit converted to cash, since the repayment lands as cash and tmb never files a ledger row): an 'I paid for them' on a CARD files the friend's share as its own card_charge (the bank charged the FULL bill) + a cash_in for the same amount (the advance); net on the boss's own free cash = mine commits, theirs neutralizes. The entry carries the pair handles (theirsTxnId/theirsBumpId) so add-undo / entry-delete / person-delete / edit all remove-and-restore BOTH legs. The one-shot backfill (migrateIpfTheirs, stamp-gated, idempotent) files past entries: post-base get charge + advance, pre-base get the advance ONLY (their card spend is already inside the sheet's base — filing the charge would double-count card owed); runs on boot (after migratePrepayBy) and on import",
           "function fileIpfTheirs(e, p, fileCharge, fileBump)" in js
           and "function migrateIpfTheirs()" in js

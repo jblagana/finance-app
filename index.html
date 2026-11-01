@@ -1067,9 +1067,16 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
           <label for="f_amount">Amount (₱)</label>
           <input id="f_amount" type="text" placeholder="0.00, or a quick sum like 300-125+10">
         </div>
+        <!-- v73.80: in Pay card mode this cell is "Pay to" (the card being
+             paid — f_payto, seeded with the cards); in Spend / Money in it
+             is the Category. The labels + selects swap at runtime in
+             setAddMode (the f_category select stays in Spend/Money-in;
+             f_payto is hidden there). -->
         <div>
-          <label for="f_category">Category</label>
+          <label for="f_category" id="f_categoryLabel">Category</label>
           <select id="f_category"><option value="" selected>Unsorted</option></select>
+          <label for="f_payto" id="f_paytoLabel" style="display:none">Pay to</label>
+          <select id="f_payto" style="display:none"><option value="" selected>Cash</option></select>
         </div>
       </div>
       <p id="amtEq" class="amtEq" style="display:none"></p>
@@ -1078,6 +1085,11 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
         <div>
           <label for="f_account">Paid with</label>
           <select id="f_account"><option value="CASH::Cash" selected>Cash</option></select>
+          <!-- v73.80: the Pay-card "Paid with" — the cash/debit account the
+               payoff is funded from (the card pick moves to Pay to above).
+               Hidden outside Pay card mode. -->
+          <label for="f_paywith" id="f_paywithLabel" style="display:none">Paid with</label>
+          <select id="f_paywith" style="display:none"><option value="CASH::Cash" selected>Cash</option></select>
         </div>
         <div>
           <label for="f_date">Date</label>
@@ -1097,6 +1109,10 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
           <span>From cashback — it pays the card down without touching my liquid</span>
         </label>
       </div>
+      <!-- v73.80: the payoff's funder line — shown only while editing a
+           card_payment (the edit sheet is Spend-shaped, so the funder is
+           read-only; the card sits in Paid with as before). -->
+      <p id="paywithNote" class="note" style="display:none;margin:8px 0 0"></p>
       <label for="f_note">Note (optional)</label>
       <input id="f_note">
       <!-- v73.17: the plan-link chip — the add form's fuzzy match

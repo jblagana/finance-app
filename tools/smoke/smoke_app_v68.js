@@ -1790,6 +1790,83 @@ waitReady().then(async function (F) {
       await tick();
       ok(!F.reconChanged(F.reconData()), 'v73.73: cancel drops the edit (nothing files)');
       ok(close(F.state.base.accounts.filter(function (a) { return a.name === 'Maya CC'; })[0].value, 3900), 'v73.73: cancel leaves the base untouched');
+
+      // ============ PART 30: v73.80 — Pay card sheet (Pay to / Paid with) ============
+      // The Pay card sheet's Category is REPLACED by two picks: Pay to (the
+      // card being paid) and Paid with (the cash/debit funder). A payoff
+      // lands on the CARD (owed drops, the v72.42 rule) and is FUNDED from
+      // the funder (free untouched, raw liquid drops — the v72.42 rule,
+      // unchanged). The funder rides the record (t.payWith) and the ledger
+      // row (e.w), so the row shows both sides.
+      console.log('\n== PART 30: v73.80 - the Pay card sheet (Pay to / Paid with) =');
+      // the field swap: Pay card shows Pay to + Paid with (f_payto/f_paywith);
+      // Spend / Money in show Category + Paid with (f_category/f_account).
+      F.setAddMode('prepay');
+      await tick();
+      var payToEl = byIdStub('f_payto'), payWithEl = byIdStub('f_paywith');
+      var catEl30 = byIdStub('f_category'), accEl30 = byIdStub('f_account');
+      ok(payToEl.style.display !== 'none', 'v73.80: Pay to (f_payto) is visible in Pay card mode');
+      ok(payWithEl.style.display !== 'none', 'v73.80: Paid with (f_paywith) is visible in Pay card mode');
+      ok(catEl30.style.display === 'none', 'v73.80: Category (f_category) is hidden in Pay card mode');
+      ok(accEl30.style.display === 'none', 'v73.80: the old Paid with (f_account) is hidden in Pay card mode');
+      var payToOpts = (payToEl.innerHTML || '').split('<option');
+      ok(payToOpts.some(function (o) { return o.indexOf('value="Maya CC"') >= 0; }),
+        'v73.80: Pay to offers Maya CC (bare name, not TYPE::Name)');
+      ok(payToOpts.some(function (o) { return o.indexOf('value="MariBank CC"') >= 0; }),
+        'v73.80: Pay to offers MariBank CC');
+      var payWithOpts = (payWithEl.innerHTML || '').split('<option');
+      ok(payWithOpts.some(function (o) { return o.indexOf('value="CASH::Cash"') >= 0; }),
+        'v73.80: Paid with offers Cash (the default)');
+      ok(payWithOpts.some(function (o) { return o.indexOf('value="CASH::MariBank"') >= 0; }),
+        'v73.80: Paid with offers MariBank (a debit)');
+      ok(payWithOpts.some(function (o) { return o.indexOf('value="CASH::LandBank"') >= 0; }),
+        'v73.80: Paid with offers LandBank (a debit)');
+      ok(payWithOpts.some(function (o) { return o.indexOf('CARD::') < 0; }),
+        'v73.80: Paid with has NO card options (the funder is cash/debit only)');
+      // the swap back: Spend shows Category + Paid with (f_category/f_account)
+      F.setAddMode('spend');
+      await tick();
+      ok(catEl30.style.display !== 'none', 'v73.80: Category is visible in Spend mode');
+      ok(accEl30.style.display !== 'none', 'v73.80: Paid with (f_account) is visible in Spend mode');
+      ok(payToEl.style.display === 'none', 'v73.80: Pay to is hidden in Spend mode');
+      ok(payWithEl.style.display === 'none', 'v73.80: Paid with (f_paywith) is hidden in Spend mode');
+      // the payoff math (the v72.42 rule, unchanged): a payoff lands on the
+      // CARD (owed drops, free untouched, raw liquid drops). The funder is
+      // recorded (t.payWith) and shown in the ledger row (e.w).
+      F.setAddMode('prepay');
+      await tick();
+      var mayaBefore30 = F.effectiveSnap().cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance;
+      var freeBefore30 = F.effectiveSnap().cash.free;
+      var liquidBefore30 = F.effectiveSnap().cash.total;
+      var id30 = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 2000, note: 'probe payto/paywith', date: '2026-11-01', payWith: 'MariBank' }, { quiet: true });
+      await tick();
+      var t30 = F.state.txns.filter(function (t) { return t.id === id30; })[0];
+      ok(t30 && t30.payWith === 'MariBank', 'v73.80: the funder rides the record (t.payWith = MariBank)');
+      var mayaAfter30 = F.effectiveSnap().cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance;
+      ok(close(mayaBefore30 - mayaAfter30, 2000), 'v73.80: Maya CC owed drops by 2,000 (got ' + (mayaBefore30 - mayaAfter30).toFixed(2) + ')');
+      var freeAfter30 = F.effectiveSnap().cash.free;
+      ok(close(freeBefore30 - freeAfter30, 0), 'v73.80: FREE cash is UNTOUCHED (the v72.42 rule — the spend was committed at charge time)');
+      var liquidAfter30 = F.effectiveSnap().cash.total;
+      ok(close(liquidBefore30 - liquidAfter30, 2000), 'v73.80: raw liquid drops by 2,000 (the funder pays)');
+      // the ledger row shows BOTH sides (to: Maya CC, from: MariBank)
+      var row30 = F.state.moneyLog.filter(function (e) { return e.tid === id30; })[0];
+      ok(row30 && row30.m === 'Maya CC', 'v73.80: the ledger row shows the card (m = Maya CC)');
+      ok(row30 && row30.w === 'MariBank', 'v73.80: the ledger row shows the funder (w = MariBank)');
+      // the funder resolver: fresh (payWith present), legacy (no payWith,
+      // account is the card name), legacy (no payWith, account is a cash name)
+      ok(F.payWithOf(t30) === 'MariBank', 'v73.80: payWithOf reads the fresh record (payWith present)');
+      var legacyCard = { kind: 'card_payment', account: 'Maya CC', amount: 100 };
+      ok(F.payWithOf(legacyCard) === '', 'v73.80: payWithOf on a legacy card row (account = card name) returns empty');
+      var legacyCash = { kind: 'card_payment', account: 'MariBank', amount: 100 };
+      ok(F.payWithOf(legacyCash) === 'MariBank', 'v73.80: payWithOf on a legacy cash row (account = funder) returns the funder');
+      // the edit path: a re-save keeps the funder (read-only on the edit sheet)
+      await F.saveTxnEdit(id30, { kind: 'card_payment', category: '', account: 'Maya CC', amount: 2000, note: 'probe payto/paywith edit', date: '2026-11-01' });
+      await tick();
+      var t30b = F.state.txns.filter(function (t) { return t.id === id30; })[0];
+      ok(t30b && t30b.payWith === 'MariBank', 'v73.80: a re-save KEEPS the funder (read-only on the edit sheet)');
+      // cleanup: delete the probe txn (the overlay + ledger row go with it)
+      await F.deleteTxn(id30);
+      await tick();
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);

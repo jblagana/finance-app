@@ -1793,6 +1793,24 @@
   // ---------- actions ----------
   // v72.10: opts.quiet — the caller shows its own snack (the owed flow wraps
   // the add in an entry+txn undo, two toasts would collide).
+  // v73.80: a card payment's funding account (the "Paid with" pick) —
+  // recorded on the record (t.payWith) and shown in the ledger row's m.
+  // Legacy card_payment rows (pre-v73.80) carry the CARD name in t.account
+  // and no payWith; rows that predate the payoff model carry a CASH name.
+  // This resolver is the single read path for "what funded this payoff":
+  // payWith when present, else the stored account when it is not a card
+  // name, else '' (the row renders the old way).
+  function payWithOf(t) {
+    if (!t) return '';
+    if (t.payWith) return t.payWith;
+    var acc = String(t.account || '');
+    if (!acc) return '';
+    var cards = ((state.base && state.base.accounts) || []).filter(function (a) { return a.kind === 'card'; });
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].name === acc) return ''; // legacy: the account is the CARD — no funder recorded
+    }
+    return acc; // the stored account is the funding cash/debit (pre-payoff-model rows)
+  }
   function addTxn(data, opts) {
     var id = 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     var t = {
@@ -1800,6 +1818,8 @@
       category: data.category, amount: data.amount, note: data.note,
       created: new Date().toISOString()
     };
+    // v73.80: the funding account (Pay card's "Paid with") rides the record.
+    if (data.payWith) t.payWith = data.payWith;
     // v73.17: the explicit plan link (the boss tapped the chip on the add
     // form) — rides the record, so it syncs with the txn and survives
     // reboots. Absent (undefined) when there is no link.
@@ -2013,6 +2033,9 @@
     // and an unchecked box CLEARS a previously-set flag (a card_payment
     // that is no longer a cashback payoff must drop back to the plain rule).
     if (t.kind === 'card_payment') t.cashback = !!data.cashback;
+    // v73.80: the funder is read-only on the edit sheet — a re-save keeps
+    // the record's payWith (a fresh pick only happens on a fresh add).
+    if (t.kind === 'card_payment' && o.payWith) t.payWith = o.payWith;
     state.txns[oIdx] = t; // in place — position preserved
     // v73.45: the add+remove pair nets to the edit's delta — but on an EMPTY
     // overlay (a reset already wiped it) the pair's +new leg would create a
@@ -2049,6 +2072,9 @@
       e0.l = (t.category || t.account || 'entry') + (t.note ? ' · ' + t.note : '');
       // v73.53: the cashback flag follows the edit (set, kept, or cleared)
       if (t.kind === 'card_payment') { if (t.cashback) e0.cb = true; else delete e0.cb; }
+      // v73.80: the funder follows the edit (kept — the edit sheet is
+      // read-only on it — or absent for a non-payoff)
+      if (t.kind === 'card_payment') { e0.w = payWithOf(t); } else { delete e0.w; }
       // e.at is UNTOUCHED — the original date/time stays on the row
       rebase(e0, dFree, dCard, 1);
       // v72.10: the edit flipped the row to a card flavor — backfill the card
@@ -2113,6 +2139,7 @@
       }
       cs.value = t.category || '';
     }
+    updateAddModeFields(); // v73.80: the edit re-opens in Spend mode — the Spend fields are live
     seedAccounts();
     var as = byId('f_account');
     if (as) {
@@ -2126,6 +2153,21 @@
         as.appendChild(oa);
       }
       as.value = av;
+    }
+    // v73.80: a payoff's funder (the "Paid with" pick) is shown on the note
+    // line when editing a payoff — the edit sheet is Spend-shaped (the card
+    // sits in f_account as before), so the funder is read-only here; a
+    // re-save keeps it (saveTxnEdit re-passes payWith from the record).
+    var pwNote = byId('paywithNote');
+    if (pwNote) {
+      var pw = payWithOf(t);
+      if (t.kind === 'card_payment' && pw) {
+        pwNote.style.display = '';
+        pwNote.textContent = 'Paid with ' + pw + ' — pays the card ' + (t.account || '') + ' down.';
+      } else {
+        pwNote.style.display = 'none';
+        pwNote.textContent = '';
+      }
     }
     var amtEl = byId('f_amount');
     if (amtEl) amtEl.value = String(t.amount);
@@ -2179,6 +2221,9 @@
       // spend / i cash in. Render derives every before→after from it.
       k: t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x'
     };
+    // v73.80: the payoff's funder (the "Paid with" pick) rides the row — the
+    // ledger shows both sides (to: the card, from: the funder).
+    if (t.kind === 'card_payment') e.w = payWithOf(t);
     // v73.53: the cashback flag rides the ledger row too — the row is the
     // undo record (deleteTxn's Undo re-pushes from it), and a cashback
     // payoff's overlay rule is different, so the flag must survive.
@@ -2362,6 +2407,13 @@
         // "month spent X → X" chip is GONE (the v73.9/v73.10 salary guard
         // dies with it — the chip never renders, for any row).
         var p = mlParts(e);
+        // v73.80: a payoff row shows BOTH sides — "to: Maya CC · from:
+        // MariBank debit" (the card is p.m, the funder is e.w, the "Paid
+        // with" pick). The funder rides the row (logMoney); legacy rows
+        // have no e.w (the meta line stays the old "· Maya CC" way).
+        var wTxt = (e.k === 'p' && e.w)
+          ? ' · to: ' + esc(p.m || 'card') + ' · from: ' + esc(e.w)
+          : '';
         // v73.75: the row is NO LONGER a tap target — each editable entry
         // carries its own ✎ (opens the edit sheet) beside the ✕ (delete).
         var editBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-edit="' + esc(e.tid) +
@@ -2387,7 +2439,7 @@
         return '<div class="ml-row' + (add ? '' : ' del') + '">' +
           '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
           (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
-          '<div class="ml-meta">' + mlDate(e.at) + (p.m ? ' · ' + esc(p.m) : '') + '</div></div>' +
+          '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) + '</div></div>' +
           '<div class="ml-r"><b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b>' +
           freeTxt + extra + editBtn + delBtn + adjDel + '</div></div>';
       }).join('') +
@@ -3853,30 +3905,31 @@
     var ttl = byId('addSheetTitle'), sub = byId('addSubmit');
     if (ttl) ttl.textContent = addMode === 'prepay' ? 'Card prepay' : (addMode === 'moneyin' ? 'Money in' : 'Add expense');
     if (sub) sub.textContent = addMode === 'prepay' ? 'Add payment' : (addMode === 'moneyin' ? 'Add money in' : 'Add expense');
-    // v73.52: the account list is MODE-SPECIFIC in its labels — re-seed it
-    // on every mode switch (Money in's cards wear "· CC"), keeping the
-    // current pick when it is still in the list.
-    seedAccounts();
-    var as = byId('f_account');
-    if (addMode === 'prepay' && as) {
-      // the payoff has to land on a CARD account — preselect the first one
-      // (AFTER the re-seed, so the options are the current mode's)
-      for (var i = 0; i < as.options.length; i++) {
-        if (as.options[i].value.indexOf('CARD::') === 0) { as.value = as.options[i].value; break; }
-      }
-    }
+    // v73.80: the field swap — Pay card shows Pay to (f_payto, the card)
+    // + Paid with (f_paywith, the cash/debit funder); Spend / Money in show
+    // Category + Paid with (f_category / f_account). The old "prepay mode
+    // preselects the first card in f_account" is gone — Pay to starts at
+    // "Pick a card" (the boss names the card; a blank pick is rejected at
+    // submit).
+    updateAddModeFields();
     updateCashbackRow();
     updateChargeHint();
   }
   function prefillAdd(amt, dateISO, note, accValue, mode) {
     setAddMode(mode || 'spend');
-    var a = byId('f_amount'), dt = byId('f_date'), n = byId('f_note'), as = byId('f_account');
+    var a = byId('f_amount'), dt = byId('f_date'), n = byId('f_note');
     if (a) a.value = amt != null ? String(amt) : '';
     if (dt && dateISO) dt.value = dateISO;
     if (n && note) n.value = note;
-    if (as && accValue) {
-      for (var j = 0; j < as.options.length; j++) {
-        if (as.options[j].value === accValue) { as.value = accValue; break; }
+    if (accValue) {
+      // v73.80: in Pay card mode the accValue is the CARD name (it lands in
+      // f_payto, "Pay to"); in Spend / Money in it is the old TYPE::Name
+      // value (f_account, "Paid with").
+      var sel = addMode === 'prepay' ? byId('f_payto') : byId('f_account');
+      if (sel) {
+        for (var j = 0; j < sel.options.length; j++) {
+          if (sel.options[j].value === accValue) { sel.value = accValue; break; }
+        }
       }
     }
     openSheet('addSheet');
@@ -3943,9 +3996,12 @@
     var parts = String(attr).split('|');
     var day = Number(parts[2]) || 14;
     var card = parts[3] || '';
+    // v73.80: Pay to takes the bare card name (f_payto's values are names,
+    // not TYPE::Name) — the payoff lands on that card, funded by whatever
+    // Paid with the boss picks.
     prefillAdd(Number(parts[0]) || 0, parts[1],
       'Card prepay (the ' + ordinal(day) + ')' + (card ? ' — ' + card : ''),
-      card ? 'CARD::' + card : null, 'prepay');
+      card || null, 'prepay');
   }
   function salaryRowChip(attr) {
     var parts = String(attr).split('|');
@@ -5724,6 +5780,52 @@
   // always present and pre-selected; no hardcoded account list, so an empty
   // base shows Cash only. Re-seeds on base change via the snap render list.
   // v65: option labels are the bare account names (no kind suffix).
+  // v73.80: the Pay-card sheet's TWO picks — Pay to (f_payto: the card being
+  // paid; cards only) and Paid with (f_paywith: the cash/debit account
+  // funding the payoff; cash + debits only). The old single f_account pick
+  // (cards in prepay mode) is gone: the card moves to Pay to, the funding
+  // account gets its own field.
+  function seedPayTo() {
+    var sel = byId('f_payto');
+    if (!sel) return;
+    var b = state.base;
+    var prev = sel.value;
+    var cards = (b && b.accounts || []).filter(function (a) { return a.kind === 'card'; });
+    var html = '<option value="">Pick a card</option>';
+    cards.forEach(function (a) {
+      html += '<option value="' + esc(a.name) + '">' + esc(a.name) + '</option>';
+    });
+    sel.innerHTML = html;
+    if (prev) sel.value = prev;
+  }
+  function seedPayWith() {
+    var sel = byId('f_paywith');
+    if (!sel) return;
+    var b = state.base;
+    var prev = sel.value;
+    var html = '<option value="CASH::Cash" selected>Cash</option>';
+    ((b && b.accounts) || []).forEach(function (a) {
+      if (a.kind !== 'debit' || a.name === 'Cash') return; // the default option is already it
+      var v = 'CASH::' + a.name;
+      html += '<option value="' + esc(v) + '">' + esc(a.name) + '</option>';
+    });
+    sel.innerHTML = html;
+    if (prev) sel.value = prev;
+  }
+  // v73.80: the sheet's field swap — Pay card shows Pay to + Paid with
+  // (f_payto / f_paywith); Spend / Money in show Category + Paid with
+  // (f_category / f_account). Called from setAddMode and openTxnEdit.
+  function updateAddModeFields() {
+    var pre = addMode === 'prepay';
+    function show(id, on) {
+      var el = byId(id);
+      if (el) el.style.display = on ? '' : 'none';
+    }
+    show('f_categoryLabel', !pre); show('f_category', !pre);
+    show('f_paytoLabel', pre); show('f_payto', pre);
+    show('f_account', !pre); show('f_paywithLabel', pre); show('f_paywith', pre);
+    if (pre) { seedPayTo(); seedPayWith(); } else { seedAccounts(); }
+  }
   function seedAccounts() {
     var sel = byId('f_account');
     if (!sel) return;
@@ -6287,8 +6389,11 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // it is a flag on the PAYOFF, and a payoff only exists in that combination.
   function updateCashbackRow() {
     var row = byId('cashbackRow'); if (!row) return;
-    var as = byId('f_account');
+    // v73.80: the card pick lives in f_payto in Pay card mode (f_account is
+    // hidden there) — the flag is on the payoff, so it follows the pick.
+    var as = addMode === 'prepay' ? byId('f_payto') : byId('f_account');
     var cardPick = as && String(as.value || '').indexOf('CARD::') === 0;
+    if (addMode === 'prepay') cardPick = as && !!String(as.value || '').trim(); // f_payto's values are bare card names
     // Money in + card = the fresh cashback payoff; editing a card_payment
     // (which re-opens in Spend mode) must also see the flag so it can be
     // kept or cleared.
@@ -6309,6 +6414,9 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       var rawAcc = byId('f_account').value || '';
       if (rawAcc.indexOf('CARD::') === 0) { el.style.display = 'none'; return; }
     }
+    // v73.80: prepay's hint is already hidden above; the account pick in
+    // prepay mode is f_payto/f_paywith, not f_account — nothing else here
+    // reads f_account, so no further change.
     var amtEl = byId('f_amount');
     var amt = amtEl ? evalExpr(amtEl.value) : null;
     if (amt === null) amt = NaN;
@@ -8118,12 +8226,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.79, live: new Date(2026, 10, 1, 16, 33) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.80, live: new Date(2026, 10, 1, 17, 29) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.80': [
+      'New: the Pay card sheet now asks the two real questions — Pay to (which card is being paid, e.g. Maya CC) and Paid with (which cash/debit account is paying, e.g. MariBank debit). The Category field is gone from this sheet. A payoff of 2,000 to Maya CC from MariBank debit drops Maya CC owed by 2,000, leaves the MariBank debit cash down by 2,000, and leaves FREE cash untouched (the spend was committed at charge time). The ledger row shows both sides: "to: Maya CC · from: MariBank debit".'
+    ],
     '73.79': [
       'Removed: the \u201cCards\u201d summary card on the Home tab is gone \u2014 the card balances and dues you need are already in the hero and the \u201cLive numbers\u201d card on the Ledger tab.'
     ],
@@ -9141,6 +9252,9 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     shellNotesFor: shellNotesFor, // v72.29: the What's-new notes for a version (smoke drives it)
     addSheetKind: addSheetKind, // v72.41: the Add-sheet kind decision (smoke drives it — the submit is DOM-bound)
     seedAccounts: seedAccounts, // v73.52: the Paid-with options (smoke drives the Money-in card list)
+    seedPayTo: seedPayTo, // v73.80: the Pay-card "Pay to" options (smoke drives the card list)
+    seedPayWith: seedPayWith, // v73.80: the Pay-card "Paid with" options (smoke drives the funder list)
+    payWithOf: payWithOf, // v73.80: the payoff's funder resolver (smoke drives it — legacy + fresh)
     updateCashbackRow: updateCashbackRow, // v73.53: the cashback row's visibility (smoke drives it)
     setAddMode: setAddMode, // v73.52: the direction toggle (smoke drives the mode switch)
     renderCoach: renderCoach, // v73.66: the coach card render (smoke drives the roasty copy)
@@ -9401,15 +9515,34 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     var form = byId('addForm');
     if (form) form.onsubmit = function (e) {
       e.preventDefault();
-      // v64: Cash is the default pick — if the select ever comes back empty
-      // (it can't: the Cash option is always present), map it to the same value.
-      var raw = byId('f_account').value || 'CASH::Cash';
-      var sep = raw.indexOf('::');
-      var type = raw.slice(0, sep), name = raw.slice(sep + 2);
       var amtRaw = String(byId('f_amount').value || '').trim();
       var amount = evalExpr(amtRaw);
       if (amount === null || !(amount > 0)) { alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.'); return; }
       var category = (byId('f_category').value || '').trim();
+      var type, name, payWith = '';
+      if (addMode === 'prepay') {
+        // v73.80: Pay card reads the TWO picks — Pay to (f_payto: the card
+        // being paid, bare name) and Paid with (f_paywith: the cash/debit
+        // funder, TYPE::Name). The payoff lands on the CARD (account = the
+        // card name, so the per-card owed drops — the v72.42 rule); the
+        // funder is recorded (payWith) and shown in the ledger row.
+        var card = (byId('f_payto').value || '').trim();
+        var funder = byId('f_paywith').value || 'CASH::Cash';
+        var fsep = funder.indexOf('::');
+        if (!card) {
+          alert('Pick the card you paid — Pay card logs a payment to a credit card.');
+          return;
+        }
+        type = 'CARD'; name = card;
+        payWith = funder.slice(fsep + 2);
+        category = ''; // v73.80: the sheet has no Category in this mode
+      } else {
+        // v64: Cash is the default pick — if the select ever comes back empty
+        // (it can't: the Cash option is always present), map it to the same value.
+        var raw = byId('f_account').value || 'CASH::Cash';
+        var sep = raw.indexOf('::');
+        type = raw.slice(0, sep), name = raw.slice(sep + 2);
+      }
       // v72.10: editing an INFLOW entry keeps its flow direction (cash_in stays
       // cash_in, card_payment stays card_payment); a fresh add is a spend —
       // v72.41: unless the sheet is in Pay-card mode, which logs the payoff
@@ -9430,6 +9563,9 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
         amount: amount,
         note: (byId('f_note').value || '').trim()
       };
+      // v73.80: the funder rides the record on a payoff (the ledger row's
+      // "from" side — the owed drops on the card, the cash leaves the funder).
+      if (kind === 'card_payment' && payWith) payload.payWith = payWith;
       // v73.53: the cashback flag rides the record — only on a payoff
       // (a card_payment); it changes that payoff's overlay rule.
       var cbk = byId('f_cashback');
