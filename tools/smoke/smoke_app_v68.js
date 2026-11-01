@@ -1892,8 +1892,12 @@ waitReady().then(async function (F) {
       ok((F.state.moneyLog || []).filter(function (e) { return e.l === 'Adjustment'; }).length === adjBefore29, 'v73.73: no Adjustment row — the Reconcile row IS the audit (skipAdjustment)');
       ok(!F.reconChanged(F.reconData()), 'v73.73: the edit is cleared after the save');
       // S2: Total cash → 74000 (absorbed by Cash — the debits stay put).
-      // S1's save re-anchored the overlay, so re-read the live total now.
-      var totalLive29b = F.effectiveSnap().cash.total;
+      // v73.87 retarget: read the total BEFORE S1's save — the v73.73 version
+      // read it AFTER (self-fulfilling: a card reconcile then let the base
+      // total come back bare, and the assertion compared the corrupted total
+      // to itself). The pre-save read pins the invariant: a card reconcile
+      // leaves Total cash UNTOUCHED.
+      var totalLive29b = snap29.cash.total;
       F.reconSetInput('total', 74000);
       var ch29b = F.reconChanged(F.reconData());
       ok(ch29b && ch29b.key === 'Cash' && close(ch29b.delta, 74000 - totalLive29b), 'v73.73: editing Total cash lands the correction on Cash, delta = new − total live (got ' + JSON.stringify(ch29b) + ' vs ' + (74000 - totalLive29b).toFixed(2) + ')');
@@ -1903,20 +1907,34 @@ waitReady().then(async function (F) {
       var rows29b = (F.state.moneyLog || []).filter(function (e) { return e.l === 'Reconcile'; });
       ok(rows29b.length === 2 && close(rows29b[1].n, 74000 - totalLive29b), 'v73.73: the total edit files ONE Reconcile · Cash row for the discrepancy (got ' + rows29b.length + ' x ' + (rows29b[1] && rows29b[1].n) + ')');
       ok(close(es29b.cash.total, 74000), 'v73.73: Total cash = the typed value after the save (got ' + es29b.cash.total + ')');
+      // v73.87 retarget: the hardcoded −2727.79 assumed the card reconcile
+      // (S1) left the debit bases alone; the v73.87 re-anchor moves them to
+      // their live values first, so the expected Cash base is computed from
+      // the ACTUAL other-debit bases (the invariant: Cash = new total − the
+      // other debits, whatever they are after the re-anchor).
       var cashBase29 = F.state.base.accounts.filter(function (a) { return a.name === 'Cash'; })[0];
-      ok(cashBase29 && close(cashBase29.value, -2727.79), 'v73.73: Cash absorbs the total (base = new total − the other debits; got ' + (cashBase29 && cashBase29.value) + ')');
+      var otherDebitsSum29 = F.state.base.accounts.filter(function (a) { return a.kind === 'debit' && String(a.name || '').trim().toLowerCase() !== 'cash'; }).reduce(function (t, a) { return t + (Number(a.value) || 0); }, 0);
+      ok(cashBase29 && close(cashBase29.value, 74000 - otherDebitsSum29), 'v73.73: Cash absorbs the total (base = new total − the other debits; got ' + (cashBase29 && cashBase29.value) + ' vs ' + (74000 - otherDebitsSum29).toFixed(2) + ')');
       // S3: LandBank → 44200 (its own row; the total mirrors). After S2 the
-      // overlay is zeroed, so LandBank's live = its base (55815.67) → delta
-      // −11615.67 and the total lands on 62384.33.
+      // overlay is zeroed, so LandBank's live = its base. v73.87 retarget:
+      // the hardcoded 55815.67 base / −11615.67 delta / 62384.33 total assumed
+      // the card reconcile (S1) left the debit bases alone — the v73.87
+      // re-anchor moves them to their live values first, so the expectations
+      // are computed from the live pre-save read (the invariant: delta =
+      // new − live, total = old total + delta).
+      var d29c = F.reconData();
+      var lbLive29 = d29c.debits.filter(function (r) { return r.name === 'LandBank'; })[0].live;
+      var totalBefore29c = d29c.totalLive;
+      var delta29c = 44200 - lbLive29;
       F.reconSetInput('LandBank', 44200);
       var ch29c = F.reconChanged(F.reconData());
-      ok(ch29c && ch29c.key === 'LandBank' && close(ch29c.delta, -11615.67), 'v73.73: editing a debit files its own row (got ' + JSON.stringify(ch29c) + ')');
+      ok(ch29c && ch29c.key === 'LandBank' && close(ch29c.delta, delta29c), 'v73.73: editing a debit files its own row (got ' + JSON.stringify(ch29c) + ' vs delta ' + delta29c.toFixed(2) + ')');
       F.reconSave();
       await tick();
       var es29c = F.effectiveSnap();
       var rows29c = (F.state.moneyLog || []).filter(function (e) { return e.l === 'Reconcile'; });
-      ok(rows29c.length === 3 && close(rows29c[2].n, -11615.67), 'v73.73: the debit reconcile files ONE Reconcile · LandBank row (got ' + rows29c.length + ' x ' + (rows29c[2] && rows29c[2].n) + ')');
-      ok(close(es29c.cash.total, 62384.33), 'v73.73: the total mirrors the debit edit (got ' + es29c.cash.total.toFixed(2) + ')');
+      ok(rows29c.length === 3 && close(rows29c[2].n, delta29c), 'v73.73: the debit reconcile files ONE Reconcile · LandBank row (got ' + rows29c.length + ' x ' + (rows29c[2] && rows29c[2].n) + ')');
+      ok(close(es29c.cash.total, totalBefore29c + delta29c), 'v73.73: the total mirrors the debit edit (got ' + es29c.cash.total.toFixed(2) + ' vs ' + (totalBefore29c + delta29c).toFixed(2) + ')');
       // ---- v73.77: quick sums + full keyboard in the recon inputs ----
       ok(F.reconParseInput('10000-500') === 9500, 'v73.77: a quick sum computes (10000-500 -> 9500; got ' + F.reconParseInput('10000-500') + ')');
       ok(F.reconParseInput('12850+22754.04') === 35604.04, 'v73.77: a plus-sum computes (got ' + F.reconParseInput('12850+22754.04') + ')');
@@ -2270,6 +2288,67 @@ waitReady().then(async function (F) {
       await F.deleteTxn(id32f);
       await tick();
       F.migrateCashBy(); // the boot recompute after the deletes (idempotent)
+      await tick();
+
+      // ============ PART 33: v73.87 — a card reconcile leaves Total cash UNTOUCHED ============
+      // The boss's dummy scenario: total 10,000 / Maya CC 3,000 / MariBank CC
+      // 2,000 → pay Maya due 500 (→ 2,500, total 9,500) → pay MariBank due
+      // 700 (→ 1,300, total 8,800) → reconcile Maya CC to 2,700. The v73.86
+      // card branch of reconSave re-anchored the CARDS only and then zeroed
+      // the whole overlay — the payoffs that rode adj.cash evaporated from the
+      // cash side and the base total came back BARE (10,000, not 8,800).
+      console.log('\n== PART 33: v73.87 - a card reconcile leaves Total cash untouched (the boss\'s dummy scenario) =');
+      // deterministic base: park the current one, set the dummy sheet
+      var base33orig = JSON.parse(JSON.stringify(F.state.base));
+      var snap33orig = F.state.snapshot;
+      var adj33orig = JSON.parse(JSON.stringify(F.state.adj));
+      (F.state.base.accounts || []).forEach(function (a) {
+        if (a.kind === 'debit') a.value = a.name === 'Cash' ? 10000 : 0;
+        if (a.kind === 'card') a.value = a.name === 'Maya CC' ? 3000 : (a.name === 'MariBank CC' ? 2000 : 0);
+      });
+      F.state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: 2 };
+      F.refreshLocalSnapshot(); // the base is source of truth — derive the snapshot from it
+      // pay the Maya due (500) from Cash, then the MariBank due (700) from Cash
+      var id33a = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'v73.87 maya due', date: '2026-11-01', payWith: 'Cash' }, { quiet: true });
+      await tick();
+      var id33b = await F.addTxn({ kind: 'card_payment', category: '', account: 'MariBank CC', amount: 700, note: 'v73.87 maribank due', date: '2026-11-01', payWith: 'Cash' }, { quiet: true });
+      await tick();
+      var es33a = F.effectiveSnap();
+      ok(close(es33a.cash.total, 8800), 'v73.87: after both dues total cash = 8800 (got ' + es33a.cash.total + ')');
+      ok(close(es33a.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance, 2500), 'v73.87: Maya CC = 2500 after its due (got ' + es33a.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance + ')');
+      ok(close(es33a.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance, 1300), 'v73.87: MariBank CC = 1300 after its due (got ' + es33a.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance + ')');
+      // the PRE-save live rows (the v73.73 S2 self-fulfilling read is retired —
+      // the invariant is asserted against the values BEFORE the save)
+      var d33 = F.reconData();
+      var totalBefore33 = d33.totalLive;
+      var cashRowBefore33 = d33.debits.filter(function (r) { return r.isCash; })[0].live;
+      var mbRowBefore33 = d33.debits.filter(function (r) { return r.name === 'MariBank'; })[0].live;
+      var lbRowBefore33 = d33.debits.filter(function (r) { return r.name === 'LandBank'; })[0].live;
+      ok(close(totalBefore33, 8800), 'v73.87: pre-save total live = 8800 (got ' + totalBefore33 + ')');
+      // RECONCILE Maya CC → 2,700
+      F.reconSetInput('Maya CC', 2700);
+      F.reconSave();
+      await tick();
+      var es33 = F.effectiveSnap();
+      ok(close(es33.cash.total, 8800), 'v73.87: AFTER the card reconcile total cash STAYS 8800 (got ' + es33.cash.total + ')');
+      ok(close(es33.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance, 2700), 'v73.87: Maya CC = the typed 2700 (got ' + es33.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance + ')');
+      ok(close(es33.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance, 1300), 'v73.87: the untouched card STAYS 1300 (got ' + es33.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance + ')');
+      var d33b = F.reconData();
+      ok(close(d33b.debits.filter(function (r) { return r.isCash; })[0].live, cashRowBefore33), 'v73.87: the Cash row = its pre-save live (got ' + d33b.debits.filter(function (r) { return r.isCash; })[0].live + ' vs ' + cashRowBefore33 + ')');
+      ok(close(d33b.debits.filter(function (r) { return r.name === 'MariBank'; })[0].live, mbRowBefore33) && close(d33b.debits.filter(function (r) { return r.name === 'LandBank'; })[0].live, lbRowBefore33), 'v73.87: every debit row = its pre-save live (the pool re-anchors, nothing evaporates)');
+      var baseTotal33 = (F.state.base.accounts || []).filter(function (a) { return a.kind === 'debit'; }).reduce(function (t, a) { return t + (Number(a.value) || 0); }, 0);
+      ok(close(baseTotal33, 8800), 'v73.87: the base cash pool re-anchored to the live total (got ' + baseTotal33 + ')');
+      var rows33 = (F.state.moneyLog || []).filter(function (e) { return e.l === 'Reconcile'; });
+      ok(rows33.length >= 1 && close(rows33[rows33.length - 1].n, 200), 'v73.87: the card reconcile files ONE Reconcile row for the discrepancy (2700 − 2500 = 200; got ' + (rows33[rows33.length - 1] && rows33[rows33.length - 1].n) + ')');
+      // restore the parked state (the probe txns go with the delete)
+      await F.deleteTxn(id33a);
+      await tick();
+      await F.deleteTxn(id33b);
+      await tick();
+      F.state.base = base33orig;
+      F.state.snapshot = snap33orig;
+      F.state.adjSig = F.snapSig(snap33orig);
+      F.migrateCashBy();
       await tick();
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)

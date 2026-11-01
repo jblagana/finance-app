@@ -1486,6 +1486,34 @@
         (d.cards || []).forEach(function (r) { if (!row && r.name === a.name) row = r; });
         if (row) a.value = cardClamp(a, r2(row.live)); // v73.82: the constraint guard (0 ≤ base ≤ limit)
       });
+      // v73.87: re-anchor the DEBITS to their exact live values too — the
+      // overlay zeroes below, and the payoffs/spends that rode adj.cash must
+      // not evaporate from the cash side. The cash branch already has this
+      // loop; the card branch never got it, so a card reconcile let the base
+      // total come back BARE (the boss's 10,000 → 10,000 instead of 8,800).
+      // Each named debit → its exact live (base − cashBy[name], v73.83); the
+      // Cash residual (totalLive − the named debits' live) lands in a real
+      // Cash account — created if needed, exactly like the cash branch's
+      // absorption rule — so the base total = totalLive EXACTLY (the
+      // unattributed/legacy overlay doesn't evaporate either).
+      var otherLive37 = 0;
+      (b.accounts || []).forEach(function (a) {
+        if (a.kind !== 'debit' || String(a.name || '').trim().toLowerCase() === 'cash') return;
+        var row = null;
+        (d.debits || []).forEach(function (r) { if (!row && !r.isCash && String(r.name || '').trim().toLowerCase() === String(a.name || '').trim().toLowerCase()) row = r; });
+        a.value = row ? r2(row.live) : r2(Number(a.value) || 0);
+        otherLive37 += Number(a.value) || 0;
+      });
+      var cashRow37 = null;
+      (d.debits || []).forEach(function (r) { if (r.isCash) cashRow37 = r; });
+      var cashAcc37 = null;
+      (b.accounts || []).forEach(function (a) { if (a.kind === 'debit' && String(a.name || '').trim().toLowerCase() === 'cash') cashAcc37 = a; });
+      var cashResid37 = r2(cashRow37 ? cashRow37.live : 0);
+      if (cashAcc37) {
+        cashAcc37.value = cashResid37;
+      } else if (cashResid37 !== 0) {
+        b.accounts.push({ name: 'Cash', kind: 'debit', value: cashResid37, limit: 0, note: '' });
+      }
       var typedV = r2((Number(reconState.vals[ch.key]) || 0));
       var clampedV = cardClamp(acc, typedV); // v73.82: the constraint guard on the typed value
       if (clampedV !== typedV) {
@@ -8519,12 +8547,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.86, live: new Date(2026, 10, 2, 1, 49) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.87, live: new Date(2026, 10, 2, 3, 8) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.87': [
+      'Fixed: reconciling a card balance made Total cash jump back to its old value — the payoffs and spends you logged since the last reconcile were riding the live view, and a card reconcile wiped them from the cash side while re-anchoring the cards. Now a card reconcile re-anchors the cash accounts to their live values too, so Total cash (and every cash line) stays exactly where it was — only the reconciled card moves.'
+    ],
     '73.86': [
       'Fixed: typing in the Live-numbers edit field kept snapping the keyboard back to ABC after every digit (you had to flip to 123 again for the next one). The field was being rebuilt on every keystroke, and a fresh field resets the keyboard mode — now the field stays put while you type, so 123 stays 123, and the delta / Will-file / buttons still update live.'
     ],
@@ -9667,6 +9698,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     askDeleteAdjustment: askDeleteAdjustment, // v72.31: the ✕ on an Adjustment row (smoke drives it; the stub has no confirm dialog → auto-yes)
     deleteAdjustment: deleteAdjustment, // v72.31: the undo itself (row out + the Settings value reversed, no new filing)
     saveBase: saveBase, // v72.31: a base save (smoke: remove the account for the gone-account path)
+    refreshLocalSnapshot: refreshLocalSnapshot, // v73.87: base → snapshot re-derive (smoke PART 33 parks/restores the dummy sheet)
     renderBaseEditor: renderBaseEditor, // v73.6: the base editor render (smoke: the cc due day input)
     readBaseForm: readBaseForm, // v73.29: the base form read-back (smoke: the card due column)
     delOwedEntry: delOwedEntry,

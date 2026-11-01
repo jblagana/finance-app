@@ -1,3 +1,35 @@
+# v73.87 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-02 - "i reconcile maya cc balance to 2700 -> total cash goes back to original 10000; the correct behavior is for total cash to go 8600" -> "Approve the fix (card-branch debit re-anchor + pre-save smoke pin)"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.87, sw cache
+finances-pwa-v73.87 pushed to https://github.com/jblagana/finance-app.git (main).
+
+Diagnosis (boss-approved): the CARD branch of reconSave re-anchored the CARDS
+only (the reconciled card -> typed value, the other cards -> their live
+values) and then zeroed the WHOLE overlay — the payoffs/spends that rode
+adj.cash evaporated from the cash side, so the base total came back BARE
+(the boss's 10,000 -> 10,000 instead of 8,800). The cash branch already had
+the debit re-anchor loop (v73.83); the card branch never got it. The smoke
+never caught it because v73.73 S2 read the total AFTER the card-reconcile
+save (self-fulfilling: the corrupted total compared to itself).
+
+Fix (the approved shape):
+- reconSave card branch: re-anchor the DEBITS to their exact live values
+  before the overlay zeroes — each named debit -> its exact live
+  (base - cashBy[name], v73.83); the Cash residual (totalLive - the named
+  debits' live) lands in a real Cash account (created if needed, the cash
+  branch's absorption rule) so the base total = totalLive EXACTLY (the
+  unattributed/legacy overlay doesn't evaporate either).
+- smoke PART 33: the boss's dummy scenario end-to-end (10,000 / Maya 3,000 /
+  MariBank 2,000 -> pay 500 + 700 -> 8,800 -> reconcile Maya to 2,700 ->
+  total STAYS 8,800), asserted against PRE-save readings.
+- v73.73 S2 retargeted to the pre-save read (the self-fulfilling read is
+  retired); the S2 Cash-base and S3 LandBank asserts retargeted to compute
+  their expectations from the actual re-anchored bases (the v73.87 re-anchor
+  moves them first).
+
+Gates: release.ps1 v73.87 all green - check_site (repo + root mirror; new
+v73.87 pin, 3 clauses), parser, node --check x4, both smokes.
+
 # v73.86 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-02 - "my full keyboard has 2 modes: ABC and 123. whenever i input digits to the field in add expense, i switch to 123 and the full keyboard remains at 123... its different for the reconcile card: i switch to 123 and when i enter the first digit, the mode switch back to ABC... diagnose" -> "Approve the stable-input fix (no per-keystroke re-render, surgical updates, retargeted smoke)"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.86, sw cache

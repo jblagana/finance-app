@@ -1819,6 +1819,10 @@ def main():
           # the per-keystroke re-render + caret dance are gone
           and "var caret = old && old.selectionStart" not in js
           and "inp.setSelectionRange(caret, caret);" not in js)
+    check("v73.87 (boss: 'reconcile maya cc to 2700 and total cash goes back to 10000 instead of 8600'): the CARD branch of reconSave re-anchors the DEBITS to their exact live values before the overlay zeroes — v73.86 and earlier re-anchored the cards only, so the payoffs/spends that rode adj.cash evaporated from the cash side and the base total came back BARE (the boss's 10,000 -> 10,000 instead of 8,800). The cash branch already had this loop; the card branch now does too: each named debit -> its exact live (base - cashBy[name], v73.83), and the Cash residual (totalLive - the named debits' live) lands in a real Cash account (created if needed, the cash branch's absorption rule) so the base total = totalLive EXACTLY. Smoke PART 33: the boss's dummy scenario end-to-end, asserted against PRE-save readings (the v73.73 S2 self-fulfilling read is retired)",
+          "var otherLive37 = 0;" in js
+          and "var cashResid37 = r2(cashRow37 ? cashRow37.live : 0);" in js
+          and "b.accounts.push({ name: 'Cash', kind: 'debit', value: cashResid37, limit: 0, note: '' });" in js)
     check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
           "function seedPayTo()" in js
           and "function seedPayWith()" in js
