@@ -1,3 +1,42 @@
+# v73.82 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-01 - "Diagnose why the card balances go absurd after reconcile ... Do NOT ship yet" -> "SHIP the migratePrepayBy fix now ... Acceptance test: reconcile Maya CC to 2141.80 and MariBank CC to 10864.27, then trigger the migrate/recompute path - balances must STAY at those values. Also add the constraint guard: card balance >= 0 and <= credit limit."
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.82, sw cache
+finances-pwa-v73.82 pushed to https://github.com/jblagana/finance-app.git (main).
+
+Diagnosis (tool-verified, boss-approved before the fix): the live card balance is
+base + the per-card overlay (adj.prepayBy, applied in effectiveSnap). A reconcile
+re-anchors the base to the typed real value and ZEROES the overlay - so every
+pre-reconcile charge/prepay is absorbed into the base. But migratePrepayBy (runs on
+EVERY boot, app.js) rebuilt prepayBy from the FULL state.txns history and rescaled
+that full-history split to the tiny post-reconcile overlay - re-applying months of
+already-absorbed charges/payoffs on top of the reconciled base. After any post-
+reconcile txn grew the overlay past zero, the next boot smeared the whole history
+across the cards: Maya CC 17,821.85 (above its 10,000 limit), MariBank CC
+-10,770.75. "Correct for a while" = the drift only materializes on the boot after
+the overlay has grown again.
+
+Fix (app.js):
+- migratePrepayBy is gated on lastReconAt() - the max `at` of the money-log 'a'
+  rows (reconcile / balance adjustment / 1k reset), the same lastOverrideAt gate
+  payoffModelDelta already uses. Only txns with created > lastR may ride the
+  overlay; pre-reconcile txns are already in the base.
+- Self-heal: a stored split that sums to the overlay total but is NOT the
+  post-reconcile rebuild is the old code's smear - detected (smeared flag) and
+  replaced, so already-drifted phones heal on the first boot after this release
+  with no manual data surgery.
+- Constraint guard (cardClamp): the reconciled base is clamped to [0, limit] at
+  the entry point only - the typed value + the untouched cards' re-anchor in
+  reconSave, with a toast when the typed value clamps. Never in the ledger math
+  or the display, so the discrepancy audit stays honest.
+- Exported for the smoke: migratePrepayBy + lastReconAt.
+
+Gates: release.ps1 v73.82 all green - check_site (repo + root mirror; new v73.82
+pin), parser, node --check x4, both smokes. smoke PART 31 (13 asserts): the boss's
+acceptance test verbatim (reconcile MariBank CC to 10864.27 + Maya CC to 2141.80,
+trigger the recompute, balances STAY), the post-reconcile charge lands (2141.80 +
+500 = 2641.80), the split sums to adj.card, the smear self-heal, the clamp to
+limit / to 0, and every card inside [0, limit] after the recompute.
+
 # v73.79 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-01 - "remove the card summary in the home tab" -> "throw away what was done in 73.79. just remove the card summary in home tab and ur done."
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.79, sw cache

@@ -625,11 +625,44 @@
   // (the same txnAdj deltas) and only write it when it diverges from the
   // authoritative total; the missing share (unattributed pre-field charges)
   // is scaled in proportionally so the split sums to adj.card.
+  // v73.82 (the absurd-balance diagnosis, boss-approved): the rebuild summed
+  // the FULL txn history and rescaled it to the CURRENT overlay — so after a
+  // reconcile (which re-anchors the base and ZEROES the overlay) the next
+  // boot re-applied every pre-reconcile charge/prepay — already absorbed into
+  // the base — rescaled onto the tiny post-reconcile overlay: Maya CC drifted
+  // to 17,821.85 (above its 10,000 limit), MariBank CC to −10,770.75. The
+  // overlay may only carry the txns logged SINCE the last rebasing override
+  // (a money-log 'a' row: reconcile / balance adjustment / 1k reset) — the
+  // same lastOverrideAt gate payoffModelDelta already uses. The smeared
+  // stored split (the old code's rescaled full-history map) is detected by
+  // its sum and replaced, so the boss's phone self-heals on the first boot
+  // after this release — no manual data surgery.
+  function lastReconAt() {
+    var m = 0;
+    (state.moneyLog || []).forEach(function (e) { if (e.k === 'a' && e.at && e.at > m) m = e.at; });
+    return m;
+  }
+  // v73.82 (the constraint guard, boss-approved): a card balance must stay in
+  // [0, limit]. Clamps at the ENTRY point only — reconcile (the typed value +
+  // the untouched cards' re-anchor) — never in the ledger math or the
+  // display: the overlay keeps its true deltas, so a reconcile still shows
+  // the real discrepancy and the audit rows stay honest.
+  function cardClamp(acc, v) {
+    var lim = Number(acc.limit) || 0;
+    var c = r2(Math.max(0, v));
+    if (lim > 0 && c > lim) c = r2(lim);
+    return c;
+  }
   function migratePrepayBy() {
     var a = state.adj;
     if (!a) return;
+    var lastR = lastReconAt(); // v73.82: the last rebasing override (money-log 'a')
     var by = {};
     (state.txns || []).forEach(function (t) {
+      if (lastR) {
+        var created = Date.parse(t.created) || 0;
+        if (created && created < lastR) return; // absorbed into the base by the later reconcile
+      }
       var d = txnAdj(t);
       if (d.prepay && d.acc) {
         by[d.acc] = r2((by[d.acc] || 0) + d.prepay);
@@ -638,17 +671,31 @@
     });
     var sum = 0;
     Object.keys(by).forEach(function (k) { sum += by[k]; });
+    // v73.82: a stored split that sums to the overlay total is CONSISTENT —
+    // but if it isn't the post-reconcile rebuild, it's the old code's smear
+    // (full history rescaled to the overlay). Replace it, don't trust it.
+    var cur = a.prepayBy || {};
+    var curSum = 0;
+    Object.keys(cur).forEach(function (k) { curSum += cur[k] || 0; });
+    var smeared = Math.abs(curSum - a.card) <= 0.004
+      && Object.keys(cur).length > 0
+      && (function () {
+        var keys = {};
+        Object.keys(by).forEach(function (k) { keys[k] = 1; });
+        Object.keys(cur).forEach(function (k) { keys[k] = 1; });
+        for (var k in keys) if (r2(by[k] || 0) !== r2(cur[k] || 0)) return true;
+        return false;
+      })();
     if (Math.abs(sum - a.card) > 0.004 && sum !== 0) {
       var f = a.card / sum; // reconcile the split to the authoritative total
       Object.keys(by).forEach(function (k) { by[k] = r2(by[k] * f); });
     }
     // write only when it actually differs from the stored split (idempotent
     // on the next boot — the rebuild then produces the same map)
-    var cur = a.prepayBy || {};
     var keys = {};
     Object.keys(by).forEach(function (k) { keys[k] = 1; });
     Object.keys(cur).forEach(function (k) { keys[k] = 1; });
-    var changed = false;
+    var changed = smeared;
     Object.keys(keys).forEach(function (k) {
       if (r2(by[k] || 0) !== r2(cur[k] || 0)) changed = true;
     });
@@ -1201,9 +1248,14 @@
         if (a.kind !== 'card' || String(a.name || '').trim().toLowerCase() === ch.key.toLowerCase()) return;
         var row = null;
         (d.cards || []).forEach(function (r) { if (!row && r.name === a.name) row = r; });
-        if (row) a.value = r2(row.live);
+        if (row) a.value = cardClamp(a, r2(row.live)); // v73.82: the constraint guard (0 ≤ base ≤ limit)
       });
-      acc.value = r2((Number(reconState.vals[ch.key]) || 0));
+      var typedV = r2((Number(reconState.vals[ch.key]) || 0));
+      var clampedV = cardClamp(acc, typedV); // v73.82: the constraint guard on the typed value
+      if (clampedV !== typedV) {
+        snack('Clamped ' + esc(ch.key) + ' to its credit limit (' + money(clampedV) + ') — card balances must stay between 0 and the limit', function () {});
+      }
+      acc.value = clampedV;
     }
     // re-anchor: the base now carries the live values, the overlay zeroes —
     // same reset as rebase, but the filed row is NEW − LIVE (the discrepancy).
@@ -8230,12 +8282,16 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.81, live: new Date(2026, 10, 1, 17, 29) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.82, live: new Date(2026, 10, 1, 18, 49) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.82': [
+      'Fixed: card balances drifting back to absurd values after a reconcile (Maya CC above its limit, MariBank CC negative). A boot-time recompute re-applied the ENTIRE card history onto the freshly reconciled base — the fix only rebuilds the per-card split from transactions logged AFTER your last reconcile, so a reconciled balance now stays put. Already-drifted phones self-heal on the first boot after this release.',
+      'New: card balances are guarded at reconcile — a value you type (or the re-anchor of the other card) is clamped to stay between 0 and the card\'s credit limit, with a toast telling you when it clamps.'
+    ],
     '73.81': [
       'Fixed: the Pay card sheet showed the "Paid with" label twice — the old Spend-mode label stayed visible beside the Date field. Now exactly one label sits above the funder dropdown.'
     ],
@@ -9311,6 +9367,8 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     reconStartEdit: reconStartEdit, // v73.75: the tap-to-edit (smoke drives the input appearing)
     reconToggle: reconToggle, // v73.76: the fold/unfold (smoke drives the default-fold state)
     reconRowFilesAs: reconRowFilesAs, // v73.73: the absorption rule (smoke checks total→Cash)
+    migratePrepayBy: migratePrepayBy, // v73.82: the boot per-card rebuild (smoke drives the reconcile-then-recompute acceptance test)
+    lastReconAt: lastReconAt, // v73.82: the last rebasing override (smoke asserts the gate)
     fileReconcileRow: fileReconcileRow, // v73.73: the audit row (smoke checks the ledger)
     setMlFilters: function (cat, m) { mlFilterCat = cat; mlFilterM = m || ''; mlShownCount = 5; }, // v73.70: test hook (the smoke drives the method filter without a DOM onchange)
     prefillAdd: prefillAdd, // v73.18: the coach prefill (smoke verifies the chip's target state)

@@ -1872,8 +1872,80 @@ waitReady().then(async function (F) {
       await tick();
       var t30b = F.state.txns.filter(function (t) { return t.id === id30; })[0];
       ok(t30b && t30b.payWith === 'MariBank', 'v73.80: a re-save KEEPS the funder (read-only on the edit sheet)');
+      // ============ PART 31: v73.82 — reconcile survives the recompute ============
+      // The absurd-balance bug: after a reconcile (base re-anchored, overlay
+      // zeroed), the boot-time migratePrepayBy rebuilt the per-card split from
+      // the FULL txn history and rescaled it to the tiny post-reconcile
+      // overlay — re-applying months of already-absorbed charges/payoffs on
+      // top of the base (Maya CC 17,821.85 > its 10,000 limit, MariBank CC
+      // −10,770.75). The fix gates the rebuild on the last rebasing override
+      // (money-log 'a'): only post-reconcile txns may ride the overlay.
+      console.log('\n== PART 31: v73.82 - reconcile survives the recompute (the boss\'s acceptance test) =');
+      // the seed's base: Maya CC 2141.80 / MariBank CC 14024.63 (limits 10000 / 70000)
+      var mbLimit31 = 70000;
+      (F.state.base.accounts || []).forEach(function (a) { if (a.name === 'MariBank CC') mbLimit31 = Number(a.limit) || 0; });
+      // RECONCILE 1: MariBank CC → 10864.27 (the boss's number)
+      F.reconSetInput('MariBank CC', 10864.27);
+      F.reconSave();
+      await tick();
+      var es31 = F.effectiveSnap();
+      ok(close(es31.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance, 10864.27), 'v73.82: after reconcile MariBank CC live = 10864.27 (got ' + es31.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance + ')');
+      // RECONCILE 2: Maya CC → 2141.80 (the boss's number; the seed base already
+      // carries it, so this files a zero-ish delta — the re-anchor is the point)
+      F.reconSetInput('Maya CC', 2141.8);
+      F.reconSave();
+      await tick();
+      es31 = F.effectiveSnap();
+      ok(close(es31.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance, 2141.8), 'v73.82: after reconcile Maya CC live = 2141.80 (got ' + es31.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance + ')');
+      ok(close(es31.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance, 10864.27), 'v73.82: the untouched card kept its reconciled base (MariBank CC 10864.27)');
+      ok(F.lastReconAt() > 0, 'v73.82: lastReconAt() sees the reconcile rows (the gate has a timestamp)');
+      // a POST-reconcile txn: the overlay may carry exactly this
+      var id31 = await F.addTxn({ kind: 'card_charge', category: 'Grocery', account: 'Maya CC', amount: 500, note: 'v73.82 probe charge', date: '2026-11-01' }, { quiet: true });
+      await tick();
+      // TRIGGER THE RECOMPUTE PATH (what every boot runs)
+      F.migratePrepayBy();
+      await tick();
+      es31 = F.effectiveSnap();
+      ok(close(es31.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance, 2641.8), 'v73.82: after the recompute Maya CC STAYS at 2141.80 + the 500 charge = 2641.80 (got ' + es31.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance + ')');
+      ok(close(es31.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance, 10864.27), 'v73.82: after the recompute MariBank CC STAYS at 10864.27 (no smear, got ' + es31.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance + ')');
+      var sum31 = 0;
+      Object.keys(F.state.adj.prepayBy || {}).forEach(function (k) { sum31 += F.state.adj.prepayBy[k] || 0; });
+      ok(close(sum31, F.state.adj.card), 'v73.82: the rebuilt per-card split sums to the authoritative adj.card (got ' + sum31.toFixed(2) + ' vs ' + F.state.adj.card.toFixed(2) + ')');
+      // SELF-HEAL: corrupt the stored split the way the old code did (a
+      // full-history smear that sums to the overlay total) — the rebuild must
+      // detect it and replace it, leaving the balances exactly where they are
+      F.state.adj.prepayBy = { 'Maya CC': 100, 'MariBank CC': 400 }; // sums to 500 = adj.card
+      F.migratePrepayBy();
+      await tick();
+      es31 = F.effectiveSnap();
+      ok(close(es31.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance, 2641.8), 'v73.82: a smeared stored split is REPLACED, not trusted (Maya CC still 2641.80, got ' + es31.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance + ')');
+      ok(close(es31.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance, 10864.27), 'v73.82: the smear self-heal leaves MariBank CC at 10864.27 (got ' + es31.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance + ')');
+      ok(F.state.adj.prepayBy['Maya CC'] === 500 && !('MariBank CC' in F.state.adj.prepayBy), 'v73.82: the healed split carries only the post-reconcile charge (Maya CC 500, no MariBank entry)');
+      // the CONSTRAINT GUARD: reconcile clamps the typed value to [0, limit]
+      F.reconSetInput('MariBank CC', 999999);
+      F.reconSave();
+      await tick();
+      es31 = F.effectiveSnap();
+      ok(close(es31.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance, mbLimit31), 'v73.82: a typed value above the limit clamps to the limit (got ' + es31.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance + ' vs limit ' + mbLimit31 + ')');
+      F.reconSetInput('MariBank CC', -5);
+      F.reconSave();
+      await tick();
+      es31 = F.effectiveSnap();
+      ok(close(es31.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance, 0), 'v73.82: a typed negative clamps to 0 (got ' + es31.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance + ')');
+      // and the recompute still leaves every card inside [0, limit]
+      F.migratePrepayBy();
+      await tick();
+      es31 = F.effectiveSnap();
+      var inBounds31 = true;
+      (es31.cards || []).forEach(function (c) {
+        var lim = Number(c.limit) || 0;
+        if (c.balance < 0 || (lim > 0 && c.balance > lim)) inBounds31 = false;
+      });
+      ok(inBounds31, 'v73.82: after the recompute every card balance is inside [0, limit]');
       // cleanup: delete the probe txn (the overlay + ledger row go with it)
       await F.deleteTxn(id30);
+      await tick();
+      await F.deleteTxn(id31);
       await tick();
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
