@@ -642,6 +642,30 @@
     (state.moneyLog || []).forEach(function (e) { if (e.k === 'a' && e.at && e.at > m) m = e.at; });
     return m;
   }
+  // v73.89 (the durable-stamp fix, boss-approved): the gate's DURABLE clock.
+  // lastReconAt() scans the money log for the newest rebasing 'a' row — but
+  // the log is capped at ML_CAP=30, so once 31 newer rows evict the
+  // reconcile's 'a' row the scan falls back to an older override (or 0 =
+  // gate OFF), the boot rebuild re-includes already-absorbed history, and
+  // its rescale smears the current overlay across the cards by historical
+  // proportions (the boss's unaccounted post-reconcile drift). Every
+  // overlay-zeroing event now stamps lastRebaseAt on the persisted adj
+  // (stampRebase + saveAdj), which is immune to the cap; this returns the
+  // stamp when present and falls back to the legacy scan for pre-v73.89
+  // phones (and as a floor, in case a newer 'a' row was filed without a
+  // stamp).
+  function lastRebaseAt() {
+    var stamp = state.adj && Number(state.adj.lastRebaseAt) || 0;
+    return Math.max(stamp, lastReconAt());
+  }
+  // v73.89: stamp a rebase. Called at EVERY overlay-zeroing site (reconcile,
+  // Settings override, sheet rebase, 1k reset, boot recompute) — the stamp
+  // rides the persisted adj, so it survives the ML_CAP eviction that broke
+  // the money-log scan. The caller's saveAdj() persists it.
+  function stampRebase() {
+    if (!state.adj) return;
+    state.adj.lastRebaseAt = Date.now();
+  }
   // v73.82 (the constraint guard, boss-approved): a card balance must stay in
   // [0, limit]. Clamps at the ENTRY point only — reconcile (the typed value +
   // the untouched cards' re-anchor) — never in the ledger math or the
@@ -656,7 +680,7 @@
   function migratePrepayBy() {
     var a = state.adj;
     if (!a) return;
-    var lastR = lastReconAt(); // v73.82: the last rebasing override (money-log 'a')
+    var lastR = lastRebaseAt(); // v73.89: the durable rebase clock (stamp, money-log fallback)
     var by = {};
     (state.txns || []).forEach(function (t) {
       if (lastR) {
@@ -690,6 +714,12 @@
       var f = a.card / sum; // reconcile the split to the authoritative total
       Object.keys(by).forEach(function (k) { by[k] = r2(by[k] * f); });
     }
+    // v73.89: the no-rescale guard — a rebuild that produced NOTHING (the
+    // window is empty, or every attributed move netted to zero) must never
+    // overwrite a non-empty stored split while the overlay is non-zero:
+    // there is no attribution to scale, and wiping the split would drop the
+    // cards' per-card deltas from the live view. The stored split stays put.
+    if (Object.keys(by).length === 0 && Object.keys(cur).length > 0 && Math.abs(a.card) > 0.004) return;
     // write only when it actually differs from the stored split (idempotent
     // on the next boot — the rebuild then produces the same map)
     var keys = {};
@@ -722,7 +752,7 @@
   function migrateCashBy() {
     var a = state.adj;
     if (!a) return;
-    var lastR = lastReconAt();
+    var lastR = lastRebaseAt(); // v73.89: the durable rebase clock (same gate as migratePrepayBy)
     var by = {};
     (state.txns || []).forEach(function (t) {
       if (lastR) {
@@ -865,7 +895,9 @@
     }
   }
   function computeAdjFromTxns() {
-    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V };
+    // v73.89: the full-history recompute IS a rebase — stamp it (the rebuild
+    // then sees an empty window; the overlay itself carries the full history).
+    state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V, lastRebaseAt: Date.now() };
     state.txns.forEach(function (t) { addAdj(txnAdj(t), 1); });
   }
   function saveAdj() {
@@ -914,7 +946,8 @@
     state.snapshot = snap;
     var sig = snapSig(snap);
     // Sheet numbers moved (Balances/Config edited in the sheet) -> rebase: the sheet is source of truth again.
-    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V };
+    // v73.89: the rebase stamps the durable clock (saveAdj rides the next save).
+    if (state.adjSig && sig !== state.adjSig && adjActive()) { state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V }; stampRebase(); }
     state.adjSig = sig;
   }
   // v73.45 (the 1k-reset incident): the old reset was ONE tap, no confirm, no
@@ -955,6 +988,7 @@
       ' — the live view jumps back to your Settings numbers. You can undo right after.',
       'Reset', function () {
       state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V };
+      stampRebase(); // v73.89: the durable rebase clock (saveAdj below persists it)
       state.adjSig = snapSig(state.snapshot);
       // the audit rows — same family as 'a' (one delta per row): n is the
       // actual move (after − before), f/o are the AFTER values; the render
@@ -1044,7 +1078,11 @@
     // overlay (v73.84: payoffs + spends/inflows — NOT all of adj.cash, which
     // also carries unattributed legacy rows that ride the Cash residual row,
     // never cashBy)
-    var cashByUsable = Math.abs(cashBySum - attributedCashTotal(state.txns, lastReconAt())) <= 0.004;
+    // v73.89: the display must use the SAME durable clock as the rebuild —
+    // with the money-log scan (lastReconAt) an evicted 'a' row would make
+    // this check compare the stored split (post-rebase scope) against a
+    // full-history total and fall back to the proportional smear.
+    var cashByUsable = Math.abs(cashBySum - attributedCashTotal(state.txns, lastRebaseAt())) <= 0.004;
     var otherLive = 0;
     var debRows = otherDebits.map(function (a) {
       var baseV = Number(a.value) || 0;
@@ -1527,6 +1565,7 @@
     // function re-zeros the overlay whenever the sig changes, and the card's
     // prepayBy share must be dropped, not re-applied, on the new base).
     state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V };
+    stampRebase(); // v73.89: the durable rebase clock (saveBase → saveAdj persists it)
     state.snapshot = state.base && !baseIsEmpty(state.base) ? baseToSnapshot(state.base) : null;
     state.adjSig = snapSig(state.snapshot);
     persistSnapshot();
@@ -1852,7 +1891,8 @@
     state.snapshot = state.base && !baseIsEmpty(state.base) ? baseToSnapshot(state.base) : null;
     var sig = snapSig(state.snapshot);
     // The base numbers moved (edited in Settings) -> rebase: the base is source of truth again.
-    if (state.adjSig && sig !== state.adjSig && adjActive()) state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V };
+    // v73.89: the rebase stamps the durable clock (saveBase → saveAdj persists it).
+    if (state.adjSig && sig !== state.adjSig && adjActive()) { state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V }; stampRebase(); }
     state.adjSig = sig;
   }
   function persistSnapshot() {
@@ -8148,7 +8188,8 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       cash: Number(a && a.cash) || 0, free: Number(a && a.free) || 0,
       card: Number(a && a.card) || 0, prepay: Number(a && a.prepay) || 0,
       prepayBy: pb,
-      mv: Number(a && a.mv) || 0 // v72.43: the model stamp rides the import (0 = pre-migration, migrate on boot)
+      mv: Number(a && a.mv) || 0, // v72.43: the model stamp rides the import (0 = pre-migration, migrate on boot)
+      lastRebaseAt: Number(a && a.lastRebaseAt) || 0 // v73.89: the durable rebase clock rides the import (0 = legacy, the money-log scan takes over)
     };
   }
   function owedImportSort(v) {
@@ -8547,12 +8588,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.87, live: new Date(2026, 10, 2, 3, 8) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.89, live: new Date(2026, 10, 2, 23, 43) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.89': [
+      'Fixed: card balances drifting shortly after a reconcile, with no new entries — on a busy day the ledger\u2019s audit trail (30 rows) can push a reconcile\u2019s record out, and the next boot then re-applied old card history onto the fresh base, smearing the current charges across BOTH cards. The reconcile now stamps a durable clock that can\u2019t be pushed out, so a reconciled balance stays put and the other card is never touched. Already-drifted phones self-heal on the next reconcile.'
+    ],
     '73.87': [
       'Fixed: reconciling a card balance made Total cash jump back to its old value — the payoffs and spends you logged since the last reconcile were riding the live view, and a card reconcile wiped them from the cash side while re-anchoring the cards. Now a card reconcile re-anchors the cash accounts to their live values too, so Total cash (and every cash line) stays exactly where it was — only the reconciled card moves.'
     ],
@@ -9649,6 +9693,8 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     reconRowFilesAs: reconRowFilesAs, // v73.73: the absorption rule (smoke checks total→Cash)
     migratePrepayBy: migratePrepayBy, // v73.82: the boot per-card rebuild (smoke drives the reconcile-then-recompute acceptance test)
     lastReconAt: lastReconAt, // v73.82: the last rebasing override (smoke asserts the gate)
+    lastRebaseAt: lastRebaseAt, // v73.89: the durable rebase clock (smoke asserts the stamp survives the ML_CAP eviction)
+    stampRebase: stampRebase, // v73.89: the rebase stamp (smoke drives it directly)
     migrateCashBy: migrateCashBy, // v73.83: the boot per-funder cash split rebuild (smoke drives the payoff-lands-on-funder acceptance test)
     fileReconcileRow: fileReconcileRow, // v73.73: the audit row (smoke checks the ledger)
     setMlFilters: function (cat, m) { mlFilterCat = cat; mlFilterM = m || ''; mlShownCount = 5; }, // v73.70: test hook (the smoke drives the method filter without a DOM onchange)

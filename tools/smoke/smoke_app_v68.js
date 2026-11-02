@@ -2351,6 +2351,86 @@ waitReady().then(async function (F) {
       F.migrateCashBy();
       await tick();
 
+      // ============ PART 34: v73.89 — the rebase clock survives the ML_CAP eviction ============
+      // The boss's post-reconcile drift: lastReconAt() scans the money log
+      // for the newest rebasing 'a' row — but the log is capped at ML_CAP=30,
+      // so once 31 newer rows evict the reconcile's 'a' row the scan falls
+      // back to 0 (gate OFF), the boot rebuild re-includes already-absorbed
+      // history, and its rescale smears the CURRENT overlay across the cards
+      // by historical proportions. v73.89: every overlay-zeroing event stamps
+      // lastRebaseAt on the persisted adj (durable, cap-immune); the gate
+      // reads the stamp (the money-log scan stays as fallback/floor).
+      console.log('\n== PART 34: v73.89 - the rebase clock survives the ML_CAP eviction (the boss\'s post-reconcile drift) =');
+      var base34orig = JSON.parse(JSON.stringify(F.state.base));
+      var snap34orig = F.state.snapshot;
+      var adj34orig = JSON.parse(JSON.stringify(F.state.adj));
+      var log34orig = JSON.parse(JSON.stringify(F.state.moneyLog || []));
+      (F.state.base.accounts || []).forEach(function (a) {
+        if (a.kind === 'debit') a.value = a.name === 'Cash' ? 10000 : 0;
+        if (a.kind === 'card') a.value = a.name === 'Maya CC' ? 3000 : (a.name === 'MariBank CC' ? 2000 : 0);
+      });
+      F.state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: 2 };
+      F.refreshLocalSnapshot();
+      // charge Maya 500 (rides the overlay), then reconcile MARI BANK to
+      // 1900 — the cross-reconcile: the re-anchor absorbs the Maya charge
+      // into its base, zeroes the overlay, files the 'a' row, stamps the
+      // durable clock
+      var id34a = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 500, note: 'v73.89 maya charge', date: '2026-11-01' }, { quiet: true });
+      await tick();
+      F.reconSetInput('MariBank CC', 1900);
+      F.reconSave();
+      await tick();
+      var es34a = F.effectiveSnap();
+      ok(close(es34a.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance, 3500), 'v73.89: after the cross-reconcile Maya CC = 3500 (the base absorbed the charge; got ' + es34a.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance + ')');
+      ok(close(es34a.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance, 1900), 'v73.89: MariBank CC = the typed 1900 (got ' + es34a.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance + ')');
+      ok(F.state.adj.lastRebaseAt > 0, 'v73.89: the reconcile stamped lastRebaseAt on the persisted adj (got ' + F.state.adj.lastRebaseAt + ')');
+      // EVICT the reconcile's 'a' row: 31 newer ledger rows (ML_CAP=30 keeps
+      // only the newest 30 — the legacy scan now finds no rebasing row)
+      var evictAt = Date.now() + 100000;
+      var filler = [];
+      for (var i34 = 0; i34 < 31; i34++) filler.push({ at: evictAt + i34, a: 'add', l: 'Food', c: 'Food', nt: 'evict filler ' + i34, m: 'Cash', n: 1, k: 'x' });
+      F.state.moneyLog = filler;
+      ok(F.lastReconAt() === 0, 'v73.89: the eviction is real — the legacy money-log scan now finds NO rebasing row (got ' + F.lastReconAt() + ')');
+      ok(F.lastRebaseAt() >= F.state.adj.lastRebaseAt, 'v73.89: the durable clock survives the eviction (got ' + F.lastRebaseAt() + ')');
+      // the post-reconcile charge that the pre-v73.89 gate used to smear
+      var id34b = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 200, note: 'v73.89 maya charge 2', date: '2026-11-01' }, { quiet: true });
+      await tick();
+      // BOOT REBUILD: with the gate OFF (the pre-v73.89 behavior) this
+      // re-includes the 500 (already in the base) and rescales the split by
+      // history — Maya drifts and MariBank catches a share. With the stamp:
+      // the window holds only the 200 → the rebuild is idempotent, no drift.
+      F.migratePrepayBy();
+      await tick();
+      var es34b = F.effectiveSnap();
+      var maya34 = es34b.cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance;
+      var mb34 = es34b.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance;
+      ok(close(maya34, 3700), 'v73.89: AFTER the boot rebuild Maya CC = 3700 (base 3500 + the 200 overlay — NO drift; got ' + maya34 + ')');
+      ok(close(mb34, 1900), 'v73.89: the OTHER card is untouched by the rebuild (MariBank 1900; got ' + mb34 + ')');
+      ok(close((F.state.adj.prepayBy || {})['Maya CC'], 200) && !('MariBank CC' in (F.state.adj.prepayBy || {})), 'v73.89: the rebuilt split = exactly the post-reconcile charge (Maya 200, no MariBank share; got ' + JSON.stringify(F.state.adj.prepayBy) + ')');
+      // the no-rescale guard: a non-zero overlay with an EMPTY rebuild window
+      // must keep the stored split (wiping it would drop the cards' per-card
+      // deltas while card_owed still carries the total)
+      F.reconSetInput('Maya CC', 3600);
+      F.reconSave();
+      await tick();
+      F.state.adj.card = 50;
+      F.state.adj.prepayBy = { 'Maya CC': 50 };
+      F.migratePrepayBy();
+      await tick();
+      ok(close((F.state.adj.prepayBy || {})['Maya CC'], 50), 'v73.89: the no-rescale guard keeps a stored split when the rebuild window is empty (got ' + JSON.stringify(F.state.adj.prepayBy) + ')');
+      // restore the parked state (the probe txns go with the delete)
+      await F.deleteTxn(id34a);
+      await tick();
+      await F.deleteTxn(id34b);
+      await tick();
+      F.state.base = base34orig;
+      F.state.snapshot = snap34orig;
+      F.state.adj = adj34orig;
+      F.state.adjSig = F.snapSig(snap34orig);
+      F.state.moneyLog = log34orig;
+      F.migrateCashBy();
+      await tick();
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

@@ -1823,6 +1823,13 @@ def main():
           "var otherLive37 = 0;" in js
           and "var cashResid37 = r2(cashRow37 ? cashRow37.live : 0);" in js
           and "b.accounts.push({ name: 'Cash', kind: 'debit', value: cashResid37, limit: 0, note: '' });" in js)
+    check("v73.89 (boss: 'unaccounted changes in the CC balances shortly AFTER I reconcile'): the gate's clock is DURABLE — lastReconAt() scans the money log for the newest rebasing 'a' row, but the log is capped at ML_CAP=30, so once 31 newer rows evict the reconcile's 'a' row the scan falls back to 0 (gate OFF), the boot rebuild re-includes already-absorbed history, and its rescale smears the CURRENT overlay across the cards by historical proportions. Every overlay-zeroing event (reconcile, Settings override, sheet rebase, 1k reset, boot recompute) now stamps lastRebaseAt on the persisted adj (stampRebase, cap-immune); lastRebaseAt() = max(stamp, legacy scan) feeds migratePrepayBy / migrateCashBy / the reconData cashBy-usable check, and a no-rescale guard keeps a stored split when the rebuild window is empty. Smoke PART 34: the eviction scenario end-to-end (cross-reconcile, 31 filler rows, post-reconcile charge, boot rebuild — no drift, the other card untouched)",
+          "function lastRebaseAt() {" in js
+          and "function stampRebase() {" in js
+          and "var lastR = lastRebaseAt();" in js
+          and "attributedCashTotal(state.txns, lastRebaseAt())" in js
+          and "state.adj.lastRebaseAt = Date.now();" in js
+          and "if (Object.keys(by).length === 0 && Object.keys(cur).length > 0 && Math.abs(a.card) > 0.004) return;" in js)
     check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
           "function seedPayTo()" in js
           and "function seedPayWith()" in js
@@ -1848,7 +1855,7 @@ def main():
           and "migrateCashBy: migrateCashBy" in js)  # v73.84 retarget: the usable-gate pin moved to the v73.84 check (attributedCashTotal)
     check("v73.84 (boss: 'i added an expense charge on maribank debit but the live numbers shows it was charged on cash' — diagnosis approved, fix shipped): the SAME attribution gap v73.83 fixed for payoffs applied to SPENDS — a cash_out / cash_in delta carried no funder, so it rode the global adj.cash scalar and reconData's Cash residual row (total − other debits) absorbed it: a MariBank-debit expense displayed as a Cash charge. txnAdj now attributes cash_out / cash_in to t.account (the sheet's account pick; legacy rows with no account, or a card account, fall back to 'Cash'), the usable-gate + migrateCashBy compare against attributedCashTotal (payoffs + spends/inflows — the exact sum that rides cashBy), and the rebuild self-heals v73.83-era splits (payoff-only) into the attributed ones",
           "function attributedCashTotal(txns, lastR) {" in js
-          and "var cashByUsable = Math.abs(cashBySum - attributedCashTotal(state.txns, lastReconAt())) <= 0.004;" in js
+          and "var cashByUsable = Math.abs(cashBySum - attributedCashTotal(state.txns, lastRebaseAt())) <= 0.004;" in js  # v73.89 retarget: the usable-gate reads the DURABLE rebase clock (lastReconAt's money-log scan breaks when ML_CAP evicts the 'a' row — the v73.89 pin covers the new mechanism)
           and "var attrTotal = attributedCashTotal(state.txns, lastR);" in js
           and "co.funder = cf;" in js
           and "ci.funder = cf;" in js)
