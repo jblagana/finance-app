@@ -1001,7 +1001,7 @@
         rows.push({ at: Date.now(), a: 'add', l: 'Adjustment', c: 'Adjustment', nt: 'reset to my numbers', m: '', n: dCard, k: 'r', o: r2(cardAfter) });
       }
       rows.forEach(function (e) { state.moneyLog.push(e); });
-      if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
+      // v73.91: no cap — the store is INFINITE (the v73.89 durable clock made the math cap-independent); the pager pages the DOM
       idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
       resetUndoState = { prev: prev, rows: rows };
       saveAdj().then(function () {
@@ -1314,7 +1314,7 @@
     e.f = r2(s.cash ? s.cash.free : 0);
     if (kind === 'card') e.o = r2(s.card_owed || 0);
     state.moneyLog.push(e);
-    if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
+    // v73.91: no cap — the store is INFINITE (the v73.89 durable clock made the math cap-independent); the pager pages the DOM
     idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
   }
   // the total row: if the TOTAL was edited it shows the typed total (the
@@ -1983,7 +1983,7 @@
     e.f = r2(s.cash ? s.cash.free : 0);
     if (kind === 'card') e.o = r2(s.card_owed || 0);
     state.moneyLog.push(e);
-    if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
+    // v73.91: no cap — the store is INFINITE (the v73.89 durable clock made the math cap-independent); the pager pages the DOM
     idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
   }
 
@@ -2278,7 +2278,7 @@
         var li = (typeof idxs[k] === 'number' && idxs[k] >= 0) ? Math.min(idxs[k], state.moneyLog.length) : state.moneyLog.length;
         state.moneyLog.splice(li, 0, e);
       });
-      if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
+      // v73.91: no cap — the store is INFINITE (the v73.89 durable clock made the math cap-independent); the pager pages the DOM
       idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
     }
     if (r.t) saveAdj();
@@ -2562,7 +2562,9 @@
   }
 
   // ---------- Phase 6: money log — per-change audit trail so the overview math can be sanity-checked ----------
-  var ML_CAP = 30;   // entries kept in the meta store (the card shows all of them)
+  // v73.91: the moneyLog store is INFINITE — the v72.8 ML_CAP=30 truncation is
+  // gone from every push site, the export, and the import sanitizer. The only
+  // limit is the Ledger pager (ML_PAGE / ML_STEP below), which pages the DOM.
   function logMoney(action, t) {
     var s = effectiveSnap();
     if (!s) return;
@@ -2602,7 +2604,7 @@
       e.s = r2(sp);
     }
     state.moneyLog.push(e);
-    if (state.moneyLog.length > ML_CAP) state.moneyLog = state.moneyLog.slice(-ML_CAP);
+    // v73.91: no cap — the store is INFINITE (the v73.89 durable clock made the math cap-independent); the pager pages the DOM
     idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
   }
   function mlDate(ts) {
@@ -2640,10 +2642,14 @@
   // '__m:<name>' matches the method exactly ('CC Payment' = prepays with no
   // account). Stacks with the category filter (AND).
   var mlFilterM = '';
-  // v72.29 (user edit): "See more" paging for the money log — the first 5
-  // rows (newest first) show; the button reveals 5 older ones per tap; a
-  // filter change starts the page over. In-memory — resets on reload.
-  var mlShownCount = 5;
+  // v72.29 (user edit): "See more" paging for the money log — the first page
+  // (newest first) shows; the button reveals older ones per tap; a filter
+  // change starts the page over. In-memory — resets on reload.
+  // v73.91 (boss: 'keep 50 rendered, see more/less show/hide 20'): the page
+  // is 50 rows, the step is 20 — the store is infinite, so the pager is the
+  // only limit and every row is reachable.
+  var ML_PAGE = 50, ML_STEP = 20;
+  var mlShownCount = ML_PAGE;
   function renderMlFilter() {
     var sel = byId('mlFilter');
     if (!sel) return;
@@ -2727,7 +2733,7 @@
       return;
     }
     if (noteEl) noteEl.style.display = '';
-    // v72.29 (user edit): "See more" — 5 rows at a time, the old ones hidden
+    // v72.29 (user edit): "See more" — the old ones hidden; v73.91: page 50, step 20
     var limited = shown.slice(0, mlShownCount);
     body.innerHTML = limited.map(function (e) {
         var add = e.a === 'add';
@@ -2810,10 +2816,11 @@
           freeTxt + extra + editBtn + delBtn + adjDel + '</div></div>';
       }).join('') +
       // v72.30 (user edit: 'see less beside see more'): the buttons share one
-      // row — See less re-hides 5 per tap down to the first page (hidden there)
-      ((shown.length > limited.length || mlShownCount > 5) ? '<div class="ml-pag">' +
+      // row — See less re-hides per tap down to the first page (hidden there);
+      // v73.91: the first page is 50, the step is 20
+      ((shown.length > limited.length || mlShownCount > ML_PAGE) ? '<div class="ml-pag">' +
       (shown.length > limited.length ? '<button type="button" class="addrow" id="mlMore">See more</button>' : '') +
-      (mlShownCount > 5 ? '<button type="button" class="addrow" id="mlLess">See less</button>' : '') +
+      (mlShownCount > ML_PAGE ? '<button type="button" class="addrow" id="mlLess">See less</button>' : '') +
       '</div>' : '');
     var dl = body.querySelectorAll('[data-ml-del]');
     for (var di = 0; di < dl.length; di++) dl[di].onclick = function (ev) {
@@ -2835,9 +2842,9 @@
     var ed = body.querySelectorAll('[data-ml-edit]');
     for (var ei = 0; ei < ed.length; ei++) ed[ei].onclick = function () { openTxnEdit(this.getAttribute('data-ml-edit')); };
     var more = byId('mlMore');
-    if (more) more.onclick = function () { mlShownCount += 5; renderMoneyLog(); };
-    var less = byId('mlLess'); // v72.30: re-hide 5 per tap (floor: the first page)
-    if (less) less.onclick = function () { mlShownCount = Math.max(5, mlShownCount - 5); renderMoneyLog(); };
+    if (more) more.onclick = function () { mlShownCount += ML_STEP; renderMoneyLog(); };
+    var less = byId('mlLess'); // v72.30: re-hide per tap (floor: the first page); v73.91: step 20, page 50
+    if (less) less.onclick = function () { mlShownCount = Math.max(ML_PAGE, mlShownCount - ML_STEP); renderMoneyLog(); };
   }
 
   // ---------- bottom sheets (Add, Settings) ----------
@@ -8380,7 +8387,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       if (typeof e.s === 'number' && isFinite(e.s)) m.s = e.s;
       out.push(m);
     });
-    return out.slice(-ML_CAP);
+    return out; // v73.91: no cap — an import carries the FULL ledger (the store is infinite)
   }
   function sanitizeAdj(a) {
     var pb = {};
@@ -8467,7 +8474,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       if (sel.owed) { obj.owed = state.owed.people; obj.owedSort = state.owed.sort || 'recent'; inc.push('owed'); }
       if (sel.log) {
         obj.shadowLog = state.shadowLog || []; // v68 item 11: the rule-coverage evidence
-        obj.moneyLog = (state.moneyLog || []).slice(-ML_CAP); // v72.8: the Ledger tab's audit
+        obj.moneyLog = state.moneyLog || []; // v73.91: the FULL ledger (the store is infinite — the v72.8 30-row truncation is gone)
         obj.adj = state.adj; obj.adjSig = state.adjSig || ''; // v72.8: the live overlay (exact numbers)
         inc.push('log');
       }
@@ -8794,12 +8801,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.90, live: new Date(2026, 10, 3, 16, 50) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.91, live: new Date(2026, 10, 3, 17, 57) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.91': [
+      'The Ledger is now INFINITE — the 30-row limit that quietly deleted your oldest entries is gone (storage, export, and import all keep everything). The Ledger tab shows the newest 50 first, and See more / See less reveal or re-hide 20 at a time, so every entry is still reachable.'
+    ],
     '73.90': [
       'New: the credit-card cycle model, live — each card keeps its own billing and due date (Settings → Your numbers → the card row), a charge logged within ±5 days of the card\'s billing date gets a THIS CYCLE / NEXT CYCLE toggle on its ledger row, and the coach\'s card-payment row shows the AUTO due (balance minus next-cycle charges) with the (auto)/(manual) provenance.',
       'Fixed: the settings per-card billing/due days were not being followed — the save path read the card\'s day inputs from the wrong row, so every save dropped them and the global default came back. The days now round-trip (1–31, clamped to the month\'s length), and the ±5-day window crosses month boundaries correctly (a billing date of 30 reaches into the next month).'
@@ -9907,7 +9917,10 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     stampRebase: stampRebase, // v73.89: the rebase stamp (smoke drives it directly)
     migrateCashBy: migrateCashBy, // v73.83: the boot per-funder cash split rebuild (smoke drives the payoff-lands-on-funder acceptance test)
     fileReconcileRow: fileReconcileRow, // v73.73: the audit row (smoke checks the ledger)
-    setMlFilters: function (cat, m) { mlFilterCat = cat; mlFilterM = m || ''; mlShownCount = 5; }, // v73.70: test hook (the smoke drives the method filter without a DOM onchange)
+    setMlFilters: function (cat, m) { mlFilterCat = cat; mlFilterM = m || ''; mlShownCount = ML_PAGE; }, // v73.70: test hook (the smoke drives the method filter without a DOM onchange)
+    mlShown: function () { return mlShownCount; }, // v73.91: the pager's page (smoke asserts 50/20 paging)
+    setMlShown: function (n) { mlShownCount = n; renderMoneyLog(); }, // v73.91: the smoke drives the See more/less page without a DOM click
+    sanitizeMoneyLogRows: sanitizeMoneyLogRows, // v73.91: the import sanitizer (smoke asserts it no longer truncates)
     prefillAdd: prefillAdd, // v73.18: the coach prefill (smoke verifies the chip's target state)
     getAddMode: function () { return addMode; }, // v73.19: the Add sheet's direction (the row chips' prefill proof)
     prepayRowChip: prepayRowChip, // v73.19: the prepay row-chip's handler body (smoke drives it without a DOM)
@@ -10298,9 +10311,9 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       updatePlanLinkChip();
     };
     var mlf = byId('mlFilter');
-    if (mlf) mlf.onchange = function () { mlFilterCat = mlf.value; mlShownCount = 5; renderMoneyLog(); };
+    if (mlf) mlf.onchange = function () { mlFilterCat = mlf.value; mlShownCount = ML_PAGE; renderMoneyLog(); };
     var mlfM = byId('mlFilterM'); // v73.70: the payment-method filter
-    if (mlfM) mlfM.onchange = function () { mlFilterM = mlfM.value; mlShownCount = 5; renderMoneyLog(); };
+    if (mlfM) mlfM.onchange = function () { mlFilterM = mlfM.value; mlShownCount = ML_PAGE; renderMoneyLog(); };
     wireSnackSwipe(); // v72.32: the top banner swipes up to dismiss
 
     window.addEventListener('online', function () { state.online = true; });

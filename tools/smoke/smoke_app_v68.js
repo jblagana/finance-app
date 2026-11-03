@@ -1671,7 +1671,7 @@ waitReady().then(async function (F) {
         F.setMlFilters('', '__m:Maya CC');
         F.renderMoneyLog();
         var mayaRows = rowsOf('Maya CC');
-        ok(mayaRows === Math.min(5, mayaN), 'v73.70: filtering by Maya CC shows ONLY its rows (got ' + mayaRows + ')');
+        ok(mayaRows === Math.min(50, mayaN), 'v73.70: filtering by Maya CC shows ONLY its rows (v73.91: the page is 50; got ' + mayaRows + ')');
         ok(rowsOf('MariBank CC') === 0 && rowsOf('Cash') === 0, 'v73.70: the filter hides the other methods (no MariBank CC / Cash row)');
         // the AND with the category filter narrows further
         var mayaFood = log26.filter(function (e) {
@@ -1680,7 +1680,7 @@ waitReady().then(async function (F) {
         F.setMlFilters('Food', '__m:Maya CC');
         F.renderMoneyLog();
         var mayaFoodRows = rowsOf('Maya CC');
-        ok(mayaFoodRows === Math.min(5, mayaFood), 'v73.70: the method filter ANDs with the category (Maya CC + Food = ' + mayaFood + ' rows, got ' + mayaFoodRows + ')');
+        ok(mayaFoodRows === Math.min(50, mayaFood), 'v73.70: the method filter ANDs with the category (Maya CC + Food = ' + mayaFood + ' rows, v73.91 page 50, got ' + mayaFoodRows + ')');
         // the empty state names BOTH active filters (Food + LandBank)
         var landFood = log26.filter(function (e) {
           return e.k !== 'p' && e.c === 'Food' && (e.m || '') === 'LandBank';
@@ -1697,7 +1697,7 @@ waitReady().then(async function (F) {
         F.setMlFilters('', '__m:MariBank CC');
         F.renderMoneyLog();
         var mbRows = rowsOf('MariBank CC');
-        ok(mbRows === Math.min(5, countM('MariBank CC')), 'v73.70: a method filter change restarts the See-more page at 5 rows (got ' + mbRows + ')');
+        ok(mbRows === Math.min(50, countM('MariBank CC')), 'v73.70: a method filter change restarts the See-more page at the 50-row page (v73.91; got ' + mbRows + ')');
         // clearing the method filter returns to the full log
         F.setMlFilters('', '');
         F.renderMoneyLog();
@@ -2590,6 +2590,62 @@ waitReady().then(async function (F) {
       F.state.moneyLog = log35orig;
       F.migrateCashBy();
       await tick();
+
+      // ============ PART 36: v73.91 — the infinite ledger (no store cap; the pager is the only limit) ============
+      // v72.8 capped the moneyLog store at ML_CAP=30 (5 push sites + export +
+      // import sanitizer) — the boss's history was silently amputated. v73.91:
+      // the store is INFINITE; the Ledger pager (ML_PAGE=50, ML_STEP=20) is the
+      // only limit, and every row is reachable through See more/See less.
+      console.log('\n== PART 36: v73.91 - the infinite ledger (store uncapped, the pager pages the DOM) =');
+      var log36orig = JSON.parse(JSON.stringify(F.state.moneyLog || []));
+      var base36orig = JSON.parse(JSON.stringify(F.state.base));
+      var rows36 = [];
+      for (var i36 = 0; i36 < 140; i36++) rows36.push({ at: Date.now() - (140 - i36) * 1000, a: 'add', l: 'Food', c: 'Food', nt: 'v73.91 row ' + i36, m: 'Cash', n: 1, k: 'x' });
+      F.state.moneyLog = rows36;
+      // (1) the store is INFINITE — a 140-row log survives a push untouched
+      F.state.moneyLog.push({ at: Date.now(), a: 'add', l: 'Food', c: 'Food', nt: 'v73.91 row 140', m: 'Cash', n: 1, k: 'x' });
+      ok(F.state.moneyLog.length === 141, 'v73.91: the store is INFINITE — a 141-row log survives a push (the v72.8 ML_CAP=30 amputation is gone; got ' + F.state.moneyLog.length + ')');
+      // (2) the import sanitizer no longer truncates (the push above mutated
+      // the rows36 reference — it IS the store now, 141 rows)
+      ok(F.sanitizeMoneyLogRows(rows36).length === 141, 'v73.91: the import sanitizer keeps the FULL ledger (got ' + F.sanitizeMoneyLogRows(rows36).length + ')');
+      // (3) the export carries the full ledger (the v72.8 slice(-ML_CAP) is gone)
+      var appSrc36 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'app.js'), 'utf8');
+      ok(/obj\.moneyLog = state\.moneyLog \|\| \[\];/.test(appSrc36), 'v73.91: the export writes the FULL ledger (obj.moneyLog = state.moneyLog || [])');
+      // (4) the pager: first page 50, See more/less step 20, every row reachable
+      F.setMlFilters('', '');
+      ok(F.mlShown() === 50, 'v73.91: the pager starts at the 50-row page (got ' + F.mlShown() + ')');
+      F.renderMoneyLog();
+      var html36 = String(byIdStub('mlBody').innerHTML);
+      var n36 = (html36.match(/class="ml-row/g) || []).length;
+      ok(n36 === 50, 'v73.91: the Ledger renders 50 rows on the first page (got ' + n36 + ')');
+      ok(html36.indexOf('id="mlMore"') >= 0 && html36.indexOf('id="mlLess"') < 0, 'v73.91: the first page shows See more and NO See less (got more=' + (html36.indexOf('id="mlMore"') >= 0) + ' less=' + (html36.indexOf('id="mlLess"') >= 0) + ')');
+      var pages36 = [70, 90, 110, 130, 141];
+      for (var pi36 = 0; pi36 < pages36.length; pi36++) {
+        F.setMlShown(pages36[pi36]);
+        html36 = String(byIdStub('mlBody').innerHTML);
+        n36 = (html36.match(/class="ml-row/g) || []).length;
+        ok(n36 === pages36[pi36], 'v73.91: page ' + pages36[pi36] + ' renders ' + pages36[pi36] + ' rows (got ' + n36 + ')');
+        var last36 = pages36[pi36] >= 141;
+        ok((html36.indexOf('id="mlMore"') >= 0) === !last36, 'v73.91: See more visible while rows remain hidden, GONE on the last page (page ' + pages36[pi36] + ')');
+        ok(html36.indexOf('id="mlLess"') >= 0, 'v73.91: See less appears off the first page (page ' + pages36[pi36] + ')');
+      }
+      ok(html36.indexOf('v73.91 row 0') >= 0, 'v73.91: the OLDEST row (row 0) is reachable — all 141 are viewable through See more');
+      // stepping back down: 110, 90, 70, floor 50 (the See less floor)
+      var down36 = [110, 90, 70, 50, 50];
+      for (var di36 = 0; di36 < down36.length; di36++) {
+        F.setMlShown(down36[di36]);
+        html36 = String(byIdStub('mlBody').innerHTML);
+        n36 = (html36.match(/class="ml-row/g) || []).length;
+        ok(n36 === down36[di36], 'v73.91: stepping back renders ' + down36[di36] + ' rows (got ' + n36 + ')');
+        if (down36[di36] === 50) ok(html36.indexOf('id="mlLess"') < 0, 'v73.91: See less hides itself at the 50-row floor');
+      }
+      // (5) the app source carries no store cap left (the 5 push-site truncations are gone)
+      ok(appSrc36.indexOf('state.moneyLog.length > ML_CAP') < 0, 'v73.91: no push site truncates the store anymore (state.moneyLog.length > ML_CAP is gone from app.js)');
+      // restore the parked state
+      F.state.moneyLog = log36orig;
+      F.state.base = base36orig;
+      F.setMlFilters('', '');
+      F.renderMoneyLog();
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);

@@ -1445,7 +1445,7 @@ def main():
           and "state.owed.sort = 'custom'" in js and "p.updated = new Date().toISOString()" in js)
     check("export/import cover the whole app (v72.8, selectable in v72.23): the JSON backup is async (reads the chat store) and, by default, carries the chat thread, the Ledger money log, the overlay (adj+sig) and the owed sort; the import restores all of them, recomputing adj from txns when a pre-72.8 backup lacks it",
           "idbAll(STORE_CHAT).then" in js and "obj.chat = chat" in js
-          and "obj.moneyLog = (state.moneyLog || []).slice(-ML_CAP)" in js
+          and "obj.moneyLog = state.moneyLog || []" in js  # v73.91: the export carries the FULL ledger (the v72.8 30-row truncation is gone)
           and "obj.adj = state.adj; obj.adjSig = state.adjSig || ''" in js
           and "obj.owedSort = state.owed.sort || 'recent'" in js
           and "sanitizeChatRows(data.chat)" in js
@@ -1685,11 +1685,11 @@ def main():
           and "var limit = owedShown[p.id] || 5;" in js
           and "data-ow-more" in js
           and "owedShown[moreE] = (owedShown[moreE] || 5) + 5;" in js
-          and "var mlShownCount = 5;" in js
+          and "var mlShownCount = ML_PAGE;" in js  # v73.91: the Ledger page is 50 (ML_PAGE), step 20 (ML_STEP) — the store is infinite
           and "var limited = shown.slice(0, mlShownCount);" in js
           and 'id="mlMore"' in js
-          and "mlShownCount += 5; renderMoneyLog();" in js
-          and "mlFilterCat = mlf.value; mlShownCount = 5; renderMoneyLog();" in js)
+          and "mlShownCount += ML_STEP; renderMoneyLog();" in js
+          and "mlFilterCat = mlf.value; mlShownCount = ML_PAGE; renderMoneyLog();" in js)
     check("v72.30 (user, four items): (1) 'Owed' is out of the add-sheet categories (old ledger rows keep their data — no migration); (2) the owed in-place edit Cancel closes the form — the valueless flag attribute read '' (falsy) so the handler branch never fired, it carries a value now; (3) 'See less' beside 'See more' in Owed (data-ow-less; re-hides 5 per tap, floor = the first page of 5; hides itself there) and the Ledger (mlLess, same floor); (4) the account balance override: the account row's third column is labeled the current balance, and a saveBase that moves a debit/card account's value files the SIGNED diff as a moneyLog-ONLY row (no txn — the base rebase already zeroed the overlay, and the spend insights sum txns, so they can never be skewed) under category 'Adjustment' (k='a', f = the new effective free, o = the card owed after on card rows, no tid = an audit record corrected by the next override); 'snap' re-renders the ledger for this; the import sanitizer keeps the 'a' flavor",
           "function accountBalanceDiffs(oldB, newB)" in js
           and "function fileBalanceAdjustment(name, kind, diff)" in js
@@ -1704,7 +1704,7 @@ def main():
           and "owedShown[lessE] = Math.max(5, (owedShown[lessE] || 5) - 5);" in js
           and "ow-pag" in js and "ow-pag" in html
           and 'id="mlLess"' in js and "ml-pag" in js and "ml-pag" in html
-          and "mlShownCount = Math.max(5, mlShownCount - 5);" in js
+          and "mlShownCount = Math.max(ML_PAGE, mlShownCount - ML_STEP);" in js  # v73.91: Ledger page 50 / step 20 (the Owed pager keeps its 5/5)
           and "names.push('Owed')" not in js
           and "prevTxn.category || 'Unsorted'" in js
           and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender]" in js  # v73.74: the snap key gained reconRender (a base save must repaint the Reconcile card); v73.0: renderMood + v73.2: the pulse ride the snap key; v73.14: the due strip left the list; v73.33: the pulse (renderRecap) left the list
@@ -1724,7 +1724,7 @@ def main():
           and '__m:' in js
           and "var mv = (e.k === 'p' && !e.m) ? 'CC Payment' : (e.m || '');" in js
           and "if (mv !== mlFilterM.slice(4)) return false;" in js
-          and "mlfM.onchange = function () { mlFilterM = mlfM.value; mlShownCount = 5; renderMoneyLog(); };" in js
+          and "mlfM.onchange = function () { mlFilterM = mlfM.value; mlShownCount = ML_PAGE; renderMoneyLog(); };" in js  # v73.91: the page reset uses ML_PAGE
           and ".ml-fbar select+select" in html)
     check("v73.71 (the CC-card ≠ hero diagnosis — the boss's cards-owed 12,295.52 vs the CC card's 9,620.75): prepayBy is an INCREMENTAL accumulator (addAdj only writes it when the txn carries the `account` field), so card charges logged before the per-card field existed bumped the TOTAL adj.card but never the per-card split — the CC card rows (and chat) went stale under the authoritative hero total. Fix: migratePrepayBy rebuilds the split from the txns (the same txnAdj deltas) and reconciles it to adj.card (scaling the missing share in proportionally); it runs on boot (after migratePayoffModel) and on import (after the payoff migration), is idempotent (no write when the split already matches), and sanitizeAdj now keeps the per-card split through exports",
           "function migratePrepayBy()" in js
@@ -1870,6 +1870,16 @@ def main():
           and "attributedCashTotal(state.txns, lastRebaseAt())" in js
           and "state.adj.lastRebaseAt = Date.now();" in js
           and "if (Object.keys(by).length === 0 && Object.keys(cur).length > 0 && Math.abs(a.card) > 0.004) return;" in js)
+    check("v73.91 (boss: 'can we keep 50 rendered, then see more/less show/hide 20 more/less, still infinite storage and all infinite are viewable with the see more'): the moneyLog store is INFINITE — the v72.8 ML_CAP=30 truncation is gone from every push site (logMoney, base-save, reconcile, settings override, undo re-push), the export (full ledger in the JSON), and the import sanitizer (no slice); the ONLY limit is the Ledger pager: first page 50 (ML_PAGE), See more/See less step 20 (ML_STEP), floor = the first page, filter changes reset to it. Smoke PART 36: a 140-row store survives a push, renders 50, pages 70/90/110/130 to all 140, steps back down, and an export carries all 140",
+          "var ML_PAGE = 50, ML_STEP = 20;" in js
+          and "var mlShownCount = ML_PAGE;" in js
+          and "mlShownCount += ML_STEP; renderMoneyLog();" in js
+          and "mlShownCount = Math.max(ML_PAGE, mlShownCount - ML_STEP);" in js
+          and "mlShownCount > ML_PAGE ? '<button type=\"button\" class=\"addrow\" id=\"mlLess\">See less</button>'" in js
+          and "obj.moneyLog = state.moneyLog || []" in js
+          and "return out; // v73.91: no cap" in js
+          and "state.moneyLog.length > ML_CAP" not in js
+          and "'73.91': [" in js)
     check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
           "function seedPayTo()" in js
           and "function seedPayWith()" in js
