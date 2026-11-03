@@ -33,6 +33,7 @@
     peekMode: 'with',  // v73.34: the Next-cycle salary toggle (With salary / Without)
     cbPlansOpen: false, // v73.37: the peek's Plans row expansion (in-memory, defaults closed)
     cbPlansMore: false, // v73.39: the peek's "+N more…" second-level expansion (in-memory, defaults collapsed)
+    cbCardsOpen: false, // v73.93: the this-cycle Cards owed row expansion (in-memory, defaults collapsed)
     coachPlansMore: false // v73.68: the coach's Plans group "+N more…" (in-memory, defaults collapsed to 4 rows)
   };
 
@@ -5646,7 +5647,27 @@
       // so the rows sum EXACTLY to the hero: Liquid − (Cards owed + Other
       // outflows) − Plan dues = Free cash. All display-only, one source each.
       rows += '<div class="cbrow"><div class="lab">Liquid</div><div class="amt">' + money(p.liquid) + '</div></div>';
-      rows += '<div class="cbrow"><div class="lab">Cards owed<small>all cards</small></div><div class="amt minus">− ' + money(p.cardOwed) + '</div></div>';
+      // v73.93 (boss: 'make the cards due in hero card expandable/collapsible,
+      // collapsed by default'): the Cards owed row is a tap target - the
+      // per-card breakdown drops in as sub-rows (LIVE balances from the
+      // effective snapshot + each card's own due date via cardDueData,
+      // the v73.90 per-card cycle math; the v73.71 wip variant is the
+      // shape reference). Same in-memory-flag + div[role=button] pattern
+      // as the Plan dues row (v73.37/v73.56) - no button-in-button,
+      // collapsed by default (cbCardsOpen, in-memory, never persisted).
+      var cardsOpen = !!state.cbCardsOpen;
+      rows += '<div class="cbrow cbcards" id="cbCardsRow" role="button" tabindex="0" aria-expanded="' + (cardsOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (cardsOpen ? ' open' : '') + '">\u25b8</span>Cards owed<small>' + (p.cardOwed > 0.004 ? 'all cards' : 'no cards') + '</small></div><div class="amt minus">− ' + money(p.cardOwed) + '</div></div>';
+      if (cardsOpen) {
+        var csubs = '';
+        var ces = effectiveSnap();
+        (ces ? ces.cards : []).forEach(function (c) {
+          var cdd = cardDueData(b.accounts.filter(function (a) { return a.kind === 'card' && a.name === c.name; })[0], state.txns, b, todayISO(), c.balance);
+          var dueTxt = cdd ? (dayMonth(cdd.dueDate) + (cdd.dueIn <= 0 ? ' \u00b7 due' : ' \u00b7 in ' + cdd.dueIn + 'd') + (cdd.manual ? ' \u00b7 manual' : '')) : '';
+          csubs += '<div class="cbsub"><span class="sl">' + esc(c.name) + (c.limit > 0 ? ' \u00b7 ' + money(c.limit) : '') + '</span><span class="sv">− ' + money(c.balance) + (dueTxt ? ' <small style="color:var(--mut)">' + dueTxt + '</small>' : '') + '</span></div>';
+        });
+        if (!csubs) csubs = '<div class="cbsub mut"><span class="sl">no credit cards on file</span></div>';
+        rows += '<div class="cbsubwrap">' + csubs + '</div>';
+      }
       if (p.otherOut > 0.004) rows += '<div class="cbrow mut"><div class="lab">Other outflows<small>budgets · debts · sinking · one-offs</small></div><div class="amt minus">− ' + money(p.otherOut) + '</div></div>';
       // v73.56 (boss: 'make the hero card this-cycle plan dues expandable
       // just like next cycle'): the same tap-to-expand row as the peek —
@@ -5757,6 +5778,14 @@
     // v73.37: the peek's Plans row expands the specific dues (in-memory
     // flag, defaults closed; the row is a div[role=button] — the v73.20
     // chip pattern, no button-in-button).
+    // v73.93: the this-cycle Cards owed row expands the per-card
+    // breakdown (same in-memory-flag + div[role=button] pattern as the
+    // Plan dues row - collapsed by default, in-memory, never persisted).
+    var cardsRow = byId('cbCardsRow');
+    if (cardsRow) cardsRow.onclick = function () {
+      state.cbCardsOpen = !state.cbCardsOpen;
+      renderCycleBlock();
+    };
     var plansRow = byId('cbPlansRow');
     if (plansRow) plansRow.onclick = function () {
       state.cbPlansOpen = !state.cbPlansOpen;
@@ -8803,12 +8832,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.92, live: new Date(2026, 10, 3, 18, 43) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.93, live: new Date(2026, 10, 3, 23, 26) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.93': [
+      'The hero card\u2019s Cards owed row is now expandable \u2014 tap it to see each card\u2019s live balance, limit, and its own due date; tap again to fold it back. Collapsed by default.'
+    ],
     '73.92': [
       'The Ledger now opens with the newest 10 entries, and See more / See less reveal or re-hide 10 at a time (was 50/20) — the store is still infinite and every entry is reachable.'
     ],

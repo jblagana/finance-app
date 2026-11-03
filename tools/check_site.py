@@ -1885,6 +1885,15 @@ def main():
           and "mlShownCount += ML_STEP; renderMoneyLog();" in js
           and "mlShownCount = Math.max(ML_PAGE, mlShownCount - ML_STEP);" in js
           and "'73.92': [" in js)
+    check("v73.93 (boss: 'make the cards due in hero card expandable/collapsible (collapsed by default)'): the hero's THIS-cycle Cards owed row is a tap target (cbCardsRow, div[role=button], state.cbCardsOpen in-memory, defaults collapsed - never persisted): collapsed = no sub-rows; expanded = the per-card breakdown (LIVE balances from the effective snapshot + each card's own due date via cardDueData, the v73.90 per-card cycle math); the Plan dues row keeps its own flag (cbPlansOpen) and is untouched. Same in-memory-flag + div[role=button] pattern as the Plan dues row (v73.37/v73.56) - no button-in-button. Smoke PART 37: collapsed by default, tap expands the per-card sub-rows with each card's own due date, tap collapses, the plans row stays independent",
+          "cbCardsOpen: false, // v73.93" in js
+          and 'id="cbCardsRow" role="button"' in js
+          and "state.cbCardsOpen = !state.cbCardsOpen;" in js
+          and "var cardsOpen = !!state.cbCardsOpen;" in js
+          and "cardDueData(b.accounts.filter(function (a) { return a.kind === 'card' && a.name === c.name; })[0], state.txns, b, todayISO(), c.balance)" in js
+          and ".cbrow.cbcards{cursor:pointer" in html
+          and ".cbrow.cbplans .chev.open,.cbrow.cbcards .chev.open{transform:rotate(90deg)}" in html
+          and "'73.93': [" in js)
     check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
           "function seedPayTo()" in js
           and "function seedPayWith()" in js

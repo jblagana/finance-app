@@ -2649,6 +2649,44 @@ waitReady().then(async function (F) {
       F.setMlFilters('', '');
       F.renderMoneyLog();
 
+      // ============ PART 37: v73.93 - the hero's Cards owed row is expandable/collapsible (collapsed by default) ============
+      // The this-cycle Cards owed row is a tap target (cbCardsRow, div[role=button],
+      // state.cbCardsOpen in-memory, defaults collapsed): collapsed = no sub-rows;
+      // expanded = the per-card breakdown (LIVE balances + each card's own due date
+      // from cardDueData); tapping again collapses. The Plan dues row keeps its own
+      // flag (cbPlansOpen) - the two rows are independent.
+      console.log('\n== PART 37: v73.93 - the hero Cards owed row is expandable (collapsed by default) =');
+      F.state.cycleMode = 'this';
+      F.state.cbCardsOpen = false;
+      F.renderCycleBlock();
+      var cb37 = String(byIdStub('cycleBlock').innerHTML || '');
+      ok(cb37.indexOf('id="cbCardsRow"') >= 0, 'v73.93: the this-cycle Cards owed row renders (cbCardsRow present)');
+      ok(cb37.indexOf('role="button"') >= 0 && cb37.indexOf('aria-expanded="false"') >= 0,
+        'v73.93: the Cards owed row is a tap target, collapsed by default (aria-expanded=false)');
+      ok(cb37.indexOf('class="chev open"') < 0, 'v73.93: the chevron is closed by default');
+      ok(cb37.indexOf('class="cbsubwrap"') < 0, 'v73.93: collapsed = NO per-card sub-rows (cbsubwrap absent)');
+      F.state.cbCardsOpen = true;
+      F.renderCycleBlock();
+      cb37 = String(byIdStub('cycleBlock').innerHTML || '');
+      ok(cb37.indexOf('aria-expanded="true"') >= 0, 'v73.93: tapping the Cards owed row expands it (aria-expanded=true)');
+      ok(cb37.indexOf('class="chev open"') >= 0, 'v73.93: the chevron opens');
+      ok(cb37.indexOf('class="cbsubwrap"') >= 0, 'v73.93: the expansion renders the sub-rows (cbsubwrap present)');
+      ok(cb37.indexOf('Maya CC') >= 0 && cb37.indexOf('MariBank CC') >= 0,
+        'v73.93: every card on file gets a sub-row (Maya CC + MariBank CC present)');
+      var cdd37 = F.cardDueData(F.state.base.accounts.filter(function (a) { return a.name === 'Maya CC'; })[0], F.state.txns, F.state.base, F.todayISO());
+      if (cdd37) {
+        var dueLabel37 = Number(cdd37.dueDate.slice(8)) + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(cdd37.dueDate.slice(5, 7)) - 1];
+        ok(cb37.indexOf(dueLabel37) >= 0, 'v73.93: the sub-row carries the card\u2019s own due date (' + dueLabel37 + ' from cardDueData ' + cdd37.dueDate + ')');
+      }
+      // the Plan dues row keeps its own flag - expanding Cards must not touch it
+      F.state.cbPlansOpen = false;
+      F.renderCycleBlock();
+      cb37 = String(byIdStub('cycleBlock').innerHTML || '');
+      var plansSeg37 = cb37.slice(cb37.indexOf('id="cbPlansRow"'));
+      ok(plansSeg37.indexOf('cbsub') < 0, 'v73.93: the Plan dues row stays collapsed (its own flag, independent of cbCardsOpen)');
+      F.state.cbCardsOpen = false; // leave the default state for any later render
+      F.renderCycleBlock();
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
