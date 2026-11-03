@@ -1685,7 +1685,7 @@ def main():
           and "var limit = owedShown[p.id] || 5;" in js
           and "data-ow-more" in js
           and "owedShown[moreE] = (owedShown[moreE] || 5) + 5;" in js
-          and "var mlShownCount = ML_PAGE;" in js  # v73.91: the Ledger page is 50 (ML_PAGE), step 20 (ML_STEP) — the store is infinite
+          and "var mlShownCount = ML_PAGE;" in js  # v73.92: the Ledger page is 10 (ML_PAGE), step 10 (ML_STEP) — the store is infinite
           and "var limited = shown.slice(0, mlShownCount);" in js
           and 'id="mlMore"' in js
           and "mlShownCount += ML_STEP; renderMoneyLog();" in js
@@ -1704,7 +1704,7 @@ def main():
           and "owedShown[lessE] = Math.max(5, (owedShown[lessE] || 5) - 5);" in js
           and "ow-pag" in js and "ow-pag" in html
           and 'id="mlLess"' in js and "ml-pag" in js and "ml-pag" in html
-          and "mlShownCount = Math.max(ML_PAGE, mlShownCount - ML_STEP);" in js  # v73.91: Ledger page 50 / step 20 (the Owed pager keeps its 5/5)
+          and "mlShownCount = Math.max(ML_PAGE, mlShownCount - ML_STEP);" in js  # v73.92: Ledger page 10 / step 10 (the Owed pager keeps its 5/5)
           and "names.push('Owed')" not in js
           and "prevTxn.category || 'Unsorted'" in js
           and "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender]" in js  # v73.74: the snap key gained reconRender (a base save must repaint the Reconcile card); v73.0: renderMood + v73.2: the pulse ride the snap key; v73.14: the due strip left the list; v73.33: the pulse (renderRecap) left the list
@@ -1870,9 +1870,8 @@ def main():
           and "attributedCashTotal(state.txns, lastRebaseAt())" in js
           and "state.adj.lastRebaseAt = Date.now();" in js
           and "if (Object.keys(by).length === 0 && Object.keys(cur).length > 0 && Math.abs(a.card) > 0.004) return;" in js)
-    check("v73.91 (boss: 'can we keep 50 rendered, then see more/less show/hide 20 more/less, still infinite storage and all infinite are viewable with the see more'): the moneyLog store is INFINITE — the v72.8 ML_CAP=30 truncation is gone from every push site (logMoney, base-save, reconcile, settings override, undo re-push), the export (full ledger in the JSON), and the import sanitizer (no slice); the ONLY limit is the Ledger pager: first page 50 (ML_PAGE), See more/See less step 20 (ML_STEP), floor = the first page, filter changes reset to it. Smoke PART 36: a 140-row store survives a push, renders 50, pages 70/90/110/130 to all 140, steps back down, and an export carries all 140",
-          "var ML_PAGE = 50, ML_STEP = 20;" in js
-          and "var mlShownCount = ML_PAGE;" in js
+    check("v73.91 (boss: 'can we keep 50 rendered, then see more/less show/hide 20 more/less, still infinite storage and all infinite are viewable with the see more'): the moneyLog store is INFINITE — the v72.8 ML_CAP=30 truncation is gone from every push site (logMoney, base-save, reconcile, settings override, undo re-push), the export (full ledger in the JSON), and the import sanitizer (no slice); the ONLY limit is the Ledger pager (ML_PAGE / ML_STEP), floor = the first page, filter changes reset to it. v73.92 retargeted the page to 10/10. Smoke PART 36: a 140-row store survives a push, renders the first page, pages to all 140, steps back down, and an export carries all 140",
+          "var mlShownCount = ML_PAGE;" in js
           and "mlShownCount += ML_STEP; renderMoneyLog();" in js
           and "mlShownCount = Math.max(ML_PAGE, mlShownCount - ML_STEP);" in js
           and "mlShownCount > ML_PAGE ? '<button type=\"button\" class=\"addrow\" id=\"mlLess\">See less</button>'" in js
@@ -1880,6 +1879,12 @@ def main():
           and "return out; // v73.91: no cap" in js
           and "state.moneyLog.length > ML_CAP" not in js
           and "'73.91': [" in js)
+    check("v73.92 (boss: 'instead of 50 show only 10 initially, then see more/less by 10 upto infinity'): the Ledger pager page is 10 rows and the step is 10 (was 50/20) — the store is still infinite and every row is reachable through See more/See less; the Owed pager keeps its 5/5. Smoke PART 36: first page renders 10, pages 20/30/.../140, See more gone on the last page, See less hides at the 10-row floor, the oldest row is reachable",
+          "var ML_PAGE = 10, ML_STEP = 10;" in js
+          and "var mlShownCount = ML_PAGE;" in js
+          and "mlShownCount += ML_STEP; renderMoneyLog();" in js
+          and "mlShownCount = Math.max(ML_PAGE, mlShownCount - ML_STEP);" in js
+          and "'73.92': [" in js)
     check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
           "function seedPayTo()" in js
           and "function seedPayWith()" in js

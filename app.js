@@ -2648,7 +2648,9 @@
   // v73.91 (boss: 'keep 50 rendered, see more/less show/hide 20'): the page
   // is 50 rows, the step is 20 — the store is infinite, so the pager is the
   // only limit and every row is reachable.
-  var ML_PAGE = 50, ML_STEP = 20;
+  // v73.92 (boss: 'show only 10 initially, see more/less by 10'): the page is
+  // 10 rows, the step is 10 — same infinite store, every row still reachable.
+  var ML_PAGE = 10, ML_STEP = 10;
   var mlShownCount = ML_PAGE;
   function renderMlFilter() {
     var sel = byId('mlFilter');
@@ -2817,7 +2819,7 @@
       }).join('') +
       // v72.30 (user edit: 'see less beside see more'): the buttons share one
       // row — See less re-hides per tap down to the first page (hidden there);
-      // v73.91: the first page is 50, the step is 20
+      // v73.92: the first page is 10, the step is 10 (v73.91: 50/20)
       ((shown.length > limited.length || mlShownCount > ML_PAGE) ? '<div class="ml-pag">' +
       (shown.length > limited.length ? '<button type="button" class="addrow" id="mlMore">See more</button>' : '') +
       (mlShownCount > ML_PAGE ? '<button type="button" class="addrow" id="mlLess">See less</button>' : '') +
@@ -8801,12 +8803,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.91, live: new Date(2026, 10, 3, 17, 57) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.92, live: new Date(2026, 10, 3, 18, 43) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.92': [
+      'The Ledger now opens with the newest 10 entries, and See more / See less reveal or re-hide 10 at a time (was 50/20) — the store is still infinite and every entry is reachable.'
+    ],
     '73.91': [
       'The Ledger is now INFINITE — the 30-row limit that quietly deleted your oldest entries is gone (storage, export, and import all keep everything). The Ledger tab shows the newest 50 first, and See more / See less reveal or re-hide 20 at a time, so every entry is still reachable.'
     ],
@@ -9918,7 +9923,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     migrateCashBy: migrateCashBy, // v73.83: the boot per-funder cash split rebuild (smoke drives the payoff-lands-on-funder acceptance test)
     fileReconcileRow: fileReconcileRow, // v73.73: the audit row (smoke checks the ledger)
     setMlFilters: function (cat, m) { mlFilterCat = cat; mlFilterM = m || ''; mlShownCount = ML_PAGE; }, // v73.70: test hook (the smoke drives the method filter without a DOM onchange)
-    mlShown: function () { return mlShownCount; }, // v73.91: the pager's page (smoke asserts 50/20 paging)
+    mlShown: function () { return mlShownCount; }, // v73.92: the pager's page (smoke asserts 10/10 paging)
     setMlShown: function (n) { mlShownCount = n; renderMoneyLog(); }, // v73.91: the smoke drives the See more/less page without a DOM click
     sanitizeMoneyLogRows: sanitizeMoneyLogRows, // v73.91: the import sanitizer (smoke asserts it no longer truncates)
     prefillAdd: prefillAdd, // v73.18: the coach prefill (smoke verifies the chip's target state)
