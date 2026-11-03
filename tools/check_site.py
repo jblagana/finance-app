@@ -574,19 +574,26 @@ def main():
     check("v73.24 (boss: 'the card payment dues on the 5th arent showing in the coach card rows'): the card-payment rows were keyed off the PREPAY date (the 30th) — they only appeared 1-10 days AFTER it, so on the 5th (when the bill is actually due) the coach card showed nothing. Now they follow the DUE date: cardPayWindow = cc.dueIn in [0,10], the row text says 'due <today/tomorrow/in N days>', the chip is dated at the due date, and the row is red when the due date is within 2 days (matching the prepay rows' urgency)",
           "var cc = d.ccDue;" in js
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
-          and "var dueTxt = cc.dueIn === 0 ? 'today' : (cc.dueIn === 1 ? 'tomorrow' : 'in ' + cc.dueIn + ' days');" in js
+          # v73.88 retarget: the cycle data local is `cd` (cardDueData), not
+          # the old `cc` (ccDue) — the due-text line moved with it
+          and "var dueTxt = cd.dueIn === 0 ? 'today' : (cd.dueIn === 1 ? 'tomorrow' : 'in ' + cd.dueIn + ' days');" in js
           # v73.29: the row amount is the card's manual "due this cycle"
           # (c.due) when set, else the live balance — the string moved to a
           # local `amt`; the roll-over text is the new hasNext branch.
           # v73.31: `amt` is the manual due MINUS the card's own payment
           # logged after the cutoff (the statement window) — paying the due
           # drops the row; the roll-over (balance − amt) is next cycle.
-          and "var manualDue = (c.due != null) ? Number(c.due) : null;" in js
-          and "var amt = (manualDue != null) ? Math.max(0, manualDue - paid) : c.balance;" in js
-          and "c.name + ' is at ' + money(amt) + ' due ' + dueTxt + ' — ' + money(nextBal) + ' rolls to next cycle.'" in js
-          and "c.name + ' is at ' + money(amt) + ' — the bill is due ' + dueTxt + '.'" in js
-          and "act: 'prepay', payload: { amount: amt, date: cc.dueDate, day: cc.due_day, card: c.name }" in js
-          and "rows.push({ cls: cc.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay'" in js
+          # v73.88 (the CC cycle model): the row amount is now the PER-CARD
+          # auto due (cardDueData: balance minus next-cycle charges, or the
+          # due_override when set) — the old manualDue/paidBy lines are
+          # gone; the row shape (kind cardpay, amt, nextAmt, the prepay
+          # payload, the roll-over text) is unchanged.
+          and "var amt = cd.due;" in js
+          and "var nextBal = r2(Math.max(0, c.balance - amt));" in js
+          and "c.name + ' is at ' + money(amt) + ' due ' + dueTxt + prov + ' — ' + money(nextBal) + ' rolls to next cycle.'" in js
+          and "c.name + ' is at ' + money(amt) + ' — the bill is due ' + dueTxt + prov + '.'" in js
+          and "act: 'prepay', payload: { amount: amt, date: cd.dueDate, day: cd.due_day, card: c.name }" in js
+          and "rows.push({ cls: cd.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay'" in js
           and "'73.24': [" in js)
     check("v73.25 (boss: 'collapse the coach card rows by default'): the grouped coach-card sections (Cards, Plans) now render COLLAPSED by default — the header shows the group label + this-cycle total + count, the body is hidden until the boss taps the header to expand. The fold state still lives in coachGroupOpen (re-renders keep the boss's choice); the default flipped from open (coachGroupOpen[g] !== false) to closed (coachGroupOpen[g] === true).",
           "var open = coachGroupOpen[g] === true; // v73.25: default CLOSED (boss: collapse by default)" in js
@@ -653,36 +660,29 @@ def main():
           # (7) the .dg-r becomes a flex row (pay chip + skip chip side by side)
           and ".dig .dg-r{flex:0 0 auto;font-weight:700;font-size:12.5px;color:var(--mut);white-space:nowrap;display:flex;align-items:center;gap:8px}" in html
           and "'73.28': [" in js)
-    check("v73.29 (boss: 'the maya cc due on oct 5 is fully paid but a partial 1,080.30 still shows — move that to the next cycle'; 'the aribank due is 6,122.29 but the row shows more'): the card-payment row's amount is now the card's OWN manual 'due this cycle' (base account field `due`, set in the Accounts editor — a 5th card-only column) when it is set, else the live balance. The ledger can't derive the due (a prepay can exceed the logged charges, so the auto ccDue math returns 0), so the manual amount is the source of truth. Whatever balance sits ABOVE the due is the NEXT CYCLE's bill: it rides nextAmt (the row is still DUE NOW — it counts in the Cards total), is named in the row text, and the header sub-line surfaces it (money + ' next cycle').",
+    check("v73.29 (boss: 'the maya cc due on oct 5 is fully paid but a partial 1,080.30 still shows — move that to the next cycle'; 'the aribank due is 6,122.29 but the row shows more'): the card-payment row's amount is now the card's OWN 'due this cycle' when it is set, else the live balance; whatever balance sits ABOVE the due is the NEXT CYCLE's bill: it rides nextAmt (the row is still DUE NOW — it counts in the Cards total), is named in the row text, and the header sub-line surfaces it (money + ' next cycle'). v73.88 retarget: the manual due field became the due_override and the row amount is the per-card auto due (cardDueData) — the roll-over/nextAmt/roll-over-text shape is unchanged.",
           # (1) the manual due field rides the snapshot card (null = auto)
           "due: c.due != null ? Number(c.due) : null" in js
-          # (2) the row amount = the manual due when set, else the balance;
-          # the roll-over (balance − amt) is the next-cycle amount.
-          # v73.31: amt nets the card's own payment after the cutoff, so the
-          # roll-over is balance − amt (before any payment amt = manualDue).
-          and "var manualDue = (c.due != null) ? Number(c.due) : null;" in js
-          and "var amt = (manualDue != null) ? Math.max(0, manualDue - paid) : c.balance;" in js
-          and "var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - amt)) : 0;" in js
+          # (2) the row amount = the per-card cycle due (v73.88); the
+          # roll-over (balance − amt) is the next-cycle amount.
+          and "var amt = cd.due;" in js
+          and "var nextBal = r2(Math.max(0, c.balance - amt));" in js
           # (3) the roll-over rides nextAmt + the roll-over text
           and "nextAmt: nextBal" in js
           and "rolls to next cycle.'" in js
           # (4) the Cards header sub-line surfaces the next-cycle roll-over
           and "bits.push(money(nextAmt) + ' next cycle');" in js
-          # (5) the editor: the 5th card-only column + its read-back
+          # (5) the editor: the card-only due column + its read-back
           and "data-r=\"due\"" in js
           and "due: (kind === 'card' && di && String(di.value || '').trim() !== '') ? numVal(di, true) : null" in js
           and "'73.29': [" in js)
-    check("v73.31 (boss: 'when i pay for the due only, the remaining 4k+ shows immediately in the row as if its also due in oct 5'): the manual 'due this cycle' was a STATIC target — paying it did not move it, so the row kept showing the full due AND the roll-over (balance − due) jumped in as if it were due now. Fix: net the card's OWN payment logged after the cutoff (the statement window — a payment after the cutoff pays THIS cycle's bill; a payment before it is a prepay already reflected in the manual due) off the manual due. Paying the due drops the row (amt = 0); a partial payment shows only the remainder. The roll-over becomes balance − amt (before any payment amt = manualDue, so the old formula holds).",
-          # (1) the payment window: after the cutoff (cc.windowEnd)
-          "var payAfter = cc.windowEnd;" in js
-          # (2) the per-card payment sum (card_payment only, after the cutoff)
-          and "if (dd <= payAfter) return; // before the cutoff = prepay (in the manual due)" in js
-          and "paidBy[nm] = r2((paidBy[nm] || 0) + a);" in js
-          # (3) the row amount = the manual due MINUS the paid amount
-          and "var paid = (manualDue != null) ? r2(paidBy[c.name] || 0) : 0;" in js
-          and "var amt = (manualDue != null) ? Math.max(0, manualDue - paid) : c.balance;" in js
-          # (4) the roll-over = balance − amt (NOT balance − manualDue)
-          and "var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - amt)) : 0;" in js
+    check("v73.31 (boss: 'when i pay for the due only, the remaining 4k+ shows immediately in the row as if its also due in oct 5'): paying the due must DROP the row, and the roll-over must be balance − amt. v73.88 retarget: the per-card cycle model subsumed the v73.31 paidBy netting — the due is cardDueData's auto due (the bill frozen at the last billing cut; a payoff moves the live balance, so paying the due drops amt to 0 and the row disappears via the v73.30 amt <= 0.004 gate), and the roll-over is balance − amt unconditionally.",
+          # (1) the row amount = the per-card cycle due (v73.88)
+          "var amt = cd.due;" in js
+          # (2) paying the due drops the row (the v73.30 gate)
+          and "if (amt <= 0.004) return;" in js
+          # (3) the roll-over = balance − amt (NOT balance − the static due)
+          and "var nextBal = r2(Math.max(0, c.balance - amt));" in js
           and "'73.31': [" in js)
     check("v73.32 (boss: 'the salary row in coach card is not showing even if its within 10 days already, it should show up as early as the 5th since the salary is every 15th'): the row now targets the NEXT upcoming payday — a cycle STARTS on its payday, so the current cycle's payday is always on/before today and the old sIn <= 2 window could only ever fire on payday itself — and shows from 10 days out (the 5th for a 15th payday); same green row + chip look, the amount comes from the target cycle (its overrides apply)",
           # the old 2-day window is gone (it could only ever fire on payday itself)
@@ -1358,7 +1358,9 @@ def main():
           "kind: 'cash'" not in js and "kind: 'debit'" in js)
     check("one-time migration rewrites old 'cash' kinds and detail keys",
           "function migrateBaseKinds" in js
-          and "state.base = migrateBaseKinds(m.value)" in js
+          # v73.88 retarget: the IDB base-load path now runs migrateCardDays
+          # too (the per-card billing/due days must survive a cold load)
+          and "state.base = migrateCardDays(migrateBaseKinds(m.value)); } // v65" in js
           and "'debit:' + k.slice(5)" in js)
     check("coach: debit kind, legacy 'cash' normalized, matcher + draft label retargeted",
           "COACH_KINDS = { debit: 1, cash: 1" in chatjs
@@ -1823,6 +1825,44 @@ def main():
           "var otherLive37 = 0;" in js
           and "var cashResid37 = r2(cashRow37 ? cashRow37.live : 0);" in js
           and "b.accounts.push({ name: 'Cash', kind: 'debit', value: cashResid37, limit: 0, note: '' });" in js)
+    check("v73.88 (boss: 'port the wip CC cycle model, toggle for +-5 days from billing date, and fix the settings bug where the app does not follow the per-card billing/due dates'): the CC CYCLE MODEL, forward-ported from the wip branch with two boss mods. (1) PER-CARD DATES: every card has its OWN billing_day/due_day (the global prepay/cutoff/due days are new-card defaults only); the settings bug was readBaseForm saving a per-card day ONLY when 1..28, so a 29-31 day was silently dropped and migrateCardDays re-stamped the global default — days are 1..31 now and every date math clamps to the month length. (2) THE TOGGLE WINDOW: a card charge within ±5 days AROUND the card's billing date gets a THIS/NEXT CYCLE pill on its ledger row (the wip window was billing-5..billing only); outside the window there is no pill (after = next cycle by definition, before = this cycle). (3) AUTO DUE: the coach's card-payment row amount is cardDueData's auto due — live balance minus post-window charges minus in-window charges tagged NEXT — or the due_override when set (the (auto)/(manual) provenance rides the row text); the hero OWE stays the full balance. migrateCardDays stamps per-card days from the globals on every base load (saveBase + the import/merge/IDB paths), existing values always win",
+          # (1) the per-card cycle math (pure, exported for the smoke)
+          "function cardDueData(card, txns, b, todayStr, balOverride) {" in js
+          and "function cardCycleInfo(card, dateStr, b, todayStr) {" in js
+          and "function migrateCardDays(b) {" in js
+          and "function txnCyclePill(t, todayStr) {" in js
+          and "function toggleTxnCycle(tid, todayStr) {" in js
+          and "cardDueData: cardDueData" in js and "migrateCardDays: migrateCardDays" in js and "txnCyclePill: txnCyclePill" in js and "toggleTxnCycle: toggleTxnCycle" in js
+          # (2) the settings fix: days are 1..31 (the wip 1..28 cap is gone)
+          and "if (bd >= 1 && bd <= 31) acc.billing_day = bd;" in js
+          and "if (ud >= 1 && ud <= 31) acc.due_day = ud;" in js
+          and "if (oi && String(oi.value || '').trim() !== '') acc.due_override = numVal(oi, true);" in js
+          and "data-r=\"billing\"" in js and "data-r=\"dued\"" in js and "data-r=\"duo\"" in js
+          # (3) the ±5-day window AROUND the billing date (boss mod)
+          # v73.90 retarget: the +-5 day window now crosses month boundaries
+          # (addDays) - a billing date of 30 has a window ending in the NEXT
+          # month, not clamped to the 31st of the billing month
+          and "var ws35 = addDays(prevBillM.y, prevBillM.m, prevBillDay, -5);" in js
+          and "var we35 = addDays(prevBillM.y, prevBillM.m, prevBillDay, 5);" in js
+          # (4) the auto due: balance minus next-cycle charges, override wins
+          and "due: manual ? r2(Number(card.due_override)) : r2(Math.max(0, bal - nextCycle))," in js
+          # (5) the ledger pill + its binding (tap toggles, no row editor)
+          and "data-cycletag=" in js and "var cy = body.querySelectorAll('[data-cycletag]');" in js
+          and "t.cycle = (String(t.cycle) === 'next') ? undefined : 'next';" in js
+          # (6) migrateCardDays on every base load (the settings-follow path)
+          and "state.base = migrateCardDays(migrateBaseKinds(b));" in js
+          and "state.base = migrateCardDays(migrateBaseKinds(merged.base));" in js
+          and "state.base = migrateCardDays(migrateBaseKinds(nb));" in js
+          and "state.base = migrateCardDays(migrateBaseKinds(m.value));" in js
+          # (7) the coach row: the per-card due drives the amount
+          and "var cd = cardDueData(baseCard, state.txns, state.base, d.today, c.balance);" in js
+          and "var amt = cd.due;" in js
+          # (8) the pill CSS + the What's-new note
+          # v73.90 retarget: the port shipped as v73.90 (v73.88 was never
+          # live), so the running-version note is keyed '73.90'
+          and ".cyclepill{" in html
+          and "'73.90': [" in js)
+
     check("v73.89 (boss: 'unaccounted changes in the CC balances shortly AFTER I reconcile'): the gate's clock is DURABLE — lastReconAt() scans the money log for the newest rebasing 'a' row, but the log is capped at ML_CAP=30, so once 31 newer rows evict the reconcile's 'a' row the scan falls back to 0 (gate OFF), the boot rebuild re-includes already-absorbed history, and its rescale smears the CURRENT overlay across the cards by historical proportions. Every overlay-zeroing event (reconcile, Settings override, sheet rebase, 1k reset, boot recompute) now stamps lastRebaseAt on the persisted adj (stampRebase, cap-immune); lastRebaseAt() = max(stamp, legacy scan) feeds migratePrepayBy / migrateCashBy / the reconData cashBy-usable check, and a no-rescale guard keeps a stored split when the rebuild window is empty. Smoke PART 34: the eviction scenario end-to-end (cross-reconcile, 31 filler rows, post-reconcile charge, boot rebuild — no drift, the other card untouched)",
           "function lastRebaseAt() {" in js
           and "function stampRebase() {" in js

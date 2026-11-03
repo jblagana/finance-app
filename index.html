@@ -625,6 +625,11 @@ label.chk input{width:18px;height:18px;accent-color:var(--acc);flex:0 0 auto;mar
 .ml-cat{font-size:13.5px;font-weight:700}
 .ml-note{font-size:12.5px;font-style:italic;color:var(--mut);margin-top:1px}
 .ml-meta{color:var(--mut);font-size:11.5px;margin-top:2px}
+/* v73.88: the CC cycle pill (the THIS/NEXT CYCLE toggle on an in-window charge) */
+.cyclepill{display:inline-block;vertical-align:baseline;margin-left:6px;padding:1px 7px;border-radius:9px;border:1px solid var(--line);background:rgba(94,202,144,.12);color:var(--ok);font-size:9.5px;font-weight:700;letter-spacing:.3px;cursor:pointer}
+.cyclepill:hover{background:rgba(94,202,144,.22)}
+.cyclepill.next{background:rgba(255,196,92,.12);color:#ffc45c;border-color:rgba(255,196,92,.35)}
+.cyclepill.next:hover{background:rgba(255,196,92,.22)}
 /* ---- Phase 4 a11y: 44px primary tap targets ---- */
 .tab{min-height:44px;padding:12px 6px}
 button.gear{width:44px;height:44px}

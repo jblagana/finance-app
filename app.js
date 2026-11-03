@@ -1918,7 +1918,10 @@
   function saveBase(b, opts) {
     var prevBase = state.base; // v72.30: a balance override files the diff
     b.edited = new Date().toISOString();
-    state.base = migrateBaseKinds(b); // v65
+    // v73.88: per-card billing/due days (Maya 15/5, MariBank 20/10) - the
+    // global prepay_day/cutoff_day/due_day are defaults for NEW cards only;
+    // an old export's import gets its cards the globals stamped on.
+    state.base = migrateCardDays(migrateBaseKinds(b)); // v65 + v73.88
     refreshLocalSnapshot();
     // v72.31: the ✕ on an Adjustment row reverses a filed diff through this
     // same path — that reversal must not file a NEW Adjustment (no audit of
@@ -2770,6 +2773,13 @@
         var wTxt = (e.k === 'p' && e.w)
           ? ' · to: ' + esc(p.m || 'card') + ' · from: ' + esc(e.w)
           : '';
+        // v73.88: the CC cycle pill - a card charge within ±5 days of the
+        // card's billing date gets a THIS/NEXT CYCLE toggle (default THIS);
+        // outside the window there is no tag at all. The tag rides t.cycle
+        // on the ledger entry (survives export/import).
+        var mlTxn = null;
+        if (add && e.tid) { for (var mi = 0; mi < state.txns.length; mi++) if (state.txns[mi].id === e.tid) { mlTxn = state.txns[mi]; break; } }
+        var cyclePill = txnCyclePill(mlTxn);
         // v73.75: the row is NO LONGER a tap target — each editable entry
         // carries its own ✎ (opens the edit sheet) beside the ✕ (delete).
         var editBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-edit="' + esc(e.tid) +
@@ -2795,7 +2805,7 @@
         return '<div class="ml-row' + (add ? '' : ' del') + '">' +
           '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
           (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
-          '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) + '</div></div>' +
+          '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) + (cyclePill ? ' ' + cyclePill : '') + '</div></div>' +
           '<div class="ml-r"><b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b>' +
           freeTxt + extra + editBtn + delBtn + adjDel + '</div></div>';
       }).join('') +
@@ -2809,6 +2819,13 @@
     for (var di = 0; di < dl.length; di++) dl[di].onclick = function (ev) {
       ev.stopPropagation(); // v71: ✕ deletes — it must not also open the editor
       askDeleteTxn(this.getAttribute('data-ml-del'));
+    };
+    // v73.88: the CC cycle pill - tap toggles the charge between this and
+    // next cycle (it must not open the row editor).
+    var cy = body.querySelectorAll('[data-cycletag]');
+    for (var ci = 0; ci < cy.length; ci++) cy[ci].onclick = function (ev) {
+      ev.stopPropagation();
+      toggleTxnCycle(this.getAttribute('data-cycletag'));
     };
     var adj = body.querySelectorAll('[data-adj-del]'); // v72.31: ✕ on Adjustment rows
     for (var aj = 0; aj < adj.length; aj++) adj[aj].onclick = function (ev) {
@@ -3042,6 +3059,21 @@
       : '') + kinds.map(function (k) {
       return '<option value="' + k + '"' + (a.kind === k ? ' selected' : '') + '>' + (k === 'card' ? 'Credit' : 'Debit') + '</option>';
     }).join('');
+    // v73.88 (the CC cycle model): the card gets a SECOND labeled row with its
+    // OWN billing day + due day (the global prepay/cutoff/due days are now
+    // new-card defaults only - Maya 15/5, MariBank 20/10) and the manual
+    // "Due this cycle" override. Days are 1..31 (the settings fix - the wip
+    // 1..28 cap silently dropped a 29-31 day on save and the global default
+    // came back); a day past the month's length clamps to the month's last
+    // day at render time.
+    var ccGrid = (a.kind === 'card')
+      ? brow('<span class="bnote">billing</span><input data-r="billing" type="text" value="' + (a.billing_day != null ? a.billing_day : '') + '"' +
+          ' title="billing date (day) - the statement cut for THIS card (1-31; clamps to the month length)">' +
+        '<span class="bnote">due</span><input data-r="dued" type="text" value="' + (a.due_day != null ? a.due_day : '') + '"' +
+          ' title="due date (day) - when THIS card is paid (1-31; clamps to the month length)">' +
+        '<span class="bnote">due this cycle</span><input data-r="duo" type="text" value="' + (a.due_override != null ? a.due_override : '') + '"' +
+          ' placeholder="optional" title="manual due override (blank = auto: balance minus next-cycle charges)">'
+      ) : '';
     // v73.29: the card row gains a 5th column, "due this cycle" — the
     // manual statement amount the coach card's Card-payment row shows.
     // Blank = auto (the row falls back to the card's live balance). It is
@@ -3053,7 +3085,7 @@
       '<input data-r="limit" type="text" value="' + (a.limit ? a.limit : '') + '"' + (a.kind === 'card' ? '' : ' disabled') + '>' +
       '<input data-r="due" type="text" value="' + (a.due != null ? a.due : '') + '"' + (a.kind === 'card' ? '' : ' disabled') +
         ' title="due this cycle (blank = the live balance); the balance above it rolls to next cycle">' +
-      delBtn('Remove account')) + detChips(a.kind + ':' + a.name);
+      delBtn('Remove account')) + ccGrid + detChips(a.kind + ':' + a.name);
   }
   function debtBlock(d) {
     d = d || {};
@@ -3240,15 +3272,42 @@
       var ni = row.querySelector('[data-r="name"]'); var ki = row.querySelector('[data-r="kind"]');
       var vi = row.querySelector('[data-r="value"]'); var li = row.querySelector('[data-r="limit"]');
       var di = row.querySelector('[data-r="due"]'); // v73.29: the manual "due this cycle"
-      var name = ni ? ni.value.trim() : '';
+      // v73.90 (the settings fix, round 2): the port moved the billing/due/
+      // override inputs into the card's SECOND row (the ccGrid), but this
+      // reader still looked in the FIRST row - bi/ddi/oi were always null,
+      // so every save dropped the per-card days (and the due override) and
+      // migrateCardDays re-stamped the global default: the app "does not
+      // follow whats written in the settings", again. Read them from the
+      // ccGrid row, and skip the ccGrid row itself (it has no name - it
+      // would otherwise push a phantom '(unnamed)' account).
+      var cc = row.nextElementSibling;
+      var bi = cc ? cc.querySelector('[data-r="billing"]') : null; // v73.88: the card's billing day
+      var ddi = cc ? cc.querySelector('[data-r="dued"]') : null; // v73.88: the card's due day
+      var oi = cc ? cc.querySelector('[data-r="duo"]') : null; // v73.88: the manual due override
+      if (!ni) return; // the ccGrid row (or any row without a name) - not an account row
+      var name = ni.value.trim();
       var kind = ki ? ki.value : 'debit'; // v65
       var value = numVal(vi, true);
       if (!name && !value) return;
       // v73.29: due is null (auto) when blank; a negative entry is clamped
       // to 0 at render, but keep what was typed here (the editor is the
       // source of truth).
-      b.accounts.push({ name: name || '(unnamed)', kind: kind, value: value, limit: kind === 'card' ? numVal(li, true) : 0,
-        due: (kind === 'card' && di && String(di.value || '').trim() !== '') ? numVal(di, true) : null, note: '' });
+      // v73.88 (the settings fix, boss: 'the app does not follow whats
+      // written in the settings'): the wip port saved a per-card day only
+      // when it was 1..28 - a 29-31 day was SILENTLY DROPPED on save and
+      // migrateCardDays re-stamped the GLOBAL default, so the field looked
+      // applied and wasn't. Days are 1..31 now; a day past the month's
+      // length clamps to the month's last day at render time.
+      var acc = { name: name || '(unnamed)', kind: kind, value: value, limit: kind === 'card' ? numVal(li, true) : 0,
+        due: (kind === 'card' && di && String(di.value || '').trim() !== '') ? numVal(di, true) : null, note: '' };
+      if (kind === 'card') {
+        var bd = Math.round(numVal(bi, true));
+        var ud = Math.round(numVal(ddi, true));
+        if (bd >= 1 && bd <= 31) acc.billing_day = bd;
+        if (ud >= 1 && ud <= 31) acc.due_day = ud;
+        if (oi && String(oi.value || '').trim() !== '') acc.due_override = numVal(oi, true);
+      }
+      b.accounts.push(acc);
     });
     bb.querySelectorAll('#rowsBud .brow').forEach(function (row) {
       var ni = row.querySelector('[data-r="name"]'); var ai = row.querySelector('[data-r="a"]');
@@ -3873,6 +3932,187 @@
   function ccDue() {
     if (!state.base) return null;
     return ccDueData(state.txns, state.base, todayISO());
+  }
+  // ---------- v73.88: the CC CYCLE MODEL (forward-ported from the wip branch,
+  // boss-approved, with two changes) ----------
+  // The bug this fixes: the app showed the LIVE BALANCE as the due, so a
+  // post-billing charge (3k on the 16th) made the due read 13k instead of
+  // the 10k bill frozen at the 15th. The model:
+  //   * every card has its OWN billing day (the statement cut) and due day
+  //     (base.accounts[].billing_day / due_day - the global prepay_day/
+  //     cutoff_day/due_day are now DEFAULTS FOR NEW CARDS ONLY);
+  //   * a charge logged inside ±5 DAYS AROUND the card's billing date gets
+  //     a THIS/NEXT CYCLE toggle on its ledger row (v73.88 boss mod - the
+  //     wip window was billing-5..billing only); a charge after the window
+  //     is next-cycle by definition (locked, no toggle); a pre-window
+  //     charge counts this cycle;
+  //   * AUTO DUE = live balance - (post-window charges) - (in-window
+  //     charges tagged NEXT cycle) - the bill frozen at the last billing
+  //     date; a manual "Due this cycle" override (due_override) wins when
+  //     set (auto/manual provenance);
+  //   * The hero OWE stays the FULL balance (boss-approved).
+  // v73.88 boss mod #2 (the "the app does not follow the settings" bug):
+  // the wip readBaseForm saved a per-card day only when it was 1..28, so a
+  // 29-31 day (and any >28) was SILENTLY DROPPED on save, and
+  // migrateCardDays re-stamped the global default - the settings looked
+  // applied and weren't. Days are now 1..31, and every date computation
+  // clamps the day to the month's real length (a billing day of 31 in a
+  // 30-day month lands on the 30th).
+  function cardDueData(card, txns, b, todayStr, balOverride) {
+    if (!card || String(card.kind) !== 'card') return null; // credit cards are kind 'card' (v65)
+    var dd = Math.round(Number(card.due_day) || (b && b.due_day) || 5);
+    if (dd < 1 || dd > 31) dd = 5;
+    var bd = Math.round(Number(card.billing_day) || (b && b.cutoff_day) || 15);
+    if (bd < 1 || bd > 31) bd = 15;
+    var today = String(todayStr || todayISO());
+    // timezone-proof date math (same rules as ccDueData - no local getters)
+    function iso(y, m, day) { return y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day; }
+    function dim(y, m) { return new Date(y, m, 0).getDate(); } // m = 1..12
+    function addM(y, m, k) { var t = (m - 1 + k) % 12; if (t < 0) t += 12; return { y: y + Math.floor((m - 1 + k) / 12), m: t + 1 }; }
+    function dayClamp(y, m, d) { return Math.min(Math.max(1, d), dim(y, m)); }
+    // v73.90 (the window fix): add calendar days to a date, crossing month
+    // boundaries - a window of +-5 days AROUND a billing date must reach
+    // into the next month when the billing date is near the month's end
+    // (billing 30: the window end is the 4th/5th of the NEXT month, not
+    // clamped to the 31st of the billing month).
+    function addDays(y, m, d, k) { var dt = new Date(y, m - 1, d + k); return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() }; }
+    var tp = today.split('-'), ty = Number(tp[0]), tm = Number(tp[1]);
+    // next billing date on/after today (the statement that will freeze)
+    var billDate = iso(ty, tm, dayClamp(ty, tm, bd));
+    if (billDate < today) { var bn = addM(ty, tm, 1); billDate = iso(bn.y, bn.m, dayClamp(bn.y, bn.m, bd)); }
+    // the window that feeds it: ±5 days AROUND the previous billing date
+    // (v73.88 boss mod - the wip window was (prevBilling-5, prevBilling]).
+    // The balance already carries every charge up to the cut; charges
+    // inside the window are this cycle UNLESS tagged NEXT (the ledger
+    // pill); anything after the window belongs to the NEXT cycle by
+    // definition.
+    var bp = billDate.split('-'), by = Number(bp[0]), bm = Number(bp[1]);
+    var prevBillM = addM(by, bm, -1);
+    var prevBillDay = dayClamp(prevBillM.y, prevBillM.m, bd);
+    var prevBillDate = iso(prevBillM.y, prevBillM.m, prevBillDay);
+    var ws35 = addDays(prevBillM.y, prevBillM.m, prevBillDay, -5);
+    var we35 = addDays(prevBillM.y, prevBillM.m, prevBillDay, 5);
+    var winStart = iso(ws35.y, ws35.m, ws35.d);
+    var winEnd = iso(we35.y, we35.m, we35.d);
+    // next due date on/after today
+    var dueDate = iso(ty, tm, dayClamp(ty, tm, dd));
+    if (dueDate < today) { var dn = addM(ty, tm, 1); dueDate = iso(dn.y, dn.m, dayClamp(dn.y, dn.m, dd)); }
+    var dueIn = Math.round((parseISO(dueDate) - parseISO(today)) / 86400000);
+    // the LIVE balance - the caller passes the effective snapshot's card
+    // balance (base + overlay); when absent (a pure context / smoke) the
+    // base card value is the fallback.
+    var bal = (balOverride != null) ? Number(balOverride) : (Number(card.balance) != null ? Number(card.balance) : (Number(card.value) || 0));
+    var nextCycle = 0;
+    (txns || []).forEach(function (t) {
+      var d = String(t.date || '');
+      if (String(t.account) !== String(card.name)) return;
+      if (String(t.kind) !== 'card_charge') return;
+      if (d > winEnd) nextCycle += Number(t.amount) || 0;
+      else if (d >= winStart && d <= winEnd && String(t.cycle) === 'next') nextCycle += Number(t.amount) || 0;
+    });
+    var manual = (card.due_override != null && card.due_override !== '' && !isNaN(Number(card.due_override)));
+    return {
+      card: card.name,
+      billing_day: bd, due_day: dd,
+      billDate: billDate, dueDate: dueDate, dueIn: dueIn,
+      windowStart: winStart, windowEnd: winEnd,
+      balance: bal, nextCycle: r2(nextCycle),
+      due: manual ? r2(Number(card.due_override)) : r2(Math.max(0, bal - nextCycle)),
+      manual: !!manual
+    };
+  }
+  function cardDueThisCycle(card) {
+    if (!state.base) return null;
+    var es = effectiveSnap();
+    var bal = null;
+    if (es && es.cards) es.cards.forEach(function (c) { if (String(c.name) === String(card.name)) bal = c.balance; });
+    return cardDueData(card, state.txns, state.base, todayISO(), bal);
+  }
+  // which billing window does a charge date fall in (for the ledger pill)?
+  // v73.88: inWindow = the charge sits within ±5 days AROUND the card's
+  // previous billing date; autoNext = the charge is after the window (it
+  // belongs to the next cycle by definition, no toggle offered).
+  function cardCycleInfo(card, dateStr, b, todayStr) {
+    if (!card || String(card.kind) !== 'card') return null;
+    var bd = Math.round(Number(card.billing_day) || (b && b.cutoff_day) || 15);
+    if (bd < 1 || bd > 31) bd = 15;
+    var d = String(dateStr || '');
+    if (!d) return null;
+    function iso(y, m, day) { return y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day; }
+    function dim(y, m) { return new Date(y, m, 0).getDate(); }
+    function addM(y, m, k) { var t = (m - 1 + k) % 12; if (t < 0) t += 12; return { y: y + Math.floor((m - 1 + k) / 12), m: t + 1 }; }
+    function dayClamp(y, m, dd2) { return Math.min(Math.max(1, dd2), dim(y, m)); }
+    function addDays(y, m, d, k) { var dt = new Date(y, m - 1, d + k); return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() }; } // v73.90: the window fix (same as cardDueData)
+    // anchor to the CARD'S CURRENT cycle (today), not the charge's own
+    // month - the same anchor cardDueData uses.
+    var t2 = String(todayStr || todayISO()).split('-');
+    var bill = iso(Number(t2[0]), Number(t2[1]), dayClamp(Number(t2[0]), Number(t2[1]), bd));
+    var todayNow = String(todayStr || todayISO());
+    if (bill < todayNow) { var bn = addM(Number(t2[0]), Number(t2[1]), 1); bill = iso(bn.y, bn.m, dayClamp(bn.y, bn.m, bd)); }
+    var bm2 = bill.split('-');
+    var pb = addM(Number(bm2[0]), Number(bm2[1]), -1);
+    var pbDay = dayClamp(pb.y, pb.m, bd);
+    var prevBill = iso(pb.y, pb.m, pbDay);
+    var wsC = addDays(pb.y, pb.m, pbDay, -5);
+    var weC = addDays(pb.y, pb.m, pbDay, 5);
+    var winStart = iso(wsC.y, wsC.m, wsC.d);
+    var winEnd = iso(weC.y, weC.m, weC.d);
+    return { inWindow: d >= winStart && d <= winEnd, autoNext: d > winEnd, billDate: bill, windowStart: winStart, windowEnd: winEnd };
+  }
+  // migrate a base object in place: every credit card gets its own
+  // billing_day/due_day (from the globals when absent) so per-card dates
+  // survive an old export's import. Existing per-card values ALWAYS win -
+  // this only fills the gaps (the v73.88 settings fix is on the SAVE side:
+  // readBaseForm accepts 1..31, so a typed day can no longer be dropped).
+  function migrateCardDays(b) {
+    if (!b || !b.accounts) return b;
+    var gC = Math.round(Number(b.cutoff_day) || 15);
+    var gD = Math.round(Number(b.due_day) || 5);
+    b.accounts.forEach(function (a) {
+      if (String(a.kind) !== 'card') return;
+      if (!a.billing_day || isNaN(Number(a.billing_day))) a.billing_day = gC;
+      if (!a.due_day || isNaN(Number(a.due_day))) a.due_day = gD;
+    });
+    return b;
+  }
+  // v73.88: the ledger cycle pill. A card charge within ±5 days of the
+  // card's billing date gets a THIS/NEXT CYCLE toggle (default THIS); a
+  // charge after the window is next-cycle by definition (no pill - it is
+  // not part of this bill); a pre-window charge counts THIS cycle with no
+  // pill. The tag rides the ledger entry (t.cycle) so it survives
+  // export/import.
+  function txnCyclePill(t, todayStr) {
+    if (!state.base || !t) return '';
+    var card = null;
+    (state.base.accounts || []).forEach(function (a) { if (String(a.name) === String(t.account)) card = a; });
+    if (!card || String(card.kind) !== 'card') return '';
+    if (String(t.kind) !== 'card_charge') return '';
+    var info = cardCycleInfo(card, t.date, state.base, todayStr || todayISO());
+    if (!info) return '';
+    if (!info.inWindow) return ''; // the toggle pill is ONLY for in-window charges
+    var cycle = String(t.cycle) === 'next' ? 'next' : 'this';
+    var cls = cycle === 'next' ? 'cyclepill next' : 'cyclepill';
+    var title = 'feeds the ' + info.billDate.slice(5) + ' statement - tap to toggle';
+    return '<button type="button" class="' + cls + '" data-cycletag="' + esc(String(t.id || '')) + '" title="' + title + '">' + (cycle === 'next' ? 'NEXT CYCLE' : 'THIS CYCLE') + '</button>';
+  }
+  function toggleTxnCycle(tid, todayStr) {
+    var t = null;
+    (state.txns || []).forEach(function (x) { if (String(x.id) === String(tid)) t = x; });
+    if (!t) return;
+    var card = null;
+    (state.base.accounts || []).forEach(function (a) { if (String(a.name) === String(t.account)) card = a; });
+    if (!card || String(card.kind) !== 'card') return;
+    var info = cardCycleInfo(card, t.date, state.base, todayStr || todayISO());
+    if (!info || !info.inWindow) {
+      snack('That charge is outside the cycle window - no toggle.');
+      return;
+    }
+    t.cycle = (String(t.cycle) === 'next') ? undefined : 'next';
+    if (t.cycle === undefined) delete t.cycle;
+    renderMoneyLog();
+    renderCoach();
+    renderHero();
+    snack(t.cycle === 'next' ? 'Marked NEXT CYCLE - excluded from the auto due.' : 'Marked THIS CYCLE - counted in the auto due.');
   }
   // v73.2: the MONEY PULSE — last calendar month in deterministic numbers
   // (pure fn: the smoke drives it with a seeded ledger). In = cash_in,
@@ -5739,80 +5979,46 @@
       alerts.push('prepay'); // v72.45: the remainder is still owed, whatever was logged
     }
     if (cardPayWindow) {
-      // v73.24: the due date (the 5th) is approaching — the pending bill
-      // shows as its own rows. Same design as the plan-due row (short text
-      // + amount chip); the chip logs the payment (Pay-card mode, the
-      // card's own account — the v72.41 prepay prefill), dated at the due
-      // date.
-      // v73.29 (boss: 'the maya cc due on oct 5 is fully paid but a partial
-      // 1,080.30 still shows — move that to the next cycle'; 'the aribank
-      // due is 6,122.29 but the row shows more'): the row's amount is the
-      // CARD'S OWN "due this cycle" (c.due) when it is set — the manual
-      // statement amount, because the ledger can't derive it (a prepay can
-      // exceed the logged charges, so the auto ccDue math returns 0). The
-      // balance above the due is the NEXT CYCLE's bill — it is carried on
-      // the row (nextCycle) and rendered dimmed + badged, and is EXCLUDED
-      // from the Cards group total (the total is what is due NOW).
-      var dueTxt = cc.dueIn === 0 ? 'today' : (cc.dueIn === 1 ? 'tomorrow' : 'in ' + cc.dueIn + ' days');
-      // v73.31 (boss: 'when i pay for the due only, the remaining 4k+ shows
-      // immediately in the row as if its also due in oct 5'): the manual due
-      // is a STATIC target — paying it did not move it, so the row kept
-      // showing the full due AND the roll-over (balance − due) jumped in as
-      // if it were due now. Fix: net the card's OWN payment logged in the
-      // statement window (the same window ccDueData uses for the auto due)
-      // off the manual due. Paying the due drops the row; the roll-over
-      // (next cycle's bill) becomes the row again — correct, it is the
-      // balance left on the card.
-      // v73.31: the payment window is AFTER the cutoff (cc.windowEnd) — the
-      // cutoff is when the statement is generated, so any payment after it is
-      // paying THIS cycle's bill (on the due date, a day late, or any time
-      // after the statement exists). A payment BEFORE the cutoff is a prepay
-      // (already reflected in the manual due the boss set to the actual bill).
-      var payAfter = cc.windowEnd;
-      var paidBy = {};
-      (state.txns || []).forEach(function (t) {
-        if (t.kind !== 'card_payment') return;
-        var dd = String(t.date || '');
-        if (dd <= payAfter) return; // before the cutoff = prepay (in the manual due)
-        var a = Number(t.amount) || 0;
-        if (a <= 0) return;
-        var nm = t.account;
-        paidBy[nm] = r2((paidBy[nm] || 0) + a);
-      });
+      // v73.88 (the CC cycle model, forward-ported from the wip branch):
+      // the due NOW is the card's OWN cycle — AUTO = live balance minus
+      // the charges after the last billing window (the bill frozen at the
+      // last billing cut; in-window charges tagged NEXT cycle via the
+      // ledger pill also count as next), or the manual "Due this cycle"
+      // override (due_override) when set. Each card has its OWN billing/
+      // due day (Maya 15/5, MariBank 20/10) — the global ccDue window no
+      // longer drives the row's amount (cardDueData reads the PER-CARD
+      // days; that is the settings fix). The hero OWE stays the FULL
+      // balance (boss-approved) — only this actionable row moves.
+      // The window gate (cardPayWindow) still uses the global cc.dueIn —
+      // it only decides WHEN the rows appear (within 10 days of a due).
       var bcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.balance) || 0) > 0; });
       bcards.sort(function (a, b) { return (Number(b.balance) || 0) - (Number(a.balance) || 0); });
       var cardpayShown = 0; // v73.30: count the rows actually pushed (a due=0 card pushes none)
       bcards.slice(0, 4).forEach(function (c) {
-        var manualDue = (c.due != null) ? Number(c.due) : null;
-        // v73.31: the amount due NOW = the manual due MINUS what was already
-        // paid in this cycle's window (auto case = the balance, unchanged).
-        var paid = (manualDue != null) ? r2(paidBy[c.name] || 0) : 0;
-        var amt = (manualDue != null) ? Math.max(0, manualDue - paid) : c.balance;
+        var baseCard = null;
+        (state.base.accounts || []).forEach(function (a) { if (String(a.name) === String(c.name)) baseCard = a; });
+        var cd = cardDueData(baseCard, state.txns, state.base, d.today, c.balance);
+        if (!cd) return;
+        var amt = cd.due;
+        var dueTxt = cd.dueIn === 0 ? 'today' : (cd.dueIn === 1 ? 'tomorrow' : 'in ' + cd.dueIn + ' days');
         // v73.30 (boss: 'maya cc is 0 this card cycle so it has to disappear'):
-        // a card with NOTHING due this cycle (manual due = 0, or the due was
-        // fully paid in the window) gets NO row — the balance is the NEXT
-        // cycle's bill and it must not surface now. The auto case (due unset,
-        // amt = balance) is always > 0 here (bcards filters balance > 0), so
-        // only a 0-due / fully-paid card drops the row.
+        // a card with NOTHING due this cycle gets NO row — the balance is
+        // the NEXT cycle's bill and it must not surface now.
         if (amt <= 0.004) return;
-        // the roll-over (balance − amt) is the NEXT cycle's bill. It is NOT
-        // the row's nextCycle flag: the row is still DUE NOW (the due is the
-        // actionable amount, it counts in the Cards total). The roll-over
-        // rides nextAmt — the header's "N next cycle" count + the row text
+        // the roll-over (balance − due) is the NEXT cycle's bill. It rides
+        // nextAmt — the header's "N next cycle" count + the row text
         // surface it, and it is excluded from the total.
-        // v73.31: balance − amt (NOT balance − manualDue) — paying the due
-        // drops the balance, so the whole remainder is next cycle's bill.
-        // Before any payment amt = manualDue, so this equals the old formula.
-        var nextBal = (manualDue != null) ? r2(Math.max(0, c.balance - amt)) : 0;
+        var nextBal = r2(Math.max(0, c.balance - amt));
         var hasNext = nextBal > 0.004;
+        var prov = cd.manual ? ' (manual)' : ' (auto)';
         var text = hasNext
-          ? c.name + ' is at ' + money(amt) + ' due ' + dueTxt + ' — ' + money(nextBal) + ' rolls to next cycle.'
-          : c.name + ' is at ' + money(amt) + ' — the bill is due ' + dueTxt + '.';
-        rows.push({ cls: cc.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay', amt: amt, nextAmt: nextBal,
+          ? c.name + ' is at ' + money(amt) + ' due ' + dueTxt + prov + ' — ' + money(nextBal) + ' rolls to next cycle.'
+          : c.name + ' is at ' + money(amt) + ' — the bill is due ' + dueTxt + prov + '.';
+        rows.push({ cls: cd.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay', amt: amt, nextAmt: nextBal,
           tag: 'Card payment · ' + c.name,
           text: text,
           r: money(amt),
-          act: 'prepay', payload: { amount: amt, date: cc.dueDate, day: cc.due_day, card: c.name } });
+          act: 'prepay', payload: { amount: amt, date: cd.dueDate, day: cd.due_day, card: c.name } });
         cardpayShown++;
       });
       if (cardpayShown) alerts.push('cardpay');
@@ -8450,7 +8656,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
         state.plans = merged.plans || [];
         state.owed = merged.owed || { people: [] };
         state.moneyLog = merged.moneyLog || [];
-        if (merged.base) state.base = migrateBaseKinds(merged.base);
+        if (merged.base) state.base = migrateCardDays(migrateBaseKinds(merged.base));
         return Promise.all(puts).then(function () {
           refreshLocalSnapshot();
           return Promise.all([persistSnapshot(), saveAdj(), saveOwed(),
@@ -8491,12 +8697,12 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
         function hasSec(n) { return !secs || secs.indexOf(n) >= 0; }
         // v71: fold any unsaved "Your numbers" edits into state before the
         // import replaces it (readBaseForm is synchronous; no save race).
-        if (baseDirty) { var _nb = readBaseForm(); if (_nb) state.base = migrateBaseKinds(_nb); baseDirty = false; }
+        if (baseDirty) { var _nb = readBaseForm(); if (_nb) state.base = migrateCardDays(migrateBaseKinds(_nb)); baseDirty = false; }
         var nb = defaultBase();
         if (hasSec('base') && data.base && (data.base.accounts || data.base.salary)) {
           Object.keys(nb).forEach(function (k) { if (data.base[k] !== undefined) nb[k] = data.base[k]; });
           nb.details = sanitizeDetails(nb.details); // v56
-          state.base = migrateBaseKinds(nb); // v65
+          state.base = migrateCardDays(migrateBaseKinds(nb)); // v65
         }
         // v72.8: the full restore. Import now covers everything the export
         // holds — txns, plans, base, owed (+ its sort), the money log, the
@@ -8588,12 +8794,16 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.89, live: new Date(2026, 10, 2, 23, 43) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.90, live: new Date(2026, 10, 3, 16, 50) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.90': [
+      'New: the credit-card cycle model, live — each card keeps its own billing and due date (Settings → Your numbers → the card row), a charge logged within ±5 days of the card\'s billing date gets a THIS CYCLE / NEXT CYCLE toggle on its ledger row, and the coach\'s card-payment row shows the AUTO due (balance minus next-cycle charges) with the (auto)/(manual) provenance.',
+      'Fixed: the settings per-card billing/due days were not being followed — the save path read the card\'s day inputs from the wrong row, so every save dropped them and the global default came back. The days now round-trip (1–31, clamped to the month\'s length), and the ±5-day window crosses month boundaries correctly (a billing date of 30 reaches into the next month).'
+    ],
     '73.89': [
       'Fixed: card balances drifting shortly after a reconcile, with no new entries — on a busy day the ledger\u2019s audit trail (30 rows) can push a reconcile\u2019s record out, and the next boot then re-applied old card history onto the fresh base, smearing the current charges across BOTH cards. The reconcile now stamps a durable clock that can\u2019t be pushed out, so a reconciled balance stays put and the other card is never touched. Already-drifted phones self-heal on the next reconcile.'
     ],
@@ -9793,6 +10003,13 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     cycleDataFor: cycleDataFor, // v72.45: the cycle math for a given cycle month (smoke drives it)
     cycleData: cycleData, // v72.45: the current cycle (chat.js snapshot + smoke)
     ccDueData: ccDueData, // v73.6: the cc-due math (pure — the smoke drives it with a seeded ledger)
+    cardDueData: cardDueData, // v73.88: the per-card cycle math (pure - smoke PART 35)
+    cardCycleInfo: cardCycleInfo, // v73.88: the in-window test for the ledger pill (pure)
+    migrateCardDays: migrateCardDays, // v73.88: the per-card day fill (smoke: the settings fix)
+    txnCyclePill: txnCyclePill, // v73.88: the ledger pill html (smoke)
+    toggleTxnCycle: toggleTxnCycle, // v73.88: the pill tap (smoke)
+    accRow: accRow, // v73.88: the account row html (smoke: the settings round-trip)
+    renderBaseEditor: renderBaseEditor, // v73.88: the settings form html (smoke: the settings round-trip)
     ccDue: ccDue, // v73.6: the current cc due (chat.js snapshot + smoke)
     merchantCatFor: merchantCatFor, // v68 item 1: learned merchant→category lookup for the coach
     effectiveMerchantMap: effectiveMerchantMap,
@@ -10266,7 +10483,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       state.plans = res[2] || [];
       var cachedSnap = null, hasAdj = false;
       (res[1] || []).forEach(function (m) {
-        if (m.key === 'base') { state.base = migrateBaseKinds(m.value); } // v65
+        if (m.key === 'base') { state.base = migrateCardDays(migrateBaseKinds(m.value)); } // v65
         else if (m.key === 'snapshot') { cachedSnap = m.value; }
         else if (m.key === 'adj') { state.adj = m.value; hasAdj = true; }
         else if (m.key === 'adjSig') { state.adjSig = normalizeStoredSig(m.value || ''); } // v73.13: old 4-comp sigs map to the 3-comp one (no false rebase on upgrade)

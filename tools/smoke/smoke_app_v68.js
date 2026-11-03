@@ -75,6 +75,10 @@ function byIdStub(id) {
   // querySelector to return the same node object twice. Every other id
   // stays on the forgiving makeStub.
   if (id === 'reconcile' && !elMap[id]) elMap[id] = shimEl('div', { id: 'reconcile' });
+  // v73.90: #baseBody is a REAL shim tree too - the settings round-trip
+  // probe (renderBaseEditor -> readBaseForm) needs querySelectorAll to
+  // walk the rendered rows and the ccGrid sibling rows.
+  if (id === 'baseBody' && !elMap[id]) elMap[id] = shimEl('div', { id: 'baseBody' });
   if (!elMap[id]) elMap[id] = makeStub();
   return elMap[id];
 }
@@ -114,7 +118,16 @@ function shimEl(tag, attrs) {
   Object.defineProperty(el, 'value', {
     get: function () {
       if (el._v !== undefined) return el._v;
-      return el.attrs.value !== undefined ? el.attrs.value : '';
+      if (el.attrs.value !== undefined) return el.attrs.value;
+      // v73.90: a <select> takes its value from the selected <option>
+      // (the settings form's kind picker - readBaseForm reads ki.value)
+      if (el.tagName === 'SELECT') {
+        for (var i = 0; i < (el.children || []).length; i++) {
+          var o = el.children[i];
+          if (o.tagName === 'OPTION' && o.attrs.selected !== undefined) return o.attrs.value || '';
+        }
+      }
+      return '';
     },
     set: function (v) { el._v = v; }
   });
@@ -122,7 +135,14 @@ function shimEl(tag, attrs) {
     get: function () { return shimSerialize(el.children); },
     set: function (html) {
       el.children = parseShim(String(html == null ? '' : html));
-      el.children.forEach(function (c) { if (c.parentNode === null) c.parentNode = el; });
+      // v73.90: wire parentNode through the WHOLE parsed subtree (the
+      // nextElementSibling getter walks the parent's children)
+      (function wire(nodes, parent) {
+        nodes.forEach(function (c) {
+          c.parentNode = parent;
+          if (c.type !== 'text' && c.children) wire(c.children, c);
+        });
+      })(el.children, el);
     }
   });
   el.getAttribute = function (k) { return (k in el.attrs) ? el.attrs[k] : null; };
@@ -135,10 +155,21 @@ function shimEl(tag, attrs) {
     if (i >= 0) el.children.splice(i, 1);
     c.parentNode = null;
   };
+  // nextElementSibling: computed from the parent's children (the v73.90
+  // settings round-trip probe reaches the ccGrid row this way)
+  Object.defineProperty(el, 'nextElementSibling', {
+    get: function () {
+      if (!el.parentNode) return null;
+      var i = el.parentNode.children.indexOf(el);
+      return (i >= 0 && i + 1 < el.parentNode.children.length) ? el.parentNode.children[i + 1] : null;
+    }
+  });
   el.focus = function () {};
   el.select = function () {};
   el.blur = function () {};
   el.click = function () {};
+  el.addEventListener = function () {};
+  el.removeEventListener = function () {};
   return el;
 }
 function shimSerialize(nodes) {
@@ -161,7 +192,10 @@ function shimSerialize(nodes) {
 function parseShim(html) {
   var roots = [];
   var stack = []; // open elements (children attach to the top)
-  var re = /<\/?([a-zA-Z][a-zA-Z0-9]*)((?:\s+[a-zA-Z][a-zA-Z0-9_-]*="[^"]*")*)\s*\/?>|([^<]+)/g;
+  // v73.90: bare (valueless) attributes too - the app renders <option
+  // value="card" selected> and the select's value is read from the
+  // selected option, so 'selected' must survive the parse.
+  var re = /<\/?([a-zA-Z][a-zA-Z0-9]*)((?:\s+[a-zA-Z][a-zA-Z0-9_-]*(?:="[^"]*")?)*)\s*\/?>|([^<]+)/g;
   var m;
   while ((m = re.exec(html)) !== null) {
     if (m[3] !== undefined) {
@@ -171,9 +205,12 @@ function parseShim(html) {
     }
     var tag = m[1].toLowerCase();
     var attrs = {};
-    var ar = /([a-zA-Z][a-zA-Z0-9_-]*)="([^"]*)"/g;
+    // the name is greedy ('=' is not in the name class, so data-recon="Maya CC"
+    // parses as name=data-recon value=Maya CC); a bare attr (selected) has no
+    // '=' and parses as a flag
+    var ar = /([a-zA-Z][a-zA-Z0-9_-]*)(?:="([^"]*)")?/g;
     var am;
-    while ((am = ar.exec(m[2] || '')) !== null) attrs[am[1]] = am[2];
+    while ((am = ar.exec(m[2] || '')) !== null) attrs[am[1]] = am[2] !== undefined ? am[2] : '';
     if (m[0].charAt(1) === '/') {
       // closing tag: pop the nearest matching open node
       for (var i = stack.length - 1; i >= 0; i--) {
@@ -191,17 +228,34 @@ function parseShim(html) {
   }
   return roots;
 }
-function shimParseSel(sel) {
+// v73.90: descendant-combinator support ("#rowsAcc .brow", "blk .brow") -
+// the settings round-trip probe walks the rendered account rows. A selector
+// is a chain of simple parts; a node matches when it matches the LAST part
+// and some ancestor (up to the root) matched the previous parts in order.
+function shimParseSelPart(s) {
   var p = { tag: null, cls: null, id: null, attr: null, attrVal: null };
-  var idm = sel.match(/^#([A-Za-z0-9_-]+)$/);
+  var idm = s.match(/^#([A-Za-z0-9_-]+)$/);
   if (idm) { p.id = idm[1]; return p; }
-  var tagm = sel.match(/^([a-zA-Z][a-zA-Z0-9]*)/);
+  var tagm = s.match(/^([a-zA-Z][a-zA-Z0-9]*)/);
   if (tagm) p.tag = tagm[1].toLowerCase();
-  var clsm = sel.match(/\.([A-Za-z0-9_-]+)/);
+  var clsm = s.match(/\.([A-Za-z0-9_-]+)/);
   if (clsm) p.cls = clsm[1];
-  var atm = sel.match(/\[([a-zA-Z][a-zA-Z0-9_-]*)="([^"]*)"\]/);
+  var atm = s.match(/\[([a-zA-Z][a-zA-Z0-9_-]*)="([^"]*)"\]/);
   if (atm) { p.attr = atm[1]; p.attrVal = atm[2]; }
   return p;
+}
+function shimParseSel(sel) {
+  // quote-aware split: a space inside [attr="Maya CC"] is NOT a combinator
+  var parts = [];
+  var cur = '';
+  var inQ = false;
+  String(sel).split('').forEach(function (ch) {
+    if (ch === '"') inQ = !inQ;
+    if (/\s/.test(ch) && !inQ) { if (cur) { parts.push(cur); cur = ''; } }
+    else cur += ch;
+  });
+  if (cur) parts.push(cur);
+  return parts.map(shimParseSelPart);
 }
 function shimMatch(node, p) {
   if (node.type === 'text') return false;
@@ -212,14 +266,20 @@ function shimMatch(node, p) {
   return true;
 }
 function shimQ(root, sel) {
-  var p = shimParseSel(sel);
+  var parts = shimParseSel(sel);
   var out = [];
-  (function walk(e) {
+  (function walk(e, idx) {
     e.children.forEach(function (c) {
-      if (shimMatch(c, p)) out.push(c);
-      if (c.type !== 'text') walk(c);
+      if (c.type === 'text') return;
+      if (shimMatch(c, parts[idx])) {
+        if (idx + 1 >= parts.length) out.push(c);
+        else walk(c, idx + 1);
+      }
+      // always descend at the same index - a deeper descendant might
+      // match the current part (the child itself did not)
+      walk(c, idx);
     });
-  })(root);
+  })(root, 0);
   return out;
 }
 global.window = global;
@@ -2428,6 +2488,106 @@ waitReady().then(async function (F) {
       F.state.adj = adj34orig;
       F.state.adjSig = F.snapSig(snap34orig);
       F.state.moneyLog = log34orig;
+      F.migrateCashBy();
+      await tick();
+
+      // ============ PART 35: v73.90 — the CC cycle model (per-card billing/due days, the ±5-day THIS/NEXT pill, the auto due, the 1..31 settings round-trip) ============
+      // The v73.88 port, rebased onto v73.89 (the durable rebase clock).
+      // Pure-math asserts (cardDueData/cardCycleInfo/migrateCardDays) + the
+      // ledger pill html + the pill tap (toggleTxnCycle) + the settings
+      // round-trip through the REAL renderBaseEditor/readBaseForm (the
+      // 1..31 fix: a day of 31 no longer gets silently dropped on save).
+      console.log('\n== PART 35: v73.90 - the CC cycle model (per-card days, the +-5 day pill, the auto due, the 1..31 settings round-trip) =');
+      var base35orig = JSON.parse(JSON.stringify(F.state.base));
+      var txns35orig = JSON.parse(JSON.stringify(F.state.txns));
+      var log35orig = JSON.parse(JSON.stringify(F.state.moneyLog || []));
+      var TODAY35 = '2026-11-03';
+      var maya35 = { name: 'Maya CC', kind: 'card', balance: 10000, billing_day: 30, due_day: 10 };
+      // (1) the per-card cycle math: billing 30 / due 10, today 2026-11-03.
+      // prev billing = 2026-10-30, the window = ±5 days AROUND it
+      // (2026-10-25..2026-11-04), next billing = 2026-11-30, due = 2026-11-10.
+      // the window is +-5 AROUND the PREVIOUS billing date (2026-10-30):
+      // 2026-10-25..2026-11-04. In-window = this cycle by default (toggleable);
+      // post-window = next cycle by definition; pre-window = this cycle, locked.
+      var tIn = { kind: 'card_charge', account: 'Maya CC', amount: 500, date: '2026-11-02' };
+      var tNext = { kind: 'card_charge', account: 'Maya CC', amount: 300, date: '2026-11-28' };
+      var tPre = { kind: 'card_charge', account: 'Maya CC', amount: 200, date: '2026-10-20' };
+      var cd35 = F.cardDueData(maya35, [tIn, tNext, tPre], null, TODAY35, 10000);
+      ok(cd35.windowStart === '2026-10-25' && cd35.windowEnd === '2026-11-04', 'v73.90: the window = +-5 days AROUND the previous billing date (got ' + cd35.windowStart + '..' + cd35.windowEnd + ')');
+      ok(cd35.billDate === '2026-11-30' && cd35.dueDate === '2026-11-10' && cd35.dueIn === 7, 'v73.90: the next billing/due dates from the PER-CARD days (got ' + cd35.billDate + ' / ' + cd35.dueDate + ' / ' + cd35.dueIn + ')');
+      ok(close(cd35.due, 9700) && close(cd35.nextCycle, 300) && !cd35.manual, 'v73.90: AUTO due = balance - next-cycle charges (the in-window charge counts THIS cycle by default; got due ' + cd35.due + ' next ' + cd35.nextCycle + ')');
+      tIn.cycle = 'next';
+      var cd35b = F.cardDueData(maya35, [tIn, tNext, tPre], null, TODAY35, 10000);
+      ok(close(cd35b.due, 9200) && close(cd35b.nextCycle, 800), 'v73.90: an in-window charge tagged NEXT is excluded from the auto due (got due ' + cd35b.due + ' next ' + cd35b.nextCycle + ')');
+      delete tIn.cycle;
+      var cd35c = F.cardDueData(Object.assign({}, maya35, { due_override: 1234.5 }), [tIn, tNext, tPre], null, TODAY35, 10000);
+      ok(close(cd35c.due, 1234.5) && cd35c.manual, 'v73.90: the manual due_override wins with the (manual) provenance (got due ' + cd35c.due + ' manual ' + cd35c.manual + ')');
+      // the month-length clamp: a billing day of 31 in a 30-day month lands on the 30th
+      var cd35d = F.cardDueData({ name: 'X', kind: 'card', billing_day: 31, due_day: 31 }, [], null, '2026-11-03', 100);
+      ok(cd35d.billDate === '2026-11-30' && cd35d.dueDate === '2026-11-30', 'v73.90: day 31 clamps to the month length (got bill ' + cd35d.billDate + ' due ' + cd35d.dueDate + ')');
+      // (2) the ledger pill: ONLY an in-window charge gets the toggle
+      var ci35 = F.cardCycleInfo(maya35, '2026-11-02', null, TODAY35);
+      ok(ci35.inWindow && !ci35.autoNext, 'v73.90: a charge inside the window is toggleable (got ' + JSON.stringify(ci35) + ')');
+      var ci35b = F.cardCycleInfo(maya35, '2026-12-06', null, TODAY35);
+      ok(!ci35b.inWindow && ci35b.autoNext, 'v73.90: a post-window charge is next-cycle by definition (no toggle)');
+      // txnCyclePill reads the card's days from state.base - give the seed's
+      // Maya CC its per-card days first (the seed predates the model)
+      var b35 = JSON.parse(JSON.stringify(F.state.base));
+      (F.state.base.accounts || []).forEach(function (a) { if (a.name === 'Maya CC') { a.billing_day = 30; a.due_day = 10; } });
+      var pill35 = F.txnCyclePill({ id: 't35', kind: 'card_charge', account: 'Maya CC', date: '2026-11-02' }, TODAY35);
+      ok(pill35.indexOf('data-cycletag="t35"') >= 0 && pill35.indexOf('THIS CYCLE') >= 0, 'v73.90: the in-window charge renders the THIS CYCLE pill (got ' + pill35 + ')');
+      ok(F.txnCyclePill({ id: 't35b', kind: 'card_charge', account: 'Maya CC', date: '2026-12-06' }, TODAY35) === '', 'v73.90: the post-window charge renders NO pill');
+      // the pill tap: toggles t.cycle on the real ledger entry (and back)
+      var id35 = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 100, note: 'v73.90 pill probe', date: '2026-11-02' }, { quiet: true });
+      await tick();
+      F.toggleTxnCycle(String(id35), TODAY35);
+      var t35 = null;
+      (F.state.txns || []).forEach(function (x) { if (String(x.id) === String(id35)) t35 = x; });
+      ok(t35 && String(t35.cycle) === 'next', 'v73.90: the pill tap marks the charge NEXT CYCLE (got ' + (t35 && t35.cycle) + ')');
+      F.toggleTxnCycle(String(id35), TODAY35);
+      ok(t35 && !('cycle' in t35), 'v73.90: the second tap clears the tag (back to THIS)');
+      F.state.base = b35;
+      // (3) the settings round-trip through the REAL form (the 1..31 fix):
+      // renderBaseEditor -> readBaseForm must preserve a per-card day of 31
+      // (the wip 1..28 cap silently dropped it and the global default came back)
+      // byId('baseBody') is the harness' elMap instance (a real shim tree
+      // since v73.90) - renderBaseEditor writes through byId, so read it back
+      // from the SAME instance
+      var bb35 = global.__elMap['baseBody'];
+      // give the seed's cards their own per-card days (the boss's real setup:
+      // Maya 30/10, MariBank 20/10) so the round-trip has per-card values to
+      // preserve (the seed predates the model - no per-card days)
+      (F.state.base.accounts || []).forEach(function (a) {
+        if (a.name === 'Maya CC') { a.billing_day = 30; a.due_day = 10; }
+        if (a.name === 'MariBank CC') { a.billing_day = 20; a.due_day = 10; }
+      });
+      F.renderBaseEditor();
+      // each card renders TWO .brow rows in #rowsAcc: the name/kind/value
+      // row (what readBaseForm reads) and the ccGrid row (billing/due/override)
+      var accRows35 = Array.prototype.slice.call(bb35.querySelectorAll('#rowsAcc .brow'));
+      var mayaRow35 = accRows35.filter(function (r) { var n = r.querySelector('[data-r="name"]'); return n && n.value === 'Maya CC'; })[0];
+      var mbRow35 = accRows35.filter(function (r) { var n = r.querySelector('[data-r="name"]'); return n && n.value === 'MariBank CC'; })[0];
+      ok(!!mayaRow35 && !!mbRow35, 'v73.90: the settings form renders both card rows');
+      var mayaB35 = mayaRow35 && mayaRow35.nextElementSibling ? mayaRow35.nextElementSibling.querySelector('[data-r="billing"]') : null;
+      var mbB35 = mbRow35 && mbRow35.nextElementSibling ? mbRow35.nextElementSibling.querySelector('[data-r="billing"]') : null;
+      ok(!!mayaB35 && mayaB35.value === '30' && !!mbB35 && mbB35.value === '20', 'v73.90: the card rows carry their OWN billing days (Maya 30, MariBank 20; got ' + (mayaB35 && mayaB35.value) + ' / ' + (mbB35 && mbB35.value) + ')');
+      mayaB35.value = '31';
+      var b35read = F.readBaseForm();
+      var mayaAcc35 = (b35read.accounts || []).filter(function (a) { return a.name === 'Maya CC'; })[0];
+      ok(mayaAcc35 && mayaAcc35.billing_day === 31, 'v73.90: a day of 31 SURVIVES the settings round-trip (the wip 1..28 cap dropped it; got ' + (mayaAcc35 && mayaAcc35.billing_day) + ')');
+      var mbAcc35 = (b35read.accounts || []).filter(function (a) { return a.name === 'MariBank CC'; })[0];
+      ok(mbAcc35 && mbAcc35.billing_day === 20 && mbAcc35.due_day === 10, 'v73.90: the other card keeps its own days (got ' + (mbAcc35 && mbAcc35.billing_day) + '/' + (mbAcc35 && mbAcc35.due_day) + ')');
+      // (4) migrateCardDays: an old export's cards get the globals stamped on; existing values win
+      var mb35 = F.migrateCardDays({ cutoff_day: 15, due_day: 5, accounts: [{ name: 'A', kind: 'card' }, { name: 'B', kind: 'card', billing_day: 20, due_day: 10 }, { name: 'C', kind: 'debit' }] });
+      ok(mb35.accounts[0].billing_day === 15 && mb35.accounts[0].due_day === 5, 'v73.90: a card with no per-card days gets the GLOBAL defaults stamped on (got ' + mb35.accounts[0].billing_day + '/' + mb35.accounts[0].due_day + ')');
+      ok(mb35.accounts[1].billing_day === 20 && mb35.accounts[1].due_day === 10, 'v73.90: existing per-card days ALWAYS win the migration (got ' + mb35.accounts[1].billing_day + '/' + mb35.accounts[1].due_day + ')');
+      ok(!('billing_day' in mb35.accounts[2]), 'v73.90: debit accounts are untouched by the migration');
+      // restore the parked state (the probe txn goes with the delete)
+      await F.deleteTxn(id35);
+      await tick();
+      F.state.base = base35orig;
+      F.state.txns = txns35orig;
+      F.state.moneyLog = log35orig;
       F.migrateCashBy();
       await tick();
 
