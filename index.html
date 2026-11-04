@@ -135,6 +135,23 @@ button.plchip.linked{border:1px solid var(--ok);background:rgba(55,211,155,.12);
 /* v73.60: the plans list's tab bar — One-offs LEFT, Recurring RIGHT,
    counts ride the tabs, One-offs is the default. Pure layout over the
    v73.59 renderer (both lists always exist; the tab is view state). */
+/* v73.96 (boss-approved mockup_committed_sections.html): the Committed
+   tab's summary row + the Expenses (amber) / Saving for (blue) section
+   labels. Rows are byte-identical to the existing .plrow look — the only
+   new pixels are the section labels, the blue tint on goal amounts, and
+   the summary line. Empty sections are hidden (a section appears the
+   moment its first row exists). */
+.sumrow{display:flex;align-items:flex-end;justify-content:space-between;padding:10px 2px 12px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.sumrow .sumlab{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.sumrow .sumv{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px}
+.sumrow .sub{font-size:12px;color:var(--mut);text-align:right;line-height:1.35}
+.sect{display:flex;align-items:baseline;justify-content:space-between;padding:12px 2px 6px}
+.sect .lab{font-size:11px;color:var(--warn);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.sect .tot{font-size:12.5px;color:var(--mut);font-variant-numeric:tabular-nums}
+.sect .tot b{color:var(--warn);font-weight:700}
+.sect.goal .lab{color:#8fb0ff}
+.sect.goal .tot b{color:#8fb0ff}
+.pl-amt.goal{color:#8fb0ff}
 .pltabs{display:flex;gap:6px;padding:4px;background:var(--card2);border:1px solid var(--line);border-radius:12px;margin:2px 0 10px}
 .pltab{flex:1;text-align:center;padding:9px 0;font-size:13px;font-weight:700;color:var(--mut);border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
 .pltab.on{background:var(--card);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.35)}
@@ -808,10 +825,15 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
          is just Coming up — the Projection card (and the overlay reset bar
          that lived inside it) is GONE, and the Reconcile cards moved to the
          Ledger tab (the old Spend-pace slot, compact). -->
-    <!-- v73.14: the Money tab's plans heading is now just "Coming up" (boss call) -->
-    <!-- v73.15: the add form collapsed to a one-line trigger — it now lives in
-         the plan sheet (#planSheet), same bottom-sheet family as the edit sheet -->
-    <h2>Coming up</h2>
+    <!-- v73.96 (boss-approved mockup_committed_sections.html): the Money tab
+         is renamed "Committed" (the other half of the hero's Free/unallocated)
+         and gains the one-line summary: this cycle's committed total (the same
+         cyclePlanDeduction math the hero's Plan dues row uses) + how much of
+         the free cash it speaks for. The plans list below is sectioned
+         Expenses (amber) / Saving for (blue) inside the One-offs/Recurring
+         tabs. -->
+    <h2>Committed</h2>
+    <div class="sumrow" id="committedSum" style="display:none"><div class="sum"><div class="sumlab">This cycle · committed</div><div class="sumv" id="committedSumV"></div></div><div class="sub" id="committedSumSub"></div></div>
     <button class="act ghost" id="planAddBtn" type="button" style="margin:0 0 10px">＋ Add a plan</button>
     <div id="plans" class="card"></div>
   </div>
@@ -946,6 +968,14 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       <div id="p_countWrap" style="display:none;margin-top:10px">
         <label for="p_count">How many times <span class="note" style="margin-left:6px">blank = keep showing the next few</span></label>
         <input id="p_count" type="number" min="1" step="1" inputmode="numeric">
+      </div>
+      <!-- v73.96: the kind axis — an expense (obligation) or money being
+           saved for a thing. Default expense: old plans (no kind field)
+           migrate to expense, so the sections never surprise. -->
+      <label style="margin-top:12px;display:block">This is for</label>
+      <div id="p_kindWrap" style="display:flex;gap:6px;padding:4px;background:var(--card2);border:1px solid var(--line);border-radius:12px">
+        <div id="p_kind_expense" class="pltab on">Expense</div>
+        <div id="p_kind_goal" class="pltab">Saving for</div>
       </div>
       <div style="margin-top:14px">
         <button class="act" type="submit">Add plan</button>
@@ -1295,7 +1325,7 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
 <nav id="bottombar" aria-label="Sections">
   <div id="tabs">
     <button type="button" class="tab active" data-tab="home">Home</button>
-    <button type="button" class="tab" data-tab="money">Money</button>
+    <button type="button" class="tab" data-tab="money">Committed</button>
     <button type="button" class="addbtn" id="addBtn" aria-label="Add expense">+</button>
     <button type="button" class="tab" data-tab="ledger">Ledger</button>
     <button type="button" class="tab" data-tab="owed">Owed</button>

@@ -61,7 +61,10 @@ var elMap = {
   pe_date: makeStub(),
   pe_dateLabel: makeStub(),
   mlBody: makeStub(),
-  planEditClose: makeStub() // the v73.47 dead id — must stay UNBOUND
+  planEditClose: makeStub(), // the v73.47 dead id — must stay UNBOUND
+  committedSum: makeStub(), // v73.96: the Committed summary row (renderPlans shows/hides it)
+  committedSumV: makeStub(), // v73.96: the Committed summary value (renderPlans writes it; the probe reads it back — same instance)
+  committedSumSub: makeStub() // v73.96: the Committed summary sub-line
 };
 elMap['pe_date'].id = 'pe_date';
 // v73.49: byIdStub must return the SAME instance every time (the app's
@@ -2737,6 +2740,91 @@ waitReady().then(async function (F) {
       var remain38 = Math.round(Math.max(0, hDailySub38 - d38.todaySpend) * 100) / 100;
       ok(coachSub38.indexOf('left of today\u2019s headroom') >= 0 && coachSub38.indexOf(money22(remain38)) >= 0,
         'v73.94: the coach sub quotes the headroom REMAINDER (' + money22(remain38) + ' = ' + money22(hDailySub38) + ' - ' + money22(d38.todaySpend) + ') \u2014 got: ' + JSON.stringify(coachSub38));
+
+      // ============ PART 39: v73.96 - the Committed tab (sections + summary) ============
+      // (boss-approved mockup_committed_sections.html: 'use another colors for
+      // expenses and saving for and make the order home,committed,ledger,owed'
+      // + 'Ship it'). The Money tab is renamed Committed, sits second in the
+      // tab bar, opens with the one-line summary (this cycle's committed total
+      // = the SAME cyclePlanDeduction math the hero's Plan dues row uses + the
+      // % of free cash it speaks for), and the plans list is sectioned
+      // Expenses (amber) / Saving for (blue) with count+subtotal labels, goal
+      // amounts tinted blue, and empty sections hidden. p.kind rides the
+      // record ('goal' | 'expense'); old plans (no field) are expenses.
+      console.log('\n== PART 39: v73.96 - the Committed tab (sections + summary) =');
+      var html39 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
+      ok(html39.indexOf('<h2>Committed</h2>') >= 0, 'v73.96: the tab heading is Committed');
+      ok(html39.indexOf('data-tab="money">Committed</button>') >= 0, 'v73.96: the bottom-bar label is Committed');
+      // the tab order: Home < Committed < Ledger < Owed (the + button sits between)
+      ok(html39.indexOf('data-tab="home"') < html39.indexOf('data-tab="money"') &&
+         html39.indexOf('data-tab="money"') < html39.indexOf('data-tab="ledger"') &&
+         html39.indexOf('data-tab="ledger"') < html39.indexOf('data-tab="owed"'),
+        'v73.96: the tab order is Home · Committed · Ledger · Owed');
+      ok(html39.indexOf('id="p_kind_expense"') >= 0 && html39.indexOf('id="p_kind_goal"') >= 0,
+        'v73.96: the add sheet carries the This-is-for toggle (Expense / Saving for)');
+      // the sectioned render: seed a goal one-off + a goal recurring, render
+      var probeOne = { id: 'p39one', name: 'MacBook Air 13', amount: 49990, date: F.shiftMonth(F.todayISO(), 1), repeat: null, count: null, overrides: {}, kind: 'goal', created: '2026-11-01T00:00:00.000Z' };
+      var probeRec = { id: 'p39rec', name: 'Emergency fund', amount: 5000, date: F.shiftMonth(F.todayISO(), 1), repeat: 'monthly', count: null, overrides: {}, kind: 'goal', created: '2026-11-01T00:00:00.000Z' };
+      F.state.plans.push(probeOne, probeRec);
+      F.renderPlans();
+      var plans39 = String(byIdStub('plans').innerHTML || '');
+      ok(plans39.indexOf('class="sect"') >= 0 && plans39.indexOf('>Expenses<') >= 0,
+        'v73.96: the Expenses section label renders (the seed has expense one-offs)');
+      ok(plans39.indexOf('class="sect goal"') >= 0 && plans39.indexOf('>Saving for<') >= 0,
+        'v73.96: the Saving-for section label renders (the probe goal one-off)');
+      ok(plans39.indexOf('pl-amt goal') >= 0, 'v73.96: the goal row tints its amount blue');
+      // the subtotal: the Expenses section total = the sum of the expense one-offs
+      var expTotal39 = 0;
+      F.state.plans.forEach(function (p) { if (!p.repeat && p.kind !== 'goal') expTotal39 += Number(p.amount) || 0; });
+      var expTotTxt39 = (Math.round(expTotal39 * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      ok(plans39.indexOf(expTotTxt39) >= 0, 'v73.96: the Expenses subtotal sums the section (' + expTotTxt39 + ')');
+      // the Recurring tab: the goal series lands in its Saving-for section
+      F.setPlanTab('rec');
+      F.renderPlans();
+      var plans39r = String(byIdStub('plans').innerHTML || '');
+      ok(plans39r.indexOf('class="sect goal"') >= 0 && plans39r.indexOf('Emergency fund') >= 0,
+        'v73.96: the Recurring tab sectioned too (the goal series under Saving for)');
+      F.setPlanTab('one');
+      // empty section hidden: delete the probe goal one-off -> the One-offs
+      // Saving-for section disappears, the Expenses section stays (the probe
+      // expense one-off keeps it alive)
+      var probeExp = { id: 'p39exp', name: 'Globe postpaid', amount: 1299, date: F.shiftMonth(F.todayISO(), 1), repeat: null, count: null, overrides: {}, kind: 'expense', created: '2026-11-01T00:00:00.000Z' };
+      F.state.plans.push(probeExp);
+      F.state.plans = F.state.plans.filter(function (p) { return p.id !== 'p39one'; });
+      F.renderPlans();
+      var plans39e = String(byIdStub('plans').innerHTML || '');
+      var sectCount39 = (plans39e.match(/class="sect/g) || []).length;
+      ok(sectCount39 === 1 && plans39e.indexOf('>Saving for<') < 0 && plans39e.indexOf('>Expenses<') >= 0,
+        'v73.96: the empty Saving-for section is hidden (1 section left: ' + sectCount39 + ')');
+      // the summary line: quotes cyclePlanDeduction + the freeNet %
+      var committed39 = F.cyclePlanDeduction();
+      var d39s = F.insightsData();
+      var freeN39s = d39s.freeNet != null ? d39s.freeNet : d39s.free;
+      F.renderPlans();
+      var sumV39 = String(byIdStub('committedSumV').innerHTML || '');
+      var sumS39 = String(byIdStub('committedSumSub').innerHTML || '');
+      var pct39 = freeN39s > 0 ? Math.round(committed39 / freeN39s * 1000) / 10 : 0;
+      ok(sumV39.indexOf(money22(committed39)) >= 0,
+        'v73.96: the summary quotes this cycle\u2019s committed total (' + money22(committed39) + ' = cyclePlanDeduction)');
+      ok(sumS39.indexOf(String(pct39) + '% of your free') >= 0,
+        'v73.96: the summary quotes the % of free cash spoken for (' + pct39 + '% of ' + money22(freeN39s) + ')');
+      // the kind round-trips through addPlan (the add sheet's toggle feeds it)
+      var beforeKinds39 = F.state.plans.length;
+      await F.addPlan({ name: 'Trip fund — Cebu', amount: 3000, date: F.todayISO(), repeat: null, count: null, kind: 'goal' });
+      var added39 = F.state.plans[F.state.plans.length - 1];
+      ok(added39 && added39.name === 'Trip fund — Cebu' && added39.kind === 'goal',
+        'v73.96: addPlan stores kind=goal (got ' + JSON.stringify(added39 && added39.kind) + ')');
+      // the default: no kind -> expense (old plans migrate implicitly)
+      await F.addPlan({ name: 'Globe postpaid', amount: 1299, date: F.todayISO(), repeat: null, count: null });
+      var added39b = F.state.plans[F.state.plans.length - 1];
+      ok(added39b && added39b.kind === 'expense',
+        'v73.96: addPlan defaults kind to expense (got ' + JSON.stringify(added39b && added39b.kind) + ')');
+      // cleanup: delete the probe plans
+      await F.deletePlan('p39rec');
+      await F.deletePlan(added39.id);
+      await F.deletePlan(added39b.id);
+      F.setPlanTab('one');
+      F.renderPlans();
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);

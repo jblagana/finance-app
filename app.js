@@ -6459,17 +6459,20 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       // data-unskip path), so the unskip access the boss lost is here too
       // (the recurring-only record row never existed for one-offs).
       var roO = resolveOccurrence(p, String(p.date));
+      // v73.96: saving-for rows tint their amount blue (the section label
+      // already carries the color; the amount follows it).
+      var gclsO = p.kind === 'goal' ? ' goal' : '';
       if (roO && roO.skip) {
         return '<div class="plrow oneoff skipped"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') +
           ' <span class="pill" style="font-size:10px;background:rgba(143,176,255,.14);color:#8fb0ff">skipped</span></div>' +
           '<div class="pl-sub">' + esc(subTxt) + '</div></div>' +
-          '<div class="pl-r"><div class="pl-amt" style="text-decoration:line-through;opacity:.6">₱ ' + amt(p.amount) + '</div></div>' +
+          '<div class="pl-r"><div class="pl-amt' + gclsO + '" style="text-decoration:line-through;opacity:.6">₱ ' + amt(p.amount) + '</div></div>' +
           '<button class="mini" data-unskip="' + p.id + '|' + String(p.date) + '" title="Tap to unskip — the due returns to the coach card">↺</button>' +
           '<button class="mini" data-delp="' + p.id + '" title="Delete plan">✕</button></div>';
       }
       return '<div class="plrow oneoff"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') + planPaidPill(p.id, String(p.date), p.name, p.amount) + '</div>' +
         '<div class="pl-sub">' + esc(subTxt) + '</div></div>' +
-        '<div class="pl-r"><div class="pl-amt">₱ ' + amt(p.amount) + '</div></div>' +
+        '<div class="pl-r"><div class="pl-amt' + gclsO + '">₱ ' + amt(p.amount) + '</div></div>' +
         '<button class="mini" data-editp="' + p.id + '" data-editd="' + String(p.date) + '" title="Edit this one-off">✎</button>' +
         '<button class="mini" data-delp="' + p.id + '" title="Delete plan">✕</button></div>';
     }
@@ -6534,7 +6537,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       '<div class="chev">▸</div><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') +
       (anyEdited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') +
       '</div><div class="pl-sub">' + headSub + '</div></div>' +
-      '<div class="pl-r"><div class="pl-amt">₱ ' + amt(p.amount) + '</div><div class="pl-per">each</div></div>' +
+      '<div class="pl-r"><div class="pl-amt' + (p.kind === 'goal' ? ' goal' : '') + '">₱ ' + amt(p.amount) + '</div><div class="pl-per">each</div></div>' +
       (firstSkip ? '<button class="mini" data-unskip="' + p.id + '|' + firstSkip + '" title="Unskip ' + fmtDate(firstSkip) + ' (and see the rest expanded)">↺</button>' : '') +
       // v73.55: a plan whose dues are ALL skipped is exactly the plan you
       // most want to edit/unskip — the ✎ must not vanish with `shown`.
@@ -6621,16 +6624,55 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     // expand/collapse state survives re-renders until the plan SET changes
     var sig = all.map(function (p) { return p.id; }).join('|');
     if (sig !== planSig) { planOpen = {}; planSig = sig; }
+    // v73.96 (boss-approved mockup_committed_sections.html): the list is
+    // SECTIONED by kind — Expenses (amber) / Saving for (blue) — inside the
+    // One-offs/Recurring tabs. p.kind is 'goal' for saving-for rows;
+    // anything else (incl. old plans with no field) is an expense, so the
+    // migration is implicit and the sections never surprise. Empty sections
+    // are hidden — a section appears the moment its first row exists. The
+    // section label carries the count + subtotal (the mockup's "2 · ₱3,299").
+    function planKind(p) { return p.kind === 'goal' ? 'goal' : 'expense'; }
+    function sectionHTML(list, kind) {
+      if (!list.length) return '';
+      var total = 0;
+      list.forEach(function (p) { total += Number(p.amount) || 0; });
+      var lab = kind === 'goal' ? 'Saving for' : 'Expenses';
+      var tot = list.length + ' · <b>₱ ' + (Math.round(total * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</b>';
+      return '<div class="sect' + (kind === 'goal' ? ' goal' : '') + '"><span class="lab">' + lab + '</span><span class="tot">' + tot + '</span></div>';
+    }
+    function listHTML(list) {
+      var exp = list.filter(function (p) { return planKind(p) === 'expense'; });
+      var goal = list.filter(function (p) { return planKind(p) === 'goal'; });
+      var h = sectionHTML(exp, 'expense');
+      exp.forEach(function (p) { h += planHTML(p, { open: !!planOpen[p.id] }); });
+      h += sectionHTML(goal, 'goal');
+      goal.forEach(function (p) { h += planHTML(p, { open: !!planOpen[p.id] }); });
+      return h;
+    }
     var html = '<div class="pltabs">' +
       '<div class="pltab' + (planTab === 'one' ? ' on' : '') + '" data-pltab="one">One-offs<span class="plcnt">' + oneoffs.length + '</span></div>' +
       '<div class="pltab' + (planTab === 'rec' ? ' on' : '') + '" data-pltab="rec">Recurring<span class="plcnt">' + recs.length + '</span></div>' +
       '</div>';
-    if (planTab === 'one') {
-      oneoffs.forEach(function (p) { html += planHTML(p, { open: !!planOpen[p.id] }); });
-    } else {
-      recs.forEach(function (p) { html += planHTML(p, { open: !!planOpen[p.id] }); });
-    }
+    html += listHTML(planTab === 'one' ? oneoffs : recs);
     el.innerHTML = html;
+    // v73.96: the summary line — this cycle's committed total (the SAME
+    // cyclePlanDeduction math the hero's Plan dues row uses, so the tab
+    // proves the hero's number) + how much of the free cash it speaks for.
+    var sumEl = byId('committedSum');
+    if (sumEl) {
+      var committed = cyclePlanDeduction();
+      var d39 = insightsData();
+      var freeN39 = d39 && d39.freeNet != null ? d39.freeNet : (d39 ? d39.free : null);
+      if (committed > 0.004 && freeN39 != null) {
+        sumEl.style.display = '';
+        var vEl = byId('committedSumV'); if (vEl) vEl.innerHTML = '− ' + money(committed);
+        var sEl = byId('committedSumSub');
+        if (sEl) {
+          var pct = freeN39 > 0 ? Math.round(committed / freeN39 * 1000) / 10 : 0;
+          sEl.innerHTML = pct + '% of your free<br>is spoken for';
+        }
+      } else { sumEl.style.display = 'none'; }
+    }
     var tabs = el.querySelectorAll('[data-pltab]');
     for (var t = 0; t < tabs.length; t++) tabs[t].onclick = function () {
       planTab = this.getAttribute('data-pltab');
@@ -6681,8 +6723,14 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     // overrides (per-occurrence forks — empty until the first edit)
     var rep = ['daily', 'weekly', 'monthly', 'annual'].indexOf(data.repeat) >= 0 ? data.repeat : null;
     var cnt = Math.floor(Number(data.count));
+    // v73.96: kind — 'goal' (saving for a thing) or 'expense' (default;
+    // old plans with no field migrate to expense, so the sections never
+    // surprise). The kind rides the record, so it survives import/sync
+    // like every other field.
+    var kind = data.kind === 'goal' ? 'goal' : 'expense';
     var p = { id: id, name: data.name, amount: data.amount, date: data.date,
       repeat: rep, count: (rep && cnt >= 1) ? cnt : null, overrides: {},
+      kind: kind,
       created: new Date().toISOString() };
     state.plans.push(p);
     return idbPut(STORE_PLANS, p).then(function () {
@@ -8780,12 +8828,16 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.95, live: new Date(2026, 10, 4, 10, 22) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.96, live: new Date(2026, 10, 4, 22, 5) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.96': [
+      'The Money tab is now \u201cCommitted\u201d \u2014 the money that is already spoken for (the other half of the hero\u2019s Free/unallocated). It opens with one line: what this cycle commits and how much of your free cash that is. The plan list is sectioned: Expenses (amber) and Saving for (blue), with a subtotal on each \u2014 and new plans get a one-tap \u201cThis is for\u201d pick (Expense or Saving for) in the add sheet. Your old plans are all Expenses; flip one to Saving for by re-adding it (the kind can\u2019t be changed on an existing plan yet).',
+      'The tab order is Home \u00b7 Committed \u00b7 Ledger \u00b7 Owed.'
+    ],
     '73.95': [
       'The cycle strip\u2019s third cell now always shows \u2014 it is \u201cSpent today\u201d (shorter label, and it no longer hides itself on no-spend days) \u2014 and the Headroom number is a little smaller so it fits on one row.'
     ],
@@ -10227,6 +10279,17 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       if (repEl0 && cntWrap) repEl0.onchange = function () {
         cntWrap.style.display = repEl0.value === 'once' ? 'none' : '';
       };
+      // v73.96: the kind toggle (Expense / Saving for) — in-memory view
+      // state like planTab, default Expense. The two chips share the
+      // .pltab look (the on-state styles come from the existing CSS).
+      var kindSel = 'expense';
+      var kindE = byId('p_kind_expense'), kindG = byId('p_kind_goal');
+      function kindPaint() {
+        if (kindE) kindE.className = 'pltab' + (kindSel === 'expense' ? ' on' : '');
+        if (kindG) kindG.className = 'pltab' + (kindSel === 'goal' ? ' on' : '');
+      }
+      if (kindE) kindE.onclick = function () { kindSel = 'expense'; kindPaint(); };
+      if (kindG) kindG.onclick = function () { kindSel = 'goal'; kindPaint(); };
       pform.onsubmit = function (e) {
         e.preventDefault();
         var name = (byId('p_name').value || '').trim();
@@ -10242,11 +10305,12 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
         var cntVal = cntEl ? Math.floor(Number(cntEl.value)) : NaN;
         if (!(cntVal >= 1)) cntVal = null;
         addPlan({ name: name, amount: amount, date: byId('p_date').value || todayISO(),
-          repeat: repVal === 'once' ? null : repVal, count: cntVal }).then(function () {
+          repeat: repVal === 'once' ? null : repVal, count: cntVal, kind: kindSel }).then(function () {
           byId('p_name').value = '';
           byId('p_amount').value = '';
           if (cntEl) cntEl.value = '';
           if (repEl) { repEl.value = 'once'; if (cntWrap) cntWrap.style.display = 'none'; }
+          kindSel = 'expense'; kindPaint(); // v73.96: the toggle resets to its default
           closeSheets(); // v73.15: the sheet is done — the "Planned …" snack confirms
         });
       };

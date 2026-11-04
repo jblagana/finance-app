@@ -459,7 +459,7 @@ def main():
           and "function openRecap() {" in js
           and "'73.2': [" in js)
     check("v73.14 (user: 'rename it to just Coming up' + 'the home tab is so full of info?' + the Fin AI backlog 'repeatable entries'): (1) the Money tab's 'Plans · coming up' heading is now 'Coming up'; (2) Home slim — the due strip is GONE (it previewed the Coming-up list two taps away) and the two AI cards are MERGED: the coach's note is the opening block (#coachNoteBlock) INSIDE the #coach card, so Home reads as one coach voice; (3) REPEATABLE ENTRIES — the repeat select gains 'daily', the form gains a count field (visible only when a repeat is picked; blank = the old window), the plan row carries count + overrides, and the 3-scope model (boss-confirmed) lands in resolveOccurrence: 'just this one' = an exact-date fork, 'this one and after' = applyFrom, 'all' = applyFrom at the series' first occurrence, skip hides the occurrence; (4) the per-occurrence edit sheet (#planEditSheet) — name/amount/date pre-filled from the RESOLVED occurrence + the scope select + skip-this-occurrence + explicit delete-whole-plan; forked dates wear an 'edited' pill; (5) the coach's math (insightsData week items + month plans + the Plan-due rows) reads RESOLVED occurrences, so forks and skips change what the coach says",
-          '<h2>Coming up</h2>' in html and 'Plans · coming up' not in html
+          '<h2>Committed</h2>' in html and 'Plans · coming up' not in html  # v73.96: the heading is now "Committed" (the v73.14 "Coming up" rename is superseded)
           and 'id="coachNoteBlock"' in html and 'id="coachNote"' not in html
           and 'id="dueStrip"' not in html and 'id="dueBody"' not in html
           and '.coachnote-block{' in html
@@ -474,7 +474,7 @@ def main():
           and "'73.14': [" in js)
     check("v73.15 (user: 'the ui for coming up and the entries is so cluttered' — the mockup he approved): the Coming-up list renders SERIES, not projections — a recurring plan is ONE tappable row (name · 'Every <cadence> · next <date>' · count badge · amount 'each') that expands into occurrence sub-rows capped at 5 with '+N more…'; one-offs are plain rows with their own ✕; the 'recurring' pill is gone (the row IS the series), 'edited' survives on the head (any fork) and on the specific sub-row; the ✕ foot-gun left the list for series (delete-whole-plan lives in the edit sheet); the add form collapsed to the one-line '＋ Add a plan' trigger and now lives in #planSheet (bottom-sheet family); the v73.14 rows' unstyled .txn classes are replaced by the .plrow/.occ styles (the v18 ledger rework had deleted the old .txn CSS); the form's Amount label drops the '— number or quick sum' tail",
           'id="planSheet"' in html and 'id="planAddBtn"' in html and 'id="planAddClose"' in html
-          and '＋ Add a plan' in html and '<h2>Coming up</h2>' in html
+          and '＋ Add a plan' in html and '<h2>Committed</h2>' in html  # v73.96: the tab heading is "Committed" (was "Coming up")
           and 'id="planForm"' in html and 'id="p_amount"' in html
           and "number or quick sum" not in html
           and ".plrow{" in html and ".occwrap{" in html and ".chev{" in html
@@ -1916,6 +1916,21 @@ def main():
           and 'class="v sm"' in js
           and ".pace .p .v.sm{font-size:12px;white-space:nowrap}" in html
           and "'73.95': [" in js)
+    check("v73.96 (boss-approved mockup_committed_sections.html: 'use another colors for expenses and saving for and make the order home,committed,ledger,owed' + 'Ship it'): the Money tab is renamed COMMITTED (the other half of the hero's Free/unallocated — the money already spoken for) and sits second in the tab bar (Home · Committed · Ledger · Owed). It opens with a one-line summary: this cycle's committed total (the SAME cyclePlanDeduction math the hero's Plan dues row uses, so the tab proves the hero's number) + the % of free cash it speaks for. The plans list is SECTIONED by kind — Expenses (amber) / Saving for (blue) — inside the One-offs/Recurring tabs, each section label carrying the count + subtotal, goal rows tint their amount blue, and EMPTY sections are hidden. The add sheet gains the 'This is for' toggle (Expense default / Saving for); p.kind rides the record ('goal' or 'expense') and old plans (no field) migrate to expense. Smoke PART 39: the sections render with subtotals, the summary quotes cyclePlanDeduction + freeNet, and the kind round-trips through addPlan",
+          '<h2>Committed</h2>' in html and 'data-tab="money">Committed</button>' in html
+          and 'data-tab="home">Home</button>' in html and 'data-tab="ledger">Ledger</button>' in html and 'data-tab="owed">Owed</button>' in html
+          and html.index('data-tab="home"') < html.index('data-tab="money"') < html.index('data-tab="ledger"') < html.index('data-tab="owed"')
+          and 'id="committedSum"' in html and 'id="committedSumV"' in html and 'id="committedSumSub"' in html
+          and '.sect{display:flex;align-items:baseline;justify-content:space-between' in html
+          and '.sect.goal .lab{color:#8fb0ff}' in html and '.pl-amt.goal{color:#8fb0ff}' in html
+          and '.sumrow{display:flex;align-items:flex-end' in html
+          and 'id="p_kind_expense"' in html and 'id="p_kind_goal"' in html
+          and "function planKind(p) {" in js and "p.kind === 'goal'" in js
+          and "var kind = data.kind === 'goal' ? 'goal' : 'expense';" in js
+          and "kind: kind," in js
+          and "kindSel = 'expense'" in js and "kind: kindSel" in js
+          and "committedSum" in js and "cyclePlanDeduction()" in js
+          and "'73.96': [" in js)
     check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
           "function seedPayTo()" in js
           and "function seedPayWith()" in js
