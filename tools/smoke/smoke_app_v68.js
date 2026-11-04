@@ -2687,6 +2687,54 @@ waitReady().then(async function (F) {
       F.state.cbCardsOpen = false; // leave the default state for any later render
       F.renderCycleBlock();
 
+      // ============ PART 38: v73.94 - the Insights card is a 3-cell cycle strip ============
+      // (boss: 'tweaks: (headroom) x/day, days left, spent in app today / no more
+      // more details / move the card above the coach card'). The Today / Next-7-days
+      // / This-cycle text blocks are GONE; the card renders exactly 3 cells:
+      // Headroom (net free / cycleDaysLeft, /day unit) + Days left this cycle +
+      // Spent in app today (only when todaySpend > 0). The card title is dynamic
+      // ('This cycle - OCT 15 -> NOV 14'), the treat input control is gone, and
+      // the coach's good branch quotes the REMAINDER of today's headroom.
+      console.log('\n== PART 38: v73.94 - the 3-cell cycle strip =');
+      var d38 = F.insightsData();
+      ok(!!d38, 'v73.94: the seed state yields insights data');
+      var freeN38 = d38.freeNet != null ? d38.freeNet : d38.free;
+      var hDays38 = d38.cycleDaysLeft || d38.daysLeft;
+      var hDaily38 = hDays38 > 0 ? Math.round(Math.max(0, freeN38) / hDays38 * 100) / 100 : 0;
+      F.renderInsights();
+      var ins38 = String(byIdStub('insBody').innerHTML || '');
+      ok(ins38.indexOf('class="pace"') >= 0, 'v73.94: the strip renders in the .pace row');
+      ok(ins38.indexOf('Headroom') >= 0 && ins38.indexOf('Days left this cycle') >= 0,
+        'v73.94: the two always-on cells render (Headroom + Days left this cycle)');
+      ok(ins38.indexOf(money22(hDaily38)) >= 0 && ins38.indexOf('/day') >= 0,
+        'v73.94: the Headroom cell quotes the per-cycle daily math (' + money22(hDaily38) + '/day, net free ' + money22(freeN38) + ' / ' + hDays38 + ' days)');
+      ok(ins38.indexOf('>' + hDays38 + '<') >= 0, 'v73.94: the Days-left cell quotes cycleDaysLeft (' + hDays38 + ')');
+      if (d38.todaySpend > 0) {
+        ok(ins38.indexOf('Spent in app today') >= 0 && ins38.indexOf(money22(d38.todaySpend)) >= 0,
+          'v73.94: the Spent-in-app-today cell renders with today\u2019s spend (' + money22(d38.todaySpend) + ')');
+      }
+      // the dynamic title names the cycle window
+      var dcy38 = d38.cycle;
+      var title38 = dcy38 && dcy38.start && dcy38.end ? 'This cycle \u00b7 ' + F.dayMonth(dcy38.start) + ' \u2192 ' + F.dayMonth(dcy38.end) : 'This cycle';
+      ok(String(byIdStub('insTitle').textContent || '') === title38,
+        'v73.94: the card title names the cycle window (got ' + JSON.stringify(String(byIdStub('insTitle').textContent || '')) + ', want ' + JSON.stringify(title38) + ')');
+      // the old block copy is GONE (no more details)
+      var appSrc38 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'app.js'), 'utf8');
+      ok(appSrc38.indexOf('the treats are now a memory') < 0 && appSrc38.indexOf('You win this round') < 0 && appSrc38.indexOf('the paycheque is dying a young death') < 0,
+        'v73.94: the old block one-liners are deleted from app.js (treat check / 7-day / cycle copy)');
+      ok(appSrc38.indexOf('mealEdit') < 0, 'v73.94: the treat input control is gone from the app (mealEdit no longer referenced)');
+      // the DOM order: the strip card sits ABOVE the coach card (index.html)
+      var html38 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
+      ok(html38.indexOf('id="insights"') < html38.indexOf('id="coach"'), 'v73.94: the strip card precedes the coach card in index.html');
+      ok(html38.indexOf('id="mealEdit"') < 0, 'v73.94: the treat input is gone from the card header (index.html)');
+      // the coach's good branch quotes the REMAINDER of today's headroom
+      F.renderCoach();
+      var coachSub38 = String(byIdStub('coachSub').textContent || '');
+      var hDailySub38 = hDays38 > 0 ? Math.round(Math.max(0, freeN38) / hDays38 * 100) / 100 : 0;
+      var remain38 = Math.round(Math.max(0, hDailySub38 - d38.todaySpend) * 100) / 100;
+      ok(coachSub38.indexOf('left of today\u2019s headroom') >= 0 && coachSub38.indexOf(money22(remain38)) >= 0,
+        'v73.94: the coach sub quotes the headroom REMAINDER (' + money22(remain38) + ' = ' + money22(hDailySub38) + ' - ' + money22(d38.todaySpend) + ') \u2014 got: ' + JSON.stringify(coachSub38));
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

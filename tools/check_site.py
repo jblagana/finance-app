@@ -1080,11 +1080,13 @@ def main():
           and "They do not get less real just because you keep not looking at them." in js
           and "Progress is progress, I suppose." in js
           and "You have not changed, and that is its own kind of loyalty." in js
-          # (c) the insights one-liners (Today / 7-days / cycle / month)
-          and "the treats are now a memory" in js
-          and "You win this round; do not celebrate yet." in js
-          and "the paycheque is dying a young death" in js
-          and "Suspiciously fine — do not log anything else." in js
+          # (c) the insights one-liners: v73.94 deleted the Today / 7-days /
+          # cycle / month text blocks (the 3-cell strip replaced them) - the
+          # pin now asserts the STRIP cells + the coach's headroom-remainder
+          # reference (the roast copy that survived the cut)
+          and "Days left this cycle" in js
+          and "Spent in app today" in js
+          and "left of today’s headroom" in js
           # (d) the recap one-liner
           and "worth a look, or worth a therapist?" in js
           # (e) the smoke can drive the real render
@@ -1189,8 +1191,8 @@ def main():
           and "return dl > 0 ? dl : 1;" in js  # the guard: never zero/negative (the cycle end is today at the latest)
           and "var hDays = d.cycleDaysLeft || daysLeft;" in js  # the render uses the cycle days (calendar when absent)
           and "var hDaily = hDays > 0 ? r2(Math.max(0, free) / hDays) : 0;" in js  # the per-cycle daily
-          and "this cycle (to ' + dayMonth(d.cycle.end) + ')'" in js  # the line names the cycle end
-          and "else if (hDaily >= meal) {" in js  # the treat check runs on the per-cycle daily
+          and "Days left this cycle" in js  # v73.94: the cycle days feed the strip's Days-left cell (the old "this cycle (to ...)" line is deleted)
+          and "hDailySub" in js  # v73.94: the per-cycle daily now feeds the strip + the coach remainder (the treat check is deleted)
           and "'73.11': [" in js)
     check("v73.12 (user: 'the cards owed should be subtracted already from the liquid cash to know how much cash is free/unallocated'): the base snapshot commits the FULL card balance (free = liquid - owed - other outflows), not just the prepay-to-target slice. The v72.42 overlay rule (charge -a free, payoff 0) is unchanged - it is exactly what keeps the identity live (a charge commits free by the full amount; the payoff only drops raw liquid + owed)",
           "var cardOwed = (month === months[0]) ? baseCardTotal(b) : 0;" in js  # the base month commits the full owed
@@ -1645,7 +1647,7 @@ def main():
           and "function prepayRowChip(attr) {" in js  # v73.19: the prepay row-chip's handler body
           and "function salaryRowChip(attr) {" in js  # v73.19: the salary row-chip's handler body
           and ".rowchip{" in html  # v73.20: the row-chip pill styling (the plan-due design for every action row)
-          and "insBlock('This cycle'" in js
+          and "This cycle" in js  # v73.94: the cycle label is the strip title (insBlock deleted)
           # v73.57: the v72.45 salDelta/proration lines are GONE (the 2-month
           # step chart replaced the base-matrix plot) — the salary now lands
           # as a step event on the next payday (the v73.57 pin asserts it).
@@ -1894,6 +1896,21 @@ def main():
           and ".cbrow.cbcards{cursor:pointer" in html
           and ".cbrow.cbplans .chev.open,.cbrow.cbcards .chev.open{transform:rotate(90deg)}" in html
           and "'73.93': [" in js)
+    check("v73.94 (boss: 'tweaks: (headroom) x/day, days left, spent in app today / no more more details / move the card above the coach card'): the Insights card is a 3-CELL CYCLE STRIP (approved mockup v4) - Headroom (net free / cycleDaysLeft, green, red when free is negative, a /day unit) + Days left this cycle + Spent in app today (only when todaySpend > 0). The Today / Next-7-days / This-cycle text blocks (treat check, 7-day one-liners, cycle detail) are DELETED - no more details; the treat input control is gone from the card header; the card title is dynamic ('This cycle - OCT 15 -> NOV 14'); the card moved ABOVE the coach card in index.html; the coach's good branch now references the REMAINDER of today's headroom (hDaily - todaySpend) instead of quoting the daily number twice (one number, one home). Smoke PART 38: the strip renders the 3 cells with the seed's real math, the title names the cycle, the coach sub quotes the remainder, and the old block copy is gone",
+          "var hDays = d.cycleDaysLeft || daysLeft;" in js
+          and "var hDaily = hDays > 0 ? r2(Math.max(0, free) / hDays) : 0;" in js
+          and "class=\"p\"><div class=\"k\">Headroom</div>" in js
+          and "<span class=\"unit\">/day</span>" in js
+          and "Days left this cycle" in js
+          and "Spent in app today" in js
+          and "id=\"insTitle\"" in html
+          and "left of today’s headroom" in js
+          and "var hDailySub = hDaysSub > 0 ? r2(Math.max(0, freeN) / hDaysSub) : 0;" in js
+          and ".pace .p .v .unit{font-size:9.5px" in html
+          and "id=\"insights\" class=\"card\"" in html
+          and "id=\"coach\" class=\"card coach\"" in html
+          and html.index('id="insights"') < html.index('id="coach"')
+          and "'73.94': [" in js)
     check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
           "function seedPayTo()" in js
           and "function seedPayWith()" in js

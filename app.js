@@ -3568,12 +3568,6 @@
     return '<div class="adjbar"><span class="note">live view: includes ' + money(state.adj.free) + ' recorded in this app</span>' +
       '<button class="mini" id="resetAdj" type="button" title="Stop adjusting and trust the numbers in Settings">reset to my numbers</button></div>';
   }
-  function insBlock(title, lines, cls, text) {
-    var l = '';
-    (lines || []).forEach(function (x) { l += '<div class="ins-line">' + x + '</div>'; });
-    var v = text ? '<div class="verdict ' + cls + '">' + esc(text) + '</div>' : '';
-    return '<div class="ins-block"><div class="ins-t">' + esc(title) + '</div>' + l + v + '</div>';
-  }
   function planWhen(ds) {
     var d = diffDays(todayISO(), ds);
     if (d === 0) return 'Today';
@@ -4856,7 +4850,13 @@
     } else {
       cls = 'good';
       head = hi + 'you are on track. You can spend up to ' + money(d.daily) + ' today — spend it, you have earned the guilt.';
-      sub = 'Next 7 days stay covered; an eat-out (about ' + money(d.meal) + ') is safe. Go on, the app is watching.';
+      // v73.94: the daily number's ONE home is the strip's Headroom cell (above
+      // this card) - the coach only references the REMAINDER of today's headroom,
+      // computed the SAME way the strip does (net free across the cycle days).
+      // The treat check (the meal line) is gone with the detail blocks.
+      var hDaysSub = d.cycleDaysLeft || d.daysLeft;
+      var hDailySub = hDaysSub > 0 ? r2(Math.max(0, freeN) / hDaysSub) : 0; // freeN = the net free (line above)
+      sub = 'You still have ' + money(r2(Math.max(0, hDailySub - d.todaySpend))) + ' left of today’s headroom — spend it. Go on, the app is watching.';
     }
     // v73.23 (boss: 'for the how much is owed, show only what is owed within
     // the cycle'): the "On repeat" line is CYCLE-SCOPED — only the recurring
@@ -5192,92 +5192,36 @@
   function renderInsights() {
     var wrap = byId('insights'), body = byId('insBody');
     if (!wrap || !body) return;
-    var mealEl = byId('mealEdit');
-    if (mealEl && !mealEl.value) mealEl.value = mealBudget();
     var d = insightsData();
     var he = byId('homeEmpty');
     if (he) he.style.display = d ? 'none' : '';
     if (!d) { wrap.style.display = 'none'; return; }
+    // v73.94: the card title names the window the strip measures.
+    var it = byId('insTitle');
+    if (it) it.textContent = d.cycle && d.cycle.start && d.cycle.end ? 'This cycle \u00b7 ' + dayMonth(d.cycle.start) + ' \u2192 ' + dayMonth(d.cycle.end) : 'This cycle';
     wrap.style.display = '';
     var s = d.s, daysLeft = d.daysLeft, meal = d.meal;
     // v73.16: the headroom runs on the NET free (raw minus the cycle's plan
     // share) — the same number the hero + coach quote.
     var free = d.freeNet != null ? d.freeNet : d.free;
-    var blocks = '';
 
-    // ---- Today: daily headroom + treat check
+    // ---- v73.94 (boss: 'no more details' + approved mockup v4): the three
+    // text blocks (Today / Next 7 days / This cycle) are DELETED — the card is
+    // a 3-CELL STRIP: Headroom ₱/day · Days left this cycle · Spent in app
+    // today. The treat check + the 7-day/cycle one-liners lived in the blocks
+    // and the coach head/sub; the coach now quotes the remainder of today's
+    // headroom instead. The card also moved ABOVE the coach card (index.html).
     // v73.11 (user: 'base it per cycle too'): the headroom is per CYCLE — the
-    // free cash has to last until the NEXT salary (the 14th), not the calendar
+    // free cash has to last until the NEXT salary (the 15th), not the calendar
     // month end. cycleDaysLeft falls back to the calendar days when there is
     // no cycle, so the old text is the no-cycle case.
     var todaySpend = d.todaySpend;
-    var daily = d.daily;
     var hDays = d.cycleDaysLeft || daysLeft;
     var hDaily = hDays > 0 ? r2(Math.max(0, free) / hDays) : 0;
-    var cycLbl = d.cycle && d.cycle.end ? ' this cycle (to ' + dayMonth(d.cycle.end) + ')' : '';
-    var tLines = ['Headroom: <b>' + money(hDaily) + '/day</b> left across the next ' + hDays + ' day' + (hDays === 1 ? '' : 's') + '.' + cycLbl];
-    if (todaySpend > 0) tLines.push('Spent in this app today: <b>' + money(todaySpend) + '</b>.');
-    var tCls, tTxt;
-    if (free < 0) { tCls = 'bad'; tTxt = 'No room for treats — free cash is negative, which means the treats are now a memory. Back the cards first.'; }
-    else if (hDaily >= meal) { tCls = 'good'; tTxt = 'Eat out OK: a ' + money(meal) + ' treat still leaves you on track (about ' + money(r2(hDaily - meal)) + ' under your daily headroom). Spend it, you have earned the guilt.'; }
-    else if (hDaily > 0) { tCls = 'warn'; tTxt = 'Tight today: only ' + money(hDaily) + '/day left — a ' + money(meal) + ' treat would overshoot by ' + money(r2(meal - hDaily)) + '. We can do this, we just can\'t do it today.'; }
-    else { tCls = 'warn'; tTxt = 'Nothing left after this month\'s commitments. The wallet is at zero, the willpower should match.'; }
-    blocks += insBlock('Today', tLines, tCls, tTxt);
-
-    // ---- Next 7 days: plans + card prepay
-    var items = d.items;
-    var laterCount = d.laterCount, laterAmt = d.laterAmt;
-    var prepayDay = d.prepayDay, prepayIn = d.prepayIn, prepayAmt = d.prepayAmt;
-    var weekTotal = d.weekCost;
-    var wLines = items.length
-      ? items.map(function (it) { return esc(planWhen(it.date)) + ' · ' + esc(it.label) + ' — <b>' + money(it.amt) + '</b>'; })
-      : ['Nothing planned for the next 7 days — a quiet stretch.'];
-    if (laterCount) wLines.push('Later in the month: ' + laterCount + ' more plan' + (laterCount === 1 ? '' : 's') + ', ' + money(r2(laterAmt)) + ' total.');
-    if (prepayIn === 0 && prepayAmt > 0) wLines.push('<b>Prepay day is today</b> — ' + money(prepayAmt) + ' is due before the ' + (s.cutoff_day || 15) + '.');
-    else if (prepayIn > 0 && prepayIn <= 7 && prepayAmt > 0) wLines.push('Set aside <b>' + money(r2(prepayAmt / prepayIn)) + '/day</b> until the ' + ordinal(prepayDay) + ' prepay.');
-    var wCls, wTxt;
-    if (!weekTotal) { wCls = 'good'; wTxt = 'No cost coming up — free cash stays where it is. Suspicious, but fine.'; }
-    else if (weekTotal <= free) { wCls = 'good'; wTxt = 'Covered: ' + money(r2(free - weekTotal)) + ' left after the next 7 days. You win this round; do not celebrate yet.'; }
-    else { wCls = 'bad'; wTxt = 'Over free cash by ' + money(r2(weekTotal - free)) + ' — trim a plan, or enjoy dipping into the floor.'; }
-    blocks += insBlock('Next 7 days', wLines, wCls, wTxt);
-    // ---- This salary cycle (the 15th) — v72.45 ----
-    var cyc = d.cycle;
-    if (cyc && cyc.expected > 0) {
-      var cLines = [];
-      cLines.push('Cycle: <b>' + dayMonth(cyc.start) + ' – ' + dayMonth(cyc.end) + '</b> — ' + cyc.elapsed + ' of ' + cyc.days + ' days.');
-      cLines.push(cyc.received
-        ? 'Salary <b>' + money(cyc.received.amount) + '</b> — in on ' + dayMonth(cyc.received.date) + '.'
-        : 'Salary <b>' + money(cyc.expected) + '</b> — due on the ' + ordinal(cyc.sday) + '.');
-      cLines.push('Spent this cycle: <b>' + money(cyc.spent) + '</b> (' + Math.round((cyc.spent / cyc.expected) * 100) + '% of the salary).');
-      if (d.planDeduct > 0) cLines.push('Plans landing in this cycle: <b>' + money(d.planDeduct) + '</b> — already deducted from your free cash.'); // v73.16
-      if (cyc.elapsed >= 7) cLines.push('At this pace the cycle ends with <b>' + money(cyc.projectedNet) + '</b> of the salary.');
-      if (cyc.prev && (cyc.prev.spent > 0 || cyc.prev.expected > 0)) {
-        cLines.push('Last cycle (' + dayMonth(cyc.prev.start) + ' – ' + dayMonth(cyc.prev.end) + '): spent <b>' + money(cyc.prev.spent) + '</b>, kept ' + money(cyc.prev.net) + '.');
-      }
-      var cCls, cTxt;
-      if (cyc.elapsed >= 7 && cyc.projectedNet < 0) { cCls = 'bad'; cTxt = 'This pace burns the salary before the cycle ends — the paycheque is dying a young death. Slow down or cut a plan.'; }
-      else if (cyc.spent > 0.6 * cyc.expected && cyc.elapsed < 0.6 * cyc.days) { cCls = 'warn'; cTxt = 'You are past 60% of the salary with 60% of the cycle still to go. The salary does not know it is already half gone; do not tell it.'; }
-      else { cCls = 'good'; cTxt = 'On pace — the salary covers this cycle at the current spend. Do not let it hear you saying that.'; }
-      blocks += insBlock('This cycle', cLines, cCls, cTxt);
-    }
-
-    body.innerHTML = blocks;
-  }
-  function monthBlock(d) {
-    var s = d.s;
-    var mLines = [];
-    mLines.push('Committed on the sheet: <b>' + money(s.committed || 0) + '</b>.');
-    var monthPlans = d.monthPlans, monthPlanCount = d.monthPlanCount;
-    if (monthPlanCount) mLines.push('Planned here this month: <b>' + money(monthPlans) + '</b> (' + monthPlanCount + ' item' + (monthPlanCount === 1 ? '' : 's') + ').');
-    if (s.salary) mLines.push('Salary this cycle: <b>' + money(s.salary) + '</b>.');
-    var spentM = d.spentM, pace = d.pace;
-    mLines.push('App spend so far: <b>' + money(spentM) + '</b> (about ' + money(pace) + '/day).');
-    var freeAfterPace = d.freeAfterPace;
-    var mCls, mTxt;
-    if (freeAfterPace < 0) { mCls = 'warn'; mTxt = 'At this pace you\'d need ' + money(r2(-freeAfterPace)) + ' more than your free cash — slow down, or cut plans, or invent money. The first two are easier.'; }
-    else if (monthPlanCount && monthPlans > freeAfterPace) { mCls = 'warn'; mTxt = 'Careful: doing all ' + monthPlanCount + ' planned item' + (monthPlanCount === 1 ? '' : 's') + ' would leave ' + money(r2(freeAfterPace - monthPlans)) + ' free — that\'s under your headroom. The plans are not the enemy; the volume of them is.'; }
-    else { mCls = 'good'; mTxt = 'On track: at this pace about ' + money(freeAfterPace) + ' stays free at month end' + (monthPlanCount ? ', before your ' + monthPlanCount + ' plan' + (monthPlanCount === 1 ? '' : 's') : '') + '. Suspiciously fine — do not log anything else.'; }
-    return insBlock('This month', mLines, mCls, mTxt);
+    var cells = '<div class="p"><div class="k">Headroom</div><div class="v"' + (free < 0 ? ' style="color:var(--bad)"' : ' style="color:var(--ok)"') + '>' + money(hDaily) + '<span class="unit">/day</span></div></div>'
+      + '<div class="p"><div class="k">Days left this cycle</div><div class="v">' + hDays + '</div></div>';
+    if (todaySpend > 0) cells += '<div class="p"><div class="k">Spent in app today</div><div class="v">' + money(todaySpend) + '</div></div>';
+    body.innerHTML = '<div class="pace">' + cells + '</div>';
   }
   // v73.75 (boss-approved mockup_compact_livenumbers.html): renderProjection
   // is GONE — the Money tab's Projection card (and the overlay reset bar that
@@ -8832,12 +8776,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.93, live: new Date(2026, 10, 3, 23, 26) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.94, live: new Date(2026, 10, 4, 9, 36) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.94': [
+      'The cycle card is now a 3-cell strip \u2014 Headroom (per day) \u00b7 Days left this cycle \u00b7 Spent in app today \u2014 and it sits above the coach card. The treat check and the 7-day/cycle detail lines are gone (no more details); the coach now quotes how much of today\u2019s headroom is left.'
+    ],
     '73.93': [
       'The hero card\u2019s Cards owed row is now expandable \u2014 tap it to see each card\u2019s live balance, limit, and its own due date; tap again to fold it back. Collapsed by default.'
     ],
@@ -9981,6 +9928,8 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     getPlanLinkRef: function () { return state.planLinkRef; },
     coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut); v73.68: the cycle-window + no-4-cap assertions
     insightsData: insightsData, // v73.2: the insight math (coachRows' input)
+    renderInsights: renderInsights, // v73.94: the 3-cell strip render (smoke PART 38 drives it)
+    dayMonth: dayMonth, // v73.94: the date label (smoke PART 38 builds the expected title)
     // v73.75: renderProjection is GONE with the card (the v73.42 export dies too)
     adjActive: adjActive, // v73.42: is the overlay live (the adj bar's gate)
     adjEmpty: adjEmpty, // v73.45: is the overlay fully empty (the delete/edit no-op guard)
@@ -10315,13 +10264,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     owedBindEvents();
     bindConfirm();
 
-    var mealEl = byId('mealEdit');
-    if (mealEl) mealEl.onchange = function () {
-      var v = parseFloat(mealEl.value);
-      if (v > 0) { try { localStorage.setItem(LS_MEAL, String(v)); } catch (e2) {} }
-      else mealEl.value = mealBudget();
-      render();
-    };
+    // v73.94: the treat input is gone with the Insights detail blocks (its boot binding + the card-header control were deleted here).
     var amtEl = byId('f_amount');
     if (amtEl) amtEl.addEventListener('input', function () { addAmtEq(amtEl); updateChargeHint(); updatePlanLinkChip(); });
     var noteEl = byId('f_note'); // v68 item 1: learned merchant→category prefill

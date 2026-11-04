@@ -598,6 +598,7 @@ padding:7px 14px;font-size:12.5px}
 .pace .p{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 8px;text-align:center}
 .pace .p .k{color:var(--mut);font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;line-height:1.35}
 .pace .p .v{font-size:14px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+.pace .p .v .unit{font-size:9.5px;font-weight:600;color:var(--mut);margin-left:1px}
 /* ---- Phase 3 motion: pane crossfade, slide-in, shimmer ---- */
 @keyframes paneIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -768,6 +769,17 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
          just no longer reachable from a Home card (the coach's note carries
          the month story). -->
 
+    <!-- v73.94 (boss: approved mockup v4): the cycle strip (3 cells -
+         Headroom x/day, Days left this cycle, Spent in app today) moved ABOVE
+         the coach card. The treat check / 7-day / cycle detail blocks are gone
+         (no more details) - the coach references the headroom remainder. -->
+    <section id="insights" class="card" style="display:none">
+      <div class="ins-top">
+        <h2 style="margin-top:0" id="insTitle">This cycle</h2>
+      </div>
+      <div id="insBody"></div>
+    </section>
+
     <!-- v73.14: Home slim — the due strip is gone (it previews the Money tab's
          "Coming up" list, now two taps away) and the two AI cards are merged:
          the coach's note is the opening block INSIDE the coach card, so Home
@@ -787,15 +799,7 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       <div id="coachActs" class="coach-acts"></div>
     </section>
 
-    <section id="insights" class="card" style="display:none">
-      <div class="ins-top">
-        <h2 style="margin-top:0">Insights</h2>
-        <div class="ins-ctrls">
-          <label class="ins-meal" for="mealEdit">treat ≈ ₱<input id="mealEdit" type="number" min="0" step="50" inputmode="numeric"></label>
-        </div>
-      </div>
-      <div id="insBody"></div>
-    </section>
+
   </div>
 
   <div id="tab-money" style="display:none">
