@@ -1085,7 +1085,7 @@ def main():
           # pin now asserts the STRIP cells + the coach's headroom-remainder
           # reference (the roast copy that survived the cut)
           and "Days left this cycle" in js
-          and "Spent in app today" in js
+          and "Spent today" in js  # v73.95: renamed from 'Spent in app today'
           and "left of today’s headroom" in js
           # (d) the recap one-liner
           and "worth a look, or worth a therapist?" in js
@@ -1902,7 +1902,6 @@ def main():
           and "class=\"p\"><div class=\"k\">Headroom</div>" in js
           and "<span class=\"unit\">/day</span>" in js
           and "Days left this cycle" in js
-          and "Spent in app today" in js
           and "id=\"insTitle\"" in html
           and "left of today’s headroom" in js
           and "var hDailySub = hDaysSub > 0 ? r2(Math.max(0, freeN) / hDaysSub) : 0;" in js
@@ -1911,6 +1910,12 @@ def main():
           and "id=\"coach\" class=\"card coach\"" in html
           and html.index('id="insights"') < html.index('id="coach"')
           and "'73.94': [" in js)
+    check("v73.95 (boss: 'why is there NO spent cell - fix it; rename to spent today; headroom x/day font a lil smaller so it fits one row'): the Spent-today cell is ALWAYS rendered (no more conditional hiding on todaySpend > 0) and renamed from 'Spent in app today' to 'Spent today'; the Headroom value gets the .sm size (12px, white-space:nowrap) so 'PHP X,XXX.XX/day' fits one row. Smoke PART 38: the Spent-today cell always renders with today's spend, the old label is gone, the Headroom value uses .sm",
+          '<div class="k">Spent today</div>' in js
+          and "if (todaySpend > 0) cells" not in js  # the conditional hiding is gone (always rendered)
+          and 'class="v sm"' in js
+          and ".pace .p .v.sm{font-size:12px;white-space:nowrap}" in html
+          and "'73.95': [" in js)
     check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
           "function seedPayTo()" in js
           and "function seedPayWith()" in js

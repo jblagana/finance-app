@@ -2709,10 +2709,13 @@ waitReady().then(async function (F) {
       ok(ins38.indexOf(money22(hDaily38)) >= 0 && ins38.indexOf('/day') >= 0,
         'v73.94: the Headroom cell quotes the per-cycle daily math (' + money22(hDaily38) + '/day, net free ' + money22(freeN38) + ' / ' + hDays38 + ' days)');
       ok(ins38.indexOf('>' + hDays38 + '<') >= 0, 'v73.94: the Days-left cell quotes cycleDaysLeft (' + hDays38 + ')');
-      if (d38.todaySpend > 0) {
-        ok(ins38.indexOf('Spent in app today') >= 0 && ins38.indexOf(money22(d38.todaySpend)) >= 0,
-          'v73.94: the Spent-in-app-today cell renders with today\u2019s spend (' + money22(d38.todaySpend) + ')');
-      }
+      // v73.95 (boss: 'why is there NO spent cell — fix it; rename to Spent
+      // today'): the cell is ALWAYS rendered (no conditional hiding) and the
+      // label is "Spent today".
+      ok(ins38.indexOf('Spent today') >= 0 && ins38.indexOf(money22(d38.todaySpend)) >= 0,
+        'v73.95: the Spent-today cell ALWAYS renders with today\u2019s spend (' + money22(d38.todaySpend) + ')');
+      ok(ins38.indexOf('Spent in app today') < 0, 'v73.95: the old label is gone');
+      ok(ins38.indexOf('class="v sm"') >= 0, 'v73.95: the Headroom value uses the .sm size (fits one row)');
       // the dynamic title names the cycle window
       var dcy38 = d38.cycle;
       var title38 = dcy38 && dcy38.start && dcy38.end ? 'This cycle \u00b7 ' + F.dayMonth(dcy38.start) + ' \u2192 ' + F.dayMonth(dcy38.end) : 'This cycle';

@@ -5218,9 +5218,13 @@
     var todaySpend = d.todaySpend;
     var hDays = d.cycleDaysLeft || daysLeft;
     var hDaily = hDays > 0 ? r2(Math.max(0, free) / hDays) : 0;
-    var cells = '<div class="p"><div class="k">Headroom</div><div class="v"' + (free < 0 ? ' style="color:var(--bad)"' : ' style="color:var(--ok)"') + '>' + money(hDaily) + '<span class="unit">/day</span></div></div>'
-      + '<div class="p"><div class="k">Days left this cycle</div><div class="v">' + hDays + '</div></div>';
-    if (todaySpend > 0) cells += '<div class="p"><div class="k">Spent in app today</div><div class="v">' + money(todaySpend) + '</div></div>';
+    // v73.95 (boss: 'why is there NO spent cell — fix it; rename to Spent today'):
+    // the cell is ALWAYS rendered (0.00 on a no-spend day — the strip is a fixed
+    // 3-cell strip, no conditional hiding) and the label is "Spent today".
+    // The headroom value gets the .sm size so '₱X,XXX.XX/day' fits one row.
+    var cells = '<div class="p"><div class="k">Headroom</div><div class="v sm"' + (free < 0 ? ' style="color:var(--bad)"' : ' style="color:var(--ok)"') + '>' + money(hDaily) + '<span class="unit">/day</span></div></div>'
+      + '<div class="p"><div class="k">Days left this cycle</div><div class="v">' + hDays + '</div></div>'
+      + '<div class="p"><div class="k">Spent today</div><div class="v">' + money(todaySpend) + '</div></div>';
     body.innerHTML = '<div class="pace">' + cells + '</div>';
   }
   // v73.75 (boss-approved mockup_compact_livenumbers.html): renderProjection
@@ -8776,12 +8780,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.94, live: new Date(2026, 10, 4, 9, 36) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.95, live: new Date(2026, 10, 4, 10, 22) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.95': [
+      'The cycle strip\u2019s third cell now always shows \u2014 it is \u201cSpent today\u201d (shorter label, and it no longer hides itself on no-spend days) \u2014 and the Headroom number is a little smaller so it fits on one row.'
+    ],
     '73.94': [
       'The cycle card is now a 3-cell strip \u2014 Headroom (per day) \u00b7 Days left this cycle \u00b7 Spent in app today \u2014 and it sits above the coach card. The treat check and the 7-day/cycle detail lines are gone (no more details); the coach now quotes how much of today\u2019s headroom is left.'
     ],
