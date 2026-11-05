@@ -481,7 +481,7 @@ def main():
           and "function planHTML(p, opts) {" in js
           and "var OCC_CAP = 5;" in js and "'+N more'" not in js
           and "data-grp=" in js and "planOpen[" in js
-          and "class=\"plrow grp" in js and "class=\"plrow oneoff\"" in js
+          and "class=\"plrow grp" in js and "'plrow oneoff'" in js  # v73.99: the one-off class is now the rowClsO ternary (paid → 'prow')
           and "data-delp" in js and "data-editp" in js
           and "openSheet('planSheet')" in js
           and "planHTML: planHTML" in js
@@ -1943,6 +1943,19 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v73.99 (boss-approved mockup_committed_paid.html: 'for paid expense, move them to a hidden section'): the Committed tab files its receipts — a one-off that is FULLY paid (the planRef sum covers the amount, the same >= 100% rule the chip uses) leaves the live list and collects under a collapsed Paid bar at the bottom of the One-offs tab (count · total, muted strikethrough .prow rows, tap to expand; paidOpen in-memory, resets on reload, like the hero's Cards row). Partly-paid one-offs STAY live with the ◐ pill (the remainder is still owed); recurring plans STAY too (their next due is live — the per-plan 'N paid' chip is their record, no occurrence rows under the bar); empty Paid state → the bar doesn't render. The .prow rows are the planHTML rows themselves, so ✎/✕ bind through the same [data-…] walk. Smoke PART 42: baseline bar absent, a full planRef payment raises the bar (1 · ₱ 2,000.00) with the .prow row under it (✎ still opens the edit sheet), expand flips .open on bar + rows, a partial stays live above the bar with the ◐ pill (bar total unchanged), the Recurring tab has no bar, deleting the paid one-off drops the bar",
+          "var paidOpen = false; // v73.99" in js
+          and "function oneOffPaid(p) {" in js
+          and "var liveOneoffs = oneoffs.filter(function (p) { return !oneOffPaid(p); });" in js
+          and "var paidOneoffs = oneoffs.filter(function (p) { return oneOffPaid(p); }).reverse();" in js
+          and 'data-paidbar="1"' in js
+          and "var rowClsO = paidFullO ? 'prow' : 'plrow oneoff';" in js
+          and "pbar.onclick = function () { paidOpen = !paidOpen; renderPlans(); };" in js
+          and "setPaidOpen: function (o) { paidOpen = !!o; }" in js
+          and ".paidbar{display:flex" in html
+          and ".paidrows.open{display:block}" in html
+          and ".prow .pl-name{font-size:13.5px;font-weight:500;text-decoration:line-through}" in html
+          and "'73.99': [" in js)
     check("v73.98 (boss: 'whenever a salary is logged ahead of the next cycle, the headroom recomputes x/day based on (date of salary logged to end of next cycle)'): the headroom window is headroomWindow() — when the cycle's salary landed EARLY (cycleDataFor.received: a qualifying cash_in dated strictly inside the cycle, the second scan now catches post-payday+2 early-next-cycle paydays too), the per-day headroom + days-left run from the received date to the END OF THE NEXT cycle (new Date(m+1, sday-1)) instead of diluting across the current cycle; no early payday = the current cycle verbatim. The strip title names the early window ('Early salary ...'). Smoke PART 41: baseline window == cycle, an in-cycle early salary flips early=true / start=today / end=next cycle end / cycleDaysLeft + Headroom cell + title follow, delete falls back. ALSO: the smoke calendar drift is fixed — the seed's monthly Gym plan re-anchors to the live cycle (PART 10) and every date the PART 10/11/13/14/15 assertions need is computed from the live clock, so the suite passes on any day",
           "function headroomWindow() {" in js
           and "headroomWindow: headroomWindow" in js

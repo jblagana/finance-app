@@ -1685,8 +1685,12 @@ waitReady().then(async function (F) {
     date: past23, repeat: 'monthly', count: null, overrides: {}
   };
   var fut23 = { id: 'smoke23-gym', name: 'Gym', amount: 1200, date: fut23d, repeat: 'monthly', count: null, overrides: {} };
-  // planRefAlive walks state.plans — seed the two test series in (setPlans hook, v73.67);
-  // PART 23 is the last part, so no restore is needed.
+  // planRefAlive walks state.plans — seed the two test series in (setPlans hook, v73.67).
+  // v73.99: the "last part, no restore" note went stale when PART 42 landed
+  // AFTER PART 23 — the wipe left state.plans at [smoke23-rent, smoke23-gym]
+  // for every later part (PART 42's Calculator one-off was gone). Restore
+  // after the asserts, like PART 24.
+  var origPlans23 = F.state.plans;
   F.setPlans([rent23, fut23]);
   var fwd23 = F.planOccurrences(rent23);
   ok(fwd23.indexOf(past23) < 0, 'v73.67: the overdue occurrence is NOT in the forward window (the old bug\'s premise) — got: ' + JSON.stringify(fwd23));
@@ -1700,6 +1704,7 @@ waitReady().then(async function (F) {
     'v73.67: a link to a DELETED plan is still dead');
   ok(F.planRefAlive({ planId: 'smoke23-gym', date: fut23d, name: 'Gym', amount: 1200 }),
     'v73.67: a link to a FUTURE occurrence is still alive (the normal case, unchanged)');
+  F.setPlans(origPlans23); // v73.99: restore — the parts after 23 need the real plan set
 
   // ============ PART 24: v73.68 — the due rows span the cycle ==========
   // (boss: 'extend the plan due rows... on second thoughts, make it
@@ -2901,6 +2906,12 @@ waitReady().then(async function (F) {
       var probeOne = { id: 'p39one', name: 'MacBook Air 13', amount: 49990, date: F.shiftMonth(F.todayISO(), 1), repeat: null, count: null, overrides: {}, kind: 'goal', created: '2026-11-01T00:00:00.000Z' };
       var probeRec = { id: 'p39rec', name: 'Emergency fund', amount: 5000, date: F.shiftMonth(F.todayISO(), 1), repeat: 'monthly', count: null, overrides: {}, kind: 'goal', created: '2026-11-01T00:00:00.000Z' };
       F.state.plans.push(probeOne, probeRec);
+      // v73.99: pin the tab — PART 20 leaves it on Recurring, and this part
+      // asserts the ONE-OFFS sections. (Pre-v73.99 the subtotal assert
+      // passed by coincidence: "2,000.00" is a substring of the Gym row's
+      // "₱ 1,200.00" on the Recurring tab — the Expenses subtotal was
+      // never actually rendered when the assert ran.)
+      F.setPlanTab('one');
       F.renderPlans();
       var plans39 = String(byIdStub('plans').innerHTML || '');
       ok(plans39.indexOf('class="sect"') >= 0 && plans39.indexOf('>Expenses<') >= 0,
@@ -3031,6 +3042,71 @@ waitReady().then(async function (F) {
       var d41c = F.insightsData();
       ok(d41c.headroomWindow.early === false && d41c.headroomWindow.start === d41c.cycle.start,
         'v73.98: after deleting the early salary the window falls back to the current cycle');
+
+      // ============ PART 42: v73.99 - the Committed tab's hidden Paid section ============
+      // (boss-approved mockup_committed_paid.html: 'for paid expense, move them
+      // to a hidden section'). Fully-paid one-offs leave the live list and
+      // collect under the collapsed Paid bar (count · total, muted
+      // strikethrough rows, tap to expand); partly-paid one-offs stay live
+      // (the ◐ pill); recurring plans stay (their "N paid" chip is the
+      // record); empty Paid state → the bar doesn't render.
+      console.log('\n== PART 42: v73.99 - the Committed tab hidden Paid section =');
+      F.setPlanTab('one');
+      F.setPaidOpen(false);
+      F.renderPlans();
+      var plans42 = String(byIdStub('plans').innerHTML || '');
+      ok(plans42.indexOf('data-paidbar') < 0, 'v73.99: baseline — no paid one-offs, the Paid bar does not render');
+      // log a FULL payment for the seed's one-off (Calculator, 2000) — the
+      // explicit planRef link is the only paid proof (v73.56).
+      var idTxn42 = await F.addTxn({ kind: 'cash_out', category: 'Misc', account: 'Cash', amount: 2000, note: 'probe paid calc', date: '2026-10-09', planRef: { planId: 'pmup5dq4iunh', date: '2026-10-09', name: 'Calculator', amount: 2000 } }, { quiet: true });
+      await sleep(60);
+      F.renderPlans();
+      plans42 = String(byIdStub('plans').innerHTML || '');
+      ok(plans42.indexOf('data-paidbar="1"') >= 0, 'v73.99: a fully-paid one-off brings the Paid bar up');
+      ok(plans42.indexOf('>1 · ₱ 2,000.00<') >= 0, 'v73.99: the bar reads count · total (1 · ₱ 2,000.00)');
+      ok(plans42.indexOf('class="prow"') >= 0 && plans42.indexOf('data-delp="pmup5dq4iunh"') >= 0,
+        'v73.99: the paid row renders as the muted .prow variant (✎/✕ still bind)');
+      ok(plans42.indexOf('class="prow"') > plans42.indexOf('data-paidbar="1"'),
+        'v73.99: the paid row sits UNDER the bar, not in the live list');
+      // the row is still actionable from the Paid section: ✎ opens the edit sheet
+      F.openPlanEdit('pmup5dq4iunh', '2026-10-09');
+      ok(byIdStub('pe_name').value === 'Calculator', 'v73.99: the Paid row\'s ✎ opens the edit sheet (Calculator)');
+      // expand: the bar + rows get .open
+      F.setPaidOpen(true);
+      F.renderPlans();
+      plans42 = String(byIdStub('plans').innerHTML || '');
+      ok(plans42.indexOf('paidbar open') >= 0 && plans42.indexOf('paidrows open') >= 0,
+        'v73.99: expand — the bar and its rows carry .open (chevron flips)');
+      // a PARTIALLY paid one-off stays in the LIVE list (the ◐ pill)
+      await F.addPlan({ name: 'Probe partial', amount: 1000, date: '2026-12-20', repeat: null, kind: 'expense' });
+      var partId42 = F.state.plans[F.state.plans.length - 1].id; // addPlan resolves the idb put; the plan is in state
+      ok(!!partId42, 'v73.99: the probe partial one-off exists');
+      await F.addTxn({ kind: 'cash_out', category: 'Misc', account: 'Cash', amount: 400, note: 'probe partial pay', date: '2026-12-20', planRef: { planId: partId42, date: '2026-12-20', name: 'Probe partial', amount: 1000 } }, { quiet: true });
+      await sleep(60);
+      F.renderPlans();
+      plans42 = String(byIdStub('plans').innerHTML || '');
+      var iPart42 = plans42.indexOf('Probe partial');
+      ok(iPart42 >= 0 && plans42.indexOf('class="prow"') > iPart42,
+        'v73.99: the partly-paid one-off stays in the live list (above the bar)');
+      ok(plans42.indexOf('occ-paid partial') >= 0, 'v73.99: the partial wears the ◐ pill (400/1,000)');
+      // the bar total is unchanged (the partial is not filed under Paid)
+      ok(plans42.indexOf('>1 · ₱ 2,000.00<') >= 0, 'v73.99: the bar total counts only the fully-paid one-off');
+      // the Recurring tab: no Paid bar (recurring records stay the per-plan chips)
+      F.setPlanTab('rec');
+      F.renderPlans();
+      plans42 = String(byIdStub('plans').innerHTML || '');
+      ok(plans42.indexOf('data-paidbar') < 0, 'v73.99: the Recurring tab has no Paid bar (the "N paid" chip is the record)');
+      // delete the paid one-off → the bar disappears again
+      F.setPlanTab('one');
+      await F.deletePlan('pmup5dq4iunh');
+      await sleep(60);
+      F.renderPlans();
+      plans42 = String(byIdStub('plans').innerHTML || '');
+      ok(plans42.indexOf('data-paidbar') < 0, 'v73.99: deleting the paid one-off drops the bar (empty state)');
+      // cleanup: the probe partial + its partial payment + the full payment
+      await F.deletePlan(partId42);
+      await F.deleteTxn(idTxn42);
+      await sleep(60);
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);

@@ -152,6 +152,24 @@ button.plchip.linked{border:1px solid var(--ok);background:rgba(55,211,155,.12);
 .sect.goal .lab{color:#8fb0ff}
 .sect.goal .tot b{color:#8fb0ff}
 .pl-amt.goal{color:#8fb0ff}
+/* v73.99 (boss-approved mockup_committed_paid.html): the hidden Paid section —
+   fully-paid one-offs leave the live list and collect under a collapsed Paid
+   bar at the bottom of each tab (muted, strikethrough, tap to expand).
+   Recurring plans STAY in the list (their next due is still live) — their
+   payment record stays the existing "N paid" chip on the collapsed header.
+   Empty Paid state → the bar doesn't render at all. */
+.paidbar{display:flex;align-items:center;justify-content:space-between;padding:12px 2px 2px;margin-top:6px;border-top:1px dashed var(--line);cursor:pointer}
+.paidbar .lab{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.paidbar .tot{font-size:12.5px;color:var(--mut);font-variant-numeric:tabular-nums}
+.paidbar .chev{color:var(--mut);font-size:11px;margin-left:8px;transition:transform .15s}
+.paidbar.open .chev{transform:rotate(90deg)}
+.paidrows{display:none}
+.paidrows.open{display:block}
+.prow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 2px;border-bottom:1px solid var(--line);opacity:.55}
+.prow:last-child{border-bottom:0}
+.prow .pl-name{font-size:13.5px;font-weight:500;text-decoration:line-through}
+.prow .pl-sub{font-size:11px}
+.prow .pl-amt{font-size:13.5px;font-weight:600}
 .pltabs{display:flex;gap:6px;padding:4px;background:var(--card2);border:1px solid var(--line);border-radius:12px;margin:2px 0 10px}
 .pltab{flex:1;text-align:center;padding:9px 0;font-size:13px;font-weight:700;color:var(--mut);border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
 .pltab.on{background:var(--card);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.35)}

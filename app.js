@@ -6482,6 +6482,7 @@
   var planOpen = {}; // planId -> true while the series is expanded
 var planTab = 'one'; // v73.60: the plans list's tab — 'one' (one-offs, DEFAULT) | 'rec' (recurring)
 var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N older" second level is open (in-memory, like cbPlansMore)
+var paidOpen = false; // v73.99: the Committed tab's Paid bar — collapsed by default, in-memory (resets on reload, like the hero's Cards row)
   var coachGroupOpen = {}; // v73.23: coach-card group fold state (group key -> bool); v73.25: default closed (coachGroupOpen[g] === true means open)
   var planSig = '';  // the plan set the open-state was captured for
   // v73.18: the occurrence's PAID pill (the same proof the edit sheet shows —
@@ -6530,6 +6531,14 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       // v73.96: saving-for rows tint their amount blue (the section label
       // already carries the color; the amount follows it).
       var gclsO = p.kind === 'goal' ? ' goal' : '';
+      // v73.99 (boss-approved mockup_committed_paid.html): a one-off is
+      // FULLY paid (the planRef sum covers the amount — the same >= 100%
+      // rule the chip uses) → its row is the muted, strikethrough .prow
+      // variant; renderPlans files it under the Paid bar and keeps it OUT
+      // of the live sections. Partly paid → the row stays live with the
+      // ◐ pill (the remainder is still owed).
+      var paidO = findPaidTxn({}, { planId: p.id, date: String(p.date), name: p.name, amount: p.amount });
+      var paidFullO = !!(paidO && (Number(paidO.amount) || 0) >= (Number(p.amount) || 0) - 0.005);
       if (roO && roO.skip) {
         return '<div class="plrow oneoff skipped"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') +
           ' <span class="pill" style="font-size:10px;background:rgba(143,176,255,.14);color:#8fb0ff">skipped</span></div>' +
@@ -6538,7 +6547,10 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
           '<button class="mini" data-unskip="' + p.id + '|' + String(p.date) + '" title="Tap to unskip — the due returns to the coach card">↺</button>' +
           '<button class="mini" data-delp="' + p.id + '" title="Delete plan">✕</button></div>';
       }
-      return '<div class="plrow oneoff"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') + planPaidPill(p.id, String(p.date), p.name, p.amount) + '</div>' +
+      // v73.99: the fully-paid row — same anatomy, muted + strikethrough
+      // (.prow), filed under the Paid bar by renderPlans.
+      var rowClsO = paidFullO ? 'prow' : 'plrow oneoff';
+      return '<div class="' + rowClsO + '"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') + planPaidPill(p.id, String(p.date), p.name, p.amount) + '</div>' +
         '<div class="pl-sub">' + esc(subTxt) + '</div></div>' +
         '<div class="pl-r"><div class="pl-amt' + gclsO + '">₱ ' + amt(p.amount) + '</div></div>' +
         '<button class="mini" data-editp="' + p.id + '" data-editd="' + String(p.date) + '" title="Edit this one-off">✎</button>' +
@@ -6708,6 +6720,20 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       var tot = list.length + ' · <b>₱ ' + (Math.round(total * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</b>';
       return '<div class="sect' + (kind === 'goal' ? ' goal' : '') + '"><span class="lab">' + lab + '</span><span class="tot">' + tot + '</span></div>';
     }
+    // v73.99 (boss-approved mockup_committed_paid.html): fully-paid one-offs
+    // LEAVE the live list — they collect under the collapsed Paid bar at the
+    // bottom of the tab (count · total, muted strikethrough rows, tap to
+    // expand; in-memory state, resets on reload, like the hero's Cards row).
+    // Partly-paid one-offs STAY live (the ◐ pill — the remainder is still
+    // owed). Recurring plans STAY too: their next due is still live, and
+    // their payment record is the existing "N paid" chip on the header.
+    // Empty Paid state → the bar doesn't render at all.
+    function oneOffPaid(p) {
+      var pd = findPaidTxn({}, { planId: p.id, date: String(p.date), name: p.name, amount: p.amount });
+      return !!(pd && (Number(pd.amount) || 0) >= (Number(p.amount) || 0) - 0.005);
+    }
+    var liveOneoffs = oneoffs.filter(function (p) { return !oneOffPaid(p); });
+    var paidOneoffs = oneoffs.filter(function (p) { return oneOffPaid(p); }).reverse(); // newest first under the bar
     function listHTML(list) {
       var exp = list.filter(function (p) { return planKind(p) === 'expense'; });
       var goal = list.filter(function (p) { return planKind(p) === 'goal'; });
@@ -6721,7 +6747,19 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       '<div class="pltab' + (planTab === 'one' ? ' on' : '') + '" data-pltab="one">One-offs<span class="plcnt">' + oneoffs.length + '</span></div>' +
       '<div class="pltab' + (planTab === 'rec' ? ' on' : '') + '" data-pltab="rec">Recurring<span class="plcnt">' + recs.length + '</span></div>' +
       '</div>';
-    html += listHTML(planTab === 'one' ? oneoffs : recs);
+    html += listHTML(planTab === 'one' ? liveOneoffs : recs);
+    // the Paid bar — only on the One-offs tab (recurring paid records stay
+    // the per-plan chips), and only when something is actually paid.
+    if (planTab === 'one' && paidOneoffs.length) {
+      var paidTotal = 0;
+      paidOneoffs.forEach(function (p) { paidTotal += Number(p.amount) || 0; });
+      html += '<div class="paidbar' + (paidOpen ? ' open' : '') + '" data-paidbar="1">' +
+        '<span class="lab">Paid</span>' +
+        '<span><span class="tot">' + paidOneoffs.length + ' · ₱ ' + (Math.round(paidTotal * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span><span class="chev">▸</span></span>' +
+        '</div><div class="paidrows' + (paidOpen ? ' open' : '') + '">';
+      paidOneoffs.forEach(function (p) { html += planHTML(p, { open: false }); });
+      html += '</div>';
+    }
     el.innerHTML = html;
     // v73.96: the summary line — this cycle's committed total (the SAME
     // cyclePlanDeduction math the hero's Plan dues row uses, so the tab
@@ -6746,6 +6784,11 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
       planTab = this.getAttribute('data-pltab');
       renderPlans();
     };
+    // v73.99: the Paid bar's tap — expand/collapse (in-memory, like the
+    // hero's Cards row). The rows are the .prow one-off rows themselves,
+    // so their ✎/✕ handlers below bind through the same [data-…] walk.
+    var pbar = el.querySelector('[data-paidbar]');
+    if (pbar) pbar.onclick = function () { paidOpen = !paidOpen; renderPlans(); };
     var grps = el.querySelectorAll('[data-grp]');
     for (var g = 0; g < grps.length; g++) grps[g].onclick = function (e) {
       var id = this.getAttribute('data-grp');
@@ -8896,12 +8939,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.98, live: new Date(2026, 10, 5, 19, 41) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.99, live: new Date(2026, 10, 5, 23, 4) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.99': [
+      'Committed now files its receipts: a one-off that is fully paid leaves the live list and collects under a collapsed Paid bar at the bottom of the tab (count · total, muted and strikethrough — tap it to expand, tap again to fold). Partly-paid one-offs stay in the list with their ◐ pill, and recurring plans stay too (their next due is still live — the "N paid" chip on the plan is their record). The bar hides itself when nothing is paid.'
+    ],
     '73.98': [
       'The cycle strip now notices an early payday: when your salary lands ahead of the next cycle, the Headroom per day and the days-left count run from the day the money arrived to the end of the NEXT cycle — the number stays honest instead of diluting across the old window (the card title says "Early salary" while it does).',
       'The smoke calendar stopped drifting: the test seed re-anchors its monthly plan to the live cycle, so the suite passes on any day, not just the day it was written.'
@@ -10058,6 +10104,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
     planSortKey: planSortKey, // v73.59: the sort key (recurring = next occurrence, one-off = its date)
     setPlanOpen: function (id, open) { planOpen[id] = open ? true : undefined; }, // v73.59: the smoke expands a series (the harness can't click)
     setPlanTab: function (t) { planTab = (t === 'rec') ? 'rec' : 'one'; }, // v73.60: the smoke switches the tab (the harness can't click)
+    setPaidOpen: function (o) { paidOpen = !!o; }, // v73.99: the smoke toggles the Paid bar (the harness can't click)
     unlinkPlanTxn: unlinkPlanTxn, // v73.17: break an explicit link (the txn keeps its money)
     setPlanLinkRef: function (r) { state.planLinkRef = r; }, // v73.17: the chip's link state (smoke drives it)
     getPlanLinkRef: function () { return state.planLinkRef; },
