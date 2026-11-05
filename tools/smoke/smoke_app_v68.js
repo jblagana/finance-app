@@ -3108,6 +3108,78 @@ waitReady().then(async function (F) {
       await F.deleteTxn(idTxn42);
       await sleep(60);
 
+      // ============ PART 43: v74.00 - the "Test a spend" affordability row ============
+      // (boss-approved mockup_test_spend.html: 'im thinking to spend on
+      // something one time and i wanna know what will my headroom become').
+      // The row lives under the cycle strip: resting = the quiet dashed
+      // line, expanded = the amount input + the LIVE new-headroom line
+      // (no Check button) + the red "cut it to" verdict (only when it
+      // doesn't fit) + the Log button (green when it fits, red when it
+      // doesn't). Pure + in-memory: it reads the snapshot's free but
+      // NEVER writes it (the v73.34 peek's discipline).
+      console.log('\n== PART 43: v74.00 - the Test a spend affordability row =');
+      var d43 = F.insightsData();
+      var free43 = d43.freeNet != null ? d43.freeNet : d43.free;
+      var days43 = d43.cycleDaysLeft || d43.daysLeft;
+      var cur43 = days43 > 0 ? Math.round(Math.max(0, free43) / days43 * 100) / 100 : 0;
+      // the pure math: fits / doesn't fit / the max
+      var fit43 = Math.round(free43 / 2);
+      var rFit = F.testSpend(fit43);
+      ok(rFit && rFit.fits === true, 'v74.00: half the free cash fits (fits=true)');
+      ok(rFit.newHeadroom === Math.round(Math.max(0, free43 - fit43) / days43 * 100) / 100,
+        'v74.00: the new headroom = (free − amt) / window days (' + rFit.newHeadroom + ')');
+      ok(rFit.delta === Math.round((cur43 - rFit.newHeadroom) * 100) / 100,
+        'v74.00: the delta = current − new headroom (' + rFit.delta + ')');
+      var rOver = F.testSpend(free43 + 1000);
+      ok(rOver && rOver.fits === false && rOver.max === Math.round(free43 * 100) / 100,
+        'v74.00: over the free cash → fits=false and the max is the free cash itself');
+      ok(F.testSpend(0) === null && F.testSpend(-5) === null,
+        'v74.00: a non-positive amount → null (the row stays quiet)');
+      // the row is STATIC markup (index.html) — the smoke's stub DOM has no
+      // static ids, so the app's byId() hits the byIdStub cache (same
+      // instance the probe reads). Resting = no .ts-open on the row.
+      var tsRow43 = byIdStub('tsRow'), tsLine43 = byIdStub('tsLine'), tsLog43 = byIdStub('tsLog'), tsAmt43 = byIdStub('tsAmt');
+      tsRow43.className = 'testrow';
+      ok(tsRow43.className === 'testrow' && String(tsLine43.innerHTML || '') === '' && String(tsLog43.className || '').indexOf('on') < 0,
+        'v74.00: resting — the row has no .ts-open, the live line is empty, the Log button is hidden');
+      // expand: .ts-open appears (the CSS shows the input + the ✕)
+      F.tsSetOpen(true);
+      ok(tsRow43.className === 'testrow ts-open', 'v74.00: expand — the row carries .ts-open (input + ✕ visible via CSS)');
+      // type a FITTING amount (the smoke stub's input has no value — set it)
+      tsAmt43.value = String(fit43);
+      F.tsUpdate();
+      var line43 = String(byIdStub('tsLine').innerHTML || '');
+      var logCls43 = String(byIdStub('tsLog').className || '');
+      ok(line43.indexOf('New headroom') >= 0 && line43.indexOf('/day') >= 0,
+        'v74.00: the live line reads "New headroom …/day"');
+      ok(logCls43.indexOf('red') < 0 && logCls43.indexOf('tr-log on') >= 0,
+        'v74.00: a fitting spend → the Log button is green (no .red)');
+      ok(line43.indexOf('Cut it to') < 0, 'v74.00: a fitting spend has NO verdict line (the number speaks)');
+      // the DOESN'T-FIT case: the red verdict + the red log button
+      tsAmt43.value = String(free43 + 1000);
+      F.tsUpdate();
+      line43 = String(byIdStub('tsLine').innerHTML || '');
+      logCls43 = String(byIdStub('tsLog').className || '');
+      ok(line43.indexOf('Cut it to') >= 0 && line43.indexOf('or less to stay in the green') >= 0,
+        'v74.00: a spend over the free cash → the red "Cut it to … or less" verdict');
+      ok(logCls43.indexOf('tr-log on red') >= 0, 'v74.00: the Log button turns red when it doesn\u2019t fit');
+      // the strip itself is UNTOUCHED (the test reads, never writes):
+      // the headroom cell still quotes the CURRENT headroom
+      F.renderInsights();
+      var ins43 = String(byIdStub('insBody').innerHTML || '');
+      ok(ins43.indexOf('>PHP ' + (Math.round(cur43 * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '<') >= 0,
+        'v74.00: the strip\u2019s Headroom cell still quotes the current headroom (the test never writes)');
+      // the sig is untouched (the v73.34 peek's discipline)
+      var sigBefore43 = F.snapSig();
+      F.testSpend(free43 + 5000);
+      byIdStub('tsAmt').value = String(free43 + 5000);
+      F.tsUpdate();
+      ok(F.snapSig() === sigBefore43, 'v74.00: testing + rendering never moves the overlay sig');
+      // collapse: back to the quiet line, the verdict is gone, the log hides
+      F.tsSetOpen(false);
+      ok(tsRow43.className === 'testrow' && String(byIdStub('tsLine').innerHTML || '') === '' && String(byIdStub('tsLog').className || '') === 'tr-log',
+        'v74.00: collapse — no .ts-open, the verdict is gone, the Log button hides again');
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

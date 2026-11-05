@@ -170,6 +170,34 @@ button.plchip.linked{border:1px solid var(--ok);background:rgba(55,211,155,.12);
 .prow .pl-name{font-size:13.5px;font-weight:500;text-decoration:line-through}
 .prow .pl-sub{font-size:11px}
 .prow .pl-amt{font-size:13.5px;font-weight:600}
+/* v74.00 (boss-approved mockup_test_spend.html): the "Test a spend" row —
+   the one-time-purchase affordability check under the cycle strip.
+   Resting: one quiet dashed line; expanded: the amount input + the live
+   new-headroom line + the red "cut it to" verdict (fits = no verdict, the
+   number speaks) + the Log button (green when it fits, red when it
+   doesn't — the check and the commit are one motion either way).
+   In-memory only: it reads the snapshot's free but NEVER writes it (the
+   v73.34 peek's discipline). */
+.testrow{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}
+.tr-head{display:flex;align-items:center;gap:8px}
+.tr-label{font-size:12.5px;color:var(--mut);font-weight:700;white-space:nowrap;cursor:pointer}
+.testrow.ts-open .tr-label{cursor:default}
+.tr-hint{font-size:12px;color:var(--mut);opacity:.7}
+.testrow.ts-open .tr-hint{display:none}
+.tr-amt{display:none;width:110px;padding:7px 10px;font-size:14px;background:var(--card2);border:1px solid var(--line);border-radius:9px;color:var(--ink);font-family:inherit}
+.testrow.ts-open .tr-amt{display:inline-block}
+.tr-amt:focus{outline:none;border-color:var(--acc)}
+.tr-x{display:none;margin-left:auto;background:none;border:0;color:var(--mut);font-size:15px;cursor:pointer;padding:2px 6px}
+.testrow.ts-open .tr-x{display:inline-block}
+.tr-line{font-size:13px;margin:9px 0 0;color:var(--mut)}
+.tr-line b{color:var(--ink);font-weight:700}
+.tr-line .ok{color:var(--ok)}
+.tr-line .bad{color:var(--bad)}
+.tr-verdict{margin-top:9px;font-size:12.5px;font-weight:700;padding:8px 10px;border-radius:9px;line-height:1.45;background:rgba(255,107,107,.12);color:var(--bad)}
+.tr-log{display:none;margin-top:9px;width:100%;padding:10px;border-radius:10px;border:1px solid var(--acc);background:rgba(55,211,155,.14);color:var(--ok);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer}
+.tr-log.on{display:block}
+.tr-log.red{border-color:var(--bad);background:rgba(255,107,107,.14);color:var(--bad)}
+.tr-log:active{filter:brightness(1.2)}
 .pltabs{display:flex;gap:6px;padding:4px;background:var(--card2);border:1px solid var(--line);border-radius:12px;margin:2px 0 10px}
 .pltab{flex:1;text-align:center;padding:9px 0;font-size:13px;font-weight:700;color:var(--mut);border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
 .pltab.on{background:var(--card);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.35)}
@@ -814,6 +842,21 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
         <h2 style="margin-top:0" id="insTitle">This cycle</h2>
       </div>
       <div id="insBody"></div>
+<!-- v74.00 (boss-approved mockup_test_spend.html): the "Test a spend" row —
+     static markup (the input must survive re-renders: rebuilding it on
+     every keystroke would drop focus mid-type). The app wires the events
+     (wireTestSpend) and tsSetOpen() flips .ts-open; the math is
+     testSpend() — pure, reads the snapshot's free, never writes it. -->
+<div class="testrow" id="tsRow" data-testrow="1">
+  <div class="tr-head">
+    <span class="tr-label" id="tsOpen">＋ Test a spend</span>
+    <span class="tr-hint" id="tsHint">what if I buy something one-time?</span>
+    <input class="tr-amt" id="tsAmt" type="text" inputmode="decimal" placeholder="0.00">
+    <button type="button" class="tr-x" id="tsX">✕</button>
+  </div>
+  <div class="tr-line" id="tsLine"></div>
+  <button type="button" class="tr-log" id="tsLog">Log it as an expense</button>
+</div>
     </section>
 
     <!-- v73.14: Home slim — the due strip is gone (it previews the Money tab's

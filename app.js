@@ -3757,6 +3757,23 @@
     }
     return { start: cd.start, end: cd.end, early: false, received: rec };
   }
+  // v74.00 (boss-approved mockup_test_spend.html: 'im thinking to spend on
+  // something one time and i wanna know what will my headroom become'): the
+  // one-time-purchase affordability check — the pure math behind the
+  // "Test a spend" row under the cycle strip. Same numbers the strip uses
+  // (freeNet, the headroom window's days), minus the test amount. Pure +
+  // in-memory: it NEVER writes state, the snapshot sig is untouched (the
+  // v73.34 peek's discipline).
+  function testSpend(amt) {
+    var d = insightsData();
+    var a = Number(amt) || 0;
+    if (!d || a <= 0) return null;
+    var free = d.freeNet != null ? d.freeNet : d.free;
+    var days = d.cycleDaysLeft || d.daysLeft || 0;
+    var cur = days > 0 ? r2(Math.max(0, free) / days) : 0;
+    var nh = days > 0 ? r2(Math.max(0, free - a) / days) : 0;
+    return { amt: r2(a), newHeadroom: nh, delta: r2(cur - nh), fits: a <= free, max: Math.max(0, r2(free)) };
+  }
   // v73.34 (boss: 'add an ability to peek on the next cycles numbers, using
   // current free cash (with ability to see the numbers with and without
   // salary in)' + 'current cycle should be shown by default, peek only shows
@@ -5295,6 +5312,76 @@
       + '<div class="p"><div class="k">Spent today</div><div class="v">' + money(todaySpend) + '</div></div>';
     body.innerHTML = '<div class="pace">' + cells + '</div>';
   }
+  // v74.00 (boss-approved mockup_test_spend.html: 'im thinking to spend on
+  // something one time and i wanna know what will my headroom become'):
+  // the "Test a spend" row under the cycle strip — STATIC markup in
+  // index.html (the input must survive re-renders: rebuilding it on every
+  // keystroke would drop focus mid-type). Resting = the quiet dashed line
+  // (the input + ✕ hidden); tap it → they appear, type → the new headroom
+  // + (−delta) update LIVE (no Check button), and when it DOESN'T fit a
+  // red verdict names the max you could actually spend. The green verdict
+  // is gone (the number speaks for itself). The Log button shows on any
+  // entered amount — green when it fits, red when it doesn't — and opens
+  // the Add sheet pre-filled (the "can I?" and the "do it" are one
+  // motion). In-memory only (testSpendOpen/testSpendAmt): it reads the
+  // snapshot's free but NEVER writes it (the v73.34 peek's discipline),
+  // so the overlay/rebase sig is untouched; ✕ collapses, reload resets.
+  var testSpendWired = false;
+  function tsUpdate() {
+    var tsLine = byId('tsLine'), tsLog = byId('tsLog'), tsAmt = byId('tsAmt');
+    // the live input wins; testSpendAmt is the persisted fallback (a
+    // re-render restores the typed amount from it — and the smoke stub's
+    // input has no value, so the fallback is what it reads).
+    var v = evalExpr(String((tsAmt && tsAmt.value) || testSpendAmt || '').trim());
+    var r = testSpend(v);
+    if (!r) {
+      if (tsLine) tsLine.innerHTML = '';
+      if (tsLog) tsLog.className = 'tr-log';
+      return;
+    }
+    if (tsLine) {
+      tsLine.innerHTML = 'New headroom <b class="' + (r.newHeadroom <= 0 ? 'bad' : 'ok') + '">' + money(r.newHeadroom) + '/day</b> <span class="bad">(−' + money(r.delta) + '/day)</span>';
+    }
+    if (tsLog) {
+      tsLog.className = 'tr-log on' + (r.fits ? '' : ' red');
+      tsLog.dataset.tsAmt = String(r.amt);
+    }
+    // the red verdict (only when it DOESN'T fit — the green case has no
+    // verdict line, per the approved mockup's final state).
+    var verdict = r.fits ? '' : '<div class="tr-verdict">Cut it to ' + money(r.max) + ' or less to stay in the green.</div>';
+    if (tsLine) tsLine.innerHTML = tsLine.innerHTML + verdict;
+  }
+  function tsSetOpen(open) {
+    testSpendOpen = !!open;
+    if (!open) testSpendAmt = '';
+    var row = byId('tsRow'), line = byId('tsLine'), log = byId('tsLog'), amt = byId('tsAmt');
+    if (row) row.className = 'testrow' + (open ? ' ts-open' : '');
+    if (line) line.innerHTML = '';
+    if (log) log.className = 'tr-log';
+    if (open) {
+      if (amt) { amt.focus && amt.focus(); amt.select && amt.select(); }
+      if (testSpendAmt) { if (amt) amt.value = testSpendAmt; tsUpdate(); }
+    }
+  }
+  function wireTestSpend() {
+    if (testSpendWired) return;
+    testSpendWired = true;
+    var open = byId('tsOpen'), amt = byId('tsAmt'), x = byId('tsX'), log = byId('tsLog');
+    if (open) open.onclick = function () { tsSetOpen(true); };
+    if (amt) amt.oninput = function () { testSpendAmt = String(amt.value || ''); tsUpdate(); };
+    if (x) x.onclick = function () { tsSetOpen(false); };
+    if (log) log.onclick = function () {
+      var a = Number(log.dataset.tsAmt) || 0;
+      if (a > 0) prefillAdd(a, null, null, null, 'spend');
+    };
+  }
+  // v74.00: the row's resting state — the quiet line (input/✕ hidden by
+  // CSS via the missing .ts-open). Called at boot so a reload starts
+  // collapsed even though the markup is static.
+  function tsResetResting() {
+    var row = byId('tsRow');
+    if (row) row.className = 'testrow';
+  }
   // v73.75 (boss-approved mockup_compact_livenumbers.html): renderProjection
   // is GONE — the Money tab's Projection card (and the overlay reset bar that
   // lived inside it) was removed. resetAdj/adjBar stay (exported; the smoke
@@ -6483,6 +6570,8 @@
 var planTab = 'one'; // v73.60: the plans list's tab — 'one' (one-offs, DEFAULT) | 'rec' (recurring)
 var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N older" second level is open (in-memory, like cbPlansMore)
 var paidOpen = false; // v73.99: the Committed tab's Paid bar — collapsed by default, in-memory (resets on reload, like the hero's Cards row)
+var testSpendOpen = false; // v74.00: the "Test a spend" row's expanded state (resting = the quiet dashed line) — in-memory, resets on reload
+var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders while the row is open)
   var coachGroupOpen = {}; // v73.23: coach-card group fold state (group key -> bool); v73.25: default closed (coachGroupOpen[g] === true means open)
   var planSig = '';  // the plan set the open-state was captured for
   // v73.18: the occurrence's PAID pill (the same proof the edit sheet shows —
@@ -8939,12 +9028,15 @@ var paidOpen = false; // v73.99: the Committed tab's Paid bar — collapsed by d
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.99, live: new Date(2026, 10, 5, 23, 4) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.00, live: new Date(2026, 10, 6, 1, 45) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.00': [
+      'The cycle strip now answers "what if I buy something one-time?": tap the quiet "＋ Test a spend" line under it, type an amount, and the new headroom per day updates live as you type — no check button, nothing written. When it doesn\u2019t fit, a red line names the most you could actually spend, and the "Log it as an expense" button (green when it fits, red when it doesn\u2019t) opens the add sheet pre-filled, so the check and the commit are one motion.'
+    ],
     '73.99': [
       'Committed now files its receipts: a one-off that is fully paid leaves the live list and collects under a collapsed Paid bar at the bottom of the tab (count · total, muted and strikethrough — tap it to expand, tap again to fold). Partly-paid one-offs stay in the list with their ◐ pill, and recurring plans stay too (their next due is still live — the "N paid" chip on the plan is their record). The bar hides itself when nothing is paid.'
     ],
@@ -10105,6 +10197,9 @@ var paidOpen = false; // v73.99: the Committed tab's Paid bar — collapsed by d
     setPlanOpen: function (id, open) { planOpen[id] = open ? true : undefined; }, // v73.59: the smoke expands a series (the harness can't click)
     setPlanTab: function (t) { planTab = (t === 'rec') ? 'rec' : 'one'; }, // v73.60: the smoke switches the tab (the harness can't click)
     setPaidOpen: function (o) { paidOpen = !!o; }, // v73.99: the smoke toggles the Paid bar (the harness can't click)
+    testSpend: testSpend, // v74.00: the one-time-purchase affordability math (smoke drives it)
+    tsSetOpen: tsSetOpen, // v74.00: the row's expand/collapse (the harness can't click)
+    tsUpdate: tsUpdate, // v74.00: the live line + log button update (the harness can't type)
     unlinkPlanTxn: unlinkPlanTxn, // v73.17: break an explicit link (the txn keeps its money)
     setPlanLinkRef: function (r) { state.planLinkRef = r; }, // v73.17: the chip's link state (smoke drives it)
     getPlanLinkRef: function () { return state.planLinkRef; },
@@ -10493,6 +10588,7 @@ var paidOpen = false; // v73.99: the Committed tab's Paid bar — collapsed by d
     window.addEventListener('online', function () { state.online = true; });
     window.addEventListener('offline', function () { state.online = false; });
 
+    wireTestSpend(); tsResetResting(); // v74.00: the "Test a spend" row under the cycle strip (static markup, events wired once)
     var ab = byId('addBtn');
     if (ab) ab.onclick = function () { setAddMode('spend'); openSheet('addSheet'); }; // v72.41: a fresh Add opens in Spend mode
     // v72.41: the Add sheet's direction toggle (Spend / Pay card) — v73.8: + Money in

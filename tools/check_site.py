@@ -196,16 +196,16 @@ def main():
           html.index("app.js") < html.index("chat.js") < html.index("ai.js"))
 
     print("\n== PWA shell (offline app, online coach) ==")
-    check("sw.js cache is v73 (dot releases v73.x per subtask)",
-          "finances-pwa-v73" in sw and "finances-pwa-v72" not in sw)
+    check("sw.js cache is v74 (dot releases v74.x per subtask)",
+          "finances-pwa-v74" in sw and "finances-pwa-v73" not in sw)
     check("sw.js handles SKIP_WAITING", "'SKIP_WAITING'" in sw)
     check("shell cache holds the app scripts + manifest + icons (no model files)",
           "'./app.js'" in sw and "'./chat.js'" in sw and "'./ai.js'" in sw
           and "'./manifest.webmanifest'" in sw and "'./favicon.png'" in sw)
     check("sw.js: non-GET and cross-origin (coach) calls stay network-only",
           "url.origin !== self.location.origin" in sw and "req.method !== 'GET'" in sw)
-    check("footer stamp: brand + shell v73 + live date/time, one source for both footers",
-          "var SHELL_RELEASE = { v: 73" in js and "function shellStamp" in js
+    check("footer stamp: brand + shell v74 + live date/time, one source for both footers",
+          "var SHELL_RELEASE = { v: 74" in js and "function shellStamp" in js
           and "'Fin.AI · shell v'" in js and 'id="setFoot"' in html
           and "byId('setFoot')" in js)
     check("service worker registration wired (page or app.js)",
@@ -1943,6 +1943,28 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.00 (boss-approved mockup_test_spend.html: 'im thinking to spend on something one time and i wanna know what will my headroom become'): the one-time-purchase affordability check — a quiet '＋ Test a spend' line under the cycle strip (resting, no visual weight). Tap it → the amount input appears; as you type, the NEW headroom per day + the (−delta) update LIVE (no Check button, no green verdict — the number speaks for itself). When it DOESN'T fit, a red verdict names the max you could actually spend ('Cut it to … or less to stay in the green'). The 'Log it as an expense' button shows on any entered amount — GREEN when it fits, RED when it doesn't — and opens the Add sheet pre-filled (the check and the commit are one motion). The math is testSpend() — pure, the same freeNet + headroom-window days the strip uses; in-memory only (testSpendOpen/testSpendAmt), it reads the snapshot's free but NEVER writes it (the v73.34 peek's discipline), so the overlay/rebase sig is untouched; ✕ collapses, reload resets. Smoke PART 43: fits/delta/max/null math, resting render (quiet line, no input), expanded render (input + live line + green log button, no verdict), the doesn't-fit render (red verdict + red log button), the strip's Headroom cell untouched, the sig untouched, collapse back to the quiet line",
+          "function testSpend(amt) {" in js
+          and "var testSpendOpen = false; // v74.00" in js
+          and "var testSpendAmt = ''; // v74.00" in js
+          and "function tsSetOpen(open) {" in js
+          and "function tsUpdate() {" in js
+          and "function wireTestSpend() {" in js
+          and "wireTestSpend(); tsResetResting();" in js
+          and "tsLog.className = 'tr-log on' + (r.fits ? '' : ' red');" in js
+          and "Cut it to " in js
+          and "testSpend: testSpend" in js
+          and "tsSetOpen: tsSetOpen" in js
+          and "tsUpdate: tsUpdate" in js
+          and 'data-testrow="1"' in html
+          and 'id="tsAmt"' in html
+          and 'id="tsLog"' in html
+          and 'id="tsOpen"' in html
+          and ".testrow{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}" in html
+          and ".testrow.ts-open .tr-amt{display:inline-block}" in html
+          and ".tr-log.red{border-color:var(--bad);background:rgba(255,107,107,.14);color:var(--bad)}" in html
+          and ".tr-verdict{margin-top:9px" in html
+          and "'74.00': [" in js)
     check("v73.99 (boss-approved mockup_committed_paid.html: 'for paid expense, move them to a hidden section'): the Committed tab files its receipts — a one-off that is FULLY paid (the planRef sum covers the amount, the same >= 100% rule the chip uses) leaves the live list and collects under a collapsed Paid bar at the bottom of the One-offs tab (count · total, muted strikethrough .prow rows, tap to expand; paidOpen in-memory, resets on reload, like the hero's Cards row). Partly-paid one-offs STAY live with the ◐ pill (the remainder is still owed); recurring plans STAY too (their next due is live — the per-plan 'N paid' chip is their record, no occurrence rows under the bar); empty Paid state → the bar doesn't render. The .prow rows are the planHTML rows themselves, so ✎/✕ bind through the same [data-…] walk. Smoke PART 42: baseline bar absent, a full planRef payment raises the bar (1 · ₱ 2,000.00) with the .prow row under it (✎ still opens the edit sheet), expand flips .open on bar + rows, a partial stays live above the bar with the ◐ pill (bar total unchanged), the Recurring tab has no bar, deleting the paid one-off drops the bar",
           "var paidOpen = false; // v73.99" in js
           and "function oneOffPaid(p) {" in js
