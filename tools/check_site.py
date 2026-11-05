@@ -1943,6 +1943,16 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v73.98 (boss: 'whenever a salary is logged ahead of the next cycle, the headroom recomputes x/day based on (date of salary logged to end of next cycle)'): the headroom window is headroomWindow() — when the cycle's salary landed EARLY (cycleDataFor.received: a qualifying cash_in dated strictly inside the cycle, the second scan now catches post-payday+2 early-next-cycle paydays too), the per-day headroom + days-left run from the received date to the END OF THE NEXT cycle (new Date(m+1, sday-1)) instead of diluting across the current cycle; no early payday = the current cycle verbatim. The strip title names the early window ('Early salary ...'). Smoke PART 41: baseline window == cycle, an in-cycle early salary flips early=true / start=today / end=next cycle end / cycleDaysLeft + Headroom cell + title follow, delete falls back. ALSO: the smoke calendar drift is fixed — the seed's monthly Gym plan re-anchors to the live cycle (PART 10) and every date the PART 10/11/13/14/15 assertions need is computed from the live clock, so the suite passes on any day",
+          "function headroomWindow() {" in js
+          and "headroomWindow: headroomWindow" in js
+          and "headroomWindow: headroomWindow()" in js
+          and "var hw = headroomWindow();" in js
+          and "var hwT = d.headroomWindow;" in js
+          and "'Early salary \\u00b7 '" in js  # the strip title names the early window (literal \u00b7 in the source)
+          and "Early salary" in js  # (plain substring — immune to escape-sequence interpretation)
+          and "if (d <= hi || d > w.end) return;" in js  # the second received scan (post-payday+2, in-cycle)
+          and "'73.98': [" in js)
     check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
           "function seedPayTo()" in js
           and "function seedPayWith()" in js

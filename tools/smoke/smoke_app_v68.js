@@ -657,45 +657,108 @@ waitReady().then(async function (F) {
   // unskipping must return it. (Rent's next due is already logged-paid, so
   // its deduction is 0 — the delta test needs an unpaid due.)
   console.log('\n== PART 10: v73.54 — skip record + unskip ============');
+  // v73.98 (date-drift fix): the seed is a frozen Oct-14 snapshot — the Gym
+  // anchor (2026-10-04, monthly, 3-occurrence window) is CLOCK-RELATIVE:
+  // every date the old tests hardcoded (2026-11-04 in-cycle, 2026-12-05
+  // free, ...) was the answer ON 2026-10-14 and is stale by now. The app is
+  // right; the test's calendar was the bug. The fix has two halves:
+  //   (a) re-anchor the Gym plan to the latest month where its 3-occurrence
+  //       window still holds >= 2 FUTURE dues (the preconditions these
+  //       parts were written against), and
+  //   (b) compute every date the assertions need from the live clock.
+  (function reAnchorGym() {
+    var p = null;
+    F.state.plans.forEach(function (x) { if (x.id === 'pmuimaif9irt') p = x; });
+    if (!p) return;
+    // v73.98: anchor to the current cycle's START + 1 day (deterministic
+    // within any cycle — the window is always [start+1, start+1mo, start+2mo],
+    // so the sort/skip/move assertions are run-date-independent). Walk back
+    // one month at a time until the 3-occurrence window holds >= 2 FUTURE
+    // dues (the precondition these parts were written against).
+    var cd0 = F.cycleData();
+    var d = F.parseISO(cd0.start);
+    d.setDate(d.getDate() + 1);
+    var m = 0;
+    while (m < 48) {
+      p.date = F.localISO(d);
+      if (F.planOccurrences(p).length >= 2) break;
+      d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate());
+      m++;
+    }
+    console.log('  [v73.98] Gym re-anchored to ' + p.date + ' (live window ' +
+      JSON.stringify(F.planOccurrences(p)) + ')');
+  })();
   var gym = null;
   F.state.plans.forEach(function (p) { if (p.id === 'pmuimaif9irt') gym = p; });
   ok(!!gym && gym.repeat === 'monthly', 'v73.54: seed precondition — Gym is the monthly plan');
-  var nextGym = F.planOccurrences(gym)[0];
-  ok(nextGym === '2026-11-04', 'v73.54: Gym\'s next due is 2026-11-04 (in-cycle) (got ' + nextGym + ')');
+  var cd10 = F.cycleData();
+  // v73.98: the old assertion "Gym's next due is in-cycle" was only true on
+  // the Oct-14 write date — after the re-anchor Gym's window is
+  // [start+1, +1mo, +2mo], and the skip/unskip math below is plan-agnostic
+  // (the skip target is computed from the live cycle, not from Gym).
+  ok(!!cd10, 'v73.54: the live cycle resolves (' + cd10.start + '..' + cd10.end + ')');
   var ded0 = F.cyclePlanDeduction();
   ok(ded0 > 0, 'v73.54: baseline cycle deduction is non-zero (' + ded0.toFixed(2) + ')');
-  // skip the next due via the coach chip (the v73.28 handler)
-  F.skipPlanChip('pmuimaif9irt|' + nextGym);
+  // v73.98 (date-drift fix): the skip target is COMPUTED — the first unpaid,
+  // unskipped due inside the current cycle (the old test hardcoded Gym's
+  // 2026-11-04, which was in-cycle only on the Oct-14 write date; after the
+  // re-anchor the in-cycle dues belong to other plans — Spaylater Nov 5,
+  // AC Nov 8, Home Utils Oct 29...). The skip/unskip math is plan-agnostic.
+  function firstUnpaidDueInCycle() {
+    var cd = F.cycleData();
+    var cands = [];
+    F.state.plans.forEach(function (p) {
+      F.planAllDates(p).forEach(function (od) {
+        if (od < cd.start || od > cd.end) return;
+        if (od < F.todayISO()) return; // the coach chip skips FUTURE dues (the original intent)
+        var ro = p.repeat ? F.resolveOccurrence(p, od) : null;
+        if (ro && ro.skip) return;
+        var nm = ro ? ro.name : p.name, am = ro ? ro.amount : p.amount;
+        var pp = F.findPaidTxn({ monthPrefix: cd.start.slice(0, 7), today: F.todayISO() }, { planId: p.id, date: od, name: nm, amount: am });
+        var rem = Math.round((Number(am) - (Number(pp && pp.amount) || 0)) * 100) / 100;
+        if (rem > 0.004) cands.push({ pid: p.id, date: od, amount: rem });
+      });
+    });
+    cands.sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+    return cands[0] || null;
+  }
+  var skipT = firstUnpaidDueInCycle();
+  ok(!!skipT, 'v73.54: the current cycle has an unpaid due to skip (got ' + (skipT ? skipT.pid + '|' + skipT.date : 'none') + ')');
+  var skipPlanP = null;
+  F.state.plans.forEach(function (p) { if (p.id === skipT.pid) skipPlanP = p; });
+  var skipOvBackup = JSON.stringify(skipPlanP.overrides);
+  // skip the due via the coach chip (the v73.28 handler)
+  F.skipPlanChip(skipT.pid + '|' + skipT.date);
   await sleep(40);
-  ok(gym.overrides[nextGym] && gym.overrides[nextGym].skip,
+  ok(skipPlanP.overrides[skipT.date] && skipPlanP.overrides[skipT.date].skip,
     'v73.54: the coach chip writes the skip-override');
-  ok(typeof gym.overrides[nextGym].skippedAt === 'number',
+  ok(typeof skipPlanP.overrides[skipT.date].skippedAt === 'number',
     'v73.54: the skip carries a skippedAt stamp (by-when record)');
   var dedSkip = F.cyclePlanDeduction();
-  ok(close(ded0 - dedSkip, gym.amount), 'v73.54: skipping the in-cycle due drops the deduction by exactly the due (' + (ded0 - dedSkip).toFixed(2) + ')');
+  ok(close(ded0 - dedSkip, skipT.amount), 'v73.54: skipping the in-cycle due drops the deduction by exactly the due (' + (ded0 - dedSkip).toFixed(2) + ')');
   // the record row renders in the plans list (label + ↺, both data-unskip).
   // v73.60: recurring series live on the Recurring tab — switch to it.
   F.setPlanTab('rec');
   F.renderPlans();
   var plansHtml = String(byIdStub('plans').innerHTML || '');
-  ok(plansHtml.indexOf('data-unskip="pmuimaif9irt|' + nextGym + '"') >= 0,
+  ok(plansHtml.indexOf('data-unskip="' + skipT.pid + '|' + skipT.date + '"') >= 0,
     'v73.54: the plans list renders the skipped occurrence as a record row (data-unskip present)');
   ok(plansHtml.indexOf('skipped') >= 0, 'v73.54: the record row wears the "skipped" label');
   ok(plansHtml.indexOf('1 skipped') >= 0, 'v73.54: the series header counts its skips ("1 skipped")');
   // the unskip path: the due returns to the cycle deduction and the override
   // (and its stamp) is gone
-  await F.unskipPlanOccurrence('pmuimaif9irt', nextGym);
+  await F.unskipPlanOccurrence(skipT.pid, skipT.date);
   await sleep(40);
-  ok(!gym.overrides[nextGym] || !gym.overrides[nextGym].skip,
+  ok(!skipPlanP.overrides[skipT.date] || !skipPlanP.overrides[skipT.date].skip,
     'v73.54: unskip removes the skip-override');
   ok(close(F.cyclePlanDeduction(), ded0), 'v73.54: unskip returns the due to the cycle deduction (back to ' + ded0.toFixed(2) + ')');
   F.renderPlans();
-  ok(String(byIdStub('plans').innerHTML || '').indexOf('data-unskip="pmuimaif9irt|' + nextGym + '"') < 0,
+  ok(String(byIdStub('plans').innerHTML || '').indexOf('data-unskip="' + skipT.pid + '|' + skipT.date + '"') < 0,
     'v73.54: after unskip the record row is gone');
   // unskip is a no-op on a date that isn't skipped (the guard)
-  await F.unskipPlanOccurrence('pmuimaif9irt', nextGym);
+  await F.unskipPlanOccurrence(skipT.pid, skipT.date);
   await sleep(20);
-  ok(!gym.overrides[nextGym], 'v73.54: unskip on an unskipped date is a no-op');
+  ok(JSON.stringify(skipPlanP.overrides) === skipOvBackup, 'v73.54: unskip on an unskipped date is a no-op (overrides pristine)');
 
   // ============ PART 11: v73.55 — the ✎/✕ must not vanish on a skipped plan ============
   // (boss: 'after a plan occurrence is SKIPPED, the plan record is no longer
@@ -703,10 +766,25 @@ waitReady().then(async function (F) {
   // nothing — the ✎ was rendered only when `shown.length` (skipping the
   // next due emptied it) and the recurring header had NO ✕ at all.
   console.log('\n== PART 11: v73.55 — edit/delete survive a skip ============');
+  // v73.98 (date-drift fix): occ2 is the live forward window (computed, not
+  // hardcoded) and the "free date" move target is computed as the first
+  // date >= 30 days out that is NOT a Gym occurrence (the old 2026-12-05
+  // collided with the series the day the calendar moved).
+  function gymFreeDate(afterISO) {
+    var all = F.planAllDates(gym2);
+    var d = F.parseISO(afterISO);
+    for (var k = 0; k < 48; k++) {
+      d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      var x = F.localISO(d);
+      if (x > afterISO && all.indexOf(x) < 0) return x;
+    }
+    return null;
+  }
   var gym2 = null;
   F.state.plans.forEach(function (p) { if (p.id === 'pmuimaif9irt') gym2 = p; });
   var occ2 = F.planOccurrences(gym2);
   ok(occ2.length >= 2, 'v73.55: seed precondition — Gym has >= 2 future occurrences (got ' + occ2.length + ')');
+  var gym2free = gymFreeDate(F.todayISO());
   occ2.forEach(function (d) {
     F.skipPlanChip('pmuimaif9irt|' + d); // skip EVERY due -> shown = []
   });
@@ -736,11 +814,11 @@ waitReady().then(async function (F) {
     'v73.55: moving a skipped due onto another skipped date is rejected (collision)');
   ok(global.__alerts.some(function (m) { return m.indexOf('already falls on') >= 0; }),
     'v73.55: the collision alert fired (the guard named the skipped date)');
-  byIdStub('pe_date').value = '2026-12-05';
+  byIdStub('pe_date').value = gym2free;
   F.savePlanOccurrence();
   await sleep(40);
-  ok(gym2.overrides[occ2[0]] && gym2.overrides[occ2[0]].move === '2026-12-05',
-    'v73.55: moving a skipped due to a free date is allowed');
+  ok(gym2.overrides[occ2[0]] && gym2.overrides[occ2[0]].move === gym2free,
+    'v73.55: moving a skipped due to a free date is allowed (free date ' + gym2free + ')');
   // clean up: restore the pristine plan (the tests above mutated it)
   delete gym2.overrides[occ2[0]];
   delete gym2.overrides[occ2[1]];
@@ -943,7 +1021,19 @@ waitReady().then(async function (F) {
   var g3 = F.sparkData();
   var g3Dates = {};
   g3.pts.forEach(function (p) { g3Dates[p.date] = true; });
-  ok(!g3Dates[skipDue], 'v73.57: a skipped due removes its drop (' + skipDue + ' gone)');
+  // v73.98 (date-drift fix): the old "2026-11-15 gone" assertion checked
+  // DATE ABSENCE — but 11-15 is ALSO the card-owed drop + the payday rise
+  // (they cancel, so the point survives a Rent skip). The correct truth:
+  // the value at the RESOLVED date rises by exactly the skipped remainder
+  // (the drop left), whatever else lands on that date.
+  var skipResolved = F.planDateAt(skipPlan, skipDue);
+  var roSkip = F.resolveOccurrence(skipPlan, skipDue);
+  var ppSkip = F.findPaidTxn({ monthPrefix: tToday.slice(0, 7), today: tToday }, { planId: skipPlan.id, date: skipDue, name: roSkip.name, amount: roSkip.amount });
+  var skipRem = Math.round((Number(roSkip.amount) - (Number(ppSkip && ppSkip.amount) || 0)) * 100) / 100;
+  var vBeforeSkip = (function () { for (var i = 0; i < g2.pts.length; i++) if (g2.pts[i].date === skipResolved) return g2.pts[i].v; return null; })();
+  var vAfterSkip = (function () { for (var i = 0; i < g3.pts.length; i++) if (g3.pts[i].date === skipResolved) return g3.pts[i].v; return null; })();
+  ok(vBeforeSkip !== null && vAfterSkip !== null && close(vAfterSkip - vBeforeSkip, skipRem),
+    'v73.57: a skipped due removes its drop (value at ' + skipResolved + ' rises by exactly the skipped ' + skipRem + ': ' + vBeforeSkip + ' -> ' + vAfterSkip + ')');
   // cleanup: delete the probe txns + restore the skipped plan.
   await F.deleteTxn(chargeId); await sleep(20);
   await F.deleteTxn(payId); await sleep(20);
@@ -964,12 +1054,26 @@ waitReady().then(async function (F) {
   // savePlanOccurrence collision rule. Driven without a DOM via the
   // exported chooser fns (scDate is a byId stub the harness pre-seeds).
   console.log('\n== PART 14: v73.58 — the skip/move chooser ============');
+  // v73.98 (date-drift fix): the move target is COMPUTED (the first free
+  // date after the due — the old 2026-12-05 was free only on the Oct-14
+  // write date; after the re-anchor it lands ON the Gym series).
+  function gym3FreeDate(afterISO) {
+    var all = F.planAllDates(gym3);
+    var d = F.parseISO(afterISO);
+    for (var k = 0; k < 48; k++) {
+      d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      var x = F.localISO(d);
+      if (x > afterISO && all.indexOf(x) < 0) return x;
+    }
+    return null;
+  }
   var gym3 = null;
   F.state.plans.forEach(function (p) { if (p.id === 'pmuimaif9irt') gym3 = p; });
   ok(!!gym3 && gym3.repeat === 'monthly', 'v73.58: seed precondition — Gym is the monthly plan');
   var occ3 = F.planOccurrences(gym3);
   ok(occ3.length >= 2, 'v73.58: Gym has >= 2 future occurrences (got ' + occ3.length + ')');
   var occA = occ3[0], occB = occ3[1];
+  var gym3free = gym3FreeDate(occA);
   // clean slate on the target
   gym3.overrides = gym3.overrides || {};
   delete gym3.overrides[occA];
@@ -987,14 +1091,14 @@ waitReady().then(async function (F) {
   // (2) the MOVE path: writes the v73.41 move-override at the grid date,
   // the occurrence resolves to the new date, and the lists follow
   F.openSkipChooser(gym3.id, occA);
-  byIdStub('scDate').value = '2026-12-05'; // a free date
+  byIdStub('scDate').value = gym3free; // a free date (computed — v73.98)
   F.skipChooserMove();
   await sleep(40);
-  ok(gym3.overrides[occA] && gym3.overrides[occA].move === '2026-12-05',
-    'v73.58: the chooser Move writes the v73.41 move-override (move=2026-12-05)');
-  ok(F.planDateAt(gym3, occA) === '2026-12-05', 'v73.58: the occurrence resolves to the new date');
+  ok(gym3.overrides[occA] && gym3.overrides[occA].move === gym3free,
+    'v73.58: the chooser Move writes the v73.41 move-override (move=' + gym3free + ')');
+  ok(F.planDateAt(gym3, occA) === gym3free, 'v73.58: the occurrence resolves to the new date');
   var occAfterMove = F.planOccurrences(gym3);
-  ok(occAfterMove.indexOf('2026-12-05') >= 0 && occAfterMove.indexOf(occA) < 0,
+  ok(occAfterMove.indexOf(gym3free) >= 0 && occAfterMove.indexOf(occA) < 0,
     'v73.58: the moved due reappears on its new date and leaves the old one');
   // cleanup the move
   delete gym3.overrides[occA];
@@ -1019,11 +1123,19 @@ waitReady().then(async function (F) {
   ok(global.__alerts.some(function (m) { return m.indexOf('Pick a date after') >= 0; }),
     'v73.58: the past-date alert fired');
   // (5) the date input is constrained: min = day after the due, default = next same-day-of-month
+  // v73.98 (date-drift fix): both values computed from the re-anchored due
+  // (the old 2026-11-05 min / 2026-12-04 default were the Oct-14 answers).
   F.openSkipChooser(gym3.id, occA);
   var scInp = byIdStub('scDate');
-  ok(scInp.min === '2026-11-05', 'v73.58: the date input min is the day after the due (got ' + scInp.min + ')');
-  ok(/^2026-\d{2}-04$/.test(scInp.value) && scInp.value > '2026-11-04',
-    'v73.58: the date input defaults to the next same-day-of-month (got ' + scInp.value + ')');
+  var minExp = (function () { var d = F.parseISO(occA); d.setDate(d.getDate() + 1); return F.localISO(d); })();
+  ok(scInp.min === minExp, 'v73.58: the date input min is the day after the due (got ' + scInp.min + ', want ' + minExp + ')');
+  var defExp = (function () {
+    var d = F.parseISO(occA);
+    for (var m = 1; m <= 3; m++) { d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate()); if (F.localISO(d) > minExp) break; }
+    return F.localISO(d);
+  })();
+  ok(scInp.value === defExp,
+    'v73.58: the date input defaults to the next same-day-of-month (got ' + scInp.value + ', want ' + defExp + ')');
   F.closeSkipChooser();
   // cleanup: pristine plan
   delete gym3.overrides[occA];
@@ -1039,10 +1151,11 @@ waitReady().then(async function (F) {
   // (paid ✓ / skipped strikethrough / past-due red — nothing deleted),
   // and a one-off's ✎ opens the edit sheet (name/amount/date straight).
   console.log('\n== PART 15: v73.59 — the plans-list redesign ============');
-  var rent = null, calc = null;
+  var rent = null, calc = null, gymS15 = null;
   F.state.plans.forEach(function (p) {
     if (p.id === 'pmuk0wjffffx') rent = p;
     if (p.id === 'pmup5dq4iunh') calc = p;
+    if (p.id === 'pmuimaif9irt') gymS15 = p;
   });
   ok(!!rent && rent.repeat === 'monthly', 'v73.59: seed precondition — Rent is the monthly plan');
   ok(!!calc && !calc.repeat, 'v73.59: seed precondition — Calculator is the one-off');
@@ -1058,10 +1171,17 @@ waitReady().then(async function (F) {
   var iCalc = listHtml.indexOf('data-editd="2026-10-09"');  // one-off date
   ok(iGym >= 0 && iCalc < 0,
     'v73.59: the Recurring pane holds the series; the one-off (Oct 9) is on its own tab — sections, not one flat list');
+  // v73.98 (date-drift fix): the sort assertion is COMPUTED from each
+  // plan's live next occurrence (the old "Gym 11-04 before Rent 11-15"
+  // was the Oct-14 answer; after the re-anchor Gym's next is start+1mo and
+  // the order vs Rent flips with the calendar).
+  var rentNext15 = F.planOccurrences(rent)[0];
+  var gymNext15 = F.planOccurrences(gymS15)[0];
   var iRent = listHtml.indexOf('data-grp="pmuk0wjffffx"');
   var iGymFirst = listHtml.indexOf('data-grp="pmuimaif9irt"');
-  ok(iRent >= 0 && iGymFirst >= 0 && iGymFirst < iRent,
-    'v73.59: recurring sorts by NEXT occurrence — Gym (next 2026-11-04) before Rent (next 2026-11-15)');
+  var wantOrder = (gymNext15 < rentNext15) ? (iGymFirst < iRent) : (iRent < iGymFirst);
+  ok(iRent >= 0 && iGymFirst >= 0 && wantOrder,
+    'v73.59: recurring sorts by NEXT occurrence — Gym (next ' + gymNext15 + ') vs Rent (next ' + rentNext15 + ') in the computed order');
   // (2) the expanded series: the NEXT DUE row + the history chip strip
   // (the harness can't click — setPlanOpen is the exported toggle)
   F.setPlanOpen('pmuk0wjffffx', true);
@@ -1090,22 +1210,37 @@ waitReady().then(async function (F) {
   F.state.txns = baseTxns2; // restore
   rent.overrides = JSON.parse(rentOvBackup);
   // (3) a skipped FUTURE due stays visible as a strikethrough chip (the v73.54 unskip path)
+  // v73.98 (date-drift fix): the skip/move targets are the re-anchored Gym's
+  // LIVE occurrences (the old 2026-11-04/2026-12-05 were the Oct-14 answers).
+  var gymS = null;
+  F.state.plans.forEach(function (p) { if (p.id === 'pmuimaif9irt') gymS = p; });
+  var gymSNext = F.planOccurrences(gymS)[0];
   F.setPlanOpen('pmuimaif9irt', true); // expand Gym so its chip strip renders
-  F.skipPlanChip('pmuimaif9irt|2026-11-04');
+  F.skipPlanChip('pmuimaif9irt|' + gymSNext);
   await sleep(40);
   F.renderPlans();
   listHtml = String(byIdStub('plans').innerHTML || '');
-  ok(listHtml.indexOf('hchip skip') >= 0 && listHtml.indexOf('data-unskip="pmuimaif9irt|2026-11-04"') >= 0,
+  ok(listHtml.indexOf('hchip skip') >= 0 && listHtml.indexOf('data-unskip="pmuimaif9irt|' + gymSNext + '"') >= 0,
     'v73.59: a skipped due stays visible as a strikethrough chip carrying the unskip path');
   ok(listHtml.indexOf('1 skipped') >= 0, 'v73.59: the header still counts its skips ("1 skipped")');
-  await F.unskipPlanOccurrence('pmuimaif9irt', '2026-11-04');
+  await F.unskipPlanOccurrence('pmuimaif9irt', gymSNext);
   await sleep(40);
   F.setPlanOpen('pmuimaif9irt', false);
   // (4) a moved due RE-ORDERS the list (the old anchor sort never did)
   var gymM = null;
   F.state.plans.forEach(function (p) { if (p.id === 'pmuimaif9irt') gymM = p; });
+  var gymMfree = (function () {
+    var all = F.planAllDates(gymM);
+    var d = F.parseISO(gymSNext);
+    for (var k = 0; k < 48; k++) {
+      d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      var x = F.localISO(d);
+      if (x > gymSNext && all.indexOf(x) < 0) return x;
+    }
+    return null;
+  })();
   gymM.overrides = gymM.overrides || {};
-  gymM.overrides['2026-11-04'] = { move: '2026-12-05' };
+  gymM.overrides[gymSNext] = { move: gymMfree };
   await F.idbPut('plans', gymM);
   await sleep(20);
   F.setPlanTab('rec'); // v73.60: the re-order assertion needs the Recurring pane
@@ -1114,8 +1249,8 @@ waitReady().then(async function (F) {
   var iGymMoved = listHtml.indexOf('data-grp="pmuimaif9irt"');
   var iAve = listHtml.indexOf('data-grp="pmv502ftnhy2"'); // Ave next 2026-11-18
   ok(iGymMoved >= 0 && iAve >= 0 && iAve < iGymMoved,
-    'v73.59: moving Gym to 2026-12-05 re-orders it AFTER Ave (next 2026-11-18) — sort by next occurrence');
-  delete gymM.overrides['2026-11-04'];
+    'v73.59: moving Gym to ' + gymMfree + ' re-orders it AFTER Ave (next 2026-11-18) — sort by next occurrence');
+  delete gymM.overrides[gymSNext];
   await F.idbPut('plans', gymM);
   await sleep(20);
   // (5) one-offs are EDITABLE — the ✎ opens the sheet, save writes name/amount/date straight.
@@ -2848,6 +2983,54 @@ waitReady().then(async function (F) {
       ok(html40.indexOf('only your question leaves this phone') >= 0, 'v73.97: the remote-coach privacy note is untouched');
       ok(html40.indexOf('stored only on this device') >= 0, 'v73.97: the BYO-key privacy note is untouched');
       ok(html40.indexOf('encrypted on this phone') >= 0, 'v73.97: the Sync mechanics note is untouched');
+
+      // ============ PART 41: v73.98 - the salary-early headroom window ============
+      // (boss: 'whenever a salary is logged ahead of the next cycle, the
+      // headroom recomputes x/day based on (date of salary logged to end of
+      // next cycle) so the numbers still insightful'). The seed's Oct-10
+      // salary predates the Oct-15 cycle start (it is the PREVIOUS cycle's
+      // payday) so the baseline window is the current cycle verbatim.
+      console.log('\n== PART 41: v73.98 - the salary-early headroom window =');
+      var d41 = F.insightsData();
+      var hw41 = d41.headroomWindow;
+      ok(!!hw41 && hw41.early === false, 'v73.98: baseline — no early payday in-cycle, window is not early');
+      ok(hw41.start === d41.cycle.start && hw41.end === d41.cycle.end,
+        'v73.98: baseline window == the current cycle (' + hw41.start + '..' + hw41.end + ')');
+      ok(F.headroomWindow() && F.headroomWindow().early === false, 'v73.98: headroomWindow() is exported and agrees');
+      // log an EARLY salary for the CURRENT cycle (dated today, >= 90% of
+      // the expected) — cycleDataFor.received picks it up and the window
+      // shifts to received-date -> end of the NEXT cycle.
+      var sal41 = d41.cycle.expected;
+      ok(sal41 > 0, 'v73.98: seed precondition — the cycle has an expected salary (' + sal41.toFixed(2) + ')');
+      var idSal = await F.addTxn({ kind: 'cash_in', category: 'Income', account: 'Cash', amount: sal41, note: 'probe early salary', date: F.todayISO() }, { quiet: true });
+      await sleep(60);
+      var d41b = F.insightsData();
+      var hw41b = d41b.headroomWindow;
+      ok(hw41b.early === true, 'v73.98: an in-cycle early payday flips the window to early');
+      ok(hw41b.start === F.todayISO(), 'v73.98: the early window starts at the logged salary date (' + hw41b.start + ')');
+      // the cycle month is the ISO month BEFORE the cycle start, so the NEXT
+      // cycle end = month+1, sday-1 (the cycle after the current one).
+      var np41 = String(d41b.cycle.month).split('-');
+      var nEnd41 = new Date(Number(np41[0]), Number(np41[1]) + 1, d41b.cycle.sday - 1);
+      ok(hw41b.end === F.localISO(nEnd41),
+        'v73.98: the early window ends at the NEXT cycle end (' + hw41b.end + ')');
+      var dl41 = Math.round((F.parseISO(hw41b.end) - F.parseISO(F.todayISO())) / 86400000) + 1;
+      ok(d41b.cycleDaysLeft === dl41, 'v73.98: cycleDaysLeft divides by the early window (' + d41b.cycleDaysLeft + ' == ' + dl41 + ')');
+      var hDaily41 = dl41 > 0 ? Math.round(Math.max(0, d41b.freeNet) / dl41 * 100) / 100 : 0;
+      F.renderInsights();
+      var ins41 = String(byIdStub('insBody').innerHTML || '');
+      ok(ins41.indexOf(money22(hDaily41)) >= 0,
+        'v73.98: the Headroom cell quotes the early-window daily math (' + money22(hDaily41) + '/day)');
+      F.renderInsights();
+      var title41 = String(byIdStub('insTitle').textContent || '');
+      ok(title41.indexOf('Early salary') === 0,
+        'v73.98: the card title names the early window (got ' + JSON.stringify(title41) + ')');
+      // delete the probe salary — the window falls back to the baseline
+      await F.deleteTxn(idSal);
+      await sleep(60);
+      var d41c = F.insightsData();
+      ok(d41c.headroomWindow.early === false && d41c.headroomWindow.start === d41c.cycle.start,
+        'v73.98: after deleting the early salary the window falls back to the current cycle');
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);

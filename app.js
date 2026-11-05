@@ -3660,6 +3660,36 @@
       if (d < lo || d > hi) return;
       if (!received || d < received.date) received = { date: d, amount: r2(amt), id: t.id || null };
     });
+    // v73.98 (boss: 'whenever a salary is logged ahead of the next cycle, the
+    // headroom recomputes x/day based on (date of salary logged to end of
+    // next cycle)'): a SECOND scan — a qualifying cash_in dated AFTER payday+2
+    // but still inside the cycle is the NEXT cycle's salary arriving early.
+    // Record it the same way; headroomWindow() decides which side of the
+    // cycle it landed on (before payday = early payday, after = early next).
+    if (received) {
+      // a LATER-dated qualifying cash_in (after payday+2, still in-cycle)
+      // is the next cycle's salary arriving early — it wins over the
+      // early-payday one above.
+      state.txns.forEach(function (t) {
+        if (t.kind !== 'cash_in') return;
+        var amt = Number(t.amount) || 0;
+        if (amt <= 0) return;
+        if (expected > 0 && amt < 0.9 * expected) return;
+        var d = String(t.date || '');
+        if (d <= hi || d > w.end) return;
+        if (d > received.date) received = { date: d, amount: r2(amt), id: t.id || null };
+      });
+    } else {
+      state.txns.forEach(function (t) {
+        if (t.kind !== 'cash_in') return;
+        var amt = Number(t.amount) || 0;
+        if (amt <= 0) return;
+        if (expected > 0 && amt < 0.9 * expected) return;
+        var d = String(t.date || '');
+        if (d <= hi || d > w.end) return;
+        if (!received || d < received.date) received = { date: d, amount: r2(amt), id: t.id || null };
+      });
+    }
     var receivedId = received ? received.id : null;
     // spend this cycle (the one spend rule, v72.44 — prepays are not spend).
     // The cycle's own salary cash_in is excluded from the spend: it is income
@@ -3700,6 +3730,32 @@
   function cycleData() {
     if (!state.base) return null;
     return cycleDataFor(currentCycleMonth(state.base, todayISO()), state.base);
+  }
+  // v73.98 (boss: 'whenever a salary is logged ahead of the next cycle, the
+  // headroom recomputes x/day based on (date of salary logged to end of next
+  // cycle) so the numbers stay insightful'): the headroom window. When the
+  // cycle's salary landed EARLY — cycleDataFor.received detected a cash_in
+  // dated strictly inside the current cycle, before payday — that money now
+  // has to carry the stretch from the day it landed to the END OF THE NEXT
+  // cycle (the next payday), so the per-day headroom divides by that shorter
+  // window instead of diluting across the whole current cycle. No early
+  // payday = the current cycle window verbatim (the pre-v73.98 behavior).
+  // A received date BEFORE the cycle start (the seed's Oct-10 salary for the
+  // Oct-15..Nov-14 cycle) is the PREVIOUS cycle's payday — it does not
+  // trigger the window.
+  function headroomWindow() {
+    var cd = cycleData();
+    if (!cd) return null;
+    var rec = cd.received;
+    if (rec && rec.date > cd.start && rec.date < cd.end) {
+      // cd.month is the ISO month BEFORE the cycle start (cycle = month+1
+      // sday .. month+1 sday-1), so the NEXT cycle end = new Date(y, m+1,
+      // sday-1) — one month past the current cycle end.
+      var np = String(cd.month).split('-');
+      var nEnd = new Date(Number(np[0]), Number(np[1]) + 1, cd.sday - 1);
+      return { start: rec.date, end: localISO(nEnd), early: true, received: rec };
+    }
+    return { start: cd.start, end: cd.end, early: false, received: rec };
   }
   // v73.34 (boss: 'add an ability to peek on the next cycles numbers, using
   // current free cash (with ability to see the numbers with and without
@@ -4465,12 +4521,16 @@
       // end (the 14th), not the calendar month end — the money lasts until the
       // next salary, not until the 30th. Falls back to the calendar days when
       // there is no cycle (no base / no salary day).
+      // v73.98: the window is headroomWindow() — when the salary landed EARLY
+      // in-cycle, the money covers received-date → end of the NEXT cycle, so
+      // the per-day headroom divides by that shorter stretch.
       cycleDaysLeft: (function () {
-        var cd = cycleData();
-        if (!cd) return daysLeft;
-        var dl = Math.round((parseISO(cd.end) - parseISO(today)) / 86400000) + 1;
+        var hw = headroomWindow();
+        if (!hw) return daysLeft;
+        var dl = Math.round((parseISO(hw.end) - parseISO(today)) / 86400000) + 1;
         return dl > 0 ? dl : 1;
-      })()
+      })(),
+      headroomWindow: headroomWindow() // v73.98: the strip title + the smoke read it
     };
   }
   // ---------- Phase 5: unified coach card (narrative + attention rows + one-tap actions) ----------
@@ -5197,8 +5257,16 @@
     if (he) he.style.display = d ? 'none' : '';
     if (!d) { wrap.style.display = 'none'; return; }
     // v73.94: the card title names the window the strip measures.
-    var it = byId('insTitle');
-    if (it) it.textContent = d.cycle && d.cycle.start && d.cycle.end ? 'This cycle \u00b7 ' + dayMonth(d.cycle.start) + ' \u2192 ' + dayMonth(d.cycle.end) : 'This cycle';
+    // v73.98: when the salary landed early, the window is the EARLY window
+    // (received-date → end of the next cycle), so the title says so.
+    var hwT = d.headroomWindow;
+    if (hwT && hwT.early) {
+      var it = byId('insTitle');
+      if (it) it.textContent = 'Early salary \u00b7 ' + dayMonth(hwT.start) + ' \u2192 ' + dayMonth(hwT.end);
+    } else {
+      var it2 = byId('insTitle');
+      if (it2) it2.textContent = d.cycle && d.cycle.start && d.cycle.end ? 'This cycle \u00b7 ' + dayMonth(d.cycle.start) + ' \u2192 ' + dayMonth(d.cycle.end) : 'This cycle';
+    }
     wrap.style.display = '';
     var s = d.s, daysLeft = d.daysLeft, meal = d.meal;
     // v73.16: the headroom runs on the NET free (raw minus the cycle's plan
@@ -8828,12 +8896,16 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.97, live: new Date(2026, 10, 5, 15, 27) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.98, live: new Date(2026, 10, 5, 19, 41) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.98': [
+      'The cycle strip now notices an early payday: when your salary lands ahead of the next cycle, the Headroom per day and the days-left count run from the day the money arrived to the end of the NEXT cycle — the number stays honest instead of diluting across the old window (the card title says "Early salary" while it does).',
+      'The smoke calendar stopped drifting: the test seed re-anchors its monthly plan to the live cycle, so the suite passes on any day, not just the day it was written.'
+    ],
     '73.97': [
       'The small print got smaller: the notes that just said what the UI already shows are gone (the drag hint, the \u201csaved on this phone\u201d lines, the Owed-tab description, the redundant Your-numbers summary), and the ones that survived keep only their non-obvious clause (quick sums, the empty-Ledger onboarding pointer).'
     ],
@@ -9885,6 +9957,7 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
 
   // ---------- bridge for chat.js (the chat writes through the app's own actions) ----------
   window.FinApp = {
+    headroomWindow: headroomWindow, // v73.98: the early-salary headroom window (smoke drives it)
     addPlan: addPlan,
     deletePlan: deletePlan,
     addTxn: addTxn,
