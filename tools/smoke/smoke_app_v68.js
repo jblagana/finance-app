@@ -2826,6 +2826,29 @@ waitReady().then(async function (F) {
       F.setPlanTab('one');
       F.renderPlans();
 
+      // ============ PART 40: v73.97 - the self-evident notes are gone ============
+      // (boss: 'i want to completely remove the descriptions for parts that are
+      // self explanatory and obvious'). Five notes deleted outright (the drag
+      // hint, the Owed-tab description, the add-plan note, the redundant
+      // Your-numbers Settings summary, the "entries saved on this phone"
+      // clause) and two trimmed to their one non-obvious clause (quick sums;
+      // the empty-Ledger onboarding pointer). The privacy/mechanics notes
+      // (remote coach, BYO key, Sync) stay — they answer real questions.
+      console.log('\n== PART 40: v73.97 - the self-evident notes are gone =');
+      var html40 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
+      ok(html40.indexOf('drag a card to rearrange') < 0, 'v73.97: the drag hint is gone (the ⠿ handle teaches itself)');
+      ok(html40.indexOf('A private book of who owes whom') < 0, 'v73.97: the Owed-tab description is gone (the tab is named Owed)');
+      ok(html40.indexOf('Plans stay on this phone') < 0, 'v73.97: the add-plan note is gone (local app, said 4x in Settings)');
+      ok(html40.indexOf('Everything is stored on this phone') < 0, 'v73.97: both "stored on this phone" notes are gone (the stale "projection" name with them)');
+      ok(html40.indexOf('Entries are saved on this phone') < 0, 'v73.97: the empty-Ledger first clause is gone');
+      // the survivors keep only their non-obvious clause
+      ok(html40.indexOf('quick sums like 300-125+10') >= 0, 'v73.97: the quick-sums clause survives in the Your-numbers sheet');
+      ok(html40.indexOf('For full free-cash math, add your numbers in') >= 0, 'v73.97: the empty-Ledger onboarding pointer survives');
+      // the notes that answer real questions are untouched
+      ok(html40.indexOf('only your question leaves this phone') >= 0, 'v73.97: the remote-coach privacy note is untouched');
+      ok(html40.indexOf('stored only on this device') >= 0, 'v73.97: the BYO-key privacy note is untouched');
+      ok(html40.indexOf('encrypted on this phone') >= 0, 'v73.97: the Sync mechanics note is untouched');
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

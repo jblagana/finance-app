@@ -8828,12 +8828,15 @@ var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N o
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 73.96, live: new Date(2026, 10, 4, 22, 5) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 73.97, live: new Date(2026, 10, 5, 15, 27) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '73.97': [
+      'The small print got smaller: the notes that just said what the UI already shows are gone (the drag hint, the \u201csaved on this phone\u201d lines, the Owed-tab description, the redundant Your-numbers summary), and the ones that survived keep only their non-obvious clause (quick sums, the empty-Ledger onboarding pointer).'
+    ],
     '73.96': [
       'The Money tab is now \u201cCommitted\u201d \u2014 the money that is already spoken for (the other half of the hero\u2019s Free/unallocated). It opens with one line: what this cycle commits and how much of your free cash that is. The plan list is sectioned: Expenses (amber) and Saving for (blue), with a subtotal on each \u2014 and new plans get a one-tap \u201cThis is for\u201d pick (Expense or Saving for) in the add sheet. Your old plans are all Expenses; flip one to Saving for by re-adding it (the kind can\u2019t be changed on an existing plan yet).',
       'The tab order is Home \u00b7 Committed \u00b7 Ledger \u00b7 Owed.'

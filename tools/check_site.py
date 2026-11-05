@@ -1931,6 +1931,18 @@ def main():
           and "kindSel = 'expense'" in js and "kind: kindSel" in js
           and "committedSum" in js and "cyclePlanDeduction()" in js
           and "'73.96': [" in js)
+    check("v73.97 (boss: 'i want to completely remove the descriptions for parts that are self explanatory and obvious'): the self-evident notes are GONE — the drag hint (the ⠿ handle teaches itself), the Owed-tab description (the tab is named Owed), the add-plan note + both 'stored on this phone' notes (local app, said 4x in Settings; the stale 'projection' name dies with them), and the empty-Ledger first clause. The survivors keep only their non-obvious clause (quick sums; the empty-Ledger onboarding pointer), and the privacy/mechanics notes (remote coach, BYO key, Sync) are untouched — they answer real questions. Smoke PART 40: all five gone, the two survivors present, the three privacy notes intact",
+          'drag a card to rearrange' not in html
+          and 'A private book of who owes whom' not in html
+          and 'Plans stay on this phone' not in html
+          and 'Everything is stored on this phone' not in html
+          and 'Entries are saved on this phone' not in html
+          and 'quick sums like 300-125+10' in html
+          and 'For full free-cash math, add your numbers in' in html
+          and 'only your question leaves this phone' in html
+          and 'stored only on this device' in html
+          and 'encrypted on this phone' in html
+          and "'73.97': [" in js)
     check("v73.80 (boss: 'replace Category with Pay to / Paid with on the Pay card sheet'): the Pay card sheet's Category is GONE — it is two picks instead: Pay to (f_payto: the card being paid, bare names, cards only) and Paid with (f_paywith: the cash/debit funder, TYPE::Name, debits + Cash only). setAddMode swaps the fields (updateAddModeFields); the payoff still lands on the CARD (account = the card name, the v72.42 rule: owed drops, free UNTOUCHED, raw liquid drops) and the funder rides the record (t.payWith) + the ledger row (e.w), which renders both sides ('to: <card> · from: <funder>'); payWithOf resolves the funder for fresh + legacy rows; the edit sheet is Spend-shaped and shows the funder read-only (paywithNote), and a re-save keeps it",
           "function seedPayTo()" in js
           and "function seedPayWith()" in js
