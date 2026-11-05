@@ -67,6 +67,10 @@ var elMap = {
   committedSumSub: makeStub() // v73.96: the Committed summary sub-line
 };
 elMap['pe_date'].id = 'pe_date';
+// v74.01: the tsRow stub's row-level onclick guard reads e.target.id — the
+// ts* stubs need real id strings or the guard (t.id === 'tsAmt' …) can never
+// match and the input/✕/Log clicks would wrongly expand the row.
+['tsRow', 'tsOpen', 'tsHint', 'tsAmt', 'tsX', 'tsLog', 'tsLine'].forEach(function (k) { byIdStub(k).id = k; });
 // v73.49: byIdStub must return the SAME instance every time (the app's
 // byId('mlBody').innerHTML write and the probe's read of elMap['mlBody']
 // must hit one object). The pre-v73.49 version created a fresh stub per
@@ -3145,6 +3149,27 @@ waitReady().then(async function (F) {
       // expand: .ts-open appears (the CSS shows the input + the ✕)
       F.tsSetOpen(true);
       ok(tsRow43.className === 'testrow ts-open', 'v74.00: expand — the row carries .ts-open (input + ✕ visible via CSS)');
+      // v74.01 (boss: 'make the entire row clickable'): the WHOLE row is the
+      // tap target — the row carries the click handler, a click on the hint
+      // (or the row's own gaps) expands it, and a click that STARTS on the
+      // input / ✕ / Log is the row's own control (ignored by the row).
+      var rowH43 = byIdStub('tsRow').onclick;
+      ok(typeof rowH43 === 'function', 'v74.01: the row carries a click handler (the whole row is the tap target)');
+      F.tsSetOpen(false);
+      rowH43({ target: byIdStub('tsHint') });
+      ok(tsRow43.className === 'testrow ts-open', 'v74.01: a click on the hint expands the row');
+      F.tsSetOpen(false);
+      rowH43({ target: byIdStub('tsRow') });
+      ok(tsRow43.className === 'testrow ts-open', 'v74.01: a click on the row itself (the gaps) expands it');
+      F.tsSetOpen(false);
+      rowH43({ target: byIdStub('tsAmt') });
+      ok(tsRow43.className === 'testrow', 'v74.01: a click starting on the input is ignored (stays collapsed)');
+      rowH43({ target: byIdStub('tsX') });
+      ok(tsRow43.className === 'testrow', 'v74.01: a click starting on the ✕ is ignored (stays collapsed)');
+      rowH43({ target: byIdStub('tsLog') });
+      ok(tsRow43.className === 'testrow', 'v74.01: a click starting on the Log button is ignored (stays collapsed)');
+      rowH43({ target: byIdStub('tsOpen') });
+      ok(tsRow43.className === 'testrow ts-open', 'v74.01: a click on the label still expands (the original target, now via the row)');
       // type a FITTING amount (the smoke stub's input has no value — set it)
       tsAmt43.value = String(fit43);
       F.tsUpdate();

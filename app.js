@@ -5366,8 +5366,19 @@
   function wireTestSpend() {
     if (testSpendWired) return;
     testSpendWired = true;
-    var open = byId('tsOpen'), amt = byId('tsAmt'), x = byId('tsX'), log = byId('tsLog');
+    var open = byId('tsOpen'), amt = byId('tsAmt'), x = byId('tsX'), log = byId('tsLog'), row = byId('tsRow');
     if (open) open.onclick = function () { tsSetOpen(true); };
+    // v74.01 (boss: 'make the entire row clickable'): the WHOLE row is the
+    // tap target — the label, the hint, the gaps. Clicks that START on the
+    // input / ✕ / Log button are the row's own controls: they keep their
+    // own handlers (the input's tap must not re-select mid-type, the ✕ and
+    // Log have their own jobs), so a click beginning on them is ignored
+    // here. A click anywhere else on the row expands it.
+    if (row) row.onclick = function (e) {
+      var t = e && e.target;
+      if (t && (t.id === 'tsAmt' || t.id === 'tsX' || t.id === 'tsLog')) return;
+      tsSetOpen(true);
+    };
     if (amt) amt.oninput = function () { testSpendAmt = String(amt.value || ''); tsUpdate(); };
     if (x) x.onclick = function () { tsSetOpen(false); };
     if (log) log.onclick = function () {
@@ -9028,12 +9039,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.00, live: new Date(2026, 10, 6, 1, 45) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.01, live: new Date(2026, 10, 6, 3, 9) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.01': [
+      'The "Test a spend" row is now the whole tap target: anywhere on the line — the label, the "what if I buy something one-time?" hint, even the gaps — opens the amount input (before, only the bold label did). The input itself, the ✕, and the Log button still do their own thing when tapped.'
+    ],
     '74.00': [
       'The cycle strip now answers "what if I buy something one-time?": tap the quiet "＋ Test a spend" line under it, type an amount, and the new headroom per day updates live as you type — no check button, nothing written. When it doesn\u2019t fit, a red line names the most you could actually spend, and the "Log it as an expense" button (green when it fits, red when it doesn\u2019t) opens the add sheet pre-filled, so the check and the commit are one motion.'
     ],
