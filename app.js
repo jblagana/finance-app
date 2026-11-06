@@ -2435,6 +2435,10 @@
       // v73.80: the funder follows the edit (kept — the edit sheet is
       // read-only on it — or absent for a non-payoff)
       if (t.kind === 'card_payment') { e0.w = payWithOf(t); } else { delete e0.w; }
+      // v74.02: a payoff row that predates the funder field (pre-v73.80,
+      // e.w never backfilled on edit) gets it now — the render's CC-funded
+      // branch (the ledger's card-only line) reads e.w.
+      if (t.kind === 'card_payment' && e0.w == null) { var wBf = payWithOf(t); if (wBf) e0.w = wBf; }
       // e.at is UNTOUCHED — the original date/time stays on the row
       rebase(e0, dFree, dCard, 1);
       // v72.10: the edit flipped the row to a card flavor — backfill the card
@@ -2699,6 +2703,20 @@
       if (msel.value !== mlFilterM) mlFilterM = msel.value; // filtered method no longer present
     }
   }
+  // v74.02: is the payoff's FUNDER a credit card? The funder rides the row
+  // (e.w, v73.80) and is resolved against the LIVE effective snapshot —
+  // the card names live in s.cards (not base.accounts, which holds the
+  // debit accounts), and the effective clone keeps them live. A CC-funded
+  // payoff has no liquid side at all (the ledger can only show the TOTAL
+  // card line; per-card balances aren't stored on the row).
+  function isCardFunder(name) {
+    var nm = String(name || '').trim();
+    if (!nm) return false;
+    var s = effectiveSnap();
+    var cards = (s && s.cards) || [];
+    for (var i = 0; i < cards.length; i++) if (String(cards[i].name || '') === nm) return true;
+    return false;
+  }
   function renderMoneyLog() {
     var el = byId('moneyLog');
     if (!el) return;
@@ -2760,16 +2778,45 @@
         // v73.53: a cashback payoff (e.cb) is NEW money — free rose by the
         // full amount, so its row is an inflow like 'i', not a plain 'p'.
         var cbRow = e.k === 'p' && e.cb;
+        // v74.02 (boss-approved mockup_ledger_changes.html): every "x → y"
+        // sub-line becomes the ACCOUNT(S) the row actually touched — card
+        // charge → card line, liquid spend/in → liquid line, a card payment
+        // FROM liquid → BOTH (card first). The old "free" line is gone from
+        // every row. Cases the boss approved with the mock: a cashback
+        // payoff shows CARD ONLY (the money is new — a liquid line would be
+        // fake); a payoff FUNDED BY ANOTHER CC shows the total card line
+        // only (per-card balances aren't stored on the row); adjustments map
+        // debit → liquid, card → card; legacy rows (no flavor) fall back to
+        // the liquid line (cash is the only thing they could have moved).
+        var ccFunded = e.k === 'p' && !cbRow && isCardFunder(e.w);
         var inflow = e.k === 'i' || e.k === 'p' || cbRow;
-        var before = (e.k === 'p' && !cbRow) ? r2(e.f)
-          : r2(e.f + (add ? (inflow ? -e.n : e.n) : (inflow ? e.n : -e.n)));
-        if (isAdj) before = r2(e.f - e.n);
         var extra = '';
         if (e.k === 'c' || e.k === 'p') {
           var oBefore = r2(e.o + (add ? (e.k === 'c' ? -e.n : e.n) : (e.k === 'c' ? e.n : -e.n)));
           extra = '<span class="ml-x">card ' + money(oBefore) + ' → ' + money(e.o) + '</span>';
         } else if (isAdj && e.o != null) {
           extra = '<span class="ml-x">card ' + money(r2(e.o - e.n)) + ' → ' + money(e.o) + '</span>';
+        }
+        // v74.02: the liquid line — the row's free-cash before→after
+        // (e.f is the AFTER value; the before is derived per flavor, the
+        // same way the old free line was). Which rows get it:
+        //  · 'x' (spend) / 'i' (cash in): the liquid side of the row
+        //  · 'a'/'r' debit rows: the override's own signed diff
+        //  · a PLAIN payoff gets NO liquid line — free is UNTOUCHED by it
+        //    (v72.42: the charge already committed the money; the payoff
+        //    only settles the debt), so a line would read "x → x". The
+        //    card line IS the row.
+        //  · a CASHBACK payoff: CARD ONLY (the approved lean — the money
+        //    is new, liquid untouched; a liquid line would be fake)
+        //  · a CC-FUNDED payoff: no liquid line either (the funder is a
+        //    card — nothing liquid moved at all)
+        //  · a LEGACY row (no k flavor, pre-v72.10 import) falls back to
+        //    the liquid line (cash is the only thing it could have moved)
+        var legacyRow = !e.k;
+        if (e.k === 'x' || e.k === 'i' || (isAdj && e.o == null) || legacyRow) {
+          var liqBefore = isAdj ? r2(e.f - e.n)
+            : r2((e.f != null ? e.f : 0) + (add ? (e.k === 'i' ? -e.n : e.n) : (e.k === 'i' ? e.n : -e.n)));
+          extra += '<span class="ml-f">liquid ' + money(liqBefore) + ' → ' + money(e.f != null ? e.f : 0) + '</span>';
         }
         // v73.75 (boss-approved mockup_compact_livenumbers.html): the
         // "month spent X → X" chip is GONE (the v73.9/v73.10 salary guard
@@ -2803,20 +2850,19 @@
           '" aria-label="Remove this adjustment" title="Remove the record — it takes the override back">\u2715</button>' : '';
         var down = add ? !inflow : inflow; // spend down / come-back up vs inflow up / take-back down
         var amtTxt = (down ? '−' : '+') + money(e.n);
-        var freeTxt = '<span class="ml-f">free ' + money(before) + ' → ' + money(e.f) + '</span>';
+        // v74.02: the "free x → y" line is GONE from every row — the account
+        // line(s) in `extra` (card / liquid) are the row's whole story now.
         if (isAdj) {
           var cardRow = e.o != null;
           down = cardRow ? e.n > 0 : e.n < 0; // more owed (card) / less cash (debit) = the red side
           amtTxt = (e.n > 0 ? '+' : '−') + money(Math.abs(e.n));
-          if (cardRow) freeTxt = ''; // a card override never moves free
         }
-        if (e.k === 'p' && !cbRow) freeTxt = ''; // v72.44 (user edit): a plain payoff never moves free — show only the card balance change; v73.53: a cashback payoff DOES move free (it is new money)
         return '<div class="ml-row' + (add ? '' : ' del') + '">' +
           '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
           (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
           '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) + (cyclePill ? ' ' + cyclePill : '') + '</div></div>' +
           '<div class="ml-r"><b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b>' +
-          freeTxt + extra + editBtn + delBtn + adjDel + '</div></div>';
+          extra + editBtn + delBtn + adjDel + '</div></div>';
       }).join('') +
       // v72.30 (user edit: 'see less beside see more'): the buttons share one
       // row — See less re-hides per tap down to the first page (hidden there);
@@ -9039,12 +9085,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.01, live: new Date(2026, 10, 6, 3, 9) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.02, live: new Date(2026, 10, 6, 14, 16) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.02': [
+      'Every Ledger entry now shows the account it actually charged: a card charge shows the card balance change, a liquid spend or cash-in shows the liquid change. The old "free" line is gone from every row. A card payment (from liquid) shows the card line only — the free cash was already committed when the charge was made, so the payoff only settles the debt. A cashback payoff shows only the card line (the money is new — liquid was untouched), and a card payment funded by another card shows the total card line (per-card balances aren\'t stored on the entry). Adjustments map the same way: a debit override shows the liquid line, a card override the card line.'
+    ],
     '74.01': [
       'The "Test a spend" row is now the whole tap target: anywhere on the line — the label, the "what if I buy something one-time?" hint, even the gaps — opens the amount input (before, only the bold label did). The input itself, the ✕, and the Log button still do their own thing when tapped.'
     ],
@@ -10188,6 +10237,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     stampRebase: stampRebase, // v73.89: the rebase stamp (smoke drives it directly)
     migrateCashBy: migrateCashBy, // v73.83: the boot per-funder cash split rebuild (smoke drives the payoff-lands-on-funder acceptance test)
     fileReconcileRow: fileReconcileRow, // v73.73: the audit row (smoke checks the ledger)
+    fileBalanceAdjustment: fileBalanceAdjustment, // v74.02: the override audit row (smoke checks the mapped lines)
+    isCardFunder: isCardFunder, // v74.02: the CC-funder resolver (smoke drives the CC-funded branch)
     setMlFilters: function (cat, m) { mlFilterCat = cat; mlFilterM = m || ''; mlShownCount = ML_PAGE; }, // v73.70: test hook (the smoke drives the method filter without a DOM onchange)
     mlShown: function () { return mlShownCount; }, // v73.92: the pager's page (smoke asserts 10/10 paging)
     setMlShown: function (n) { mlShownCount = n; renderMoneyLog(); }, // v73.91: the smoke drives the See more/less page without a DOM click

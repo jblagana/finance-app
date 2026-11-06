@@ -614,8 +614,16 @@ waitReady().then(async function (F) {
   var row5 = null;
   F.state.moneyLog.forEach(function (e) { if (e.tid === id5) row5 = e; });
   ok(!!row5 && row5.cb === true, 'v73.53: the cashback flag rides the ledger row');
-  var seg5 = (byIdStub('mlBody').innerHTML || '').slice((byIdStub('mlBody').innerHTML || '').indexOf('probe cashback'));
-  ok(seg5.indexOf('ml-f') >= 0, 'v73.53: the cashback row shows its free line (new money)');
+  // v74.02: the cashback row's "new money" line is now the CARD line (the
+  // free line is gone from every row; a liquid line would be fake — the
+  // money is new, liquid untouched).
+  var _h5 = String(byIdStub('mlBody').innerHTML || '');
+  var _i5 = _h5.indexOf('probe cashback');
+  var _j5 = _h5.indexOf('<div class="ml-row', _i5 + 10);
+  if (_j5 < 0) _j5 = _h5.indexOf('ml-pag', _i5);
+  var seg5 = _i5 >= 0 ? _h5.slice(_i5, _j5 > _i5 ? _j5 : undefined) : '';
+  ok(seg5.indexOf('ml-x') >= 0 && seg5.indexOf('card PHP') >= 0, 'v73.53: the cashback row shows its card line (new money)');
+  ok(seg5.indexOf('liquid PHP') < 0, 'v74.02: the cashback row has NO liquid line (liquid was untouched)');
   // delete + undo restore the exact pre-payoff state (no phantom, no stuck flag)
   await F.deleteTxn(id5);
   await sleep(40);
@@ -3204,6 +3212,138 @@ waitReady().then(async function (F) {
       F.tsSetOpen(false);
       ok(tsRow43.className === 'testrow' && String(byIdStub('tsLine').innerHTML || '') === '' && String(byIdStub('tsLog').className || '') === 'tr-log',
         'v74.00: collapse — no .ts-open, the verdict is gone, the Log button hides again');
+
+      // ============ PART 44: v74.02 - the ledger's card / liquid change lines ============
+      // (boss-approved mockup_ledger_changes.html: 'all instances of "x -> y"
+      // in every entry: if charged/added on card, show the card change; if
+      // charged/added on liquid, show the liquid change; card payment from
+      // liquid shows both'). The free line is gone from every row; the
+      // approved leans: cashback = card only, CC-funded = total card line,
+      // adjustments mapped (debit -> liquid, card -> card).
+      console.log('\n== PART 44: v74.02 - the ledger card / liquid change lines =');
+      var log44 = JSON.parse(JSON.stringify(F.state.moneyLog || []));
+      var base44 = JSON.parse(JSON.stringify(F.state.base));
+      var es44 = F.effectiveSnap();
+      var raw44 = es44.cash.total, free44 = es44.cash.free, owed44 = es44.card_owed;
+      // the liquid line quotes the row's STORED free (e.f = the AFTER
+      // value, before derived per flavor) — the overlay's live free at log
+      // time, NOT the snapshot's raw cash total.
+      var php = function (v) { return 'PHP ' + (Math.round(v * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+      var segOf = function (note) {
+        F.setMlShown(9999); // the probe rows must be on the rendered page
+        F.renderMoneyLog();
+        var h = String(byIdStub('mlBody').innerHTML || '');
+        var i = h.indexOf(note);
+        // the row is the outer .ml-row div — the segment runs to the NEXT
+        // row (or the pager), not the first nested </div></div>
+        var j = h.indexOf('<div class="ml-row', i + 10);
+        if (j < 0) j = h.indexOf('ml-pag', i);
+        return i >= 0 ? h.slice(i, j > i ? j : undefined) : '';
+      };
+      // (1) liquid spend -> liquid line only, no card line, no free line
+      var id44a = await F.addTxn({ kind: 'cash_out', category: 'Food', account: 'MariBank', amount: 250, note: 'v74.02 spend probe', date: '2026-10-14' }, { quiet: true });
+      await sleep(60);
+      var seg44a = segOf('v74.02 spend probe');
+      ok(seg44a.indexOf('liquid ' + php(free44) + ' → ' + php(free44 - 250)) >= 0, 'v74.02: a liquid spend shows the liquid change (' + php(free44) + ' → ' + php(free44 - 250) + ')');
+      ok(seg44a.indexOf('card PHP') < 0, 'v74.02: a liquid spend has NO card line');
+      // (2) cash in -> liquid line, the other direction
+      var id44b = await F.addTxn({ kind: 'cash_in', category: '', account: 'Maya', amount: 400, note: 'v74.02 cashin probe', date: '2026-10-14' }, { quiet: true });
+      await sleep(60);
+      var free44b = F.effectiveSnap().cash.free;
+      var seg44b = segOf('v74.02 cashin probe');
+      ok(seg44b.indexOf('liquid ' + php(free44b - 400) + ' → ' + php(free44b)) >= 0, 'v74.02: a cash-in shows the liquid change the other way (' + php(free44b - 400) + ' → ' + php(free44b) + ')');
+      ok(seg44b.indexOf('card PHP') < 0, 'v74.02: a cash-in has NO card line');
+      // (3) card charge -> card line only, no liquid line
+      var id44c = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 300, note: 'v74.02 charge probe', date: '2026-10-14' }, { quiet: true });
+      await sleep(60);
+      var owed44c = F.effectiveSnap().card_owed;
+      var seg44c = segOf('v74.02 charge probe');
+      ok(seg44c.indexOf('card ' + php(owed44c - 300) + ' → ' + php(owed44c)) >= 0, 'v74.02: a card charge shows the card change (' + php(owed44c - 300) + ' → ' + php(owed44c) + ')');
+      ok(seg44c.indexOf('liquid PHP') < 0, 'v74.02: a card charge has NO liquid line');
+      // (4) card payment FROM liquid -> the card line. (The mock's second
+      // "liquid" line was the RAW bank total — the ledger row stores only
+      // free + owed, and free is UNTOUCHED by a plain payoff (v72.42: the
+      // charge already committed the money), so a liquid line would read
+      // "x → x". The card line IS the row — the approved rule of thumb
+      // "show the account(s) it actually moved" holds.)
+      var id44d = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'v74.02 payoff probe', date: '2026-10-14', payWith: 'MariBank' }, { quiet: true });
+      await sleep(60);
+      var owed44d = F.effectiveSnap().card_owed;
+      var seg44d = segOf('v74.02 payoff probe');
+      ok(seg44d.indexOf('card ' + php(owed44d + 500) + ' → ' + php(owed44d)) >= 0, 'v74.02: a payoff from liquid shows the card line (' + php(owed44d + 500) + ' → ' + php(owed44d) + ')');
+      ok(seg44d.indexOf('liquid PHP') < 0, 'v74.02: a plain payoff has NO liquid line (free is untouched — a line would read x → x)');
+      // (5) cashback payoff -> card line ONLY (the approved lean — new money)
+      var id44e = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 200, note: 'v74.02 cashback probe', date: '2026-10-14', cashback: true }, { quiet: true });
+      await sleep(60);
+      var owed44e = F.effectiveSnap().card_owed;
+      var seg44e = segOf('v74.02 cashback probe');
+      ok(seg44e.indexOf('card ' + php(owed44e + 200) + ' → ' + php(owed44e)) >= 0, 'v74.02: a cashback payoff shows the card line');
+      ok(seg44e.indexOf('liquid PHP') < 0, 'v74.02: a cashback payoff has NO liquid line (the money is new — the approved lean)');
+      // (6) payoff FUNDED BY ANOTHER CC -> total card line only (approved
+      // lean). NOTE: the v72.42 model still drops RAW cash on any plain
+      // payoff (the funder only steers per-debit attribution via cashBy —
+      // pre-existing, untouched here), so the row shows NO liquid line
+      // (the account it was charged on is a card) even though the raw
+      // total moves — that's the model, not a v74.02 change.
+      var raw44e = F.effectiveSnap().cash.total;
+      var id44f = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 350, note: 'v74.02 ccfunded probe', date: '2026-10-14', payWith: 'MariBank CC' }, { quiet: true });
+      await sleep(60);
+      var owed44f = F.effectiveSnap().card_owed, raw44f = F.effectiveSnap().cash.total;
+      var seg44f = segOf('v74.02 ccfunded probe');
+      ok(seg44f.indexOf('card ' + php(owed44f + 350) + ' → ' + php(owed44f)) >= 0, 'v74.02: a CC-funded payoff shows the TOTAL card line (per-card balances aren\'t stored on the row)');
+      ok(seg44f.indexOf('liquid PHP') < 0, 'v74.02: a CC-funded payoff has NO liquid line (the account it was charged on is a card)');
+      ok(close(raw44f, raw44e - 350), 'v74.02: a CC-funded payoff moves raw liquid by the payoff amount (the pre-existing v72.42 model — funder only steers per-debit attribution)');
+      // (7) the free line is GONE from every row (the seed's 29 rows + the 6 probes)
+      F.setMlShown(9999);
+      var html44 = String(byIdStub('mlBody').innerHTML || '');
+      ok(html44.indexOf('free PHP') < 0, 'v74.02: NO row in the full ledger shows a free line anymore');
+      // (8) adjustments map the same way: debit -> liquid, card -> card
+      // (fileBalanceAdjustment files the audit row only — the base save is
+      // the Settings flow's job — so the effective free/owed at filing are
+      // the row's AFTER values, and the before is derived as f − n / o − n.
+      // The list renders NEWEST-FIRST, so the probe rows (filed at "now",
+      // the seed's override rows are Oct 11) are the FIRST two occurrences.)
+      // the row stores the AFTER value (effective at filing); capture the
+      // BEFORE from the effective snapshot at each filing moment (the seed
+      // carries its own override rows, so the free/owed here already fold
+      // them in — the delta is what's under test)
+      var free44g = F.effectiveSnap().cash.free;
+      F.fileBalanceAdjustment('MariBank', 'debit', 120);
+      var owed44g = F.effectiveSnap().card_owed;
+      F.fileBalanceAdjustment('Maya CC', 'card', -80);
+      F.setMlShown(9999);
+      F.renderMoneyLog();
+      var h8 = String(byIdStub('mlBody').innerHTML || '');
+      // every rendered "balance override" segment (the seed's + the probes')
+      var segs8 = []; var p8 = h8.indexOf('balance override');
+      while (p8 >= 0) {
+        var j8 = h8.indexOf('<div class="ml-row', p8 + 10);
+        if (j8 < 0) j8 = h8.indexOf('ml-pag', p8);
+        segs8.push(h8.slice(p8, j8 > p8 ? j8 : undefined));
+        p8 = h8.indexOf('balance override', p8 + 1);
+      }
+      var debSeg = segs8.filter(function (s) { return s.indexOf('liquid ' + php(free44g - 120) + ' → ' + php(free44g)) >= 0; });
+      var cardSeg = segs8.filter(function (s) { return s.indexOf('card ' + php(owed44g + 80) + ' → ' + php(owed44g)) >= 0; });
+      ok(debSeg.length === 1 && debSeg[0].indexOf('card PHP') < 0, 'v74.02: a debit adjustment shows the liquid line (before = f − n) and NO card line');
+      ok(cardSeg.length === 1 && cardSeg[0].indexOf('liquid PHP') < 0, 'v74.02: a card adjustment shows the card line (before = o − n) and NO liquid line');
+      // (9) legacy rows (no flavor, e.g. pre-v72.10 imports) fall back to the liquid line
+      F.state.moneyLog.push({ at: Date.now(), a: 'add', l: 'Legacy', c: 'Food', nt: 'v74.02 legacy probe', m: 'Cash', n: 10, f: 1000 });
+      F.renderMoneyLog();
+      var seg44h = segOf('v74.02 legacy probe');
+      ok(seg44h.indexOf('liquid PHP 1,010.00 → PHP 1,000.00') >= 0, 'v74.02: a legacy row (no flavor) falls back to the liquid line');
+      // restore: delete the probe txns (rows + overlay go with them), drop the
+      // synthetic rows, park the base
+      await F.deleteTxn(id44a); await sleep(30);
+      await F.deleteTxn(id44b); await sleep(30);
+      await F.deleteTxn(id44c); await sleep(30);
+      await F.deleteTxn(id44d); await sleep(30);
+      await F.deleteTxn(id44e); await sleep(30);
+      await F.deleteTxn(id44f); await sleep(30);
+      F.state.moneyLog = log44;
+      F.state.base = base44;
+      F.setMlFilters('', '');
+      F.setMlShown(10);
+      F.renderMoneyLog();
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);

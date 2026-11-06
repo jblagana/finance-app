@@ -94,6 +94,7 @@ def main():
     chatjs = rd("chat.js")
     aijs = rd("ai.js")
     sw = rd("sw.js")
+    smoke = rd(os.path.join("tools", "smoke", "smoke_app_v68.js"))  # v74.02: the gate pins smoke PARTs
     mf = rd("manifest.webmanifest")
     readme = rd("README.md")
     worker = rd(os.path.join("worker", "worker.js"))
@@ -1595,10 +1596,10 @@ def main():
           # in f_payto, "Pay to" — f_payto's values are names, not TYPE::Name).
           and "card || null, 'prepay');" in js
           and "addSheetKind: addSheetKind" in js)
-    check("v72.42 (the payoff bug, user: 'fix the payoff bug and keep both numbers — floor stays on raw bank cash'): a card_payment settles the debt — it is NOT the exact inverse of card_charge (the charge already spent the free cash; the credit limit isn't money). The payoff drops the RAW liquid (adj.cash +a → effective total −a) and the owed/prepay, and leaves free UNTOUCHED (tuple free: 0, freeEffect → 0): a charge+payoff cycle nets free −amt and liquid −amt with owed 0 (the expense is real, the debt is settled) instead of erasing the expense; the money-log 'p' row renders free unchanged (before = f) while its card sub-line still shows the owed dropping; cash.free and cash.total stay separate and the liquidity floor keeps running on the raw cash.total",
+    check("v72.42 (the payoff bug, user: 'fix the payoff bug and keep both numbers — floor stays on raw bank cash'): a card_payment settles the debt — it is NOT the exact inverse of card_charge (the charge already spent the free cash; the credit limit isn't money). The payoff drops the RAW liquid (adj.cash +a → effective total −a) and the owed/prepay, and leaves free UNTOUCHED (tuple free: 0, freeEffect → 0): a charge+payoff cycle nets free −amt and liquid −amt with owed 0 (the expense is real, the debt is settled) instead of erasing the expense; the money-log 'p' row shows the card line only (v74.02: the free line is gone from every row — free is untouched by a plain payoff, so the card line IS the row); cash.free and cash.total stay separate and the liquidity floor keeps running on the raw cash.total",
           "var plain = { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js  # the PLAIN payoff tuple (v73.53: the cashback branch above it is the new-money variant); v73.83: the funder attaches to the same object
           and "function freeEffect(t, amt) { if (t.kind === 'card_payment') return t.cashback ? amt : 0; return (t.kind === 'cash_in') ? amt : -amt; }" in js  # v73.53: a cashback payoff moves free by +amt; a plain one by 0
-          and "var before = (e.k === 'p' && !cbRow) ? r2(e.f)" in js)
+          and "var ccFunded = e.k === 'p' && !cbRow && isCardFunder(e.w);" in js)  # v74.02: the render's payoff branch (card line only — no free line)
     check("v72.43 (prepaid cards under the old model, user: 'ive already prepaid the cards prior to this version, as such, card balance and free cash and liquid cash all changed, fix that'): the persisted overlay is NOT re-derived from txns on boot, so a pre-v72.42 phone's stored adj still carries each old prepay's old-model contribution (free inflated by the prepay total, liquid not reduced); the one-shot migration (the adj.mv model stamp) adds the {cash: +a, free: +a} delta per card_payment on boot + import — but NOT for a prepay after which a balance-override (money-log 'a') row rebased the overlay (that prepay's effect is in the sheet's numbers, not the overlay); every zeroed/fresh adj (boot initializer, both rebases, computeAdjFromTxns, the import sanitizer) carries the stamp so it fires exactly once; card owed is untouched (identical in both models)",
           "var ADJ_MODEL_V = 2" in js
           and "function payoffModelDelta(txns, lastOverrideAt)" in js
@@ -1622,7 +1623,7 @@ def main():
           and "spent += spendOf(t)" in js
           and "spendOf: spendOf" in js
           and "F.spendOf(tn)" in chatjs
-          and "if (e.k === 'p' && !cbRow) freeTxt = ''" in js)  # (3) user edit: the prepay row shows only the card change, not the unchanged free line (v73.53: a cashback payoff is new money — its free line stays)
+          and "var ccFunded = e.k === 'p' && !cbRow && isCardFunder(e.w);" in js)  # (3) user edit: the prepay row shows only the card change, not the unchanged free line — v74.02 generalized it: the free line is gone from EVERY row, so the payoff branch (card line only) IS the pin
     check("v72.45 (user: 'the bot dont know my cc limits / i feel like coach fin cant read my current actual numbers / i prepay in maya cc partial only but the chip is still not showing for that in the hey jan card. i want it to still show the remaining / salary is expected every 15th and used in the projection / insights on my finances based on every salary cycle (15th) / i can confirm somewhere if the salary has already entered prior to 15'): (1) the coach snapshot's CARD rows carry the LIVE per-card balance (the effective overlay, not the sheet as-of) + the stored credit limit + utilization; (2) a PARTIAL prepay keeps its per-card chips + a 'Partly handled — … still owed' row + the live 'prepay' alert — keyed on the remaining, only the full settlement takes them down; (3) the salary lands on the salary_day (the 15th, a new Your-numbers field, cutoff-day fallback): the cycle is 15th -> 14th (pure cycleDataFor), the expected amount is the cycle month's override when > 0 else the base salary (the sheet's pre-payday zero is 'not in yet', not 'no salary'), the 'Salary in' chip is a real cash_in (a third Add-sheet direction, CASH-only) the cycle reads back — even an early 13th one, which is excluded from the cycle spend so it cannot sink the previous cycle; (4) the projection gains the explicit payday point (actual receipt date once logged), the hero carries due / in, Home gets a 'This cycle' block, and the cycle rides the shared snapshot as a deterministic finding",
           "function cardEff(name) {" in chatjs
           and "var bal = c ? (Number(c.balance) || 0) : (Number(a.value) || 0);" in chatjs
@@ -1700,7 +1701,7 @@ def main():
           and "n: r2(diff), k: 'a'" in js
           and "set a balance to what it really is" in js
           and "var isAdj = e.k === 'a' || e.k === 'r';" in js  # v73.45: 'r' (reset audit row) joins the Adjustment render family
-          and "if (cardRow) freeTxt = ''" in js
+          and "var down = add ? !inflow : inflow;" in js  # v74.02: the adjustment's red/green side (card row: more owed = down; debit: less cash = down) — the freeTxt-suppression clause was replaced by the free-line removal
           and "data-ow-edit-cancel=\"1\"" in js
           and "var lessE = t.getAttribute && t.getAttribute('data-ow-less');" in js
           and "owedShown[lessE] = Math.max(5, (owedShown[lessE] || 5) - 5);" in js
@@ -1943,6 +1944,14 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.02 (boss-approved mockup_ledger_changes.html: 'all instances of x -> y in every entry: if charged/added on card, show the card change; if charged/added on liquid, show the liquid change'): every Ledger row's before→after sub-line is now the ACCOUNT the row actually charged — card charge → the card line, liquid spend / cash-in → the liquid line; the old 'free' line is gone from every row. A PLAIN payoff (from liquid) shows the card line only — free is untouched by it (v72.42: the charge already committed the money), so a liquid line would read 'x → x'; a CASHBACK payoff shows the card line only (new money — liquid untouched); a payoff FUNDED BY ANOTHER CC shows the total card line only (per-card balances aren't stored on the row; isCardFunder resolves e.w against the live snapshot's cards); adjustments map debit → liquid / card → card; legacy rows (no flavor) fall back to the liquid line. Smoke PART 44: all eight row shapes verified end-to-end + no free line anywhere in the full ledger",
+          "function isCardFunder(name) {" in js
+          and "var ccFunded = e.k === 'p' && !cbRow && isCardFunder(e.w);" in js
+          and "extra += '<span class=\"ml-f\">liquid ' + money(liqBefore) + ' → ' + money(e.f != null ? e.f : 0) + '</span>';" in js
+          and "'74.02': [" in js
+          and "fileBalanceAdjustment: fileBalanceAdjustment" in js
+          and "isCardFunder: isCardFunder" in js
+          and "PART 44: v74.02 - the ledger card / liquid change lines" in smoke)
     check("v74.01 (boss: 'make the entire row of \"+test a spend what if i buy something one-time?\" clickable'): the WHOLE Test-a-spend row is the tap target — the row itself carries the click handler (wireTestSpend), so a click on the label, the hint, or the gaps expands the amount input; a click that STARTS on the input / ✕ / Log button is the row's own control and is ignored by the row handler (e.target.id guard) so the input's tap doesn't re-select mid-type and the ✕/Log keep their own jobs. The hint gets cursor:pointer to match the label (the whole line advertises itself). Smoke PART 43: the row carries the handler, hint/row/label clicks expand, input/✕/Log clicks are ignored",
           "if (row) row.onclick = function (e) {" in js
           and "t.id === 'tsAmt' || t.id === 'tsX' || t.id === 'tsLog'" in js
