@@ -3345,6 +3345,31 @@ waitReady().then(async function (F) {
       F.setMlShown(10);
       F.renderMoneyLog();
 
+      // ============ PART 45: v74.03 - plan payments are not "spent today" ============
+      // (boss: 'its the ac installment that shouldnt count toward it' — the
+      // Spent-today card showed 2,285 = the 2,020 AC Installment + 265 while
+      // the ledger's real spend was 265; the headroom already nets out the
+      // cycle's plan share, so the payment must not double-count it).
+      console.log('\n== PART 45: v74.03 - plan payments are not spent today =');
+      var baseTxns45 = F.state.txns;
+      var id45a = await F.addTxn({ kind: 'cash_out', category: 'Utilities', account: 'Cash', amount: 2020, note: 'v74.03 AC probe', date: F.todayISO(), planRef: { planId: 'pmuim8h7dtuv', date: F.todayISO(), name: 'AC Installment', amount: 2020 } }, { quiet: true });
+      var id45b = await F.addTxn({ kind: 'cash_out', category: 'Food', account: 'Cash', amount: 265, note: 'v74.03 plain spend', date: F.todayISO() }, { quiet: true });
+      await sleep(30);
+      var d45 = F.insightsData();
+      ok(d45.todaySpend === 265, 'v74.03: a planRef payment (AC Installment, 2,020) does NOT count toward Spent today — the headroom already nets the plan share (todaySpend ' + d45.todaySpend + ' vs 265)');
+      ok(F.spendOf({ kind: 'cash_out', amount: 2020, planRef: { planId: 'x', date: F.todayISO(), name: 'AC', amount: 2020 } }) === 2020, 'v74.03: spendOf() STILL counts a planRef row (the projection chart derives its plan-due drops from it — the exclusion lives on the todaySpend aggregate, not here)');
+      ok(F.spendOf({ kind: 'cash_out', amount: 265 }) === 265, 'v74.03: spendOf() still counts a plain spend');
+      // the coach's headroom remainder subtracts the same number (the same
+      // net-free / cycle-days math the strip uses — see PART 38)
+      var hDays45 = d45.cycleDaysLeft || d45.daysLeft;
+      var hDaily45 = hDays45 > 0 ? Math.round(Math.max(0, d45.freeNet) / hDays45 * 100) / 100 : 0;
+      var remain45 = Math.round(Math.max(0, hDaily45 - d45.todaySpend) * 100) / 100;
+      ok(remain45 === Math.round(Math.max(0, hDaily45 - 265) * 100) / 100, 'v74.03: the coach remainder uses the same planRef-excluded todaySpend');
+      // restore: delete the probes (rows + overlay go with them), park the base
+      await F.deleteTxn(id45a); await sleep(30);
+      await F.deleteTxn(id45b); await sleep(30);
+      F.state.txns = baseTxns45;
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

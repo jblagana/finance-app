@@ -3639,6 +3639,10 @@
     // s line). monthEffect keeps the narrower rule (refunds still net the
     // ledger line down) for the audit trail.
     if (t.kind === 'cash_in') return 0;
+    // v74.03 note — plan payments (planRef rows) are NOT excluded here:
+    // the projection chart derives its plan-due drops from spendOf() on
+    // those rows, so a zero would erase the drops (PART 45 caught it).
+    // The exclusion lives where it belongs — the "spent today" aggregate.
     return a;
   }
   // ---------- v72.45: the salary cycle (the 15th) ----------
@@ -4429,7 +4433,15 @@
     var meal = mealBudget();
     var free = s.cash ? s.cash.free : 0;
     var todaySpend = 0;
-    state.txns.forEach(function (t) { if (t.date === today) todaySpend += spendOf(t); }); // v72.44: prepays are not spend
+    // v74.03 (boss: 'its the ac installment that shouldnt count toward it'):
+    // a plan payment (the explicit planRef link — the chip's tap marks an
+    // occurrence paid) is NOT "spent today". The headroom already nets out
+    // the cycle's plan share (cyclePlanDeduct), so counting the payment
+    // here would double-count it: the card drops by the installment while
+    // the headroom still reserves it. The exclusion lives on THIS aggregate
+    // only (not in spendOf — the projection chart derives its plan-due
+    // drops from spendOf on the planRef rows, and a zero there erased them).
+    state.txns.forEach(function (t) { if (t.date === today && !t.planRef) todaySpend += spendOf(t); }); // v72.44: prepays are not spend; v74.03: plan payments are not spend
     var items = [];
     var laterCount = 0, laterAmt = 0;
     state.plans.forEach(function (p) {
@@ -9085,12 +9097,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.02, live: new Date(2026, 10, 6, 14, 16) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.03, live: new Date(2026, 10, 8, 17, 33) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.03': [
+      'The "Spent in app today" cell no longer counts plan payments (like the AC Installment) — the headroom already reserves the cycle’s plan share, so the payment was being counted twice. Plain spends, card charges, and everything else count the same as before.'
+    ],
     '74.02': [
       'Every Ledger entry now shows the account it actually charged: a card charge shows the card balance change, a liquid spend or cash-in shows the liquid change. The old "free" line is gone from every row. A card payment (from liquid) shows the card line only — the free cash was already committed when the charge was made, so the payoff only settles the debt. A cashback payoff shows only the card line (the money is new — liquid was untouched), and a card payment funded by another card shows the total card line (per-card balances aren\'t stored on the entry). Adjustments map the same way: a debit override shows the liquid line, a card override the card line.'
     ],
