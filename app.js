@@ -8690,6 +8690,50 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     });
     return out.slice(-CHAT_CAP);
   }
+  // v74.05: imported txns keep only the shape addTxn / saveTxnEdit write —
+  // one of the four kinds, a YYYY-MM-DD date, a finite amount (a numeric
+  // string is coerced; junk drops the row), string text fields. A bad row
+  // is dropped (not "fixed" into a wrong number); duplicate ids keep the first.
+  var TXN_KINDS = { cash_out: 1, cash_in: 1, card_charge: 1, card_payment: 1 };
+  function sanitizeTxnRows(rows) {
+    var out = [], seen = {};
+    function str(v, n) { return typeof v === 'string' ? v.slice(0, n) : (v == null ? '' : String(v).slice(0, n)); }
+    (Array.isArray(rows) ? rows : []).forEach(function (t) {
+      if (!t || typeof t !== 'object') return;
+      if (typeof t.id !== 'string' || !t.id || seen[t.id]) return;
+      if (!TXN_KINDS[t.kind]) return;
+      if (typeof t.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(t.date)) return;
+      var amt = typeof t.amount === 'number' ? t.amount
+        : (typeof t.amount === 'string' && /^\s*-?\d+(\.\d+)?\s*$/.test(t.amount) ? Number(t.amount) : NaN);
+      if (!isFinite(amt) || amt < 0 || amt > 1e9) return;
+      var r = { id: t.id, date: t.date, account: str(t.account, 60), kind: t.kind,
+        category: str(t.category, 60), amount: amt, note: str(t.note, 200),
+        created: typeof t.created === 'string' ? t.created : '' };
+      if (typeof t.updated === 'string') r.updated = t.updated;
+      if (typeof t.payWith === 'string' && t.payWith) r.payWith = t.payWith.slice(0, 60);
+      if (t.cashback === true) r.cashback = true;
+      var pr = t.planRef;
+      if (pr && typeof pr === 'object' && typeof pr.planId === 'string' && typeof pr.date === 'string') {
+        r.planRef = { planId: pr.planId, date: pr.date, name: str(pr.name, 80), amount: Number(pr.amount) || 0 };
+      }
+      seen[t.id] = true;
+      out.push(r);
+    });
+    return out;
+  }
+  // v74.05: a malformed owed ENTRY drops only that entry — before, one bad
+  // entry silently dropped the whole person (and every good entry with them).
+  function sanitizeOwedPeople(people) {
+    return (Array.isArray(people) ? people : []).filter(function (p) {
+      return p && typeof p.name === 'string' && p.name.trim();
+    }).map(function (p) {
+      var entries = (Array.isArray(p.entries) ? p.entries : []).filter(function (e) {
+        return e && e.id && OWED_DIRS[e.dir] && (Number(e.amt) || 0) > 0 && e.d;
+      });
+      return { id: p.id || owedUid('ow'), name: p.name.trim(), entries: entries,
+        updated: typeof p.updated === 'string' ? p.updated : '' }; // v72.7: recent-sort key
+    });
+  }
   function sanitizeMoneyLogRows(rows) {
     var out = [];
     (rows || []).forEach(function (e) {
@@ -9023,6 +9067,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         // (a pre-72.23 file) = the full v72.8 restore, exactly as before.
         var secs = Array.isArray(data.sections) ? data.sections : null;
         function hasSec(n) { return !secs || secs.indexOf(n) >= 0; }
+        var impTxns = sanitizeTxnRows(data.txns); // v74.05
         // v71: fold any unsaved "Your numbers" edits into state before the
         // import replaces it (readBaseForm is synchronous; no save race).
         if (baseDirty) { var _nb = readBaseForm(); if (_nb) state.base = migrateCardDays(migrateBaseKinds(_nb)); baseDirty = false; }
@@ -9046,27 +9091,20 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           return Promise.all(saves);
         }).then(function () {
           var puts = [];
-          if (hasSec('txns')) (data.txns || []).forEach(function (t) { if (t && t.id && t.date) puts.push(idbPut(STORE_TX, t)); });
+          // v74.05: the txns are sanitized ONCE and the same array feeds both
+          // the store and state (before, the store got a filtered list while
+          // state took data.txns raw, so the two disagreed until a reload).
+          if (hasSec('txns')) impTxns.forEach(function (t) { puts.push(idbPut(STORE_TX, t)); });
           if (hasSec('plans')) (data.plans || []).forEach(function (p) { if (p && p.id) puts.push(idbPut(STORE_PLANS, p)); });
           if (hasSec('chat')) sanitizeChatRows(data.chat).forEach(function (r) { puts.push(idbPut(STORE_CHAT, r)); });
           return Promise.all(puts);
         }).then(function () {
           // v72.23: restore ONLY the sections this file holds — the others
           // (the phone's own data) stay exactly as they were
-          if (hasSec('txns')) state.txns = data.txns || [];
-          if (hasSec('plans')) state.plans = data.plans || [];
-          var owedPeople = [];
+          if (hasSec('txns')) state.txns = impTxns;
+          if (hasSec('plans')) state.plans = (data.plans || []).filter(function (p) { return p && p.id; });
           if (hasSec('owed')) {
-            owedPeople = (data.owed || []).filter(function (p) {
-              return p && typeof p.name === 'string' && p.name.trim() &&
-                (p.entries || []).every(function (e) {
-                  return e && e.id && OWED_DIRS[e.dir] && (Number(e.amt) || 0) > 0 && e.d;
-                });
-            }).map(function (p) {
-              return { id: p.id || owedUid('ow'), name: p.name.trim(), entries: p.entries || [],
-                updated: typeof p.updated === 'string' ? p.updated : '' }; // v72.7: recent-sort key
-            });
-            state.owed = { people: owedPeople, sort: owedImportSort(data.owedSort) };
+            state.owed = { people: sanitizeOwedPeople(data.owed), sort: owedImportSort(data.owedSort) };
           }
           if (hasSec('log')) {
             var mlRows = sanitizeMoneyLogRows(data.moneyLog);
@@ -9103,9 +9141,12 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
             // and its Undo re-files the pre-import snapshot (only when the
             // file actually restored something)
             var parts = [];
-            if (hasSec('txns')) parts.push((data.txns || []).length + ' entries');
-            if (hasSec('plans')) parts.push((data.plans || []).length + ' plans');
-            if (hasSec('owed')) parts.push(owedPeople.length + ' owed people');
+            if (hasSec('txns')) {
+              var skippedT = (Array.isArray(data.txns) ? data.txns.length : 0) - impTxns.length; // v74.05: say what was dropped
+              parts.push(impTxns.length + ' entries' + (skippedT > 0 ? ' (' + skippedT + ' unreadable skipped)' : ''));
+            }
+            if (hasSec('plans')) parts.push(state.plans.length + ' plans');
+            if (hasSec('owed')) parts.push(state.owed.people.length + ' owed people');
             if (hasSec('base') && (state.base.migrated_from_snapshot || (data.base && data.base.accounts))) parts.push('numbers restored');
             snack('Imported ' + (parts.length ? parts.join(' \u00b7 ') : 'nothing \u2014 this backup had no sections selected'),
               parts.length ? function () { restoreImportSnapshot(impPrev); } : null);
@@ -9122,12 +9163,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.04, live: new Date(2026, 10, 10, 2, 23) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.05, live: new Date(2026, 10, 10, 2, 47) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.05': [
+      'Importing a backup is now careful about what it lets in: only entries the app could have made itself come through (a real date, a real amount, a known entry type), and the "Imported" message tells you how many unreadable entries it skipped. In the Owed book, one broken entry no longer makes the whole person vanish — only that entry is skipped.'
+    ],
     '74.04': [
       'Security fix: the coach’s suggestion buttons now show their text as plain text, so a strange coach reply can never run code inside the app. And importing a backup now cleans the saved chat messages — a tampered backup file can’t sneak code in through the chat history. Your normal chat history looks exactly the same.'
     ],
@@ -10288,6 +10332,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     sanitizeMoneyLogRows: sanitizeMoneyLogRows, // v73.91: the import sanitizer (smoke asserts it no longer truncates)
     sanitizeChatRows: sanitizeChatRows, // v74.04: the chat import sanitizer (smoke asserts no markup survives it)
     sanitizeChatHtml: sanitizeChatHtml, // v74.04
+    sanitizeTxnRows: sanitizeTxnRows, // v74.05: the txn import sanitizer
+    sanitizeOwedPeople: sanitizeOwedPeople, // v74.05: the owed import sanitizer (a bad entry drops only itself)
+    OWED_DIRS: OWED_DIRS, // v74.05: the smoke needs a valid direction key
     prefillAdd: prefillAdd, // v73.18: the coach prefill (smoke verifies the chip's target state)
     getAddMode: function () { return addMode; }, // v73.19: the Add sheet's direction (the row chips' prefill proof)
     prepayRowChip: prepayRowChip, // v73.19: the prepay row-chip's handler body (smoke drives it without a DOM)

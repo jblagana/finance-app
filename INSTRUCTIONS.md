@@ -1,3 +1,12 @@
+# v74.05+ batch (prepended to INSTRUCTIONS.md)
+## 2026-11-10 - "do all" -> "Fix every open item from the bug hunt, one dot release each"
+Status: **in progress**. Subtasks (foundational / fastest first):
+- [x] v74.05 import validation — txns sanitized to the shape the app writes; a bad owed entry drops only that entry (not the whole person). Also fixed on the way: the import wrote a filtered txn list to the store but put data.txns RAW into state (they disagreed until a reload); the Imported toast now names the skipped count. Smoke PART 47 (4) + check_site pin
+
+- [ ] v74.06 sync merge — txn/plan `updated` stamps (edits sync), owed gets an `edited` stamp (owed syncs), local tombstones honored on pull (no resurrection), money log merged as a union (no wholesale loss), new-gist path reachable, raw fetch checks r.ok
+- [ ] v74.07 Worker — shared-token gate (secret, not in repo) + per-IP rate limit, so the public workers.dev URL can't drain the provider quota
+- [ ] v74.08 hygiene — AbortController on coach timeouts, escape the user-name labels that reach innerHTML, wrangler ALLOWED_ORIGIN comment
+
 # v74.04 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-10 - "in my finance app repo, hunt for bugs and redflags, and report back to me" -> (report given) -> "ok" (fix #1 + #2) -> "ok" (commit, release, push) -> "Fix test + install Python"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.04, sw cache

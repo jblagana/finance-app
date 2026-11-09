@@ -3416,6 +3416,28 @@ waitReady().then(async function (F) {
       var chatSrc46 = fs.readFileSync(path.join(__dirname, '..', '..', 'chat.js'), 'utf8');
       ok(chatSrc46.indexOf("'\">' + esc(a.label) + '</button>'") >= 0, 'v74.04: chat.js escapes the coach action-button labels (LLM text)');
 
+      // ============ PART 47: v74.05 - import validation ============
+      console.log('\n== PART 47: v74.05 - import validation ==============');
+      var real47 = F.sanitizeTxnRows(seed.txns);
+      ok(real47.length === seed.txns.length, 'v74.05: every real seed txn survives the import sanitizer (' + real47.length + '/' + seed.txns.length + ')');
+      ok(JSON.stringify(real47) === JSON.stringify(seed.txns.map(function (t) { var c = {}; ['id', 'date', 'account', 'kind', 'category', 'amount', 'note', 'created'].forEach(function (k) { c[k] = t[k]; }); if (t.planRef) c.planRef = t.planRef; return c; })),
+        'v74.05: real seed txns come through byte-identical (fields + planRef)');
+      var bad47 = F.sanitizeTxnRows([
+        { id: 'a', date: '2026-11-06', kind: 'cash_out', amount: '120.50', account: 'Cash' },   // numeric string -> coerced
+        { id: 'b', date: '2026-11-06', kind: 'cash_out', amount: 'lots', account: 'Cash' },     // junk amount
+        { id: 'c', date: '2026-11-06', kind: 'teleport', amount: 5, account: 'Cash' },          // unknown kind
+        { id: 'd', date: 'yesterday', kind: 'cash_out', amount: 5, account: 'Cash' },           // bad date
+        { id: 'a', date: '2026-11-06', kind: 'cash_out', amount: 9, account: 'Cash' },          // duplicate id
+        { id: 'e', date: '2026-11-06', kind: 'card_charge', amount: -5, account: 'Maya' },      // negative
+        null, 'x'
+      ]);
+      ok(bad47.length === 1 && bad47[0].id === 'a' && bad47[0].amount === 120.5, 'v74.05: only the valid row survives, numeric-string amount coerced (got ' + JSON.stringify(bad47.map(function (t) { return t.id + ':' + t.amount; })) + ')');
+      var owed47 = F.sanitizeOwedPeople([{ id: 'p1', name: 'Ana', entries: [
+        { id: 'e1', dir: Object.keys(F.OWED_DIRS || {})[0], amt: 100, d: '2026-11-01' },
+        { id: 'e2', dir: 'nonsense', amt: 100, d: '2026-11-01' }
+      ] }]);
+      ok(owed47.length === 1 && owed47[0].entries.length === (F.OWED_DIRS ? 1 : 0), 'v74.05: a bad owed entry drops only itself — the person and the good entry stay (people ' + owed47.length + ', entries ' + (owed47[0] ? owed47[0].entries.length : 0) + ')');
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

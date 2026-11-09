@@ -1463,7 +1463,7 @@ def main():
           and "localStorage.getItem('fin.bkSel.v1')" in js
           and "obj.sections = inc" in js
           and "function hasSec(n) { return !secs || secs.indexOf(n) >= 0; }" in js
-          and "if (hasSec('txns')) state.txns = data.txns || [];" in js
+          and "if (hasSec('txns')) state.txns = impTxns;" in js  # v74.05 successor: the sanitized array (was data.txns raw)
           and "if (hasSec('owed')) saveOwed();" in js
           and "if (id === 'setSheet') { renderBaseStatus(); backupSelSync(); }" in js
           and "backupSelRead: backupSelRead" in js)
@@ -1944,6 +1944,14 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.05 (security review: import validation): imported txns run through sanitizeTxnRows (one of the four kinds, YYYY-MM-DD date, finite amount 0..1e9 with numeric strings coerced, string text fields, planRef/payWith/cashback/updated kept, duplicate ids keep the first) and the SAME array feeds the store and state (before: the store got a filtered list, state took data.txns raw); a malformed owed entry drops only itself (sanitizeOwedPeople) instead of the whole person; the Imported toast names the skipped count. Smoke PART 47: every real seed txn survives byte-identical, junk rows drop, the owed person survives a bad entry",
+          "function sanitizeTxnRows(rows) {" in js
+          and "var impTxns = sanitizeTxnRows(data.txns);" in js
+          and "if (hasSec('txns')) state.txns = impTxns;" in js
+          and "function sanitizeOwedPeople(people) {" in js
+          and "unreadable skipped" in js
+          and "'74.05': [" in js
+          and "PART 47: v74.05 - import validation" in smoke)
     check("v74.04 (security review): the coach's action-button labels are escaped (they carry LLM text — coachChangeLabel builds them from the model's change names, which nm() only trims to 40 chars, enough for an <svg onload> payload), and an imported backup's chat html is rebuilt from an allow-list (div/span/b/i/br + class only, via an inert DOMParser; plain escaped text when there is no parser) instead of being stored verbatim and rendered with innerHTML. Smoke PART 46 pins the no-parser fallback + the chat.js label escape; the smoke clock is pinned (SMOKE_NOW, default 2026-11-06 12:00) so the fixed Oct-2026 seed stops drifting out of the live cycle",
           "esc(a.label) + '</button>'" in chatjs
           and "function sanitizeChatHtml(html) {" in js
