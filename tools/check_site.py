@@ -1944,6 +1944,17 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.07 (security review: the Worker quota): the Origin check is documented for what it is (a browser gate — curl can forge Origin); the real gates are an optional APP_TOKEN secret (?t=<token> in the configured Worker URL, constant-time compare, refused before the provider is ever called; no secret = the old open behaviour so a deploy never breaks a phone) and two Cloudflare rate-limit bindings (RL_PER_IP 10/60s keyed on CF-Connecting-IP, RL_GLOBAL 30/60s; a missing or failing limiter fails open). ALLOWED_ORIGIN is the bare origin. tools/test_worker.mjs (11 asserts, real worker.js + stubbed provider) is a release gate",
+          "if (env.APP_TOKEN) {" in worker
+          and "function sameSecret(a, b) {" in worker
+          and "async function underLimit(binding, key) {" in worker
+          and "underLimit(env.RL_PER_IP, 'ip:' + ip)" in worker
+          and "underLimit(env.RL_GLOBAL, 'all')" in worker
+          and '"name": "RL_PER_IP"' in rd(os.path.join("worker", "wrangler.jsonc"))
+          and '"ALLOWED_ORIGIN": "https://jblagana.github.io",' in rd(os.path.join("worker", "wrangler.jsonc"))
+          and "ALL WORKER CHECKS PASS" in rd(os.path.join("tools", "test_worker.mjs"))
+          and "tools\\test_worker.mjs" in rd(os.path.join("tools", "release.ps1"))
+          and "'74.07': [" in js)
     check("v74.06 (security review: sync): a record's sync age is recStamp (newest of syncAt / updated / created) and every edit-path txn/plan write stamps `updated` via touchRec (the sync/import/restore writes do not) — before, the merge compared `created`, which an edit never changes, so a remote edit always tied and lost; owed merges PER PERSON by syncAt, which saveOwed stamps on the people that actually changed (owedSigs diff; { asIs: true } from sync/import/restore) — before it compared owed.edited, which nothing set, so owed never synced; this phone's own tombstones (syncLocalRemoved, now incl. owed people) ride the pull's merge so deletes don't resurrect; the money log merges as a union (at|a|tid key, time-sorted) instead of the newest side replacing the other; a pull moves the overlay by the add/edit/delete rule (syncApplyAdj), adopting the remote overlay when the remote base wins (the push now carries adj + adjSig); an empty gist URL creates a SECRET gist (the create branch was unreachable), updates use PATCH; the raw-file fetch checks r.ok. Smoke PART 48 (13 asserts)",
           "function recStamp(r) {" in js
           and "function touchRec(r) {" in js

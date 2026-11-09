@@ -7,10 +7,18 @@
   "main": "worker.js",
   "compatibility_date": "2024-11-01",
   "observability": { "enabled": true },
+  // v74.07: rate limits (Cloudflare Workers rate-limit bindings; period must be
+  // 10 or 60 seconds). RL_PER_IP keys on the caller's IP, RL_GLOBAL is one
+  // bucket for the whole Worker. A personal app makes a few calls a minute.
+  "ratelimits": [
+    { "name": "RL_PER_IP", "namespace_id": "7401", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RL_GLOBAL", "namespace_id": "7402", "simple": { "limit": 30, "period": 60 } }
+  ],
   "vars": {
-    // Your app's exact origin (the GitHub Pages URL, or custom domain).
-    // Comma-separate several if you have both http/https or a localhost test.
-    "ALLOWED_ORIGIN": "https://jblagana.github.io/finance-app",
+    // The app's origin. Browsers send Origin WITHOUT a path, so this is compared
+    // on scheme + host only (the "/finance-app" part is ignored). Comma-separate
+    // several if you also test from localhost.
+    "ALLOWED_ORIGIN": "https://jblagana.github.io",
     // Any OpenAI-compatible chat model. Groq free default shown.
     // Verified against the live /v1/models list — pick a chat model your key can use.
     "LLM_MODEL": "qwen/qwen3.8-27b"

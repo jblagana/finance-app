@@ -43,6 +43,20 @@ function allowedOrigins(env) {
 function originAllowed(origin, env) {
   return Boolean(origin) && allowedOrigins(env).indexOf(originOf(origin)) >= 0;
 }
+// v74.07: compare the token without stopping at the first differing character
+function sameSecret(a, b) {
+  a = String(a); b = String(b);
+  if (!a || a.length !== b.length) return false;
+  var diff = 0;
+  for (var i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+// v74.07: true when the call fits the limit (or the binding is absent)
+async function underLimit(binding, key) {
+  if (!binding || typeof binding.limit !== 'function') return true;
+  try { var r = await binding.limit({ key: key }); return !r || r.success !== false; }
+  catch (e) { return true; } // a limiter hiccup must not take the coach down
+}
 function corsHeaders(origin, env) {
   var h = new Headers();
   // Echo the request's own origin back, but only when it is on the allow-list. A
@@ -78,11 +92,32 @@ export default {
     if (request.method !== 'POST') {
       return fail(405, 'method not allowed', origin, env);
     }
-    // CORS stops the browser from reading a cross-origin reply; this Origin check
-    // (compared on scheme+host, not path) blocks direct / scripted calls from
-    // anywhere but the app.
+    // CORS stops a BROWSER on another site from reading the reply. It does NOT
+    // stop a script: curl can send any Origin header it likes. (v74.07: the old
+    // comment said this check "blocks direct / scripted calls" — it never did.)
+    // The real gates are the app token and the rate limits below.
     if (!originAllowed(origin, env)) {
       return fail(403, 'forbidden origin', origin, env);
+    }
+    // v74.07: the app token. When the APP_TOKEN secret is set
+    // (wrangler secret put APP_TOKEN), every call must carry it as ?t=<token>
+    // in the Worker URL the app is configured with (Settings -> Worker URL:
+    // https://<worker>.workers.dev/?t=<token>). The token lives only in the
+    // Worker's secrets and on your phone — never in this repo. No secret set =
+    // the old open behaviour (so a deploy never breaks a phone mid-update).
+    if (env.APP_TOKEN) {
+      var given = new URL(request.url).searchParams.get('t') || '';
+      if (!sameSecret(given, String(env.APP_TOKEN))) {
+        return fail(401, 'missing or wrong app token (?t=...)', origin, env);
+      }
+    }
+    // v74.07: rate limits (Cloudflare rate-limit bindings, see wrangler.jsonc):
+    // per caller IP, and one shared bucket for the whole Worker — a personal
+    // app makes a few calls a minute, so either limit only bites on abuse.
+    // A missing binding (older deploy / local dev) skips the check.
+    var ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    if (!(await underLimit(env.RL_PER_IP, 'ip:' + ip)) || !(await underLimit(env.RL_GLOBAL, 'all'))) {
+      return fail(429, 'too many requests — try again in a minute', origin, env);
     }
 
     var body;

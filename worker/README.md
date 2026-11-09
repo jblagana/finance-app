@@ -17,10 +17,16 @@ chat text.
 ## What the Worker does
 
 - **Holds the provider key** as a Cloudflare secret (never in this repo/app).
-- **CORS + origin allowlist** — only your app's origin can call it (and only the
-  browser of that origin can read the reply).
-- **Caps the cost** — `max_tokens` is hard-capped at 96 and the prompt at ~4 KB,
-  so a free key can't be drained.
+- **CORS + origin allowlist** — only a browser on your app's origin can read the
+  reply. This does NOT stop scripts: anyone can send a fake `Origin` header with
+  curl. That's what the next two are for (v74.07).
+- **App token** — set the `APP_TOKEN` secret and every call must carry it as
+  `?t=<token>` in the Worker URL. Without it, the Worker refuses the call before
+  it ever reaches the provider (no quota spent). See "Lock it with a token" below.
+- **Rate limits** — 10 calls/minute per IP and 30/minute for the whole Worker
+  (`ratelimits` in `wrangler.jsonc`), so even a leaked URL can't drain a free key.
+- **Caps the cost** — `max_tokens` is hard-capped at 512 and the prompt at 8000
+  characters.
 - **Non-streaming (v1)** — one `POST`, one `{ text }` back.
 - **Graceful** — errors come back as JSON `{ error }`; the app catches them and
   falls back to local.
@@ -53,11 +59,23 @@ Wrangler prints a URL like `https://finsmart-coach.<your-subdomain>.workers.dev`
 
 ### Set your app's origin (important)
 
-Edit `"vars"` → `"ALLOWED_ORIGIN"` in `wrangler.jsonc` to the **exact** origin of
-your deployed app, then redeploy. If you use a custom domain, use that. For the
-GitHub Pages project site this is `https://jblagana.github.io/finance-app`.
-(You can also list several, comma-separated.) If the origin doesn't match, the
-Worker returns `403 forbidden origin` and the app falls back to local.
+Edit `"vars"` → `"ALLOWED_ORIGIN"` in `wrangler.jsonc` to the origin of your
+deployed app, then redeploy. Browsers send the origin WITHOUT a path, so for the
+GitHub Pages project site this is `https://jblagana.github.io` (a path such as
+`/finance-app` is ignored either way). You can list several, comma-separated. If
+the origin doesn't match, the Worker returns `403 forbidden origin`.
+
+### Lock it with a token (recommended)
+
+```bash
+# any long random string — keep it to yourself; it is NOT committed
+npx wrangler secret put APP_TOKEN
+```
+
+Then in the app, set the Worker URL to `https://finsmart-coach.<your-subdomain>.workers.dev/?t=<that token>`.
+Calls without the right token get `401` and never reach the provider. Until the
+secret is set, the Worker stays open as before, so deploying never breaks a phone
+that hasn't been updated yet.
 
 ## 3. Point the app at it
 

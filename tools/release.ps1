@@ -161,6 +161,8 @@ $preflight = @(
   (Join-Path $repo "tools\smoke\smoke_v68.js"),
   (Join-Path $repo "tools\smoke\smoke_app_v68.js"),
   (Join-Path $repo "tools\smoke\smoke_seed.json"),
+  (Join-Path $repo "tools\test_worker.mjs"),
+  (Join-Path $repo "worker\worker.js"),
   (Join-Path $root "check_site.py"),
   (Join-Path $root "test_chat_parser.py")
 )
@@ -200,6 +202,11 @@ Gate "smoke: node tools\smoke\smoke_v68.js (real chat.js parser)" {
 }
 Gate "smoke: node tools\smoke\smoke_app_v68.js (real app.js)" {
   Set-Location $repo; node tools\smoke\smoke_app_v68.js
+}
+# v74.07: the coach Worker's gates (origin / app token / rate limits), run
+# against the real worker\worker.js with a stubbed provider — no network.
+Gate "worker: node tools\test_worker.mjs (token + rate limits)" {
+  Set-Location $repo; node tools\test_worker.mjs
 }
 
 Write-Host ""

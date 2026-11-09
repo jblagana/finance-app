@@ -9271,12 +9271,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.06, live: new Date(2026, 10, 10, 2, 54) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.07, live: new Date(2026, 10, 10, 2, 57) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.07': [
+      'The online coach’s Worker can now be locked: with a token set on the Worker, only a Worker URL ending in ?t=<your token> gets answers, and every caller is rate-limited — so nobody who finds the Worker’s address can use up your free AI allowance. Nothing changes in the app until you set the token.'
+    ],
     '74.06': [
       'Phone-to-phone sync got a lot more trustworthy: editing an entry or a plan on one phone now carries over to the other (before, the other phone kept the old version). The Owed book syncs now (it never did). Things you delete stay deleted after a sync instead of coming back. Both phones’ Ledger histories are kept and combined instead of one replacing the other. Balances now follow the entries a sync brings in. And the first push can create the gist for you — just leave the Gist URL empty.'
     ],
