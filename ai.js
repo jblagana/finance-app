@@ -92,6 +92,18 @@
   // v47: a remote failure/fix updates the cooldown AND the header LED.
   function noteRemote(ok) { remoteFailAt = ok ? 0 : Date.now(); refreshLed(); }
 
+  // v74.08: a timed-out call is CANCELLED (AbortController), and nothing
+  // that settles after the timeout touches the LED / cooldown — before, the
+  // fetch kept running and a late success flipped the coach back to
+  // "available" right after the app had given up on it.
+  function abortableTimer(onTimeout) {
+    var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+    var t = setTimeout(function () { if (ctl) { try { ctl.abort(); } catch (e) {} } onTimeout(); }, REMOTE_TIMEOUT_MS);
+    return { signal: ctl ? ctl.signal : undefined, clear: function () { clearTimeout(t); } };
+  }
+  // v74.08: never show a URL's query in the UI — a Worker URL may carry ?t=<app token>
+  function safeUrl(u) { return String(u || '').replace(/[?#].*$/, ''); }
+
   // The Worker path (v45): the app only ever knows the Worker URL.
   function workerGenerate(messages, opts, onToken) {
     return new Promise(function (resolve, reject) {
@@ -99,22 +111,23 @@
       if (!workerConfigured()) { reject(new Error('remote coach not configured')); return; }
       if (typeof fetch !== 'function') { reject(new Error('fetch unavailable')); return; }
       var done = false, timer = null;
-      function finish(fn, val) { if (done) return; done = true; if (timer) clearTimeout(timer); fn(val); }
-      timer = setTimeout(function () { noteRemote(false); finish(reject, new Error('remote coach timed out')); }, REMOTE_TIMEOUT_MS);
+      function finish(fn, val) { if (done) return; done = true; if (timer) timer.clear(); fn(val); }
+      function note(okv) { if (!done) noteRemote(okv); } // v74.08: a settled call no longer moves the LED
+      timer = abortableTimer(function () { note(false); finish(reject, new Error('remote coach timed out')); });
       fetch(url, {
-        method: 'POST',
+        method: 'POST', signal: timer.signal,
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ messages: messages, max_tokens: Math.min(512, (opts && opts.maxNew) || 256) })
       }).then(function (res) {
-        if (!res || !res.ok) { noteRemote(false); finish(reject, new Error('remote coach error ' + (res ? res.status : 'net'))); return; }
+        if (!res || !res.ok) { note(false); finish(reject, new Error('remote coach error ' + (res ? res.status : 'net'))); return; }
         return res.json().then(function (data) {
           var text = (data && typeof data.text === 'string') ? data.text : '';
-          if (!text) { noteRemote(false); finish(reject, new Error('remote coach returned no text')); return; }
-          noteRemote(true); lastSource = 'remote';
+          if (!text) { note(false); finish(reject, new Error('remote coach returned no text')); return; }
+          note(true); lastSource = 'remote';
           if (onToken) { try { onToken(text); } catch (e) {} }
           finish(resolve, text);
         });
-      })['catch'](function (err) { noteRemote(false); finish(reject, err || new Error('remote coach network error')); });
+      })['catch'](function (err) { note(false); finish(reject, err || new Error('remote coach network error')); });
     });
   }
   // v47: bring-your-own key — the same request, but the browser calls the
@@ -127,22 +140,23 @@
       if (!base) { reject(new Error('bring-your-own base URL not set')); return; }
       if (typeof fetch !== 'function') { reject(new Error('fetch unavailable')); return; }
       var done = false, timer = null;
-      function finish(fn, val) { if (done) return; done = true; if (timer) clearTimeout(timer); fn(val); }
-      timer = setTimeout(function () { noteRemote(false); finish(reject, new Error('coach timed out')); }, REMOTE_TIMEOUT_MS);
+      function finish(fn, val) { if (done) return; done = true; if (timer) timer.clear(); fn(val); }
+      function note(okv) { if (!done) noteRemote(okv); } // v74.08: a settled call no longer moves the LED
+      timer = abortableTimer(function () { note(false); finish(reject, new Error('coach timed out')); });
       fetch(base + '/chat/completions', {
-        method: 'POST',
+        method: 'POST', signal: timer.signal,
         headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + key },
         body: JSON.stringify({ model: byoModel() || GROQ_MODEL, messages: messages, max_tokens: Math.min(512, (opts && opts.maxNew) || 256), temperature: 0.2 })
       }).then(function (res) {
-        if (!res || !res.ok) { noteRemote(false); finish(reject, new Error('coach error ' + (res ? res.status : 'net'))); return; }
+        if (!res || !res.ok) { note(false); finish(reject, new Error('coach error ' + (res ? res.status : 'net'))); return; }
         return res.json().then(function (data) {
           var text = (data && data.choices && data.choices[0] && data.choices[0].message && typeof data.choices[0].message.content === 'string') ? data.choices[0].message.content : '';
-          if (!text) { noteRemote(false); finish(reject, new Error('coach returned no text')); return; }
-          noteRemote(true); lastSource = 'remote';
+          if (!text) { note(false); finish(reject, new Error('coach returned no text')); return; }
+          note(true); lastSource = 'remote';
           if (onToken) { try { onToken(text); } catch (e) {} }
           finish(resolve, text);
         });
-      })['catch'](function (err) { noteRemote(false); finish(reject, err || new Error('coach network error')); });
+      })['catch'](function (err) { note(false); finish(reject, err || new Error('coach network error')); });
     });
   }
   // Dispatch: Worker first, then bring-your-own, else not configured.
@@ -201,15 +215,17 @@
       body = JSON.stringify({ model: byoModel() || GROQ_MODEL, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 });
     }
     show('Testing...', null);
-    var timer = setTimeout(function () { show('Timed out -- check the ' + (useWorker ? 'Worker deploy' : 'key / URL / network') + '.', false); }, REMOTE_TIMEOUT_MS);
-    fetch(url, { method: 'POST', headers: headers, body: body }).then(function (res) {
-      clearTimeout(timer);
+    var settled = false;
+    var timer = abortableTimer(function () { settled = true; show('Timed out -- check the ' + (useWorker ? 'Worker deploy' : 'key / URL / network') + '.', false); });
+    fetch(url, { method: 'POST', headers: headers, body: body, signal: timer.signal }).then(function (res) {
+      timer.clear();
+      if (settled) return; // v74.08: the timeout already answered
       if (!res || !res.ok) { show('Replied ' + (res ? res.status : 'net') + ' -- check ' + (useWorker ? 'deploy + secret' : 'key + model') + '.', false); return; }
       return res.json().then(function (d) {
         var ok = useWorker ? !!(d && d.text) : !!(d && d.choices && d.choices[0]);
         show(ok ? 'Online coach is working' : 'No reply -- check the ' + (useWorker ? 'provider API key' : 'model name') + '.', ok);
       });
-    })['catch'](function () { clearTimeout(timer); show('Could not reach ' + url + ' -- check the URL + network (browser calls need a CORS-enabled provider, e.g. Groq).', false); });
+    })['catch'](function () { timer.clear(); if (settled) return; show('Could not reach ' + safeUrl(url) + ' -- check the URL + network (browser calls need a CORS-enabled provider, e.g. Groq).', false); });
   }
 
   function refreshRemoteNote() {

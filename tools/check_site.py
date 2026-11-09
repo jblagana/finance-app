@@ -1944,6 +1944,15 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.08 (security review: hygiene): ai.js aborts a timed-out coach call (abortableTimer: AbortController + the 20 s timer) and a call that settles after the timeout no longer moves the LED / cooldown (note() checks done); the Settings Test message masks the Worker URL's query (safeUrl — a Worker URL may carry ?t=<app token>). tools/test_ai_timeout.js (fake timers + a fake slow server) is a release gate",
+          "function abortableTimer(onTimeout) {" in aijs
+          and "function safeUrl(u) {" in aijs
+          and "signal: timer.signal" in aijs
+          and "function note(okv) { if (!done) noteRemote(okv); }" in aijs
+          and "'Could not reach ' + safeUrl(url)" in aijs
+          and "ALL AI CLIENT CHECKS PASS" in rd(os.path.join("tools", "test_ai_timeout.js"))
+          and "tools\\test_ai_timeout.js" in rd(os.path.join("tools", "release.ps1"))
+          and "'74.08': [" in js)
     check("v74.07 (security review: the Worker quota): the Origin check is documented for what it is (a browser gate — curl can forge Origin); the real gates are an optional APP_TOKEN secret (?t=<token> in the configured Worker URL, constant-time compare, refused before the provider is ever called; no secret = the old open behaviour so a deploy never breaks a phone) and two Cloudflare rate-limit bindings (RL_PER_IP 10/60s keyed on CF-Connecting-IP, RL_GLOBAL 30/60s; a missing or failing limiter fails open). ALLOWED_ORIGIN is the bare origin. tools/test_worker.mjs (11 asserts, real worker.js + stubbed provider) is a release gate",
           "if (env.APP_TOKEN) {" in worker
           and "function sameSecret(a, b) {" in worker

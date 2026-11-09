@@ -162,6 +162,7 @@ $preflight = @(
   (Join-Path $repo "tools\smoke\smoke_app_v68.js"),
   (Join-Path $repo "tools\smoke\smoke_seed.json"),
   (Join-Path $repo "tools\test_worker.mjs"),
+  (Join-Path $repo "tools\test_ai_timeout.js"),
   (Join-Path $repo "worker\worker.js"),
   (Join-Path $root "check_site.py"),
   (Join-Path $root "test_chat_parser.py")
@@ -207,6 +208,11 @@ Gate "smoke: node tools\smoke\smoke_app_v68.js (real app.js)" {
 # against the real worker\worker.js with a stubbed provider — no network.
 Gate "worker: node tools\test_worker.mjs (token + rate limits)" {
   Set-Location $repo; node tools\test_worker.mjs
+}
+# v74.08: the coach client (ai.js) — timeouts cancel, late replies can't flip
+# the LED, the Test message never shows the Worker URL's ?t= token.
+Gate "coach client: node tools\test_ai_timeout.js" {
+  Set-Location $repo; node tools\test_ai_timeout.js
 }
 
 Write-Host ""
