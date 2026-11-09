@@ -3420,7 +3420,7 @@ waitReady().then(async function (F) {
       console.log('\n== PART 47: v74.05 - import validation ==============');
       var real47 = F.sanitizeTxnRows(seed.txns);
       ok(real47.length === seed.txns.length, 'v74.05: every real seed txn survives the import sanitizer (' + real47.length + '/' + seed.txns.length + ')');
-      ok(JSON.stringify(real47) === JSON.stringify(seed.txns.map(function (t) { var c = {}; ['id', 'date', 'account', 'kind', 'category', 'amount', 'note', 'created'].forEach(function (k) { c[k] = t[k]; }); if (t.planRef) c.planRef = t.planRef; return c; })),
+      ok(JSON.stringify(real47) === JSON.stringify(seed.txns.map(function (t) { var c = {}; ['id', 'date', 'account', 'kind', 'category', 'amount', 'note', 'created'].forEach(function (k) { c[k] = t[k]; }); if (typeof t.updated === 'string') c.updated = t.updated; if (t.planRef) c.planRef = t.planRef; return c; })), // v74.06: earlier PARTs' edits stamp `updated` on shared seed rows
         'v74.05: real seed txns come through byte-identical (fields + planRef)');
       var bad47 = F.sanitizeTxnRows([
         { id: 'a', date: '2026-11-06', kind: 'cash_out', amount: '120.50', account: 'Cash' },   // numeric string -> coerced
@@ -3437,6 +3437,65 @@ waitReady().then(async function (F) {
         { id: 'e2', dir: 'nonsense', amt: 100, d: '2026-11-01' }
       ] }]);
       ok(owed47.length === 1 && owed47[0].entries.length === (F.OWED_DIRS ? 1 : 0), 'v74.05: a bad owed entry drops only itself — the person and the good entry stay (people ' + owed47.length + ', entries ' + (owed47[0] ? owed47[0].entries.length : 0) + ')');
+
+      // ============ PART 48: v74.06 - sync merge ============
+      console.log('\n== PART 48: v74.06 - sync merge =====================');
+      var T0 = '2026-11-01T00:00:00.000Z', T1 = '2026-11-02T00:00:00.000Z', T2 = '2026-11-03T00:00:00.000Z';
+      function tx48(id, amt, extra) { var t = { id: id, date: '2026-11-01', account: 'Cash', kind: 'cash_out', category: 'Food', amount: amt, note: '', created: T0 }; Object.keys(extra || {}).forEach(function (k) { t[k] = extra[k]; }); return t; }
+      // (1) an edit on the other phone wins (before: merged on `created`, which an edit never changes)
+      var m48 = F.syncMerge({ txns: [tx48('x', 100)] }, { txns: [tx48('x', 150, { updated: T1 })] });
+      ok(m48.txns.length === 1 && m48.txns[0].amount === 150, 'v74.06: a remote EDIT wins over the unedited local copy (got ' + m48.txns[0].amount + ')');
+      m48 = F.syncMerge({ txns: [tx48('x', 175, { updated: T2 })] }, { txns: [tx48('x', 150, { updated: T1 })] });
+      ok(m48.txns[0].amount === 175, 'v74.06: a NEWER local edit beats an older remote edit');
+      m48 = F.syncMerge({ txns: [tx48('x', 100, { updated: T1 })] }, { txns: [tx48('x', 150, { updated: T1 })] });
+      ok(m48.txns[0].amount === 100, 'v74.06: a tie still keeps local');
+      // (2) this phone's own deletions stop a pull from resurrecting them; the remote's still apply
+      m48 = F.syncMerge({ txns: [tx48('keep', 1), tx48('gone-remote', 2)], removedTxn: ['gone-local'] },
+        { txns: [tx48('gone-local', 3), tx48('keep', 1)], removedTxn: ['gone-remote'] });
+      ok(JSON.stringify(m48.txns.map(function (t) { return t.id; })) === '["keep"]', 'v74.06: local AND remote tombstones both apply (got ' + JSON.stringify(m48.txns.map(function (t) { return t.id; })) + ')');
+      // (3) owed merges per person by syncAt (before: owed.edited, which nothing set — owed never synced)
+      m48 = F.syncMerge({ owed: { people: [{ id: 'a', name: 'Ana', entries: [], syncAt: T1 }, { id: 'c', name: 'Cy', entries: [] }], sort: 'az' } },
+        { owed: { people: [{ id: 'a', name: 'Ana B', entries: [], syncAt: T2 }, { id: 'b', name: 'Ben', entries: [], syncAt: T1 }, { id: 'c', name: 'Cy', entries: [] }], sort: 'recent' }, removedOwed: [] });
+      var nm48 = m48.owed.people.map(function (p) { return p.name; }).join(',');
+      ok(nm48 === 'Ana B,Cy,Ben', 'v74.06: owed syncs per person — newer remote edit wins, remote-only person added, untouched person kept (got ' + nm48 + ')');
+      ok(m48.owed.sort === 'az', 'v74.06: the owed sort order stays this phone\'s');
+      m48 = F.syncMerge({ owed: { people: [{ id: 'a', name: 'Ana', entries: [] }] }, removedOwed: [] }, { owed: { people: [{ id: 'a', name: 'Ana', entries: [] }] }, removedOwed: ['a'] });
+      ok(m48.owed.people.length === 0, 'v74.06: a person deleted on the other phone is deleted here too');
+      // (4) money log: a union, not a wholesale replace
+      var L48 = [{ at: 1000, a: 'add', tid: 't1', n: 1 }, { at: 3000, a: 'add', tid: 't3', n: 3 }];
+      var R48 = [{ at: 1000, a: 'add', tid: 't1', n: 1 }, { at: 2000, a: 'add', tid: 't2', n: 2 }];
+      m48 = F.syncMerge({ moneyLog: L48 }, { moneyLog: R48 });
+      ok(JSON.stringify(m48.moneyLog.map(function (e) { return e.tid; })) === '["t1","t2","t3"]', 'v74.06: the money log keeps BOTH phones\' rows, deduped, in time order (got ' + JSON.stringify(m48.moneyLog.map(function (e) { return e.tid; })) + ')');
+      // (5) the per-person stamp: only a real change stamps; a sync/import save never does
+      var owedBk48 = F.state.owed;
+      F.setOwed({ people: [{ id: 'p48', name: 'Dee', entries: [], updated: '' }], sort: 'recent' });
+      await F.saveOwed();
+      ok(!F.state.owed.people[0].syncAt, 'v74.06: an unchanged person is not stamped');
+      F.state.owed.people[0].name = 'Dee R';
+      await F.saveOwed();
+      var st48 = F.state.owed.people[0].syncAt;
+      ok(typeof st48 === 'string' && st48.length > 10, 'v74.06: an edited person gets a syncAt stamp');
+      F.state.owed.people[0].name = 'Dee S';
+      await F.saveOwed({ asIs: true });
+      ok(F.state.owed.people[0].syncAt === st48, 'v74.06: a sync/import save files the person as-is (no new stamp)');
+      F.setOwed(owedBk48); await F.saveOwed({ asIs: true });
+      // (6) an edit stamps `updated` (touchRec) so the edit can win a merge
+      var id48 = await F.addTxn({ kind: 'cash_out', category: 'Food', account: 'Cash', amount: 48, note: 'v74.06 probe', date: F.todayISO() }, { quiet: true });
+      await sleep(5);
+      var before48 = null; F.state.txns.forEach(function (t) { if (t.id === id48) before48 = t.updated; });
+      await sleep(5);
+      await F.saveTxnEdit(id48, { date: F.todayISO(), account: 'Cash', kind: 'cash_out', category: 'Food', amount: 49, note: 'v74.06 probe' }, { quiet: true });
+      var after48 = null; F.state.txns.forEach(function (t) { if (t.id === id48) after48 = t; });
+      ok(after48 && after48.updated && after48.updated > (before48 || '') && F.recStamp(after48) === after48.updated, 'v74.06: an edit stamps updated (and that is the record\'s sync age)');
+      // (7) a pull moves the overlay exactly like a local add would
+      var adjA48 = JSON.stringify(F.getAdj());
+      var snapTx48 = F.state.txns.slice();
+      var newT48 = tx48('pulled48', 500, { date: F.todayISO() });
+      F.syncApplyAdj(snapTx48, snapTx48.concat([newT48]));
+      var adjB48 = JSON.stringify(F.getAdj()); // a SNAPSHOT (getAdj returns the live object)
+      F.syncApplyAdj(snapTx48.concat([newT48]), snapTx48); // and back out (a remote delete of it)
+      ok(adjB48 !== adjA48 && JSON.stringify(F.getAdj()) === adjA48, 'v74.06: a pulled txn moves the overlay, a pulled delete moves it back exactly (moved: ' + adjB48 + ')');
+      await F.deleteTxn(id48); await sleep(30);
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);

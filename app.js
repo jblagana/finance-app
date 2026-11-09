@@ -2190,7 +2190,7 @@
     state.txns.push(t);
     addAdj(txnAdj(t), 1);
     logMoney('add', t);
-    return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () {
+    return Promise.all([idbPut(STORE_TX, touchRec(t)), saveAdj()]).then(function () {
       emit('txn');
       if (!(opts && opts.quiet)) {
         // v72.36 (user: 'return the undo button for all toasts'): v71's
@@ -2220,7 +2220,7 @@
         state.txns.push(t);
         addAdj(txnAdj(t), 1);
         logMoney('add', t);
-        Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () { emit('txn'); });
+        Promise.all([idbPut(STORE_TX, touchRec(t)), saveAdj()]).then(function () { emit('txn'); });
       });
     });
   }
@@ -2269,7 +2269,7 @@
       var ti = (typeof r.txIdx === 'number' && r.txIdx >= 0) ? Math.min(r.txIdx, state.txns.length) : state.txns.length;
       state.txns.splice(ti, 0, r.t);
       addAdj(txnAdj(r.t), 1);
-      idbPut(STORE_TX, r.t).catch(function () {});
+      idbPut(STORE_TX, touchRec(r.t)).catch(function () {});
     }
     if (r.removed.length) {
       state.moneyLog = (state.moneyLog || []).filter(function (e) { return !(e && r.t && e.tid === r.t.id); });
@@ -2451,7 +2451,7 @@
       for (var k = li + 1; k < log.length; k++) { if (log[k]) rebase(log[k], dFree, dCard, 1); }
       idbPut(STORE_META, { key: 'moneyLog', value: log }).catch(function () {});
     }
-    return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () {
+    return Promise.all([idbPut(STORE_TX, touchRec(t)), saveAdj()]).then(function () {
       emit('txn');
       // v72.10: opts.quiet — the owed flow wraps the edit in its own
       // entry+txn undo toast (two snacks would collide).
@@ -4792,11 +4792,11 @@
     ov[pdate] = { skip: true, skippedAt: Date.now(), was: prev }; // v73.54: the record (by-when) rides the override
     p.overrides = ov;
     closeSheets();
-    return idbPut(STORE_PLANS, p).then(function () {
+    return idbPut(STORE_PLANS, touchRec(p)).then(function () {
       emit('plan');
       snack('Skipped ' + esc(p.name || 'plan') + ' · ' + fmtDate(pdate), function () {
         if (prev) ov[pdate] = prev; else delete ov[pdate];
-        idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
+        idbPut(STORE_PLANS, touchRec(p)).then(function () { emit('plan'); });
       });
     });
   }
@@ -4877,12 +4877,12 @@
     if (prev && prev.name != null) mvEntry.name = prev.name;
     ov[gridDate] = mvEntry;
     p.overrides = ov;
-    return idbPut(STORE_PLANS, p).then(function () {
+    return idbPut(STORE_PLANS, touchRec(p)).then(function () {
       emit('plan');
       snack('Moved ' + esc(p.name || 'plan') + ' · ' + fmtDate(dateISO) + ' → ' + fmtDate(newDate), function () {
         if (prev) ov[gridDate] = prev; else delete ov[gridDate];
         p.overrides = ov;
-        idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
+        idbPut(STORE_PLANS, touchRec(p)).then(function () { emit('plan'); });
       });
     });
   }
@@ -4917,12 +4917,12 @@
     // deleting would leave a forked occurrence at its base amount.
     if (e.was) ov[kdate] = e.was; else delete ov[kdate];
     p.overrides = ov;
-    return idbPut(STORE_PLANS, p).then(function () {
+    return idbPut(STORE_PLANS, touchRec(p)).then(function () {
       emit('plan');
       snack('Unskipped ' + esc(p.name || 'plan') + ' · ' + fmtDate(dateISO), function () {
         ov[kdate] = prev; // the same key the skip was read from
         p.overrides = ov;
-        idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
+        idbPut(STORE_PLANS, touchRec(p)).then(function () { emit('plan'); });
       });
     });
   }
@@ -5536,44 +5536,71 @@
   // LOCAL (the phone in your hand is the source of truth); records only the
   // other side has are added; a record in the other side's removed* tombstone
   // list is dropped (deletions sync, nothing is silently overwritten).
+  //
+  // v74.06 (bug hunt #4-#7) — what changed:
+  //  - a record's age is recStamp(): the newest of syncAt / updated / created.
+  //    Edits now stamp `updated` (touchRec at every txn/plan write), so an
+  //    edit made on the other phone wins (before: merged on `created`, which
+  //    an edit never changes — remote edits always tied and lost).
+  //  - owed merges PER PERSON (recStamp = the person's syncAt, stamped by
+  //    saveOwed when that person changed) — before it compared owed.edited,
+  //    which nothing ever set, so the Owed book never synced at all.
+  //  - deletions: BOTH sides' tombstones apply. local.removed* (this phone's
+  //    own deletes) stops a pull from re-adding what you deleted here.
+  //  - moneyLog merges as a UNION (row key = at|a|tid; a key both sides hold
+  //    keeps local's copy), sorted by time — before, the side with the newest
+  //    row replaced the other's whole log. The rows' before/after balance
+  //    lines are each phone's own running numbers; the entries are no longer lost.
+  function recStamp(r) {
+    var a = (r && r.syncAt) ? String(r.syncAt) : '', b = (r && r.updated) ? String(r.updated) : '',
+      c = (r && r.created) ? String(r.created) : '';
+    var m = a > b ? a : b;
+    return m > c ? m : c;
+  }
+  // v74.06: stamp a txn / plan as edited NOW — called at every write that
+  // changes one (add, edit, link/unlink, skip, undo). The sync/import/restore
+  // writes do NOT call it: they file records as they arrived.
+  function touchRec(r) { if (r && typeof r === 'object') r.updated = new Date().toISOString(); return r; }
   function syncMerge(local, remote) {
     function ts(v, f) { return (v && v[f]) ? String(v[f]) : ''; }
-    function inList(list, id) {
-      return (list || []).some(function (x) { return (x && x.id === id) || x === id; });
+    function idSet(a, b) {
+      var s = {};
+      [a, b].forEach(function (list) {
+        (list || []).forEach(function (x) { var id = (x && x.id) || x; if (typeof id === 'string') s[id] = true; });
+      });
+      return s;
     }
-    function mergeById(arrA, arrB, removedB, field) {
-      var out = [];
+    function mergeById(arrA, arrB, removed) {
+      var out = [], at = {};
       (arrA || []).forEach(function (r) {
-        if (r && r.id && !inList(removedB, r.id)) out.push(r);
+        if (r && r.id && !removed[r.id] && !(r.id in at)) { at[r.id] = out.length; out.push(r); }
       });
       (arrB || []).forEach(function (r) {
-        if (!r || !r.id) return;
-        var i = -1;
-        for (var j = 0; j < out.length; j++) if (out[j].id === r.id) { i = j; break; }
-        if (i < 0) out.push(r); // only the remote has it -> add
-        else if (ts(r, field) > ts(out[i], field)) out[i] = r; // remote is newer -> replace
+        if (!r || !r.id || removed[r.id]) return;
+        if (!(r.id in at)) { at[r.id] = out.length; out.push(r); return; } // only the remote has it -> add
+        if (recStamp(r) > recStamp(out[at[r.id]])) out[at[r.id]] = r;     // remote is newer -> replace
         // tie / local newer -> keep local (the phone in your hand wins)
       });
       return out;
     }
-    // moneyLog is the audit trail — rows have no id, so it merges as a whole
-    // by its newest row's `at` (the newest-wins rule at the collection level;
-    // the trail is append-only, so the newer phone holds the longer one).
-    function newestAt(arr) {
-      var m = 0;
-      (arr || []).forEach(function (r) { if (r && (r.at || 0) > m) m = r.at || 0; });
-      return m;
+    function mlKey(e) { return String(e && e.at) + '|' + String(e && e.a) + '|' + String((e && e.tid) || ''); }
+    function mergeLog(lLog, rLog) {
+      var out = [], seen = {};
+      (lLog || []).forEach(function (e) { if (e) { seen[mlKey(e)] = true; out.push(e); } });
+      (rLog || []).forEach(function (e) { if (e && !seen[mlKey(e)]) { seen[mlKey(e)] = true; out.push(e); } });
+      // stable sort by time (Array.sort is stable in every engine the app targets)
+      return out.sort(function (x, y) { return (Number(x.at) || 0) - (Number(y.at) || 0); });
     }
-    var lAt = newestAt(local && local.moneyLog), rAt = newestAt(remote && remote.moneyLog);
-    var b = (remote && remote.base && ts(remote.base, 'edited') > ts(local && local.base, 'edited'))
-      ? remote.base : (local && local.base);
+    local = local || {}; remote = remote || {};
+    var b = (remote.base && ts(remote.base, 'edited') > ts(local.base, 'edited')) ? remote.base : local.base;
+    var lOwed = local.owed || { people: [] }, rOwed = remote.owed || { people: [] };
     return {
       base: b,
-      txns: mergeById(local && local.txns, remote && remote.txns, remote && remote.removedTxn, 'created'),
-      plans: mergeById(local && local.plans, remote && remote.plans, remote && remote.removedPlan, 'created'),
-      owed: (remote && remote.owed && ts(remote.owed, 'edited') > ts(local && local.owed, 'edited'))
-        ? remote.owed : (local && local.owed || { people: [] }),
-      moneyLog: rAt >= lAt ? (remote && remote.moneyLog || []) : (local && local.moneyLog || [])
+      txns: mergeById(local.txns, remote.txns, idSet(remote.removedTxn, local.removedTxn)),
+      plans: mergeById(local.plans, remote.plans, idSet(remote.removedPlan, local.removedPlan)),
+      owed: { people: mergeById(lOwed.people, rOwed.people, idSet(remote.removedOwed, local.removedOwed)),
+        sort: lOwed.sort || rOwed.sort || 'recent' },
+      moneyLog: mergeLog(local.moneyLog, remote.moneyLog)
     };
   }
   // the goal's PACE, as a pure fn (the smoke drives it). The required
@@ -7002,7 +7029,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       kind: kind,
       created: new Date().toISOString() };
     state.plans.push(p);
-    return idbPut(STORE_PLANS, p).then(function () {
+    return idbPut(STORE_PLANS, touchRec(p)).then(function () {
       emit('plan');
       var perTxt = p.repeat === 'daily' ? 'day' : (p.repeat === 'weekly' ? 'week' : (p.repeat === 'annual' ? 'year' : 'month'));
       var cntTxt = p.count ? ' · ' + p.count + 'x' : '';
@@ -7090,7 +7117,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     delete hit.planRef;
     closeSheets();
     planEditCtx = null;
-    return idbPut(STORE_TX, hit).then(function () {
+    return idbPut(STORE_TX, touchRec(hit)).then(function () {
       emit('txn');
       snack('Unlinked — the entry stays in the ledger, it just no longer counts as this plan\'s payment');
     });
@@ -7114,7 +7141,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       p.date = newDate1;
       closeSheets();
       planEditCtx = null;
-      return idbPut(STORE_PLANS, p).then(function () {
+      return idbPut(STORE_PLANS, touchRec(p)).then(function () {
         emit('plan');
         snack('Updated ' + esc(name) + ' · ' + fmtDate(newDate1));
       });
@@ -7203,7 +7230,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     p.overrides = ov;
     closeSheets();
     planEditCtx = null;
-    return idbPut(STORE_PLANS, p).then(function () {
+    return idbPut(STORE_PLANS, touchRec(p)).then(function () {
       emit('plan');
       snack('Updated ' + esc(name) + ' · ' + fmtDate(dateISO) + (scope === 'all' ? ' · all occurrences' : (scope === 'following' ? ' · this one and after' : '')), function () { /* the override stands — undo would need the prior row; keep it simple */ });
     });
@@ -7220,11 +7247,11 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     p.overrides = ov;
     closeSheets();
     planEditCtx = null;
-    return idbPut(STORE_PLANS, p).then(function () {
+    return idbPut(STORE_PLANS, touchRec(p)).then(function () {
       emit('plan');
       snack('Skipped ' + esc(p.name || 'plan') + ' · ' + fmtDate(dateISO), function () {
         if (prev) ov[dateISO] = prev; else delete ov[dateISO];
-        idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
+        idbPut(STORE_PLANS, touchRec(p)).then(function () { emit('plan'); });
       });
     });
   }
@@ -7239,7 +7266,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       snack('Removed plan ' + esc(p.name), function () {
         syncTombRemove('p', id); // the plan is back — the tombstone goes
         state.plans.push(p);
-        idbPut(STORE_PLANS, p).then(function () { emit('plan'); });
+        idbPut(STORE_PLANS, touchRec(p)).then(function () { emit('plan'); });
       });
     });
   }
@@ -7323,7 +7350,37 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     });
     return r2(b);
   }
-  function saveOwed() { return idbPut(STORE_META, { key: 'owed', value: state.owed }); }
+  // v74.06: sync needs to know WHICH person changed. saveOwed compares each
+  // person against how they looked at the last save (owedSigs) and stamps the
+  // changed / new ones with syncAt — so every edit path (entries, rename,
+  // undo, the theirs-pair link...) is covered without stamping each call site.
+  // The sync / import / restore paths pass { asIs: true }: they file people
+  // exactly as they arrived (re-stamping a pulled person would make this phone
+  // look newer than the edit it just received). p.updated (the recent-sort
+  // key) is untouched — syncAt is sync's own field.
+  var owedSigs = null;
+  function owedSigOf(p) {
+    var c = {};
+    Object.keys(p || {}).forEach(function (k) { if (k !== 'syncAt') c[k] = p[k]; });
+    return JSON.stringify(c);
+  }
+  function owedSeedSigs() {
+    owedSigs = {};
+    (state.owed && state.owed.people || []).forEach(function (p) { if (p && p.id) owedSigs[p.id] = owedSigOf(p); });
+  }
+  function saveOwed(opts) {
+    var asIs = !!(opts && opts.asIs);
+    if (!owedSigs) owedSeedSigs();
+    var now = new Date().toISOString(), next = {};
+    (state.owed && state.owed.people || []).forEach(function (p) {
+      if (!p || !p.id) return;
+      var s = owedSigOf(p);
+      if (!asIs && owedSigs[p.id] !== s) p.syncAt = now;
+      next[p.id] = s;
+    });
+    owedSigs = next;
+    return idbPut(STORE_META, { key: 'owed', value: state.owed });
+  }
   function emitOwed() { emit('owed'); }
   function owedUid(pref) { return pref + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
   // v72.29 (user edit: 'when enrties are more than 5, hide the old ones in a
@@ -7625,7 +7682,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     state.txns.push(t);
     addAdj(txnAdj(t), 1);
     logMoney('add', t);
-    return Promise.all([idbPut(STORE_TX, t), saveAdj()]).then(function () { emit('txn'); });
+    return Promise.all([idbPut(STORE_TX, touchRec(t)), saveAdj()]).then(function () { emit('txn'); });
   }
   function addOwedPerson(name) {
     name = String(name || '').trim();
@@ -7642,6 +7699,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     (state.owed.people || []).forEach(function (p, i) { if (p.id === id) idx = i; });
     if (idx < 0) return;
     var gone = state.owed.people.splice(idx, 1)[0];
+    syncTombAdd('o', gone.id); // v74.06: the person's deletion syncs (Undo clears the tombstone)
     // v72.10: every ledger-filed entry goes with the person — undo brings them back
     // (v73.72: the theirs pair's txns ride along too)
     var goneTxns = [];
@@ -7657,6 +7715,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       goneTxns.forEach(function (t) { removeTxnQuiet(t.id); });
       snack('Removed ' + esc(gone.name), function () {
         state.owed.people.push(gone);
+        syncTombRemove('o', gone.id); // v74.06: the person is back — the tombstone goes
         var u = Promise.resolve();
         goneTxns.forEach(function (t) { u = u.then(function () { return restoreTxnQuiet(t); }); });
         u.then(function () { saveOwed().then(emitOwed); });
@@ -8906,7 +8965,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         persistSnapshot(),
         idbPut(STORE_META, { key: 'base', value: state.base }).catch(function () {}),
         saveAdj(),
-        saveOwed(),
+        saveOwed({ asIs: true }), // v74.06: restored as-is (no sync stamp)
         idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog })
       ]);
     }).then(function () {
@@ -8937,33 +8996,62 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var el = byId('syncNote');
     if (el) { el.textContent = msg; el.style.color = bad ? 'var(--bad)' : 'var(--mut)'; }
   }
+  // v74.06: this phone's deletions (tombstoned AND still absent — an Undo
+  // brought a record back and cleared its tombstone) for push and pull alike.
+  function syncLocalRemoved() {
+    var tombs = syncTombRead(), live = { t: {}, p: {}, o: {} };
+    state.txns.forEach(function (t) { live.t[t.id] = true; });
+    state.plans.forEach(function (p) { live.p[p.id] = true; });
+    (state.owed && state.owed.people || []).forEach(function (p) { live.o[p.id] = true; });
+    function ids(k) { return tombs.filter(function (x) { return x.k === k && !live[k][x.id]; }).map(function (x) { return x.id; }); }
+    return { txn: ids('t'), plan: ids('p'), owed: ids('o') };
+  }
+  // v74.06: a pull changes txns, so the live overlay moves by the same rule
+  // a local add / edit / delete uses (addTxn: +new; saveTxnEdit: +new -old;
+  // deleteTxn: -old, skipped on an empty overlay) — before, pulled txns
+  // never touched the balances until the next full rebase.
+  function syncApplyAdj(before, after) {
+    var was = {};
+    (before || []).forEach(function (t) { if (t && t.id) was[t.id] = t; });
+    var empty = adjEmpty();
+    (after || []).forEach(function (t) {
+      if (!t || !t.id) return;
+      var o = was[t.id];
+      delete was[t.id];
+      if (!o) { addAdj(txnAdj(t), 1); return; }
+      if (o === t || JSON.stringify(o) === JSON.stringify(t)) return;
+      if (!empty) { addAdj(txnAdj(t), 1); addAdj(txnAdj(o), -1); }
+    });
+    if (!empty) Object.keys(was).forEach(function (id) { addAdj(txnAdj(was[id]), -1); });
+  }
   function syncPush() {
     var url = (byId('syncUrl').value || '').trim();
     var token = (byId('syncToken').value || '').trim();
     var pass = byId('syncPass').value || '';
-    if (!url || !token || !pass) { syncNote('Fill the gist URL, token and passphrase first.', true); return; }
+    // v74.06: the gist URL is optional on a PUSH — empty = create a new secret
+    // gist (the old code required a URL and then returned on a null id, so its
+    // own "create" branch could never run). A URL that isn't a gist is still refused.
+    if (!token || !pass) { syncNote('Fill the token and passphrase first (leave the gist URL empty to create a new one).', true); return; }
     if (!window.crypto || !crypto.subtle) { syncNote('Encryption needs a secure context (https or localhost).', true); return; }
-    var gid = syncGistId(url);
-    if (!gid) { syncNote('That does not look like a gist URL (gist.github.com/…).', true); return; }
+    var gid = url ? syncGistId(url) : null;
+    if (url && !gid) { syncNote('That does not look like a gist URL (gist.github.com/…).', true); return; }
     syncNote('Encrypting…');
     // v73.3: deletions sync as tombstones — the ids deleted on THIS phone
     // (and no longer present) ride the push, so a pull on the other side
     // drops them too. A record restored by Undo is back in state, so it is
-    // excluded here (and its tombstone was removed).
-    var tombs = syncTombRead();
-    var liveT = {}, liveP = {};
-    state.txns.forEach(function (t) { liveT[t.id] = true; });
-    state.plans.forEach(function (p) { liveP[p.id] = true; });
-    var removedTxn = tombs.filter(function (x) { return x.k === 't' && !liveT[x.id]; }).map(function (x) { return x.id; });
-    var removedPlan = tombs.filter(function (x) { return x.k === 'p' && !liveP[x.id]; }).map(function (x) { return x.id; });
+    // excluded here (and its tombstone was removed). v74.06: owed people too.
+    var rm = syncLocalRemoved();
     var obj = { app: 'finances-pwa', syncedAt: new Date().toISOString(),
       base: state.base, txns: state.txns, plans: state.plans,
       owed: state.owed, moneyLog: state.moneyLog,
-      removedTxn: removedTxn, removedPlan: removedPlan };
+      removedTxn: rm.txn, removedPlan: rm.plan, removedOwed: rm.owed,
+      adj: state.adj, adjSig: state.adjSig || '' }; // v74.06: the overlay rides with the base it belongs to
     syncEncrypt(obj, pass).then(function (env) {
       var body = { description: 'Fin.AI encrypted sync (v1)', files: {} };
       body.files[SYNC_FILE] = { content: JSON.stringify(env) };
-      var req = { method: 'POST', headers: {
+      if (!gid) body['public'] = false; // a new gist is SECRET (ciphertext either way)
+      // v74.06: an update is PATCH /gists/:id (the documented method); create is POST /gists
+      var req = { method: gid ? 'PATCH' : 'POST', headers: {
         'Authorization': 'token ' + token, 'Accept': 'application/vnd.github+json'
       }, body: JSON.stringify(body) };
       return fetch(gid ? 'https://api.github.com/gists/' + gid : 'https://api.github.com/gists', req)
@@ -8998,7 +9086,11 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (!f) { throw new Error('no ' + SYNC_FILE + ' in that gist — push from this phone first'); }
       var rawUrl = f.raw_url;
       return fetch(rawUrl, { headers: { 'Authorization': 'token ' + token } })
-        .then(function (r) { return r.json(); });
+        .then(function (r) {
+          // v74.06: a failed raw fetch says so (it used to surface as a JSON parse error)
+          if (!r.ok) throw new Error('GitHub ' + r.status + ' fetching the sync file');
+          return r.json();
+        });
     }).then(function (env) {
       syncNote('Decrypting…');
       // the decrypt stage is the only failure left after a successful fetch —
@@ -9009,9 +9101,25 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         // v73.3: the merge — per record, newest wins; a tie keeps LOCAL.
         // (The design wall the plan warned about: the rule is timestamp
         //  comparison per record, and it is what the smoke pins below.)
+        // v74.06: this phone's own deletions ride the merge too, so a pull
+        // can't re-add what was deleted here (it used to resurrect them).
+        var rmL = syncLocalRemoved();
         var local = { base: state.base, txns: state.txns, plans: state.plans,
-          owed: state.owed, moneyLog: state.moneyLog };
+          owed: state.owed, moneyLog: state.moneyLog,
+          removedTxn: rmL.txn, removedPlan: rmL.plan, removedOwed: rmL.owed };
         var merged = syncMerge(local, remote);
+        // v74.06: the overlay must match the base it sits on. Remote base won
+        // and the push carried its overlay -> adopt that overlay and move it
+        // from the REMOTE txns to the merged ones; otherwise keep this phone's
+        // overlay and move it from the local txns. (A pre-v74.06 push has no
+        // adj: the local overlay is kept, as before.)
+        if (remote && remote.adj && merged.base && merged.base === remote.base && merged.base !== state.base) {
+          state.adj = sanitizeAdj(remote.adj);
+          if (typeof remote.adjSig === 'string' && remote.adjSig) state.adjSig = normalizeStoredSig(remote.adjSig);
+          syncApplyAdj(Array.isArray(remote.txns) ? remote.txns : [], merged.txns || []);
+        } else {
+          syncApplyAdj(state.txns, merged.txns || []);
+        }
         var prev = { base: cloneObj(state.base || defaultBase()), txns: cloneObj(state.txns || []),
           plans: cloneObj(state.plans || []), owed: cloneObj(state.owed || { people: [], sort: 'recent' }),
           moneyLog: cloneObj(state.moneyLog || []) };
@@ -9031,7 +9139,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         if (merged.base) state.base = migrateCardDays(migrateBaseKinds(merged.base));
         return Promise.all(puts).then(function () {
           refreshLocalSnapshot();
-          return Promise.all([persistSnapshot(), saveAdj(), saveOwed(),
+          return Promise.all([persistSnapshot(), saveAdj(), saveOwed({ asIs: true }),
             idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {})]);
         }).then(function () {
           render();
@@ -9125,7 +9233,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           // saveBase() writes base + snapshot + adj through the same path the
           // Settings editor uses, so an import sticks.
           return saveBase(state.base).then(function () {
-            if (hasSec('owed')) saveOwed();
+            if (hasSec('owed')) saveOwed({ asIs: true }); // v74.06: imported as-is
             var metaPuts = [];
             if (hasSec('log')) metaPuts = [
               idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }),
@@ -9163,12 +9271,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.05, live: new Date(2026, 10, 10, 2, 47) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.06, live: new Date(2026, 10, 10, 2, 54) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.06': [
+      'Phone-to-phone sync got a lot more trustworthy: editing an entry or a plan on one phone now carries over to the other (before, the other phone kept the old version). The Owed book syncs now (it never did). Things you delete stay deleted after a sync instead of coming back. Both phones’ Ledger histories are kept and combined instead of one replacing the other. Balances now follow the entries a sync brings in. And the first push can create the gist for you — just leave the Gist URL empty.'
+    ],
     '74.05': [
       'Importing a backup is now careful about what it lets in: only entries the app could have made itself come through (a real date, a real amount, a known entry type), and the "Imported" message tells you how many unreadable entries it skipped. In the Owed book, one broken entry no longer makes the whole person vanish — only that entry is skipped.'
     ],
@@ -10378,6 +10489,11 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     syncEncrypt: syncEncrypt, // v73.3: the envelope (the smoke round-trips it)
     syncDecrypt: syncDecrypt, // v73.3: decrypt the envelope (the smoke round-trips it)
     syncMerge: syncMerge, // v73.3: the merge rule (pure — the smoke drives it)
+    recStamp: recStamp, // v74.06: a record's sync age (newest of syncAt / updated / created)
+    saveOwed: saveOwed, // v74.06: the smoke checks the per-person sync stamp
+    syncApplyAdj: syncApplyAdj, // v74.06: the overlay follows a pull's txn changes
+    syncLocalRemoved: syncLocalRemoved, // v74.06: this phone's deletions (push + pull)
+    syncTombAdd: syncTombAdd, syncTombRemove: syncTombRemove, // v74.06: smoke hooks
     recapData: recapData, // v73.2: the money-pulse math (pure — the smoke drives it)
     pinLesson: pinLesson, // v73.2: the pinned lesson (the smoke drives it)
     readLesson: readLesson, // v73.2: read the pinned lesson (the smoke drives it)
@@ -10400,7 +10516,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     migrateIpfTheirsAll: migrateIpfTheirsAll, // v73.72: the promise form (smoke awaits the stamps)
     ipfTheirs: ipfTheirs, // v73.72: the theirs share of an ipf entry (smoke drives the math)
     getOwed: function () { return state.owed; }, // v73.72: test hook (smoke reads the book)
-    setOwed: function (o) { state.owed = o; }, // v73.72: test hook (smoke seeds the owed book)
+    setOwed: function (o) { state.owed = o; owedSeedSigs(); }, // v73.72: test hook (smoke seeds the owed book)
     sanitizeAdj: sanitizeAdj, // v73.71: the import adj sanitizer (smoke: the per-card split rides the import)
     getAdj: function () { return state.adj; }, // v72.43: the live overlay (smoke simulates a pre-v72.42 phone)
     setAdj: function (a) { state.adj = a; }, // v72.43: test hook (smoke)
@@ -10933,6 +11049,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         else if (m.key === 'moneyLog') { state.moneyLog = m.value || []; }
         else if (m.key === 'owed') {
           state.owed = (m.value && Array.isArray(m.value.people)) ? m.value : { people: [] };
+          owedSeedSigs(); // v74.06: the baseline the first edit is compared against
         }
       });
       if (!state.base) {

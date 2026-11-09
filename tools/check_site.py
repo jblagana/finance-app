@@ -1464,7 +1464,7 @@ def main():
           and "obj.sections = inc" in js
           and "function hasSec(n) { return !secs || secs.indexOf(n) >= 0; }" in js
           and "if (hasSec('txns')) state.txns = impTxns;" in js  # v74.05 successor: the sanitized array (was data.txns raw)
-          and "if (hasSec('owed')) saveOwed();" in js
+          and "if (hasSec('owed')) saveOwed({ asIs: true });" in js  # v74.06 successor: imported as-is (no sync stamp)
           and "if (id === 'setSheet') { renderBaseStatus(); backupSelSync(); }" in js
           and "backupSelRead: backupSelRead" in js)
     check("ledger edits stay in place (v72.9): the edit rewrites the txn at its OWN index (no re-file at the end), keeps the money-log row's ORIGINAL timestamp, and rebases that row + every later row by the constant delta (month lines by each row's own txn month); Undo is the exact inverse (un-rebase + original row at its position, no delete+re-add)",
@@ -1944,6 +1944,24 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.06 (security review: sync): a record's sync age is recStamp (newest of syncAt / updated / created) and every edit-path txn/plan write stamps `updated` via touchRec (the sync/import/restore writes do not) — before, the merge compared `created`, which an edit never changes, so a remote edit always tied and lost; owed merges PER PERSON by syncAt, which saveOwed stamps on the people that actually changed (owedSigs diff; { asIs: true } from sync/import/restore) — before it compared owed.edited, which nothing set, so owed never synced; this phone's own tombstones (syncLocalRemoved, now incl. owed people) ride the pull's merge so deletes don't resurrect; the money log merges as a union (at|a|tid key, time-sorted) instead of the newest side replacing the other; a pull moves the overlay by the add/edit/delete rule (syncApplyAdj), adopting the remote overlay when the remote base wins (the push now carries adj + adjSig); an empty gist URL creates a SECRET gist (the create branch was unreachable), updates use PATCH; the raw-file fetch checks r.ok. Smoke PART 48 (13 asserts)",
+          "function recStamp(r) {" in js
+          and "function touchRec(r) {" in js
+          and "idbPut(STORE_TX, touchRec(t))" in js
+          and "idbPut(STORE_PLANS, touchRec(p))" in js
+          and "(merged.txns || []).forEach(function (t) { puts.push(idbPut(STORE_TX, t)); });" in js
+          and "function owedSeedSigs() {" in js
+          and "function saveOwed(opts) {" in js
+          and "syncTombAdd('o', gone.id);" in js
+          and "function syncLocalRemoved() {" in js
+          and "function syncApplyAdj(before, after) {" in js
+          and "removedTxn: rmL.txn, removedPlan: rmL.plan, removedOwed: rmL.owed };" in js
+          and "method: gid ? 'PATCH' : 'POST'" in js
+          and "if (!gid) body['public'] = false;" in js
+          and "fetching the sync file" in js
+          and "'74.06': [" in js
+          and "leave empty on the first push" in html
+          and "PART 48: v74.06 - sync merge" in smoke)
     check("v74.05 (security review: import validation): imported txns run through sanitizeTxnRows (one of the four kinds, YYYY-MM-DD date, finite amount 0..1e9 with numeric strings coerced, string text fields, planRef/payWith/cashback/updated kept, duplicate ids keep the first) and the SAME array feeds the store and state (before: the store got a filtered list, state took data.txns raw); a malformed owed entry drops only itself (sanitizeOwedPeople) instead of the whole person; the Imported toast names the skipped count. Smoke PART 47: every real seed txn survives byte-identical, junk rows drop, the owed person survives a bad entry",
           "function sanitizeTxnRows(rows) {" in js
           and "var impTxns = sanitizeTxnRows(data.txns);" in js
