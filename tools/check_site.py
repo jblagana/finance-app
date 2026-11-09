@@ -1944,6 +1944,13 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.04 (security review): the coach's action-button labels are escaped (they carry LLM text — coachChangeLabel builds them from the model's change names, which nm() only trims to 40 chars, enough for an <svg onload> payload), and an imported backup's chat html is rebuilt from an allow-list (div/span/b/i/br + class only, via an inert DOMParser; plain escaped text when there is no parser) instead of being stored verbatim and rendered with innerHTML. Smoke PART 46 pins the no-parser fallback + the chat.js label escape; the smoke clock is pinned (SMOKE_NOW, default 2026-11-06 12:00) so the fixed Oct-2026 seed stops drifting out of the live cycle",
+          "esc(a.label) + '</button>'" in chatjs
+          and "function sanitizeChatHtml(html) {" in js
+          and "m.html = sanitizeChatHtml(r.html.slice(0, 4000));" in js
+          and "'74.04': [" in js
+          and "PART 46: v74.04 - imported chat html is sanitized" in smoke
+          and "process.env.SMOKE_NOW" in smoke)
     check("v74.03 (boss: 'its the ac installment that shouldnt count toward it'): a plan payment — a txn carrying the planRef link the plan chip's tap marks — is NOT 'spent today'. The exclusion lives on the todaySpend aggregate only (t.date === today && !t.planRef), NOT in spendOf(): the projection chart derives its plan-due drops from spendOf() on the planRef rows, and a zero there erased them (PART 45 caught it on the first cut). Rationale: the headroom already nets out the cycle's plan share (cyclePlanDeduct), so counting the payment in todaySpend double-counted it (the card dropped by the installment while the headroom still reserved it). Plain spends and card charges count unchanged. Smoke PART 45: the planRef probe (AC Installment 2,020) + a plain spend (265) → todaySpend === 265, spendOf(planRef row) === 2020 (still counted — the chart needs it), spendOf(plain) === 265, the coach remainder uses the same excluded number",
           "if (t.date === today && !t.planRef) todaySpend += spendOf(t);" in js
           and "'74.03': [" in js

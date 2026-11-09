@@ -8649,6 +8649,31 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // but a hand-edited one must not inject junk: keep only the shapes the app
   // itself writes, capped like the live stores.
   var CHAT_CAP = 200;
+  // A backup's bot html is rendered with innerHTML, so a crafted file could
+  // carry script (<img onerror>, <svg onload>, ...). Rebuild it from an
+  // allow-list — the only markup the app's own bot messages use — and drop
+  // everything else (tags become their text, attributes other than class go).
+  var CHAT_TAGS = { DIV: 'div', SPAN: 'span', B: 'b', I: 'i', BR: 'br' };
+  function sanitizeChatHtml(html) {
+    var s = String(html || '');
+    if (typeof DOMParser !== 'function') return esc(s.replace(/<[^>]*>/g, ' ')); // no parser: plain text only
+    var doc = new DOMParser().parseFromString('<body>' + s + '</body>', 'text/html'); // inert: nothing runs
+    function walk(node) {
+      var out = '';
+      for (var c = node.firstChild; c; c = c.nextSibling) {
+        if (c.nodeType === 3) { out += esc(c.nodeValue); continue; }
+        if (c.nodeType !== 1) continue;
+        if (c.tagName === 'SCRIPT' || c.tagName === 'STYLE') continue;
+        var tag = CHAT_TAGS[c.tagName];
+        if (!tag) { out += walk(c); continue; }
+        if (tag === 'br') { out += '<br>'; continue; }
+        var cls = String(c.getAttribute('class') || '').replace(/[^\w\- ]/g, '');
+        out += '<' + tag + (cls ? ' class="' + cls + '"' : '') + '>' + walk(c) + '</' + tag + '>';
+      }
+      return out;
+    }
+    return walk(doc.body);
+  }
   function sanitizeChatRows(rows) {
     var out = [];
     (rows || []).forEach(function (r) {
@@ -8657,7 +8682,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (typeof r.at !== 'string') return;
       var m = { id: r.id, who: r.who, at: r.at };
       if (typeof r.text === 'string') m.text = r.text.slice(0, 2000);
-      if (typeof r.html === 'string') m.html = r.html.slice(0, 4000);
+      if (typeof r.html === 'string') m.html = sanitizeChatHtml(r.html.slice(0, 4000));
       if (!m.text && !m.html) return;
       if (Array.isArray(r.storyLines)) m.storyLines = r.storyLines.slice(0, 20);
       if (r.done) m.done = true;
@@ -9097,12 +9122,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.03, live: new Date(2026, 10, 8, 17, 33) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.04, live: new Date(2026, 10, 10, 2, 23) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.04': [
+      'Security fix: the coach’s suggestion buttons now show their text as plain text, so a strange coach reply can never run code inside the app. And importing a backup now cleans the saved chat messages — a tampered backup file can’t sneak code in through the chat history. Your normal chat history looks exactly the same.'
+    ],
     '74.03': [
       'The "Spent in app today" cell no longer counts plan payments (like the AC Installment) — the headroom already reserves the cycle’s plan share, so the payment was being counted twice. Plain spends, card charges, and everything else count the same as before.'
     ],
@@ -10258,6 +10286,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     mlShown: function () { return mlShownCount; }, // v73.92: the pager's page (smoke asserts 10/10 paging)
     setMlShown: function (n) { mlShownCount = n; renderMoneyLog(); }, // v73.91: the smoke drives the See more/less page without a DOM click
     sanitizeMoneyLogRows: sanitizeMoneyLogRows, // v73.91: the import sanitizer (smoke asserts it no longer truncates)
+    sanitizeChatRows: sanitizeChatRows, // v74.04: the chat import sanitizer (smoke asserts no markup survives it)
+    sanitizeChatHtml: sanitizeChatHtml, // v74.04
     prefillAdd: prefillAdd, // v73.18: the coach prefill (smoke verifies the chip's target state)
     getAddMode: function () { return addMode; }, // v73.19: the Add sheet's direction (the row chips' prefill proof)
     prepayRowChip: prepayRowChip, // v73.19: the prepay row-chip's handler body (smoke drives it without a DOM)

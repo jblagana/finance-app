@@ -2135,7 +2135,7 @@
     if (m.who !== 'bot' || !m.actions || !m.actions.length) return '';
     if (m.done) return '<div class="a-row"><span class="c-done">✓ done</span></div>';
     var h = '<div class="a-row">';
-    m.actions.forEach(function (a, i) { h += '<button type="button" class="c-act" data-ai="' + i + '">' + a.label + '</button>'; });
+    m.actions.forEach(function (a, i) { h += '<button type="button" class="c-act" data-ai="' + i + '">' + esc(a.label) + '</button>'; }); // escaped: labels can carry coach (LLM) text
     return h + '</div>';
   }
   function msgEl(m) {

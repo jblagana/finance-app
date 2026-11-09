@@ -12,6 +12,32 @@
 // finances/ that the v73.42 incident destroyed once already)
 var fs = require('fs');
 var path = require('path');
+
+// v74.04: PIN THE CLOCK. The seed is a fixed Oct-2026 export, but the app reads
+// the real clock, so every passing day slid the seed's dues out of the live
+// cycle and the run went red on its own (v73.54 crashed the run → every later
+// PART silently stopped running). The clock is SHIFTED, not frozen: it starts
+// at SMOKE_NOW and keeps ticking (the toast-lifetime / sleep parts need time to
+// pass). 2026-11-06 sits in the middle of the all-green window (Nov 5–7,
+// verified). Override: SMOKE_NOW=2026-11-05T08:00, or SMOKE_NOW=real for the
+// wall clock.
+(function pinClock() {
+  var want = process.env.SMOKE_NOW || '2026-11-06T12:00';
+  if (want === 'real') return;
+  var RealDate = Date, offset = new RealDate(want).getTime() - RealDate.now();
+  if (!isFinite(offset)) throw new Error('SMOKE_NOW is not a date: ' + want);
+  function PinnedDate() {
+    if (!(this instanceof PinnedDate)) return new RealDate(RealDate.now() + offset).toString();
+    if (!arguments.length) return new RealDate(RealDate.now() + offset);
+    return new (Function.prototype.bind.apply(RealDate, [null].concat([].slice.call(arguments))))();
+  }
+  PinnedDate.prototype = RealDate.prototype;
+  PinnedDate.now = function () { return RealDate.now() + offset; };
+  PinnedDate.UTC = RealDate.UTC;
+  PinnedDate.parse = RealDate.parse;
+  global.Date = PinnedDate;
+  console.log('[clock] pinned to ' + new PinnedDate().toString() + ' (SMOKE_NOW=real for the wall clock)');
+})();
 // v73.49: dual-layout paths — the harness is repo-tracked (tools\smoke\,
 // seed beside it, app.js two levels up) AND mirrored at
 // C:\Users\Jan\Muji\finance-app\tools\smoke\ (same shape). The v73.48
@@ -3369,6 +3395,26 @@ waitReady().then(async function (F) {
       await F.deleteTxn(id45a); await sleep(30);
       await F.deleteTxn(id45b); await sleep(30);
       F.state.txns = baseTxns45;
+
+      // ============ PART 46: v74.04 - an imported chat thread can't carry script ============
+      // A backup's bot html is rendered with innerHTML (chat.js msgEl), so a
+      // crafted file could plant <img onerror> / <svg onload>. The browser path
+      // rebuilds it from an allow-list via DOMParser (verified in headless
+      // Edge); Node has no DOMParser, so this pins the no-parser fallback:
+      // plain text only, every tag gone, the text escaped.
+      console.log('\n== PART 46: v74.04 - imported chat html is sanitized ==');
+      var evil46 = '<img src=x onerror="alert(1)"><svg onload="alert(2)"></svg><b>hi</b> & <script>alert(3)</script>';
+      var rows46 = F.sanitizeChatRows([
+        { id: 'c46a', who: 'bot', at: '2026-11-06T00:00:00.000Z', html: evil46 },
+        { id: 'c46b', who: 'user', at: '2026-11-06T00:00:01.000Z', text: '<b>raw user text</b>' }
+      ]);
+      ok(rows46.length === 2, 'v74.04: both rows survive the sanitizer (got ' + rows46.length + ')');
+      var h46 = rows46[0] && rows46[0].html || '';
+      ok(h46.indexOf('<') < 0, 'v74.04: no raw tag survives an imported bot row (got ' + JSON.stringify(h46) + ')');
+      ok(h46.indexOf('hi') >= 0 && h46.indexOf('&amp;') >= 0, 'v74.04: the row keeps its text, escaped');
+      ok(rows46[1].text === '<b>raw user text</b>', 'v74.04: user text is untouched (msgEl escapes it at render)');
+      var chatSrc46 = fs.readFileSync(path.join(__dirname, '..', '..', 'chat.js'), 'utf8');
+      ok(chatSrc46.indexOf("'\">' + esc(a.label) + '</button>'") >= 0, 'v74.04: chat.js escapes the coach action-button labels (LLM text)');
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
