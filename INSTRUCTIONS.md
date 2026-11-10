@@ -1,3 +1,15 @@
+# v74.09+ batch (prepended to INSTRUCTIONS.md)
+## 2026-11-10 - "hunt for bugs and redflags in the apps logic" -> (10 findings reported) -> "do all" -> "Fix all 10, one dot release each (related day-of-month fixes share one)"
+Status: **in progress**. Subtasks (foundational first):
+- [x] v74.09 recurring plans on the 29th-31st drift to the 28th after a short month and then lose their payment links (anchor every occurrence to the plan's own day; migrate drifted links/overrides) — DONE: anchored grid + migratePlanDrift (boot / import / pull). Smoke PART 49 (8) + check_site pin
+- [ ] v74.10 paydays 29-31 silently became the 15th; card prepay days 29-31 overflow into the next month (clamp to the month's last day)
+- [ ] v74.11 the coach headline's per-day number uses the calendar month while the strip uses the pay cycle (one number: the cycle)
+- [ ] v74.12 the "end of month in the red" pace counts plan payments that are already deducted as plans
+- [ ] v74.13 no salary set: plans stop being deducted, and any refund reads as an early salary
+- [ ] v74.14 three Undo buttons do nothing (reconcile, plan edit, card clamp) + the clamp warning is overwritten
+- [ ] v74.15 entries dated before the last reconcile are counted twice (record-only by default, "count it" on demand)
+- [ ] v74.16 a budget double-counts the spends logged in its category
+
 # v74.05+ batch (prepended to INSTRUCTIONS.md)
 ## 2026-11-10 - "do all" -> "Fix every open item from the bug hunt, one dot release each"
 Status: **done** (code: 4/4 pushed to https://github.com/jblagana/finance-app.git main) — **Worker deploy pending** a Cloudflare login (see v74.07). Subtasks (foundational / fastest first):

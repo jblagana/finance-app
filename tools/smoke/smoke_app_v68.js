@@ -3497,6 +3497,39 @@ waitReady().then(async function (F) {
       ok(adjB48 !== adjA48 && JSON.stringify(F.getAdj()) === adjA48, 'v74.06: a pulled txn moves the overlay, a pulled delete moves it back exactly (moved: ' + adjB48 + ')');
       await F.deleteTxn(id48); await sleep(30);
 
+      // ============ PART 49: v74.09 - plan dates don't drift ============
+      console.log('\n== PART 49: v74.09 - plan dates stay on their day ====');
+      var plans49 = F.state.plans, txns49 = F.state.txns;
+      F.state.plans = plans49.slice(); F.state.txns = txns49.slice();
+      function mk49(id, date, repeat, paidDates) {
+        var p = { id: id, name: 'Rent49', amount: 5000, date: date, repeat: repeat, created: '2026-01-01T00:00:00Z' };
+        F.state.plans.push(p);
+        paidDates.forEach(function (d, i) {
+          F.state.txns.push({ id: id + 't' + i, date: d, account: 'Cash', kind: 'cash_out', category: 'Rent', amount: 5000, note: 'Rent49', created: d + 'T00:00:00Z',
+            planRef: { planId: id, date: d, name: 'Rent49', amount: 5000 } });
+        });
+        return p;
+      }
+      var a49 = mk49('p49a', '2026-08-31', 'monthly', ['2026-08-31', '2026-09-30', '2026-10-31']);
+      ok(JSON.stringify(F.planAllDates(a49)) === '["2026-11-30","2026-12-31","2027-01-31"]', 'v74.09: Aug 31 monthly, Aug-Oct paid -> next dues Nov 30 / Dec 31 / Jan 31 (got ' + JSON.stringify(F.planAllDates(a49)) + ')');
+      var paid49 = ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31', '2026-06-30', '2026-07-31', '2026-08-31', '2026-09-30', '2026-10-31'];
+      var b49 = mk49('p49b', '2026-01-31', 'monthly', paid49);
+      ok(F.planAllDates(b49)[0] === '2026-11-30', 'v74.09: Jan 31 monthly paid Jan-Oct is NOT stuck at "Mar 28 overdue" (first due ' + F.planAllDates(b49)[0] + ')');
+      var c49 = mk49('p49c', '2024-02-29', 'annual', ['2024-02-29', '2025-02-28', '2026-02-28']);
+      ok(JSON.stringify(F.planAllDates(c49)) === '["2027-02-28","2028-02-29"]', 'v74.09: a Feb 29 yearly plan returns to Feb 29 in a leap year (got ' + JSON.stringify(F.planAllDates(c49)) + ')');
+      // the repair: links written while the grid drifted (Mar 28, Apr 28, ...) move to the anchored dates
+      var drifted49 = ['2026-01-31', '2026-02-28', '2026-03-28', '2026-04-28', '2026-05-28', '2026-06-28', '2026-07-28', '2026-08-28', '2026-09-28', '2026-10-28'];
+      var d49 = mk49('p49d', '2026-01-31', 'monthly', drifted49);
+      d49.overrides = { '2026-11-28': { name: 'Rent49', amount: 5500, applyFrom: '2026-11-28' } };
+      ok(F.planAllDates(d49)[0] === '2026-03-31', 'v74.09: before the repair, drifted links leave the anchored Mar 31 unpaid (first due ' + F.planAllDates(d49)[0] + ')');
+      var n49 = F.migratePlanDrift();
+      var links49 = F.state.txns.filter(function (t) { return t.planRef && t.planRef.planId === 'p49d'; }).map(function (t) { return t.planRef.date; });
+      ok(JSON.stringify(links49) === JSON.stringify(paid49), 'v74.09: the repair moves every drifted link to its real date (' + n49 + ' records)');
+      ok(d49.overrides['2026-11-30'] && d49.overrides['2026-11-30'].applyFrom === '2026-11-30' && !d49.overrides['2026-11-28'], 'v74.09: a drifted override key (and its applyFrom) moves too');
+      ok(F.planAllDates(d49)[0] === '2026-11-30' && F.resolveOccurrence(d49, '2026-11-30').amount === 5500, 'v74.09: after the repair the series is current and the edit still applies');
+      ok(F.migratePlanDrift() === 0, 'v74.09: the repair is idempotent (a second run touches nothing)');
+      F.state.plans = plans49; F.state.txns = txns49;
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

@@ -995,7 +995,7 @@ def main():
           # advance retargeted to the new block
           and "if (eR && eR.skip) {\n          var sRes = planDateAt(p, start);" in js
           and "var fullyPaid = amv > 0 && (Number(pp && pp.amount) || 0) >= amv;" in js
-          and "if (fullyPaid) { start = step(start, 1); guard++; continue; }" in js
+          and "if (fullyPaid) { idx++; start = step(d, idx); guard++; continue; }" in js  # v74.09 successor: anchored, not chained
           and "var mv = eS && eS.move ? eS.move : null;" in js
           and "if (String(mv) < today) break;" in js
           and "if (out.indexOf(mvRes) < 0) out.push(mvRes);" in js
@@ -1944,6 +1944,15 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.09 (logic review #1): recurring occurrences are ANCHORED to the plan date (step(d, idx), never step(previous, 1)) — chaining drifted a 29th-31st monthly plan to the 28th after a short month, forever, and the drifted dates stopped matching the planRef links so real payments stopped counting (Jan 31 rent paid Jan-Oct read 'Mar 28 overdue'). migratePlanDrift (boot, import, sync pull; idempotent) moves links / override keys / applyFrom-shiftFrom-move dates off the old chained dates via planDriftMap. Smoke PART 49 (8 asserts)",
+          "idx++; start = step(d, idx); guard++; continue;" in js
+          and "for (var k = 0; k < n; k++) out.push(step(d, idx + k));" in js
+          and "start = step(start, 1)" not in js
+          and "function planDriftMap(p) {" in js
+          and "function migratePlanDrift() {" in js
+          and js.count("migratePlanDrift();") >= 3
+          and "PART 49: v74.09 - plan dates stay on their day" in smoke
+          and "'74.09': [" in js)
     check("v74.08 (security review: hygiene): ai.js aborts a timed-out coach call (abortableTimer: AbortController + the 20 s timer) and a call that settles after the timeout no longer moves the LED / cooldown (note() checks done); the Settings Test message masks the Worker URL's query (safeUrl — a Worker URL may carry ?t=<app token>). tools/test_ai_timeout.js (fake timers + a fake slow server) is a release gate",
           "function abortableTimer(onTimeout) {" in aijs
           and "function safeUrl(u) {" in aijs

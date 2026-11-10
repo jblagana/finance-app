@@ -376,7 +376,11 @@
       if (p.repeat === 'annual') return shiftYear(x, k);
       return shiftMonth(x, k);
     };
-    var start = d, guard = 0;
+    // v74.09: every occurrence is ANCHORED to the plan's own date — occurrence #idx
+    // = step(d, idx), never step(previous, 1). Chaining drifted: Jan 31 -> Feb 28
+    // -> Mar 28 -> ... forever (the month-clamp stuck), and the drifted dates no
+    // longer matched the planRef links, so real payments stopped counting.
+    var start = d, guard = 0, idx = 0;
     var out = [];
     if (!hasCount) {
       // v73.61 (boss-approved): the blind fast-forward is GONE. It advanced a
@@ -426,26 +430,88 @@
         if (eR && eR.skip) {
           var sRes = planDateAt(p, start);
           if (out.indexOf(sRes) < 0) out.push(sRes);
-          start = step(start, 1); guard++; continue;
+          idx++; start = step(d, idx); guard++; continue;
         }
         var amv = Number((eR && eR.amount != null) ? eR.amount : p.amount) || 0;
         var nmv = (eR && eR.name != null) ? eR.name : p.name;
         var pp = findPaidTxn({ monthPrefix: today.slice(0, 7), today: today },
           { planId: p.id, date: start, name: nmv, amount: amv });
         var fullyPaid = amv > 0 && (Number(pp && pp.amount) || 0) >= amv;
-        if (fullyPaid) { start = step(start, 1); guard++; continue; }
+        if (fullyPaid) { idx++; start = step(d, idx); guard++; continue; }
         var mv = eS && eS.move ? eS.move : null;
         if (mv) {
           if (String(mv) < today) break; // moved into the past — overdue at the moved date
           var mvRes = planDateAt(p, start);
           if (out.indexOf(mvRes) < 0) out.push(mvRes); // the relocated due stays in the window
-          start = step(start, 1); guard++; continue;
+          idx++; start = step(d, idx); guard++; continue;
         }
         break; // unpaid (or partly paid) past due — the series stops here
       }
     }
-    for (var k = 0; k < n; k++) out.push(step(start, k));
+    for (var k = 0; k < n; k++) out.push(step(d, idx + k)); // v74.09: anchored (see above)
     return out;
+  }
+  // v74.09: the one-time repair for data written while the grid DRIFTED.
+  // Before v74.09 the series chained (Jan 31 -> Feb 28 -> Mar 28 -> Apr 28...),
+  // so a payment linked on a drifted date (planRef.date = Mar 28) or an edit
+  // keyed there no longer matches the anchored grid (Mar 31). For each
+  // monthly/annual plan whose day can clamp (29th-31st; Feb 29 yearly) this
+  // rebuilds the old chained sequence next to the anchored one and moves every
+  // drifted date to its anchored twin: txn planRef.date, override keys, and
+  // the applyFrom / shiftFrom / move dates inside them. Idempotent (a second
+  // run finds nothing to move); returns how many records it touched.
+  function planDriftMap(p) {
+    var map = {};
+    if (!p || (p.repeat !== 'monthly' && p.repeat !== 'annual')) return map;
+    var d = String(p.date || ''), parts = d.split('-');
+    if (parts.length !== 3) return map;
+    var day = Number(parts[2]);
+    if (p.repeat === 'monthly' && day < 29) return map;
+    if (p.repeat === 'annual' && !(parts[1] === '02' && day === 29)) return map;
+    var step = p.repeat === 'annual' ? shiftYear : shiftMonth;
+    var horizon = shiftYear(todayISO(), 3), anchored = {}, chained = [], c = d;
+    for (var i = 0; i < 600; i++) {
+      var a = step(d, i);
+      if (a > horizon && c > horizon) break;
+      anchored[a] = i;
+      chained.push([c, a]);
+      c = step(c, 1);
+    }
+    chained.forEach(function (pr) { if (pr[0] !== pr[1] && !(pr[0] in anchored)) map[pr[0]] = pr[1]; });
+    return map;
+  }
+  function migratePlanDrift() {
+    var touched = 0, puts = [];
+    (state.plans || []).forEach(function (p) {
+      var map = planDriftMap(p);
+      if (!Object.keys(map).length) return;
+      var pChanged = false;
+      (state.txns || []).forEach(function (t) {
+        if (t && t.planRef && String(t.planRef.planId) === String(p.id) && map[t.planRef.date]) {
+          t.planRef.date = map[t.planRef.date];
+          puts.push(idbPut(STORE_TX, touchRec(t)));
+          touched++;
+        }
+      });
+      if (p.overrides) {
+        var nov = {};
+        Object.keys(p.overrides).forEach(function (k) {
+          var e = p.overrides[k];
+          var nk = map[k] || k;
+          if (nk !== k) pChanged = true;
+          if (e && typeof e === 'object') {
+            ['applyFrom', 'shiftFrom', 'move'].forEach(function (f) {
+              if (e[f] && map[e[f]]) { e[f] = map[e[f]]; pChanged = true; }
+            });
+          }
+          if (!(nk in nov)) nov[nk] = e; // a collision keeps the entry already at the anchored date
+        });
+        p.overrides = nov;
+      }
+      if (pChanged) { puts.push(idbPut(STORE_PLANS, touchRec(p))); touched++; }
+    });
+    if (puts.length) Promise.all(puts).catch(function () {});
+    return touched;
   }
   // v73.27: every occurrence date of plan p (one-offs: [p.date]; recurring:
   // the full series). planOccurrences() is a FORWARD window (first >= today);
@@ -9137,6 +9203,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         state.owed = merged.owed || { people: [] };
         state.moneyLog = merged.moneyLog || [];
         if (merged.base) state.base = migrateCardDays(migrateBaseKinds(merged.base));
+        migratePlanDrift(); // v74.09: a phone on an older version may push links on drifted plan dates
         return Promise.all(puts).then(function () {
           refreshLocalSnapshot();
           return Promise.all([persistSnapshot(), saveAdj(), saveOwed({ asIs: true }),
@@ -9226,6 +9293,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
             if (hasSec('txns')) migrateCashBy(); // v73.83: the imported per-funder split reconciles against the imported txns too
             if (hasSec('owed') && hasSec('txns')) migrateIpfTheirs(); // v73.72: an imported book's un-filed ipf-on-card entries file their theirs pair immediately
           }
+          if (hasSec('plans') || hasSec('txns')) migratePlanDrift(); // v74.09: an old backup may carry links on drifted plan dates
           // v47: persist the base too. The old code re-derived the snapshot from
           // the imported base in memory (and saved the snapshot) but never wrote
           // the base back to IndexedDB, so on the next launch the stale stored
@@ -9271,12 +9339,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.08, live: new Date(2026, 10, 10, 2, 59) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.09, live: new Date(2026, 10, 10, 12, 46) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.09': [
+      'Recurring plans stay on their day: a monthly plan on the 29th, 30th or 31st no longer slides to the 28th after February (and then lose track of the payments you marked) — it lands on the last day of short months and returns to its own day after. Yearly plans on Feb 29 come back to Feb 29 in leap years. Payments already marked on a slipped date are moved to the right date automatically.'
+    ],
     '74.08': [
       'The online coach gives up cleanly: when it takes too long, the request is now actually cancelled, and a reply that shows up afterwards no longer flips the coach light back to "available". The Test button in Settings also never shows your Worker token on screen.'
     ],
@@ -10495,6 +10566,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     syncEncrypt: syncEncrypt, // v73.3: the envelope (the smoke round-trips it)
     syncDecrypt: syncDecrypt, // v73.3: decrypt the envelope (the smoke round-trips it)
     syncMerge: syncMerge, // v73.3: the merge rule (pure — the smoke drives it)
+    planDriftMap: planDriftMap, migratePlanDrift: migratePlanDrift, // v74.09: the drift repair (smoke)
     recStamp: recStamp, // v74.06: a record's sync age (newest of syncAt / updated / created)
     saveOwed: saveOwed, // v74.06: the smoke checks the per-person sync stamp
     syncApplyAdj: syncApplyAdj, // v74.06: the overlay follows a pull's txn changes
@@ -11067,6 +11139,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       migratePayoffModel(); // v72.43: one-shot re-derivation of a pre-v72.42 persisted overlay
       migratePrepayBy(); // v73.71: one-shot rebuild of the stale per-card prepay split (AFTER the payoff migration — it re-stamps mv)
       migrateCashBy(); // v73.83: rebuild the per-funder cash split (lastReconAt-gated; self-heals smeared phones)
+      migratePlanDrift(); // v74.09: move payment links / edits off the pre-v74.09 drifted plan dates (idempotent)
       migrateIpfTheirs(); // v73.72: one-shot backfill — past ipf-on-card entries file their theirs pair (stamp-gated, idempotent)
       if (!state.adjSig) state.adjSig = snapSig(state.snapshot);
       state.adjLoaded = true;
