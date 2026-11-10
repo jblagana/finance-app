@@ -1,3 +1,8 @@
+# v74.17 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-10 - "check why the app has different liquid record in hero card vs the ledger entries 'liquid x -> y'" -> (cause: the v74.02 "liquid" line read e.f, the FREE cash — it sat exactly the cards owed, P7,764, below the hero's Liquid) -> "fix it, but make sure the changes shown are only for liquid and card, no free (acceptable for old entries but should not show ever in new ones)"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.17, sw cache finances-pwa-v74.17 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.17 every new ledger row stores q = the REAL liquid total after (cash.total, the hero's Liquid); the line shows liquid + card moves only, never free; old rows (no q) keep their free line, labelled "free" — DONE. Smoke PART 44 retargeted to the real liquid + PART 57 (6) + check_site pin. Flagged, not changed: a payoff funded by ANOTHER card drops the raw liquid total in the app's model (pre-existing v72.42 rule) — the ledger now mirrors the hero exactly, so it shows that drop too
+
 # v74.09+ batch (prepended to INSTRUCTIONS.md)
 ## 2026-11-10 - "hunt for bugs and redflags in the apps logic" -> (10 findings reported) -> "do all" -> "Fix all 10, one dot release each (related day-of-month fixes share one)"
 Status: **done** — v74.09..v74.16 pushed to https://github.com/jblagana/finance-app.git (main), each gated by release.ps1 (all green). Subtasks (foundational first):

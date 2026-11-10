@@ -1469,8 +1469,8 @@ def main():
           and "backupSelRead: backupSelRead" in js)
     check("ledger edits stay in place (v72.9): the edit rewrites the txn at its OWN index (no re-file at the end), keeps the money-log row's ORIGINAL timestamp, and rebases that row + every later row by the constant delta (month lines by each row's own txn month); Undo is the exact inverse (un-rebase + original row at its position, no delete+re-add)",
           "state.txns[oIdx] = t; // in place — position preserved" in js
-          and "rebase(e0, dFree, dCard, 1)" in js
-          and "for (var k = li + 1; k < log.length; k++) { if (log[k]) rebase(log[k], dFree, dCard, 1); }" in js
+          and "rebase(e0, dFree, dCard, 1, dLiqE)" in js  # v74.17 successor: the liquid total rides the rebase
+          and "for (var k = li + 1; k < log.length; k++) { if (log[k]) rebase(log[k], dFree, dCard, 1, dLiqE); }" in js  # v74.17 successor
           and "function monthOfTxn(tid)" in js
           and "var origRow = li >= 0 ? Object.assign({}, log[li]) : null;" in js
           and "function removeTxnRow(tid, keepInStore)" in js
@@ -1944,6 +1944,18 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.17 (boss: 'different liquid record in hero card vs the ledger entries'): every new money-log row stores q = the REAL liquid total after (cash.total — the hero's Liquid): logMoney, debit reconcile / override rows, the reset's audit row (a liquid row replaces the free row). The render shows LIQUID (spend -n, money in +n, a payoff from a bank -n, a debit override / reconcile / reset its signed n) and CARD lines only for rows with q — never free; rows without q (pre-v74.17) keep their free line, labelled 'free'. The edit rebase, its undo and 'Count it' shift q too; the sanitizer keeps q. Smoke PART 44 retargeted + PART 57 (6)",
+          "e.q = r2(s.cash ? s.cash.total : 0); // v74.17" in js
+          and js.count("else e.q = r2(s.cash ? s.cash.total : 0);") == 2
+          and "n: dLiq, k: 'r', q: r2(liqAfter0)" in js
+          and "nt: 'reset to my numbers', m: '', n: dFree, k: 'r', f: r2(freeAfter)" not in js
+          and "if (e.q != null && dQ) e.q = r2(e.q + dQ);" in js
+          and "if (log[k].q != null) log[k].q = r2(log[k].q + dQ);" in js
+          and "if (Math.abs(dQr) > 0.004) extra += '<span class=\"ml-f\">liquid '" in js
+          and "extra += '<span class=\"ml-f\">free ' + money(liqBefore)" in js
+          and "if (typeof e.q === 'number' && isFinite(e.q)) m.q = e.q;" in js
+          and "PART 57: v74.17 - ledger liquid matches the hero" in smoke
+          and "'74.17': [" in js)
     check("v74.16 (logic review #9): a budget reserves what is LEFT — budgetCredit(snapshot) hands back, per budget line, the spend in that category in the budget month (spendOf, case-insensitive category) up to the budget; effectiveSnap adds it to free (budget_credit / budget_used). Overspend still lands on free; a budget month that is over is released in full. Smoke PART 56 (5)",
           "function budgetCredit(s) {" in js
           and "free: r2((s.cash ? s.cash.free : 0) - state.adj.free + bc.total)," in js
@@ -2070,7 +2082,7 @@ def main():
     check("v74.02 (boss-approved mockup_ledger_changes.html: 'all instances of x -> y in every entry: if charged/added on card, show the card change; if charged/added on liquid, show the liquid change'): every Ledger row's before→after sub-line is now the ACCOUNT the row actually charged — card charge → the card line, liquid spend / cash-in → the liquid line; the old 'free' line is gone from every row. A PLAIN payoff (from liquid) shows the card line only — free is untouched by it (v72.42: the charge already committed the money), so a liquid line would read 'x → x'; a CASHBACK payoff shows the card line only (new money — liquid untouched); a payoff FUNDED BY ANOTHER CC shows the total card line only (per-card balances aren't stored on the row; isCardFunder resolves e.w against the live snapshot's cards); adjustments map debit → liquid / card → card; legacy rows (no flavor) fall back to the liquid line. Smoke PART 44: all eight row shapes verified end-to-end + no free line anywhere in the full ledger",
           "function isCardFunder(name) {" in js
           and "var ccFunded = e.k === 'p' && !cbRow && isCardFunder(e.w);" in js
-          and "extra += '<span class=\"ml-f\">liquid ' + money(liqBefore) + ' → ' + money(e.f != null ? e.f : 0) + '</span>';" in js
+          and "extra += '<span class=\"ml-f\">free ' + money(liqBefore) + ' → ' + money(e.f != null ? e.f : 0) + '</span>';" in js  # v74.17 successor: an OLD row's line is its free cash, labelled free (new rows read q)
           and "'74.02': [" in js
           and "fileBalanceAdjustment: fileBalanceAdjustment" in js
           and "isCardFunder: isCardFunder" in js

@@ -1040,11 +1040,14 @@
     var before = effectiveSnap();
     var freeBefore = before && before.cash ? before.cash.free : 0;
     var cardBefore = before ? (before.card_owed || 0) : 0;
+    var liqBefore0 = before && before.cash ? before.cash.total : 0; // v74.17
     state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V };
     var preview = effectiveSnap();
     state.adj = prev; // restore — the reset only happens on confirm
     var freeAfter = preview && preview.cash ? preview.cash.free : 0;
     var cardAfter = preview ? (preview.card_owed || 0) : 0;
+    var liqAfter0 = preview && preview.cash ? preview.cash.total : 0; // v74.17
+    var dLiq = r2(liqAfter0 - liqBefore0);
     var dFree = r2(freeAfter - freeBefore);  // how much free MOVED (the boss's "by how much")
     var dCard = r2(cardAfter - cardBefore);  // how much cards-owed moved
     var freeTxt = Math.abs(dFree) > 0.004
@@ -1065,8 +1068,10 @@
       // actual move (after − before), f/o are the AFTER values; the render
       // derives before = f − n / o − n.
       var rows = [];
-      if (Math.abs(dFree) > 0.004) {
-        rows.push({ at: Date.now(), a: 'add', l: 'Adjustment', c: 'Adjustment', nt: 'reset to my numbers', m: '', n: dFree, k: 'r', f: r2(freeAfter) });
+      // v74.17: the reset's liquid move is filed as a LIQUID row (q = the
+      // liquid total after) — a new row never shows free
+      if (Math.abs(dLiq) > 0.004) {
+        rows.push({ at: Date.now(), a: 'add', l: 'Adjustment', c: 'Adjustment', nt: 'reset to my numbers', m: '', n: dLiq, k: 'r', q: r2(liqAfter0) });
       }
       if (Math.abs(dCard) > 0.004) {
         rows.push({ at: Date.now(), a: 'add', l: 'Adjustment', c: 'Adjustment', nt: 'reset to my numbers', m: '', n: dCard, k: 'r', o: r2(cardAfter) });
@@ -1384,6 +1389,7 @@
     };
     e.f = r2(s.cash ? s.cash.free : 0);
     if (kind === 'card') e.o = r2(s.card_owed || 0);
+    else e.q = r2(s.cash ? s.cash.total : 0); // v74.17: a debit reconcile moves liquid by its diff
     state.moneyLog.push(e);
     // v73.91: no cap — the store is INFINITE (the v73.89 durable clock made the math cap-independent); the pager pages the DOM
     idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
@@ -2159,6 +2165,7 @@
     };
     e.f = r2(s.cash ? s.cash.free : 0);
     if (kind === 'card') e.o = r2(s.card_owed || 0);
+    else e.q = r2(s.cash ? s.cash.total : 0); // v74.17: a debit override moves liquid by its diff
     state.moneyLog.push(e);
     // v73.91: no cap — the store is INFINITE (the v73.89 durable clock made the math cap-independent); the pager pages the DOM
     idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
@@ -2404,6 +2411,7 @@
     delete t.recordOnly;
     addAdj(txnAdj(t), 1);
     var amt = Number(t.amount) || 0, dF = freeEffect(t, amt), dC = cardEffect(t.kind, amt);
+    var dQ = r2(-txnAdj(t).cash); // v74.17: the liquid move once it counts
     var log = state.moneyLog || [], from = -1;
     for (var i = 0; i < log.length; i++) if (log[i] && log[i].tid === id && from < 0) from = i;
     if (from >= 0) {
@@ -2411,6 +2419,7 @@
       for (var k = from; k < log.length; k++) {
         if (!log[k]) continue;
         if (log[k].f != null) log[k].f = r2(log[k].f + dF);
+        if (log[k].q != null) log[k].q = r2(log[k].q + dQ); // v74.17
         if (log[k].o != null) log[k].o = r2(log[k].o + dC);
       }
     }
@@ -2624,8 +2633,12 @@
     var dCard = (t.recordOnly ? 0 : cardEffect(t.kind, newAmt)) - (o.recordOnly ? 0 : cardEffect(o.kind, oldAmt)); // v74.15
     var meOld = monthEffect(o.kind, oldAmt, o), meNew = monthEffect(t.kind, newAmt, t); // v73.7: salary-aware
     var M_old = String(o.date || '').slice(0, 7), M_new = String(t.date || '').slice(0, 7);
-    function rebase(e, dF, dC, sMode) {
+    // v74.17: the liquid delta of the edit (new − old) — txnAdj.cash is the
+    // amount the liquid total DROPS, so the liquid after moves by −Δcash
+    var dLiqE = r2(-(txnAdj(t).cash - txnAdj(o).cash));
+    function rebase(e, dF, dC, sMode, dQ) {
       if (e.f != null) e.f = r2(e.f + dF);
+      if (e.q != null && dQ) e.q = r2(e.q + dQ); // v74.17
       if (e.o != null) e.o = r2(e.o + dC);
       if (e.s != null && sMode) {
         var m = monthOfTxn(e.tid);
@@ -2656,7 +2669,7 @@
       // branch (the ledger's card-only line) reads e.w.
       if (t.kind === 'card_payment' && e0.w == null) { var wBf = payWithOf(t); if (wBf) e0.w = wBf; }
       // e.at is UNTOUCHED — the original date/time stays on the row
-      rebase(e0, dFree, dCard, 1);
+      rebase(e0, dFree, dCard, 1, dLiqE);
       // v72.10: the edit flipped the row to a card flavor — backfill the card
       // line from the (post-edit) snapshot so the row renders complete
       if (e0.o == null && (t.kind === 'card_charge' || t.kind === 'card_payment')) {
@@ -2664,7 +2677,7 @@
         if (sNow) e0.o = r2(sNow.card_owed || 0);
       }
       if (M_old !== M_new) delete e0.s; // month line no longer fits (see the note above)
-      for (var k = li + 1; k < log.length; k++) { if (log[k]) rebase(log[k], dFree, dCard, 1); }
+      for (var k = li + 1; k < log.length; k++) { if (log[k]) rebase(log[k], dFree, dCard, 1, dLiqE); }
       idbPut(STORE_META, { key: 'moneyLog', value: log }).catch(function () {});
     }
     return Promise.all([idbPut(STORE_TX, touchRec(t)), saveAdj()]).then(function () {
@@ -2682,7 +2695,7 @@
         var liE = -1;
         for (var x = 0; x < lg.length; x++) if (lg[x] && lg[x].tid === tid) { liE = x; break; }
         if (liE >= 0) {
-          for (var y = liE + 1; y < lg.length; y++) { if (lg[y]) rebase(lg[y], -dFree, -dCard, -1); }
+          for (var y = liE + 1; y < lg.length; y++) { if (lg[y]) rebase(lg[y], -dFree, -dCard, -1, -dLiqE); }
           idbPut(STORE_META, { key: 'moneyLog', value: lg }).catch(function () {});
         }
         var r = removeTxnRow(tid, true); // keep the persistent row (see above)
@@ -2812,6 +2825,7 @@
     if (t.kind === 'card_payment' && t.cashback) e.cb = true;
     if (t.recordOnly) e.ro = true; // v74.15: the row renders "recorded only" (no before/after)
     e.f = r2(s.cash ? s.cash.free : 0);
+    e.q = r2(s.cash ? s.cash.total : 0); // v74.17: the LIQUID total after (the hero's "Liquid") — the row's liquid line reads this, never e.f
     if (t.kind === 'card_charge' || t.kind === 'card_payment') e.o = r2(s.card_owed || 0);
     if (String(t.date).slice(0, 7) === mp && t.kind !== 'card_payment') {
       // v72.10: month spend nets inflows down; a card payment isn't spend
@@ -3030,10 +3044,27 @@
         //  · a LEGACY row (no k flavor, pre-v72.10 import) falls back to
         //    the liquid line (cash is the only thing it could have moved)
         var legacyRow = !e.k;
-        if (e.k === 'x' || e.k === 'i' || (isAdj && e.o == null) || legacyRow) {
+        if (e.q != null) {
+          // v74.17 (boss: 'the hero liquid and the ledger liquid differ'): the
+          // v74.02 "liquid" line read e.f — the FREE cash (liquid minus what
+          // the cards / budgets already hold) — so it sat exactly the cards
+          // owed below the hero's Liquid. A new row carries q = the REAL liquid
+          // total after, and the line shows the liquid move the row made:
+          // spend −n, money in +n, a payoff from a bank −n (card + liquid), a
+          // cashback payoff 0 (card only), a charge 0 (card only), a debit
+          // override / reconcile / reset its signed n. A new row never shows free.
+          var dQr = 0;
+          if (isAdj) dQr = e.n;
+          else if (e.k === 'x') dQr = add ? -e.n : e.n;
+          else if (e.k === 'i') dQr = add ? e.n : -e.n;
+          else if (e.k === 'p' && !cbRow) dQr = add ? -e.n : e.n;
+          if (Math.abs(dQr) > 0.004) extra += '<span class="ml-f">liquid ' + money(r2(e.q - dQr)) + ' → ' + money(e.q) + '</span>';
+        } else if (e.k === 'x' || e.k === 'i' || (isAdj && e.o == null) || legacyRow) {
+          // a row logged before v74.17 has no liquid total — its line is the
+          // FREE cash it really carried, labelled as such
           var liqBefore = isAdj ? r2(e.f - e.n)
             : r2((e.f != null ? e.f : 0) + (add ? (e.k === 'i' ? -e.n : e.n) : (e.k === 'i' ? e.n : -e.n)));
-          extra += '<span class="ml-f">liquid ' + money(liqBefore) + ' → ' + money(e.f != null ? e.f : 0) + '</span>';
+          extra += '<span class="ml-f">free ' + money(liqBefore) + ' → ' + money(e.f != null ? e.f : 0) + '</span>';
         }
         // v74.15: a record-only row moved nothing — no before/after line
         if (e.ro) extra = '<span class="ml-f">recorded only — that balance already included it</span>';
@@ -9077,6 +9108,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (e.cb === true) m.cb = true; // v73.53: the cashback flag (a payoff that is NEW money) survives import too
       if (e.ro === true) m.ro = true; // v74.15: the record-only row flag survives import too
       if (typeof e.f === 'number' && isFinite(e.f)) m.f = e.f;
+      if (typeof e.q === 'number' && isFinite(e.q)) m.q = e.q; // v74.17: the liquid total after
       if (typeof e.o === 'number' && isFinite(e.o)) m.o = e.o;
       if (typeof e.s === 'number' && isFinite(e.s)) m.s = e.s;
       out.push(m);
@@ -9543,12 +9575,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.16, live: new Date(2026, 10, 10, 13, 9) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.17, live: new Date(2026, 10, 10, 13, 26) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.17': [
+      'The Ledger\'s "liquid x → y" now matches the Liquid number on the home card. It used to show your free cash (your money minus what your cards already owe) under the name "liquid", so it always read lower than the home card. New entries show only real changes: liquid when money leaves or enters your accounts (a card payment from your bank shows both card and liquid), and card for card balances. Entries logged before this update keep their old line, now honestly labelled "free".'
+    ],
     '74.16': [
       'Budgets no longer count your spending twice: a budget now sets aside only what\'s left of it this month. Before, spending inside a budgeted category came off your free cash AND the full budget stayed set aside — spend your whole P10,000 Food budget and free cash was P10,000 too low. Spending past a budget still comes off free cash, and once a budget month is over its budgets stop being held back.'
     ],

@@ -3276,14 +3276,16 @@ waitReady().then(async function (F) {
       var id44a = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_out', category: 'Food', account: 'MariBank', amount: 250, note: 'v74.02 spend probe', date: '2026-10-14' }, { quiet: true });
       await sleep(60);
       var seg44a = segOf('v74.02 spend probe');
-      ok(seg44a.indexOf('liquid ' + php(free44) + ' → ' + php(free44 - 250)) >= 0, 'v74.02: a liquid spend shows the liquid change (' + php(free44) + ' → ' + php(free44 - 250) + ')');
+      // v74.17: the liquid line quotes the REAL liquid total (cash.total, the hero's Liquid), not free
+      ok(seg44a.indexOf('liquid ' + php(raw44) + ' → ' + php(raw44 - 250)) >= 0, 'v74.17: a liquid spend shows the REAL liquid change, matching the hero (' + php(raw44) + ' → ' + php(raw44 - 250) + ')');
+      ok(Math.abs(F.effectiveSnap().cash.total - (raw44 - 250)) < 0.005, 'v74.17: ...and the row\'s after value IS the hero Liquid now');
       ok(seg44a.indexOf('card PHP') < 0, 'v74.02: a liquid spend has NO card line');
       // (2) cash in -> liquid line, the other direction
       var id44b = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_in', category: '', account: 'Maya', amount: 400, note: 'v74.02 cashin probe', date: '2026-10-14' }, { quiet: true });
       await sleep(60);
-      var free44b = F.effectiveSnap().cash.free;
+      var raw44b = F.effectiveSnap().cash.total;
       var seg44b = segOf('v74.02 cashin probe');
-      ok(seg44b.indexOf('liquid ' + php(free44b - 400) + ' → ' + php(free44b)) >= 0, 'v74.02: a cash-in shows the liquid change the other way (' + php(free44b - 400) + ' → ' + php(free44b) + ')');
+      ok(seg44b.indexOf('liquid ' + php(raw44b - 400) + ' → ' + php(raw44b)) >= 0, 'v74.17: a cash-in shows the liquid change the other way (' + php(raw44b - 400) + ' → ' + php(raw44b) + ')');
       ok(seg44b.indexOf('card PHP') < 0, 'v74.02: a cash-in has NO card line');
       // (3) card charge -> card line only, no liquid line
       var id44c = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 300, note: 'v74.02 charge probe', date: '2026-10-14' }, { quiet: true });
@@ -3300,10 +3302,10 @@ waitReady().then(async function (F) {
       // "show the account(s) it actually moved" holds.)
       var id44d = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'v74.02 payoff probe', date: '2026-10-14', payWith: 'MariBank' }, { quiet: true });
       await sleep(60);
-      var owed44d = F.effectiveSnap().card_owed;
+      var owed44d = F.effectiveSnap().card_owed, raw44d = F.effectiveSnap().cash.total;
       var seg44d = segOf('v74.02 payoff probe');
       ok(seg44d.indexOf('card ' + php(owed44d + 500) + ' → ' + php(owed44d)) >= 0, 'v74.02: a payoff from liquid shows the card line (' + php(owed44d + 500) + ' → ' + php(owed44d) + ')');
-      ok(seg44d.indexOf('liquid PHP') < 0, 'v74.02: a plain payoff has NO liquid line (free is untouched — a line would read x → x)');
+      ok(seg44d.indexOf('liquid ' + php(raw44d + 500) + ' → ' + php(raw44d)) >= 0, 'v74.17: a payoff FROM a bank shows the liquid line too (the money left the bank) (' + php(raw44d + 500) + ' → ' + php(raw44d) + ')');
       // (5) cashback payoff -> card line ONLY (the approved lean — new money)
       var id44e = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'Maya CC', amount: 200, note: 'v74.02 cashback probe', date: '2026-10-14', cashback: true }, { quiet: true });
       await sleep(60);
@@ -3323,12 +3325,14 @@ waitReady().then(async function (F) {
       var owed44f = F.effectiveSnap().card_owed, raw44f = F.effectiveSnap().cash.total;
       var seg44f = segOf('v74.02 ccfunded probe');
       ok(seg44f.indexOf('card ' + php(owed44f + 350) + ' → ' + php(owed44f)) >= 0, 'v74.02: a CC-funded payoff shows the TOTAL card line (per-card balances aren\'t stored on the row)');
-      ok(seg44f.indexOf('liquid PHP') < 0, 'v74.02: a CC-funded payoff has NO liquid line (the account it was charged on is a card)');
+      ok(seg44f.indexOf('liquid ' + php(raw44e) + ' → ' + php(raw44f)) >= 0, 'v74.17: a CC-funded payoff\'s liquid line follows the hero exactly (the model moves raw liquid — reported separately)');
       ok(close(raw44f, raw44e - 350), 'v74.02: a CC-funded payoff moves raw liquid by the payoff amount (the pre-existing v72.42 model — funder only steers per-debit attribution)');
       // (7) the free line is GONE from every row (the seed's 29 rows + the 6 probes)
       F.setMlShown(9999);
       var html44 = String(byIdStub('mlBody').innerHTML || '');
-      ok(html44.indexOf('free PHP') < 0, 'v74.02: NO row in the full ledger shows a free line anymore');
+      ['v74.02 spend probe', 'v74.02 cashin probe', 'v74.02 charge probe', 'v74.02 payoff probe', 'v74.02 cashback probe', 'v74.02 ccfunded probe'].forEach(function (nt) {
+        ok(segOf(nt).indexOf('free PHP') < 0, 'v74.17: a NEW row never shows a free line (' + nt + ')');
+      });
       // (8) adjustments map the same way: debit -> liquid, card -> card
       // (fileBalanceAdjustment files the audit row only — the base save is
       // the Settings flow's job — so the effective free/owed at filing are
@@ -3339,7 +3343,7 @@ waitReady().then(async function (F) {
       // BEFORE from the effective snapshot at each filing moment (the seed
       // carries its own override rows, so the free/owed here already fold
       // them in — the delta is what's under test)
-      var free44g = F.effectiveSnap().cash.free;
+      var raw44g = F.effectiveSnap().cash.total;
       F.fileBalanceAdjustment('MariBank', 'debit', 120);
       var owed44g = F.effectiveSnap().card_owed;
       F.fileBalanceAdjustment('Maya CC', 'card', -80);
@@ -3354,15 +3358,15 @@ waitReady().then(async function (F) {
         segs8.push(h8.slice(p8, j8 > p8 ? j8 : undefined));
         p8 = h8.indexOf('balance override', p8 + 1);
       }
-      var debSeg = segs8.filter(function (s) { return s.indexOf('liquid ' + php(free44g - 120) + ' → ' + php(free44g)) >= 0; });
+      var debSeg = segs8.filter(function (s) { return s.indexOf('liquid ' + php(raw44g - 120) + ' → ' + php(raw44g)) >= 0; });
       var cardSeg = segs8.filter(function (s) { return s.indexOf('card ' + php(owed44g + 80) + ' → ' + php(owed44g)) >= 0; });
-      ok(debSeg.length === 1 && debSeg[0].indexOf('card PHP') < 0, 'v74.02: a debit adjustment shows the liquid line (before = f − n) and NO card line');
+      ok(debSeg.length === 1 && debSeg[0].indexOf('card PHP') < 0 && debSeg[0].indexOf('free PHP') < 0, 'v74.17: a debit adjustment shows the REAL liquid line (before = q − n), no card line, no free line');
       ok(cardSeg.length === 1 && cardSeg[0].indexOf('liquid PHP') < 0, 'v74.02: a card adjustment shows the card line (before = o − n) and NO liquid line');
       // (9) legacy rows (no flavor, e.g. pre-v72.10 imports) fall back to the liquid line
       F.state.moneyLog.push({ at: Date.now(), a: 'add', l: 'Legacy', c: 'Food', nt: 'v74.02 legacy probe', m: 'Cash', n: 10, f: 1000 });
       F.renderMoneyLog();
       var seg44h = segOf('v74.02 legacy probe');
-      ok(seg44h.indexOf('liquid PHP 1,010.00 → PHP 1,000.00') >= 0, 'v74.02: a legacy row (no flavor) falls back to the liquid line');
+      ok(seg44h.indexOf('free PHP 1,010.00 → PHP 1,000.00') >= 0, 'v74.17: an OLD row (no stored liquid total) keeps its free line, labelled "free" (what it really carried)');
       // restore: delete the probe txns (rows + overlay go with them), drop the
       // synthetic rows, park the base
       await F.deleteTxn(id44a); await sleep(30);
@@ -3714,6 +3718,29 @@ waitReady().then(async function (F) {
       await F.deleteTxn(id56); await F.deleteTxn(id56b); await F.deleteTxn(id56c); await sleep(40);
       var k56 = JSON.parse(keep56); snap56.month = k56.m; snap56.obligations.budget = k56.b; snap56.cash.free = k56.f;
       F.state.txns = txns56;
+
+      // ============ PART 57: v74.17 - the ledger's liquid = the hero's Liquid ============
+      console.log('\n== PART 57: v74.17 - ledger liquid matches the hero ===');
+      var id57 = await F.addTxn({ kind: 'cash_out', category: 'Food', account: 'Cash', amount: 250, note: 'v74.17 edit probe', date: F.todayISO() }, { quiet: true });
+      await sleep(30);
+      var id57b = await F.addTxn({ kind: 'cash_out', category: 'Food', account: 'Cash', amount: 10, note: 'v74.17 later row', date: F.todayISO() }, { quiet: true });
+      await sleep(30);
+      function row57(tid) { var r = null; (F.state.moneyLog || []).forEach(function (e) { if (e.tid === tid && e.a === 'add') r = e; }); return r; }
+      ok(row57(id57b).q === F.effectiveSnap().cash.total, 'v74.17: the newest row\'s liquid after == the hero Liquid (' + row57(id57b).q + ')');
+      var q57a = row57(id57).q, q57b = row57(id57b).q;
+      await F.saveTxnEdit(id57, { date: F.todayISO(), account: 'Cash', kind: 'cash_out', category: 'Food', amount: 300, note: 'v74.17 edit probe' }, { quiet: true });
+      await sleep(30);
+      ok(Math.abs(row57(id57).q - (q57a - 50)) < 0.005 && Math.abs(row57(id57b).q - (q57b - 50)) < 0.005, 'v74.17: editing 250 -> 300 moves that row and every later row\'s liquid by -50');
+      ok(Math.abs(row57(id57b).q - F.effectiveSnap().cash.total) < 0.005, 'v74.17: ...so the newest row still matches the hero after the edit');
+      // the reset files a LIQUID audit row, never a free one
+      F.resetAdj(); await sleep(20); F.confirmYes(); await sleep(60);
+      var rr57 = (F.state.moneyLog || []).filter(function (e) { return e.k === 'r' && e.at > Date.now() - 5000; });
+      ok(rr57.length >= 1 && rr57.every(function (e) { return e.f == null; }) && rr57.some(function (e) { return e.q != null; }), 'v74.17: a reset files liquid (q) / card (o) audit rows — no free row');
+      ok(rr57.filter(function (e) { return e.q != null; }).every(function (e) { return Math.abs(e.q - F.effectiveSnap().cash.total) < 0.005; }), 'v74.17: the reset\'s liquid row ends at the hero Liquid');
+      elMap['snackUndo'] && elMap['snackUndo'].onclick && elMap['snackUndo'].onclick(); await sleep(60);
+      // the import keeps q
+      ok(F.sanitizeMoneyLogRows([{ at: 1, a: 'add', n: 5, k: 'x', f: 10, q: 20 }])[0].q === 20, 'v74.17: an import keeps the liquid total');
+      await F.deleteTxn(id57); await F.deleteTxn(id57b); await sleep(40);
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
