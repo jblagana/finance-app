@@ -3,7 +3,7 @@
 Status: **in progress**. Subtasks (foundational first):
 - [x] v74.09 recurring plans on the 29th-31st drift to the 28th after a short month and then lose their payment links (anchor every occurrence to the plan's own day; migrate drifted links/overrides) — DONE: anchored grid + migratePlanDrift (boot / import / pull). Smoke PART 49 (8) + check_site pin
 - [x] v74.10 paydays 29-31 silently became the 15th; card prepay days 29-31 overflow into the next month (clamp to the month's last day) — DONE (+ found on the way: the projection chart read the card's manual due AMOUNT as its due DAY, so every card dropped on the 15th; now the card's due_day). Smoke PART 50 (7), v73.57 chart expectations retargeted, check_site pin
-- [ ] v74.11 the coach headline's per-day number uses the calendar month while the strip uses the pay cycle (one number: the cycle)
+- [x] v74.11 the coach headline's per-day number uses the calendar month while the strip uses the pay cycle (one number: the cycle) — DONE: daily / pace / freeAfterPace all on the cycle. Smoke PART 51 (5) + check_site pin
 - [ ] v74.12 the "end of month in the red" pace counts plan payments that are already deducted as plans
 - [ ] v74.13 no salary set: plans stop being deducted, and any refund reads as an early salary
 - [ ] v74.14 three Undo buttons do nothing (reconcile, plan edit, card clamp) + the clamp warning is overwritten

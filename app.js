@@ -4653,22 +4653,37 @@
     // snapshot number (the coach memory + the sig read it); d.freeNet is the
     // projected one every display path now uses.
     var planDeduct = cyclePlanDeduction();
+    // v74.11 (logic review #2): ONE per-day number. The coach headline divided
+    // the free cash by the days left in the CALENDAR month while the headroom
+    // strip (and the coach's own sub line) divided by the days left in the PAY
+    // CYCLE — same card, ~3x apart (P1,131 vs P3,142 on the boss's Nov 6). The
+    // money has to last until payday, so everything now runs on the cycle:
+    // daily, the pace, and the "in the red" test (now "by payday").
+    var hwI = headroomWindow();
+    var cycDays = (function () {
+      if (!hwI) return daysLeft;
+      var dl = Math.round((parseISO(hwI.end) - parseISO(today)) / 86400000) + 1;
+      return dl > 0 ? dl : 1;
+    })();
+    var cycI = cycleData();
+    var paceC = cycI ? cycI.pace : pace; // the cycle's spend per elapsed day (calendar pace when there is no cycle)
+    var freeNetI = r2(free - planDeduct);
     return {
       s: s, now: now, today: today, monthPrefix: monthPrefix, daysLeft: daysLeft,
       meal: meal, free: free,
       planDeduct: planDeduct, freeNet: r2(free - planDeduct),
-      daily: daysLeft > 0 ? r2(Math.max(0, free - planDeduct) / daysLeft) : 0, // v73.16: net of the cycle's plan share
+      daily: cycDays > 0 ? r2(Math.max(0, freeNetI) / cycDays) : 0, // v73.16: net of the cycle's plan share; v74.11: per CYCLE day (the strip's number)
       todaySpend: r2(todaySpend), items: items,
       prepayDay: prepayDay, prepayIn: prepayIn, prepayDaysAgo: prepayDaysAgo, prepayAmt: prepayAmt,
       prepayDate: localISO(dayInMonth(now.getFullYear(), now.getMonth(), prepayDay)), // v74.10: clamped
       weekCost: weekCost, laterCount: laterCount, laterAmt: r2(laterAmt),
       monthPlans: r2(monthPlans), monthPlanCount: monthPlanCount,
-      spentM: spentM, pace: pace,
+      spentM: spentM, pace: paceC, paceMonth: pace, // v74.11: pace = the cycle's; paceMonth = the old calendar-month rate
       catPace: catPace.slice(0, 5), recurringGuess: recurringGuess.slice(0, 2), // v68 items 4–5
       goals: goals, lowestDip: lowestDip, // v68 items 6–7
-      cycle: cycleData(), // v72.45: the salary cycle (the 15th) — hero + insights + coach + snapshot
+      cycle: cycI, // v72.45: the salary cycle (the 15th) — hero + insights + coach + snapshot
       ccDue: ccDue(), // v73.6: the cc due (the 5th) — charges since the last cutoff minus the prepays in that window
-      freeAfterPace: r2(r2(free - planDeduct) - r2(pace * Math.max(0, daysLeft - 1))), // v73.16: from the NET free
+      freeAfterPace: r2(freeNetI - r2(paceC * Math.max(0, cycDays - 1))), // v73.16: from the NET free; v74.11: to PAYDAY at the cycle pace
       // v73.11 (user: 'base it per cycle too'): the headroom runs to the CYCLE
       // end (the 14th), not the calendar month end — the money lasts until the
       // next salary, not until the 30th. Falls back to the calendar days when
@@ -4676,13 +4691,8 @@
       // v73.98: the window is headroomWindow() — when the salary landed EARLY
       // in-cycle, the money covers received-date → end of the NEXT cycle, so
       // the per-day headroom divides by that shorter stretch.
-      cycleDaysLeft: (function () {
-        var hw = headroomWindow();
-        if (!hw) return daysLeft;
-        var dl = Math.round((parseISO(hw.end) - parseISO(today)) / 86400000) + 1;
-        return dl > 0 ? dl : 1;
-      })(),
-      headroomWindow: headroomWindow() // v73.98: the strip title + the smoke read it
+      cycleDaysLeft: cycDays, // v74.11: computed once above (the same window the strip uses)
+      headroomWindow: hwI // v73.98: the strip title + the smoke read it
     };
   }
   // ---------- Phase 5: unified coach card (narrative + attention rows + one-tap actions) ----------
@@ -5053,7 +5063,7 @@
       else sub += ' Keep today at zero extras and it stays above the floor.';
     } else if (d.freeAfterPace < 0) {
       cls = 'warn';
-      head = hi + 'at ' + money(d.pace) + '/day you end the month ' + money(r2(-d.freeAfterPace)) + ' in the red. That is a plan, apparently.';
+      head = hi + 'at ' + money(d.pace) + '/day you reach payday ' + money(r2(-d.freeAfterPace)) + ' in the red. That is a plan, apparently.'; // v74.11: payday, not month end
       sub = 'Slow to about ' + money(d.daily) + '/day from here and the red goes away. It is that easy, which is why you keep not doing it.';
     } else if (d.daily < d.meal) {
       cls = 'warn';
@@ -9356,12 +9366,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.10, live: new Date(2026, 10, 10, 12, 50) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.11, live: new Date(2026, 10, 10, 12, 52) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.11': [
+      'One spend-per-day number: the coach\'s "you can spend up to ... today" now matches the Headroom number above it. The coach used to divide your free cash by the days left in the calendar month, while the Headroom divided by the days until payday — so the two could be three times apart. Both now count to payday, and the "you\'ll be in the red" warning now means "by payday".'
+    ],
     '74.10': [
       'Paydays on the 29th, 30th or 31st now work: the app used to quietly treat them as the 15th even though Settings showed your day. In short months the payday lands on the last day (a 30th payday is Feb 28). Card prepay days on the 29th-31st no longer spill into the next month. And the cash-flow chart now drops each card payment on the card\'s real due day — it used to put every card on the 15th.'
     ],

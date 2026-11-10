@@ -3558,6 +3558,17 @@ waitReady().then(async function (F) {
       b50.prepay_day = pd50; F.refreshLocalSnapshot && F.refreshLocalSnapshot();
       ok(F.dayInMonth(2027, 1, 31).getDate() === 28 && F.dayInMonth(2028, 1, 31).getDate() === 29 && F.dayInMonth(2026, 12, 31).getMonth() === 0, 'v74.10: dayInMonth clamps (Feb 2027 = 28, Feb 2028 = 29) and rolls the year');
 
+      // ============ PART 51: v74.11 - one per-day number ============
+      console.log('\n== PART 51: v74.11 - one per-day number (the cycle) ==');
+      var d51 = F.insightsData();
+      var strip51 = d51.cycleDaysLeft > 0 ? Math.round(Math.max(0, d51.freeNet) / d51.cycleDaysLeft * 100) / 100 : 0;
+      ok(d51.daily === strip51, 'v74.11: the coach headline per-day == the strip headroom (' + d51.daily + ' vs ' + strip51 + ')');
+      ok(d51.cycleDaysLeft !== d51.daysLeft, 'v74.11: precondition - the cycle and calendar day counts differ today (' + d51.cycleDaysLeft + ' vs ' + d51.daysLeft + '), so the test means something');
+      ok(d51.pace === (d51.cycle ? d51.cycle.pace : d51.paceMonth), 'v74.11: the coach pace is the cycle pace (' + d51.pace + ')');
+      ok(Math.abs(d51.freeAfterPace - Math.round((d51.freeNet - Math.round(d51.pace * Math.max(0, d51.cycleDaysLeft - 1) * 100) / 100) * 100) / 100) < 0.011, 'v74.11: the "in the red" test projects to PAYDAY at the cycle pace');
+      ok(appSrcHas51("you reach payday"), 'v74.11: the coach says "by payday", not "end the month"');
+      function appSrcHas51(x) { return require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'app.js'), 'utf8').indexOf(x) >= 0; }
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

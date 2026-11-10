@@ -1188,7 +1188,7 @@ def main():
           and "if (d < lo || d > hi) return;" in js  # cycleDataFor's received display still uses its own window
           and "'73.10': [" in js)
     check("v73.11 (user: 'In finance-app todays insights headroom, base it per cycle too'): the Today block's headroom ran the free cash across the CALENDAR month (dim - date + 1), but the money has to last until the NEXT salary (the 14th) - the cycle end. insightsData gains cycleDaysLeft (days to cycleData's window end, calendar fallback when there is no cycle) and the Today block divides by it, names the cycle end, and the treat check compares against the per-cycle daily",
-          "cycleDaysLeft: (function () {" in js  # the per-cycle days left (calendar fallback when no cycle)
+          "cycleDaysLeft: cycDays," in js and "var cycDays = (function () {" in js  # v74.11 successor: computed once (calendar fallback when no cycle)
           and "return dl > 0 ? dl : 1;" in js  # the guard: never zero/negative (the cycle end is today at the latest)
           and "var hDays = d.cycleDaysLeft || daysLeft;" in js  # the render uses the cycle days (calendar when absent)
           and "var hDaily = hDays > 0 ? r2(Math.max(0, free) / hDays) : 0;" in js  # the per-cycle daily
@@ -1638,7 +1638,7 @@ def main():
           and "if (mode === 'salary' || mode === 'moneyin') return type === 'CARD' ? 'card_payment' : 'cash_in';" in js  # v73.52: the pin moved again — Money in on a CARD is a payoff (the v73.8 CASH-only guard is gone)
           and 'id="b_sday"' in js
           and "b.salary_day = sd > 0 ? sd : (b.cutoff_day || 15);" in js
-          and "cycle: cycleData()," in js
+          and "cycle: cycI," in js and "var cycI = cycleData();" in js  # v74.11 successor: computed once
           # v73.33: the hero-sub salary string left with the hero block — the
           # surviving 'Salary (the' is the salary row-chip's prefill note
           and "'Salary (the ' + ordinal(Number(parts[2]) || 15) + ')'" in js
@@ -1944,6 +1944,13 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.11 (logic review #2): one per-day number — insightsData.daily divides the net free by the CYCLE days (cycDays, the headroom window the strip uses) instead of the calendar days left (the coach headline and the strip were ~3x apart: P1,131 vs P3,142); pace = the cycle pace (paceMonth keeps the old calendar rate); freeAfterPace projects to payday; the coach wording says payday. headroomWindow / cycleData computed once. Smoke PART 51 (5)",
+          "daily: cycDays > 0 ? r2(Math.max(0, freeNetI) / cycDays) : 0," in js
+          and "pace: paceC, paceMonth: pace," in js
+          and "freeAfterPace: r2(freeNetI - r2(paceC * Math.max(0, cycDays - 1)))," in js
+          and "you reach payday" in js and "you end the month" not in js
+          and "PART 51: v74.11 - one per-day number" in smoke
+          and "'74.11': [" in js)
     check("v74.10 (logic review #3 + #10 + found on the way): days 29-31. dayInMonth clamps a day to its month; salaryDayOf accepts 1..31 (29-31 used to fall back to the 15th while Settings showed the typed day); cycleWindow / currentCycleMonth / the previous-cycle month / headroomWindow / the coach salary row derive from clamped paydays; the prepay date clamps (a 31st in November was Dec 1); the legacy ccDueData accepts 29-31 and clamps; the projection chart drops a card on its base account due_day (it read c.due — the manual due AMOUNT — as a day, so every card fell on the 15th). Smoke PART 50 (7) + the v73.57 chart expectations retargeted",
           "function dayInMonth(y, m0, day) {" in js
           and "if (sd >= 1 && sd <= 31) return sd;" in js
@@ -2070,8 +2077,8 @@ def main():
     check("v73.98 (boss: 'whenever a salary is logged ahead of the next cycle, the headroom recomputes x/day based on (date of salary logged to end of next cycle)'): the headroom window is headroomWindow() — when the cycle's salary landed EARLY (cycleDataFor.received: a qualifying cash_in dated strictly inside the cycle, the second scan now catches post-payday+2 early-next-cycle paydays too), the per-day headroom + days-left run from the received date to the END OF THE NEXT cycle (new Date(m+1, sday-1)) instead of diluting across the current cycle; no early payday = the current cycle verbatim. The strip title names the early window ('Early salary ...'). Smoke PART 41: baseline window == cycle, an in-cycle early salary flips early=true / start=today / end=next cycle end / cycleDaysLeft + Headroom cell + title follow, delete falls back. ALSO: the smoke calendar drift is fixed — the seed's monthly Gym plan re-anchors to the live cycle (PART 10) and every date the PART 10/11/13/14/15 assertions need is computed from the live clock, so the suite passes on any day",
           "function headroomWindow() {" in js
           and "headroomWindow: headroomWindow" in js
-          and "headroomWindow: headroomWindow()" in js
-          and "var hw = headroomWindow();" in js
+          and "headroomWindow: hwI" in js  # v74.11 successor: computed once
+          and "var hwI = headroomWindow();" in js  # v74.11 successor
           and "var hwT = d.headroomWindow;" in js
           and "'Early salary \\u00b7 '" in js  # the strip title names the early window (literal \u00b7 in the source)
           and "Early salary" in js  # (plain substring — immune to escape-sequence interpretation)
