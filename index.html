@@ -398,6 +398,43 @@ border-top:1px solid var(--line);background:var(--card)}
 /* v72.29: Category + Account share one row (the pair grid); the in-place edit form's button row */
 .oent-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .oent-btns{display:flex;gap:8px;margin-top:14px}
+/* ---- v74.19: the new Owed look (boss: 'ship new owed look') ---- */
+.ow-sum{padding:18px 18px 16px}
+.ow-sum-k{color:var(--mut);font-size:13px;font-weight:600}
+.ow-sum-v{display:block;font-size:32px;line-height:1.15;font-weight:800;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+.ow-sum-v.pos{color:var(--ok)}.ow-sum-v.neg{color:var(--warn)}
+.ow-sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.ow-cell{background:var(--card2);border-radius:12px;padding:9px 12px;display:flex;flex-direction:column;gap:1px}
+.ow-cell span{color:var(--mut);font-size:11.5px}
+.ow-cell b{font-size:15.5px;font-variant-numeric:tabular-nums}
+.ow-cell b.pos{color:var(--ok)}.ow-cell b.neg{color:var(--warn)}
+.ow-add{display:flex;gap:8px;align-items:center;margin:12px 0}
+.ow-add-l{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ow-add input{flex:1;min-width:0;margin:0}
+.ow-add .act{flex:0 0 auto;width:auto;margin:0;padding-left:18px;padding-right:18px}
+.ow-p{padding:0;overflow:hidden}
+.ow-p .ow-h{display:flex;align-items:center;gap:10px;margin:0;padding:12px 14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.ow-p .ow-h:active{background:rgba(255,255,255,.03)}
+.ow-av{flex:0 0 auto;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px}
+.ow-who{flex:1;min-width:0;display:flex;flex-direction:column}
+.ow-who .ow-name{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;align-self:flex-start;max-width:100%}
+.ow-cnt{color:var(--mut);font-size:12px}
+.ow-balbox{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;font-variant-numeric:tabular-nums}
+.ow-bv{font-size:14.5px;font-weight:800;white-space:nowrap}
+.ow-bd{font-size:11.5px;font-weight:600}
+.ow-bv.plus,.ow-bd.plus{color:var(--ok)}.ow-bv.minus,.ow-bd.minus{color:var(--warn)}.ow-bv.zero,.ow-bd.zero{color:var(--mut)}
+.ow-chev{flex:0 0 auto;color:var(--mut);font-size:13px;transition:transform .2s ease;line-height:1}
+.ow-p.open .ow-chev{transform:rotate(90deg)}
+.ow-body{display:none;padding:0 14px 12px}
+.ow-p.open .ow-body{display:block;animation:paneIn .18s ease}
+.ow-acts{display:flex;gap:8px;align-items:center;margin-bottom:4px}
+.ow-acts .addrow{flex:1;margin-top:0}
+.ow-acts .ow-xbtn{height:36px;border-radius:9px}
+.ow-acts .ow-xbtn.wide{padding:0 12px}
+.ow-acts .ow-xbtn:not(.wide){width:36px}
+.ow-amtbox{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;font-variant-numeric:tabular-nums}
+.ow-run{color:var(--mut);font-size:11px;white-space:nowrap;margin-top:1px}
+@media (prefers-reduced-motion:reduce){.ow-chev{transition:none}.ow-p.open .ow-body{animation:none}}
 .oent-btns .act{flex:1;width:auto}
 .oent-inline{margin:8px 0 0;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--card2)}
 .oent{margin-top:10px}
@@ -940,23 +977,22 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
   </div>
 
   <div id="tab-owed" style="display:none">
-    <section id="owedSum" class="card" style="display:none">
-      <h2 style="margin-top:0">Owed · totals</h2>
-      <div class="kv"><span class="k">Owed to you</span><b id="owedSumIn">—</b></div>
-      <div class="kv"><span class="k">You owe</span><b id="owedSumOut">—</b></div>
-      <div class="kv"><span class="k">Net</span><b id="owedSumNet">—</b></div>
+    <!-- v74.19 (boss: 'ship new owed look' — the approved look-upgrade mockup):
+         the totals card is the NET hero (big net + its direction) over two
+         cells; the ids are unchanged (renderOwed + the gates read them). -->
+    <section id="owedSum" class="card ow-sum" style="display:none">
+      <div class="ow-sum-k">Net · <span id="owedSumDir">all settled</span></div>
+      <b id="owedSumNet" class="ow-sum-v">—</b>
+      <div class="ow-sum-grid">
+        <div class="ow-cell"><span>Owed to you</span><b id="owedSumIn" class="pos">—</b></div>
+        <div class="ow-cell"><span>You owe</span><b id="owedSumOut" class="neg">—</b></div>
+      </div>
     </section>
 
-    <form id="owedForm" class="card" autocomplete="off">
-      <label for="owedName">Add a person</label>
-      <div class="row">
-        <div>
-          <input id="owedName" maxlength="24" placeholder="e.g. Vhal" autocomplete="off">
-        </div>
-        <div>
-          <button class="act" type="submit">Add</button>
-        </div>
-      </div>
+    <form id="owedForm" class="ow-add" autocomplete="off">
+      <label for="owedName" class="ow-add-l">Add a person</label>
+      <input id="owedName" maxlength="24" placeholder="e.g. Vhal" autocomplete="off">
+      <button class="act" type="submit">Add</button>
     </form>
 
     <div style="display:flex;align-items:center;gap:8px;margin:10px 2px">

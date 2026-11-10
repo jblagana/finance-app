@@ -7825,6 +7825,14 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     // "See more" (5 per tap)
     var limit = owedShown[p.id] || 5;
     var shownEnts = ents.slice(0, limit);
+    // v74.19: the running balance after each entry (date order, oldest first —
+    // the same ordering the SOA uses), shown under the row's signed amount
+    var runAfter = {};
+    var runB = 0;
+    ents.slice().reverse().forEach(function (e) {
+      if (e && e.dir && OWED_DIRS[e.dir]) runB = r2(runB + owedSign(e.dir) * (Number(e.amt) || 0));
+      runAfter[e.id] = runB;
+    });
     var rows = '';
     shownEnts.forEach(function (e) {
       var dir = OWED_DIRS[e.dir] || OWED_DIRS.ipf;
@@ -7845,7 +7853,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         // button is on EVERY entry — the legacy ones included)
         (e.txnId ? ' <span class="ow-led" title="Filed in the ledger — the entry moves your numbers">· ledger</span>' : '') +
         '<div class="ow-k">' + esc(fmtDate(e.d)) + (e.expr ? ' · ' + esc(e.expr) : '') + hint + '</div></div>' +
-        '<b class="ow-amt ' + (dir.sign > 0 ? 'plus' : 'minus') + '">' + (dir.sign > 0 ? '+' : '\u2212') + money(amt) + '</b>' +
+        '<div class="ow-amtbox"><b class="ow-amt ' + (dir.sign > 0 ? 'plus' : 'minus') + '">' + (dir.sign > 0 ? '+' : '\u2212') + money(amt) + '</b>' +
+        '<span class="ow-run">' + owedRunText(runAfter[e.id]) + '</span></div>' +
         '<button type="button" class="ow-xbtn wide" data-ow-edit-e="' + esc(e.id) + '" aria-label="Edit entry">edit</button>' +
         '<button type="button" class="ow-xbtn" data-ow-del-e="' + esc(e.id) + '" aria-label="Remove entry">\u2715</button>' +
         '</div>';
@@ -7859,22 +7868,79 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         (limit > 5 ? '<button type="button" class="addrow" data-ow-less="' + esc(p.id) + '">See less</button>' : '') +
         '</div>';
     }
-    return '<section class="card ow-p" data-ow-pid="' + esc(p.id) + '">' +
-      '<div class="ow-h"><span class="bdrag" data-ow-drag="1" aria-label="Drag to reorder" title="Drag to reorder">\u287F</span><b class="ow-name" data-ow-name="' + esc(p.id) + '" title="Rename">' + esc(p.name) + '</b>' + owedBalHTML(b) +
+    // v74.19 (boss: 'ship new owed look'): the card is a tappable header —
+    // avatar, name (still tap-to-rename) + entry count, balance + direction —
+    // and a body (actions, the + entry form, the rows) that opens on tap.
+    // Collapsed by default (in-memory owedOpen, resets on reload); a sole
+    // person starts open.
+    var open = owedIsOpen(p.id);
+    var av = owedAvatar(p);
+    var n = (p.entries || []).length;
+    var bk = b > 0.004 ? 'plus' : (b < -0.004 ? 'minus' : 'zero');
+    var bdir = b > 0.004 ? 'owes you' : (b < -0.004 ? 'you owe' : 'settled up');
+    return '<section class="card ow-p' + (open ? ' open' : '') + '" data-ow-pid="' + esc(p.id) + '">' +
+      '<div class="ow-h" data-ow-open="' + esc(p.id) + '" role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+      '<span class="bdrag" data-ow-drag="1" aria-label="Drag to reorder" title="Drag to reorder">⡿</span>' +
+      '<span class="ow-av" style="background:' + av.bg + ';color:' + av.fg + '" aria-hidden="true">' + esc(av.ch) + '</span>' +
+      '<span class="ow-who"><b class="ow-name" data-ow-name="' + esc(p.id) + '" title="Rename">' + esc(p.name) + '</b>' +
+      '<span class="ow-cnt">' + n + (n === 1 ? ' entry' : ' entries') + '</span></span>' +
+      '<span class="ow-balbox"><b class="ow-bv ' + bk + '">' + money(Math.abs(b)) + '</b><span class="ow-bd ' + bk + '">' + bdir + '</span></span>' +
+      '<span class="ow-chev" aria-hidden="true">❯</span>' +
+      '</div>' +
+      '<div class="ow-body">' +
+      // v72.19: "+ entry" (and its hidden form) sits at the TOP of the card —
+      // right under the header, above the entry list (user request); an opened
+      // form expands next to its button and pushes the list down
+      '<div class="ow-acts">' +
+      '<button type="button" class="addrow" data-ow-toggle="' + esc(p.id) + '">+ entry</button>' +
       // v72.48: one statement of account per person — the SOA (PDF) button
       // exports this person's full account (every entry, running balance,
       // closing direction) as a PDF file
       '<button type="button" class="ow-xbtn wide" data-ow-soa="' + esc(p.id) + '" title="Statement of account (PDF)">SOA (PDF)</button>' +
-      '<button type="button" class="sheet-x" data-ow-del="' + esc(p.id) + '" aria-label="Remove person">\u2715</button></div>' +
-      // v72.19: "+ entry" (and its hidden form) sits at the TOP of the card —
-      // right under the header, above the entry list (user request); an opened
-      // form expands next to its button and pushes the list down
-      '<button type="button" class="addrow" data-ow-toggle="' + esc(p.id) + '">+ entry</button>' +
+      '<button type="button" class="ow-xbtn" data-ow-del="' + esc(p.id) + '" aria-label="Remove person">✕</button>' +
+      '</div>' +
       '<form class="oent" data-ow-for="' + esc(p.id) + '" style="display:none" autocomplete="off">' +
       oentFormHTML() +
       '</form>' +
       (rows || '<p class="note" style="margin:8px 0 0">No entries yet — add the first one above.</p>') +
+      '</div>' +
       '</section>';
+  }
+  // v74.19: the Owed card open state (in-memory; a sole person starts open)
+  var owedOpen = {};
+  function owedIsOpen(pid) {
+    if (Object.prototype.hasOwnProperty.call(owedOpen, pid)) return !!owedOpen[pid];
+    return (state.owed && state.owed.people || []).length === 1;
+  }
+  // v74.19: the initial avatar — the first letter after a kinship title
+  // (Ate Bebe -> B), a steady color per person id
+  var OWED_AV = [['#7AB4FF', 'rgba(122,180,255,.16)'], ['#C9A2FF', 'rgba(201,162,255,.16)'], ['#FFC45C', 'rgba(255,196,92,.16)'],
+    ['#5FD9C4', 'rgba(95,217,196,.16)'], ['#FF9FC6', 'rgba(255,159,198,.16)']];
+  function owedAvatar(p) {
+    var nm = String(p && p.name || '?').trim().replace(/^(ate|kuya|tita|tito|lola|lolo|ninang|ninong|mama|papa)\s+(?=\S)/i, '');
+    var ch = (nm.charAt(0) || '?').toUpperCase();
+    var h = 0, id = String(p && p.id || nm);
+    for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    var c = OWED_AV[h % OWED_AV.length];
+    return { ch: ch, fg: c[0], bg: c[1] };
+  }
+  // v74.19: open/close one card in place (no re-render — an open + entry or
+  // edit form inside it keeps what was typed)
+  function owedToggleOpen(header, pid) {
+    var card = header;
+    while (card && !(card.getAttribute && card.getAttribute('data-ow-pid'))) card = card.parentNode;
+    if (!card) return;
+    var isOpen = !owedIsOpen(pid);
+    owedOpen[pid] = isOpen;
+    if (card.classList) card.classList.toggle('open', isOpen);
+    header.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  }
+  // v74.19: the row's running-balance line ("PHP 940.00 to you" / "you owe" / "settled")
+  function owedRunText(v) {
+    var x = Number(v) || 0;
+    if (x > 0.004) return money(x) + ' to you';
+    if (x < -0.004) return 'you owe ' + money(-x);
+    return 'settled';
   }
   // v72.7: person order — A–Z / recent / custom (drag). Default = recent:
   // the last time anything on the card changed (p.updated; a person's newest
@@ -7918,8 +7984,11 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         byId('owedSumIn').textContent = money(r2(inT));
         byId('owedSumOut').textContent = money(r2(outT));
         var netEl = byId('owedSumNet');
-        netEl.textContent = (net > 0.004 ? '+' : net < -0.004 ? '\u2212' : '') + money(Math.abs(net));
-        netEl.className = net > 0.004 ? 'pos' : net < -0.004 ? 'neg' : '';
+        // v74.19: the net hero \u2014 the amount reads unsigned, its direction is the label above it
+        netEl.textContent = money(Math.abs(net));
+        netEl.className = 'ow-sum-v' + (net > 0.004 ? ' pos' : net < -0.004 ? ' neg' : '');
+        var dirEl = byId('owedSumDir');
+        if (dirEl) dirEl.textContent = net > 0.004 ? 'owed to you' : net < -0.004 ? 'you owe' : 'all settled';
       }
     }
     if (!people.length) {
@@ -8057,7 +8126,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       return p.name.toLowerCase() === name.toLowerCase();
     });
     if (dupe) { snack('Already in the book: ' + esc(name)); return; }
-    state.owed.people.push({ id: owedUid('ow'), name: name, entries: [], updated: new Date().toISOString() }); // v72.7: updated = recent-sort key
+    var nid = owedUid('ow');
+    owedOpen[nid] = true; // v74.19: a new person's card opens, ready for the first entry
+    state.owed.people.push({ id: nid, name: name, entries: [], updated: new Date().toISOString() }); // v72.7: updated = recent-sort key
     saveOwed().then(emitOwed);
   }
   function delOwedPerson(id) {
@@ -8799,6 +8870,14 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       saveOwed().then(emitOwed);
     };
     body.addEventListener('pointerdown', owedDragStart); // v72.7: drag-to-reorder
+    // v74.19: the card header is a button for the keyboard too (Enter / Space)
+    body.addEventListener('keydown', function (ev) {
+      var h = ev.target;
+      if (!h || !h.getAttribute || !h.getAttribute('data-ow-open')) return;
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      ev.preventDefault();
+      owedToggleOpen(h, h.getAttribute('data-ow-open'));
+    });
     body.addEventListener('submit', function (ev) {
       var f = ev.target;
       if (!f || typeof f.className !== 'string' || f.className.indexOf('oent') < 0) return;
@@ -8865,6 +8944,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var moreE = t.getAttribute && t.getAttribute('data-ow-more');
         var lessE = t.getAttribute && t.getAttribute('data-ow-less'); // v72.30: re-hide 5
         var soaE = t.getAttribute && t.getAttribute('data-ow-soa'); // v72.48: SOA (PDF)
+        // v74.19: the card header opens/closes the card — but not from the drag
+        // handle or the inline rename input (those keep their own gestures)
+        if (t.getAttribute && t.getAttribute('data-ow-drag')) return;
+        if (t.className === 'ow-name-in') return;
+        var openE = t.getAttribute && t.getAttribute('data-ow-open');
+        if (openE) {
+          owedToggleOpen(t, openE);
+          return;
+        }
         if (moreE) {
           owedShown[moreE] = (owedShown[moreE] || 5) + 5;
           renderOwed();
@@ -9642,12 +9730,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.18, live: new Date(2026, 10, 10, 13, 34) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.19, live: new Date(2026, 10, 10, 22, 35) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.19': [
+      'The Owed tab has a new look. The top card shows your net first — how much is owed to you, or how much you owe — with the two totals underneath. Each person is now a compact card with their initial, how many entries they have, and their balance in green (owes you) or amber (you owe). Tap a card to open it: + entry, the statement PDF and remove are inside, and every entry now shows the running balance after it. Nothing about how entries work has changed.'
+    ],
     '74.18': [
       'Paying one credit card with another now works the way it really does: the card you paid goes down, the card you paid with goes up by the same amount, and your liquid cash, free cash and total card debt stay the same — the debt just moved. Before, the app took the amount out of your liquid cash and off your total card debt, as if money had left your bank. The Ledger row says "moved from … to … — total card debt unchanged". Any such payments already in your live numbers are corrected automatically.'
     ],

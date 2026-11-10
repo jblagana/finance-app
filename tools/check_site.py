@@ -1944,6 +1944,20 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.19 (boss: 'ship new owed look' — the approved look-upgrade mockup, LOOK ONLY): the totals card is the net hero (#owedSumDir carries the direction, #owedSumNet the unsigned amount, the In/Out cells keep their ids); Add a person is one inline row; each person card is a tappable header (data-ow-open: avatar, tap-to-rename name + entry count, balance + direction) over an .ow-body that opens in place (owedToggleOpen, in-memory owedOpen, a sole person / a new person starts open) — the drag handle and the rename input never toggle it; + entry / SOA (PDF) / remove moved into the opened card; every entry row shows the running balance after it (owedRunText, oldest-first like the SOA). Every Owed behavior is unchanged (the v72.19 / v72.29 / v72.48 pins still hold)",
+          'id="owedSumDir"' in html
+          and 'class="card ow-sum"' in html
+          and 'class="ow-add"' in html
+          and ".ow-p.open .ow-body{display:block" in html
+          and "function owedToggleOpen(header, pid) {" in js
+          and "function owedIsOpen(pid) {" in js
+          and "function owedAvatar(p) {" in js
+          and "function owedRunText(v) {" in js
+          and "'<div class=\"ow-h\" data-ow-open=\"' + esc(p.id) + '\"" in js
+          and "owedRunText(runAfter[e.id])" in js
+          and "if (t.getAttribute && t.getAttribute('data-ow-drag')) return;" in js
+          and "owedOpen[nid] = true;" in js
+          and "'74.19': [" in js)
     check("v74.18 (v74.17 flag, boss: 'ok'): a payoff FUNDED BY ANOTHER CREDIT CARD moves the debt card -> card — txnAdj returns a transfer (xferFrom / xferTo / xferAmt: the paid card's prepayBy −amt, the funder's +amt; liquid, free, total owed and total prepay 0) instead of the plain tuple (liquid −amt, total owed −amt, as if a bank had paid); cardEffectOf (the edit / Count-it card delta) is 0 for it; the funder test reads the BASE accounts (cardAccountNamed), never the live snapshot. ADJ_MODEL_V 3: migratePayoffModel is the 0/1 -> 2 step only; migrateCardFundedPayoffs (boot / import, once) moves an overlay built under model 2 by (new − old) for the card-funded payoffs since the last rebase; a sync pull adopts only a current-model remote overlay. A new row reads 'moved from X to Y — total card debt unchanged' (no liquid line). Smoke PART 44 (6) retargeted + PART 58 (7)",
           "var ADJ_MODEL_V = 3;" in js
           and "function migrateCardFundedPayoffs() {" in js
