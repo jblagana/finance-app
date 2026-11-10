@@ -3319,14 +3319,20 @@ waitReady().then(async function (F) {
       // pre-existing, untouched here), so the row shows NO liquid line
       // (the account it was charged on is a card) even though the raw
       // total moves — that's the model, not a v74.02 change.
-      var raw44e = F.effectiveSnap().cash.total;
+      var raw44e = F.effectiveSnap().cash.total, owed44e2 = F.effectiveSnap().card_owed;
+      var cards44e = {}; F.effectiveSnap().cards.forEach(function (c) { cards44e[c.name] = c.balance; });
       var id44f = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'Maya CC', amount: 350, note: 'v74.02 ccfunded probe', date: '2026-10-14', payWith: 'MariBank CC' }, { quiet: true });
       await sleep(60);
       var owed44f = F.effectiveSnap().card_owed, raw44f = F.effectiveSnap().cash.total;
       var seg44f = segOf('v74.02 ccfunded probe');
-      ok(seg44f.indexOf('card ' + php(owed44f + 350) + ' → ' + php(owed44f)) >= 0, 'v74.02: a CC-funded payoff shows the TOTAL card line (per-card balances aren\'t stored on the row)');
-      ok(seg44f.indexOf('liquid ' + php(raw44e) + ' → ' + php(raw44f)) >= 0, 'v74.17: a CC-funded payoff\'s liquid line follows the hero exactly (the model moves raw liquid — reported separately)');
-      ok(close(raw44f, raw44e - 350), 'v74.02: a CC-funded payoff moves raw liquid by the payoff amount (the pre-existing v72.42 model — funder only steers per-debit attribution)');
+      // v74.18: a card -> card payoff MOVES the debt — the total owed and the liquid stay put
+      var cards44f = {}; F.effectiveSnap().cards.forEach(function (c) { cards44f[c.name] = c.balance; });
+      var fund44 = null; F.state.txns.forEach(function (t) { if (t.id === id44f) fund44 = t.payWith; });
+      ok(close(owed44f, owed44e2), 'v74.18: a card -> card payoff leaves the TOTAL card debt unchanged (' + owed44e2 + ' -> ' + owed44f + ')');
+      ok(close(cards44f['Maya CC'], cards44e['Maya CC'] - 350) && close(cards44f[fund44], cards44e[fund44] + 350), 'v74.18: the paid card drops 350 and the funder card (' + fund44 + ') rises 350');
+      ok(seg44f.indexOf('moved from Maya CC to ' + fund44) >= 0 && seg44f.indexOf('total card debt unchanged') >= 0, 'v74.18: the row says the debt moved (no "card x -> x" line)');
+      ok(seg44f.indexOf('liquid PHP') < 0, 'v74.18: a card -> card payoff has NO liquid line (no bank money moved)');
+      ok(close(raw44f, raw44e), 'v74.18: a card -> card payoff leaves the liquid total unchanged (' + raw44e + ' -> ' + raw44f + ')');
       // (7) the free line is GONE from every row (the seed's 29 rows + the 6 probes)
       F.setMlShown(9999);
       var html44 = String(byIdStub('mlBody').innerHTML || '');
@@ -3741,6 +3747,41 @@ waitReady().then(async function (F) {
       // the import keeps q
       ok(F.sanitizeMoneyLogRows([{ at: 1, a: 'add', n: 5, k: 'x', f: 10, q: 20 }])[0].q === 20, 'v74.17: an import keeps the liquid total');
       await F.deleteTxn(id57); await F.deleteTxn(id57b); await sleep(40);
+
+      // ============ PART 58: v74.18 - card -> card payoffs ============
+      console.log('\n== PART 58: v74.18 - a card-funded payoff moves the debt ==');
+      var cardsA = (F.state.base.accounts || []).filter(function (a) { return a.kind === 'card'; }).map(function (a) { return a.name; });
+      var paid58 = cardsA[0], fund58 = cardsA[1];
+      function st58() { var es = F.effectiveSnap(), c = {}; es.cards.forEach(function (x) { c[x.name] = x.balance; }); return { liq: es.cash.total, free: es.cash.free, owed: es.card_owed, c: c }; }
+      var b58 = st58();
+      var id58 = await F.addTxn({ kind: 'card_payment', category: '', account: paid58, amount: 1000, note: 'v74.18 xfer', date: F.todayISO(), payWith: fund58 }, { quiet: true });
+      await sleep(30);
+      var a58 = st58();
+      ok(close(a58.liq, b58.liq) && close(a58.free, b58.free) && close(a58.owed, b58.owed), 'v74.18: liquid, free and the total owed are all unchanged');
+      ok(close(a58.c[paid58], b58.c[paid58] - 1000) && close(a58.c[fund58], b58.c[fund58] + 1000), 'v74.18: ' + paid58 + ' -1,000, ' + fund58 + ' +1,000');
+      await F.saveTxnEdit(id58, { date: F.todayISO(), account: paid58, kind: 'card_payment', category: '', amount: 1200, note: 'v74.18 xfer' }, { quiet: true });
+      await sleep(30);
+      var e58 = st58();
+      ok(close(e58.c[paid58], b58.c[paid58] - 1200) && close(e58.c[fund58], b58.c[fund58] + 1200) && close(e58.owed, b58.owed), 'v74.18: an edit to 1,200 moves both cards by 1,200, the total still unchanged');
+      await F.deleteTxn(id58); await sleep(30);
+      var d58 = st58();
+      ok(close(d58.c[paid58], b58.c[paid58]) && close(d58.c[fund58], b58.c[fund58]) && close(d58.liq, b58.liq) && close(d58.owed, b58.owed), 'v74.18: deleting it puts everything back exactly');
+      // the 2 -> 3 migration: an overlay built under model 2 carries the OLD tuple
+      var adjKeep58 = JSON.parse(JSON.stringify(F.getAdj()));
+      var t58 = { id: 't58m', date: F.todayISO(), account: paid58, kind: 'card_payment', category: '', amount: 500, note: 'v74.18 old-model', created: new Date(Date.now() + 1000).toISOString(), payWith: fund58 };
+      F.state.txns.push(t58);
+      var A58 = F.getAdj();
+      A58.cash = Math.round((A58.cash + 500) * 100) / 100; A58.card = Math.round((A58.card - 500) * 100) / 100; A58.prepay = Math.round((A58.prepay - 500) * 100) / 100;
+      A58.prepayBy = A58.prepayBy || {}; A58.prepayBy[paid58] = Math.round(((A58.prepayBy[paid58] || 0) - 500) * 100) / 100;
+      A58.mv = 2;
+      var old58 = st58();
+      ok(close(old58.liq, b58.liq - 500) && close(old58.owed, b58.owed - 500), 'v74.18: precondition - the old model dropped liquid and the total owed by 500');
+      var n58 = F.migrateCardFundedPayoffs();
+      var m58 = st58();
+      ok(n58 === 1 && close(m58.liq, b58.liq) && close(m58.owed, b58.owed) && close(m58.c[paid58], b58.c[paid58] - 500) && close(m58.c[fund58], b58.c[fund58] + 500), 'v74.18: the one-time migration corrects an old-model card -> card payoff (liquid + total back, the debt on ' + fund58 + ')');
+      ok(F.getAdj().mv === F.ADJ_MODEL_V && F.migrateCardFundedPayoffs() === undefined, 'v74.18: the migration stamps model 3 and runs once');
+      F.state.txns = F.state.txns.filter(function (t) { return t.id !== 't58m'; });
+      var A58b = F.getAdj(); Object.keys(A58b).forEach(function (k) { delete A58b[k]; }); Object.keys(adjKeep58).forEach(function (k) { A58b[k] = adjKeep58[k]; });
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);

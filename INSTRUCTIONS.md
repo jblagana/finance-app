@@ -1,3 +1,8 @@
+# v74.18 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-10 - (v74.17 flag: "a card payment paid with another credit card lowers liquid and total card debt") -> "ok"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.18, sw cache finances-pwa-v74.18 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.18 a payoff funded by another credit card moves the debt card -> card (liquid, free, total owed unchanged); model 3 + a one-time 2 -> 3 overlay correction — DONE. Smoke PART 44 (6) retargeted + PART 58 (7) + check_site pin. The boss's Oct export has no card-to-card payoffs, so the one-time correction is a no-op there
+
 # v74.17 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-10 - "check why the app has different liquid record in hero card vs the ledger entries 'liquid x -> y'" -> (cause: the v74.02 "liquid" line read e.f, the FREE cash — it sat exactly the cards owed, P7,764, below the hero's Liquid) -> "fix it, but make sure the changes shown are only for liquid and card, no free (acceptable for old entries but should not show ever in new ones)"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.17, sw cache finances-pwa-v74.17 pushed to https://github.com/jblagana/finance-app.git (main).

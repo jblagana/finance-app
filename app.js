@@ -23,7 +23,7 @@
     plans: [],
     base: null,
     snapshot: null,
-    adj: { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: 2 }, // mv = the txnAdj model version (v72.43); cashBy = per-funder split of the attributed cash moves (payoffs v73.83 + spends/inflows v73.84)
+    adj: { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: 3 }, // v74.18: 3 (a fresh install starts on the current model — mv 2 would make the 2 -> 3 step re-correct its card -> card payoffs) // mv = the txnAdj model version (v72.43); cashBy = per-funder split of the attributed cash moves (payoffs v73.83 + spends/inflows v73.84)
     adjSig: '',
     adjLoaded: false,
     coachMem: null,
@@ -655,7 +655,7 @@
   //     numbers, not the overlay, so its delta is NOT re-added;
   //   - zeroed / fresh adj (the boot initializer, a rebase,
   //     computeAdjFromTxns, the import sanitizer) carries the stamp.
-  var ADJ_MODEL_V = 2; // bump when the txnAdj model changes again
+  var ADJ_MODEL_V = 3; // bump when the txnAdj model changes again (v74.18: 3 = a card-funded payoff moves debt card -> card)
   function payoffModelDelta(txns, lastOverrideAt) {
     var dc = 0;
     (txns || []).forEach(function (t) {
@@ -671,14 +671,62 @@
     // v73.73: with NO txns there is nothing to rebuild from — the stored
     // overlay IS the truth (an import may carry adj without the txn history).
     // Running the rebuild on an empty ledger zeroed the stored overlay.
-    if (!a || a.mv === ADJ_MODEL_V) return;
+    if (!a || (Number(a.mv) || 0) >= 2) return; // v74.18: this one is the 0/1 -> 2 step only
     if (!(state.txns || []).length) { a.mv = ADJ_MODEL_V; return; }
     var lastO = 0;
     (state.moneyLog || []).forEach(function (e) { if (e.k === 'a' && e.at && e.at > lastO) lastO = e.at; });
     var d = payoffModelDelta(state.txns, lastO);
     if (d.cash) { a.cash = r2(a.cash + d.cash); a.free = r2(a.free + d.free); }
-    a.mv = ADJ_MODEL_V;
+    a.mv = 2; // v74.18: the next step (2 -> 3) is migrateCardFundedPayoffs
     saveAdj().then(function () { emit('adj'); });
+  }
+  // v74.18 (the 2 -> 3 step): a payoff FUNDED BY ANOTHER CREDIT CARD used to
+  // run the plain-payoff tuple — raw liquid −amt, total card owed −amt — but no
+  // bank money moved and no debt was paid: the debt just moved from the paid
+  // card to the funder card. The model now moves it card -> card (txnAdj). An
+  // overlay built under model 2 still carries the old tuple for the card-funded
+  // payoffs logged since the last rebase (the ones absorbed into the base by a
+  // reconcile / override are gone from the overlay — same gate as the split
+  // rebuilds), so this moves those by (new − old): liquid +amt (and its
+  // funder share), total owed +amt, total prepay +amt, the funder card +amt.
+  function migrateCardFundedPayoffs() {
+    var a = state.adj;
+    if (!a || (Number(a.mv) || 0) >= 3) return;
+    var lastR = lastRebaseAt(), moved = 0;
+    (state.txns || []).forEach(function (t) {
+      if (!t || t.kind !== 'card_payment' || t.cashback || t.recordOnly) return;
+      var fund = payWithOf(t);
+      if (!cardAccountNamed(fund) || String(fund) === String(t.account)) return;
+      var created = Date.parse(t.created) || 0;
+      if (lastR && created && created <= lastR) return; // absorbed into the base already
+      var amt = Number(t.amount) || 0;
+      if (!(amt > 0)) return;
+      a.cash = r2(a.cash - amt);
+      if (a.cashBy && a.cashBy[fund] != null) { a.cashBy[fund] = r2(a.cashBy[fund] - amt); if (!a.cashBy[fund]) delete a.cashBy[fund]; }
+      a.card = r2(a.card + amt);
+      a.prepay = r2(a.prepay + amt);
+      if (!a.prepayBy) a.prepayBy = {};
+      a.prepayBy[fund] = r2((a.prepayBy[fund] || 0) + amt);
+      if (!a.prepayBy[fund]) delete a.prepayBy[fund];
+      moved++;
+    });
+    a.mv = 3;
+    saveAdj().then(function () { if (moved) emit('adj'); });
+    return moved;
+  }
+  // v74.18: is this name one of the base's credit cards? (the base, not the
+  // live snapshot — txnAdj must not depend on the numbers it produces)
+  function cardAccountNamed(name) {
+    var nm = String(name || '').trim().toLowerCase();
+    if (!nm) return false;
+    return ((state.base && state.base.accounts) || []).some(function (x) { return x && x.kind === 'card' && String(x.name || '').trim().toLowerCase() === nm; });
+  }
+  // v74.18: a txn's effect on the TOTAL card owed (a card -> card payoff moves
+  // debt between cards, so the total doesn't move; record-only moves nothing)
+  function cardEffectOf(t, amt) {
+    if (!t || t.recordOnly) return 0;
+    if (t.kind === 'card_payment' && !t.cashback && cardAccountNamed(payWithOf(t)) && String(payWithOf(t)) !== String(t.account)) return 0;
+    return cardEffect(t.kind, amt);
   }
   // v73.71 (the CC-card ≠ hero diagnosis): prepayBy is an INCREMENTAL
   // accumulator — it only gets an entry when a card txn carries the `account`
@@ -927,6 +975,13 @@
       // v73.83: the v72.42 tuple stays the pinned literal; the funder is
       // attached to the returned object right after (legacy rows — no
       // payWith — attribute to 'Cash', the wallet residual).
+      // v74.18: funded by ANOTHER credit card -> nothing left a bank and no
+      // debt was paid: the paid card drops, the funder card rises by the same
+      // amount (liquid, free and the TOTAL owed stay put)
+      var fundC = payWithOf(t);
+      if (fundC && cardAccountNamed(fundC) && String(fundC) !== String(t.account)) {
+        return { cash: 0, free: 0, card: 0, prepay: 0, xferFrom: t.account, xferTo: fundC, xferAmt: amt };
+      }
       var plain = { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };
       plain.funder = payWithOf(t) || 'Cash';
       return plain;
@@ -947,6 +1002,15 @@
     return co;
   }
   function addAdj(a, sign) {
+    // v74.18: a card -> card payoff moves the per-card balances only
+    if (a.xferFrom && a.xferTo && a.xferAmt) {
+      if (!state.adj.prepayBy) state.adj.prepayBy = {};
+      var pb = state.adj.prepayBy;
+      pb[a.xferFrom] = r2((pb[a.xferFrom] || 0) - a.xferAmt * sign);
+      if (!pb[a.xferFrom]) delete pb[a.xferFrom];
+      pb[a.xferTo] = r2((pb[a.xferTo] || 0) + a.xferAmt * sign);
+      if (!pb[a.xferTo]) delete pb[a.xferTo];
+    }
     state.adj.cash = r2(state.adj.cash + a.cash * sign);
     state.adj.free = r2(state.adj.free + a.free * sign);
     state.adj.card = r2(state.adj.card + a.card * sign);
@@ -2410,7 +2474,7 @@
     if (!t || !t.recordOnly) return Promise.resolve();
     delete t.recordOnly;
     addAdj(txnAdj(t), 1);
-    var amt = Number(t.amount) || 0, dF = freeEffect(t, amt), dC = cardEffect(t.kind, amt);
+    var amt = Number(t.amount) || 0, dF = freeEffect(t, amt), dC = cardEffectOf(t, amt); // v74.18
     var dQ = r2(-txnAdj(t).cash); // v74.17: the liquid move once it counts
     var log = state.moneyLog || [], from = -1;
     for (var i = 0; i < log.length; i++) if (log[i] && log[i].tid === id && from < 0) from = i;
@@ -2630,7 +2694,7 @@
     var oldAmt = Number(o.amount) || 0, newAmt = Number(t.amount) || 0;
     // effect delta (new − old) across free / card / month-spent
     var dFree = freeEffect(t, newAmt) - freeEffect(o, oldAmt);
-    var dCard = (t.recordOnly ? 0 : cardEffect(t.kind, newAmt)) - (o.recordOnly ? 0 : cardEffect(o.kind, oldAmt)); // v74.15
+    var dCard = cardEffectOf(t, newAmt) - cardEffectOf(o, oldAmt); // v74.15 record-only + v74.18 card -> card
     var meOld = monthEffect(o.kind, oldAmt, o), meNew = monthEffect(t.kind, newAmt, t); // v73.7: salary-aware
     var M_old = String(o.date || '').slice(0, 7), M_new = String(t.date || '').slice(0, 7);
     // v74.17: the liquid delta of the edit (new − old) — txnAdj.cash is the
@@ -3057,7 +3121,7 @@
           if (isAdj) dQr = e.n;
           else if (e.k === 'x') dQr = add ? -e.n : e.n;
           else if (e.k === 'i') dQr = add ? e.n : -e.n;
-          else if (e.k === 'p' && !cbRow) dQr = add ? -e.n : e.n;
+          else if (e.k === 'p' && !cbRow && !ccFunded) dQr = add ? -e.n : e.n; // v74.18: card -> card moves no liquid
           if (Math.abs(dQr) > 0.004) extra += '<span class="ml-f">liquid ' + money(r2(e.q - dQr)) + ' → ' + money(e.q) + '</span>';
         } else if (e.k === 'x' || e.k === 'i' || (isAdj && e.o == null) || legacyRow) {
           // a row logged before v74.17 has no liquid total — its line is the
@@ -3066,6 +3130,9 @@
             : r2((e.f != null ? e.f : 0) + (add ? (e.k === 'i' ? -e.n : e.n) : (e.k === 'i' ? e.n : -e.n)));
           extra += '<span class="ml-f">free ' + money(liqBefore) + ' → ' + money(e.f != null ? e.f : 0) + '</span>';
         }
+        // v74.18: a NEW card -> card payoff — the debt moved between the cards
+        // (the total is unchanged, so a total "card x -> x" line would say nothing)
+        if (e.q != null && ccFunded) extra = '<span class="ml-x">' + money(e.n) + ' moved from ' + esc(e.m || 'the card') + ' to ' + esc(e.w) + ' — total card debt unchanged</span>';
         // v74.15: a record-only row moved nothing — no before/after line
         if (e.ro) extra = '<span class="ml-f">recorded only — that balance already included it</span>';
         // v73.75 (boss-approved mockup_compact_livenumbers.html): the
@@ -9415,7 +9482,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         // from the REMOTE txns to the merged ones; otherwise keep this phone's
         // overlay and move it from the local txns. (A pre-v74.06 push has no
         // adj: the local overlay is kept, as before.)
-        if (remote && remote.adj && merged.base && merged.base === remote.base && merged.base !== state.base) {
+        if (remote && remote.adj && (Number(remote.adj.mv) || 0) >= ADJ_MODEL_V && merged.base && merged.base === remote.base && merged.base !== state.base) { // v74.18: only a current-model overlay
           state.adj = sanitizeAdj(remote.adj);
           if (typeof remote.adjSig === 'string' && remote.adjSig) state.adjSig = normalizeStoredSig(remote.adjSig);
           syncApplyAdj(Array.isArray(remote.txns) ? remote.txns : [], merged.txns || []);
@@ -9524,7 +9591,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
             state.adjSig = typeof data.adjSig === 'string' ? normalizeStoredSig(data.adjSig) : snapSig(state.snapshot); // v73.13: old 4-comp sigs map to the 3-comp one
             state.adjLoaded = true;
             if (!data.adj) computeAdjFromTxns(); // v72.8: a pre-72.8 backup has no adj — recompute from the imported txns
-            if (hasSec('txns')) migratePayoffModel(); // v72.43: a pre-v72.42 backup's adj still carries the old payoff model (adj + txns come from the same file)
+            if (hasSec('txns')) { migratePayoffModel(); migrateCardFundedPayoffs(); } // v72.43 + v74.18: a pre-v72.42 backup's adj still carries the old payoff model (adj + txns come from the same file)
             if (hasSec('txns')) migratePrepayBy(); // v73.71: an imported per-card split reconciles against the imported txns immediately (not just next boot)
             if (hasSec('txns')) migrateCashBy(); // v73.83: the imported per-funder split reconciles against the imported txns too
             if (hasSec('owed') && hasSec('txns')) migrateIpfTheirs(); // v73.72: an imported book's un-filed ipf-on-card entries file their theirs pair immediately
@@ -9575,12 +9642,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.17, live: new Date(2026, 10, 10, 13, 26) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.18, live: new Date(2026, 10, 10, 13, 34) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.18': [
+      'Paying one credit card with another now works the way it really does: the card you paid goes down, the card you paid with goes up by the same amount, and your liquid cash, free cash and total card debt stay the same — the debt just moved. Before, the app took the amount out of your liquid cash and off your total card debt, as if money had left your bank. The Ledger row says "moved from … to … — total card debt unchanged". Any such payments already in your live numbers are corrected automatically.'
+    ],
     '74.17': [
       'The Ledger\'s "liquid x → y" now matches the Liquid number on the home card. It used to show your free cash (your money minus what your cards already owe) under the name "liquid", so it always read lower than the home card. New entries show only real changes: liquid when money leaves or enters your accounts (a card payment from your bank shows both card and liquid), and card for card balances. Entries logged before this update keep their old line, now honestly labelled "free".'
     ],
@@ -10826,6 +10896,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     syncEncrypt: syncEncrypt, // v73.3: the envelope (the smoke round-trips it)
     syncDecrypt: syncDecrypt, // v73.3: decrypt the envelope (the smoke round-trips it)
     syncMerge: syncMerge, // v73.3: the merge rule (pure — the smoke drives it)
+    migrateCardFundedPayoffs: migrateCardFundedPayoffs, cardEffectOf: cardEffectOf, ADJ_MODEL_V: ADJ_MODEL_V, // v74.18 (smoke)
     budgetCredit: budgetCredit, // v74.16: the budget-already-spent credit (smoke)
     countTxnAnyway: countTxnAnyway, absorbedDateOf: absorbedDateOf, txnAlreadyAbsorbed: txnAlreadyAbsorbed, // v74.15: record-only entries (smoke)
     planDriftMap: planDriftMap, migratePlanDrift: migratePlanDrift, // v74.09: the drift repair (smoke)
@@ -11400,6 +11471,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       refreshLocalSnapshot();
       if (!hasAdj && !state.adjSig) computeAdjFromTxns();
       migratePayoffModel(); // v72.43: one-shot re-derivation of a pre-v72.42 persisted overlay
+      migrateCardFundedPayoffs(); // v74.18: the 2 -> 3 step (card-funded payoffs move debt card -> card)
       migratePrepayBy(); // v73.71: one-shot rebuild of the stale per-card prepay split (AFTER the payoff migration — it re-stamps mv)
       migrateCashBy(); // v73.83: rebuild the per-funder cash split (lastReconAt-gated; self-heals smeared phones)
       migratePlanDrift(); // v74.09: move payment links / edits off the pre-v74.09 drifted plan dates (idempotent)

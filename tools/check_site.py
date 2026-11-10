@@ -1601,13 +1601,13 @@ def main():
           and "function freeEffect(t, amt) { if (t && t.recordOnly) return 0; if (t.kind === 'card_payment') return t.cashback ? amt : 0; return (t.kind === 'cash_in') ? amt : -amt; }" in js  # v73.53: a cashback payoff moves free by +amt; a plain one by 0
           and "var ccFunded = e.k === 'p' && !cbRow && isCardFunder(e.w);" in js)  # v74.02: the render's payoff branch (card line only — no free line)
     check("v72.43 (prepaid cards under the old model, user: 'ive already prepaid the cards prior to this version, as such, card balance and free cash and liquid cash all changed, fix that'): the persisted overlay is NOT re-derived from txns on boot, so a pre-v72.42 phone's stored adj still carries each old prepay's old-model contribution (free inflated by the prepay total, liquid not reduced); the one-shot migration (the adj.mv model stamp) adds the {cash: +a, free: +a} delta per card_payment on boot + import — but NOT for a prepay after which a balance-override (money-log 'a') row rebased the overlay (that prepay's effect is in the sheet's numbers, not the overlay); every zeroed/fresh adj (boot initializer, both rebases, computeAdjFromTxns, the import sanitizer) carries the stamp so it fires exactly once; card owed is untouched (identical in both models)",
-          "var ADJ_MODEL_V = 2" in js
+          "var ADJ_MODEL_V = 3" in js  # v74.18 successor: model 3 (card -> card payoffs); the v72.43 0/1 -> 2 step stays below
           and "function payoffModelDelta(txns, lastOverrideAt)" in js
           and "function migratePayoffModel()" in js
           and "migratePayoffModel(); // v72.43: one-shot re-derivation of a pre-v72.42 persisted overlay" in js
-          and "if (hasSec('txns')) migratePayoffModel();" in js
+          and "if (hasSec('txns')) { migratePayoffModel(); migrateCardFundedPayoffs(); }" in js  # v74.18 successor
           and "prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V" in js  # v73.83: the per-funder cash split rides every zeroed/fresh overlay
-          and "prepayBy: {}, cashBy: {}, mv: 2 }, // mv = the txnAdj model version (v72.43); cashBy = per-funder split of the attributed cash moves (payoffs v73.83 + spends/inflows v73.84)" in js)
+          and "adj: { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: 3 }," in js)  # v74.18 successor: the fresh overlay starts on model 3 (cashBy = the per-funder split, v73.83/v73.84)
     check("v72.44 (user: 'the hey jan card disappered after i logged the prepay. also should we include the prepay in the ledger summary'): (1) the paid-prepay 'Handled' row of the home coach card read an undefined variable (prepaid instead of prepayPaid) — the ReferenceError was swallowed by emit's per-render try/catch AFTER the card was made visible, so the card rendered BLANK after a prepay was logged; (2) the spend aggregates (donut, pace, spent-today, pace anomalies, the coach-note snapshot) now use ONE rule — the same one the money-log 's' line has used since v72.10: card_payment is not spend (the charge already counted), cash_in nets spend down",
           "prepaid.amount" not in js
           # v73.23: the "Partly handled — … logged on …" row is GONE (the
@@ -1944,6 +1944,18 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.18 (v74.17 flag, boss: 'ok'): a payoff FUNDED BY ANOTHER CREDIT CARD moves the debt card -> card — txnAdj returns a transfer (xferFrom / xferTo / xferAmt: the paid card's prepayBy −amt, the funder's +amt; liquid, free, total owed and total prepay 0) instead of the plain tuple (liquid −amt, total owed −amt, as if a bank had paid); cardEffectOf (the edit / Count-it card delta) is 0 for it; the funder test reads the BASE accounts (cardAccountNamed), never the live snapshot. ADJ_MODEL_V 3: migratePayoffModel is the 0/1 -> 2 step only; migrateCardFundedPayoffs (boot / import, once) moves an overlay built under model 2 by (new − old) for the card-funded payoffs since the last rebase; a sync pull adopts only a current-model remote overlay. A new row reads 'moved from X to Y — total card debt unchanged' (no liquid line). Smoke PART 44 (6) retargeted + PART 58 (7)",
+          "var ADJ_MODEL_V = 3;" in js
+          and "function migrateCardFundedPayoffs() {" in js
+          and "function cardAccountNamed(name) {" in js
+          and "function cardEffectOf(t, amt) {" in js
+          and "return { cash: 0, free: 0, card: 0, prepay: 0, xferFrom: t.account, xferTo: fundC, xferAmt: amt };" in js
+          and "if (a.xferFrom && a.xferTo && a.xferAmt) {" in js
+          and "if (!a || (Number(a.mv) || 0) >= 2) return;" in js
+          and js.count("migrateCardFundedPayoffs();") >= 2
+          and "total card debt unchanged" in js
+          and "PART 58: v74.18 - a card-funded payoff moves the debt" in smoke
+          and "'74.18': [" in js)
     check("v74.17 (boss: 'different liquid record in hero card vs the ledger entries'): every new money-log row stores q = the REAL liquid total after (cash.total — the hero's Liquid): logMoney, debit reconcile / override rows, the reset's audit row (a liquid row replaces the free row). The render shows LIQUID (spend -n, money in +n, a payoff from a bank -n, a debit override / reconcile / reset its signed n) and CARD lines only for rows with q — never free; rows without q (pre-v74.17) keep their free line, labelled 'free'. The edit rebase, its undo and 'Count it' shift q too; the sanitizer keeps q. Smoke PART 44 retargeted + PART 57 (6)",
           "e.q = r2(s.cash ? s.cash.total : 0); // v74.17" in js
           and js.count("else e.q = r2(s.cash ? s.cash.total : 0);") == 2
