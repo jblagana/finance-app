@@ -1,3 +1,8 @@
+# v74.24 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-11 - "merge the wip to main and ship" -> "Merge branch wip/look-upgrade (the two WIP entries below) into main and release it: the whole approved look upgrade goes live. Behavior unchanged except what the WIP entries list (the Add-sheet keypad + chips, the header coach button replacing the floating bot)"
+Status: **done** - merge commit (this one, one-commit release) with SHELL_RELEASE 74.24, sw cache finances-pwa-v74.24 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.24 merge (DONE — the only conflict was the two style blocks appended at the end of <style> (v74.22's row tiles + the look layer): both kept, the tiles first; the "WIP look-upgrade" comments renamed to "v74.24 look upgrade"; check_site v74.24 pin; What's-new note; release.ps1 v74.24 all green). Also carries the v74.23 smoke fix (the edge-gap assert's regex had lost its \d and silently skipped — now it is mandatory and runs: 65.1px)
+
 # v74.23 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - (screenshot: the free-cash chart's '18 Jan' on top of '29 Jan') "theres overlap in x axis, fix in main and ship" -> "Stop the chart's date labels from colliding at the ends: the last label is always drawn (end-anchored) and the first is start-anchored, so a middle label next to either needs a wider gap — drop it when there isn't room"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.23, sw cache finances-pwa-v74.23 pushed to https://github.com/jblagana/finance-app.git (main).
@@ -12,6 +17,25 @@ Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.2
 ## 2026-11-11 - "use the per day, payday, spent today words" + "ship this to main directly, only that" -> "Rename the three cells of the Home cycle strip: Headroom -> Per day, Days left this cycle -> Payday (value = N days), Spent today stays. Words only, same numbers. Its own release on main; the rest of the WIP look stays on wip/look-upgrade"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.21, sw cache finances-pwa-v74.21 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.21 the strip words (DONE — release.ps1 v74.21 all green; check_site v74.21 pin + the v73.94 pins retargeted; smoke PART 38 retargeted; What's-new note)
+# WIP entry 2 — branch wip/look-upgrade (prepended to INSTRUCTIONS.md; NOT a release)
+## 2026-11-11 - "use the actual coach fin icon on the top right icon / apply the new addsheet look, paid progress bar on committed / use the old dark bluish color" (the strip words shipped separately as v74.21)
+Status: **done on the WIP branch** - local commit, not pushed, not released.
+- [x] the header coach button is the real Coach Fin face (the #botFace drawing, darting eyes)
+- [x] the Add sheet: chip rows for Category / Pay to and Paid with (they set the hidden selects + fire change, so the old logic runs), and a 4x4 keypad that types into the amount (inputmode=none; quick sums still work)
+- [x] Committed hero: a paid progress bar (cyclePlanPaid: what this cycle's plans already got, vs paid + still to pay)
+- [x] the dark theme is back on the old blue-grey palette (#0f1420 / #1a2233 / #212c42); Light unchanged
+
+# WIP entry — branch wip/look-upgrade (prepended to INSTRUCTIONS.md; NOT a release)
+## 2026-11-10 - "build all ur edits to the financeapp in a wip branch and serve it in this laptop" -> "Build the whole approved look-upgrade mockup (Claude canvas 'Fin.AI look upgrade' — look system, header, bottom nav, Home, Committed, Ledger, Add sheet, Coach, Settings, Boot; Owed already shipped in v74.19/74.20) into the real app on a WIP branch (wip/look-upgrade, a separate worktree — main and the live site stay untouched, no version bump, no release.ps1, no push to main), and run a local web server on the laptop so the boss can try it. LOOK ONLY: every existing behavior stays"
+Status: **built, serving locally** - WIP branch only (one local commit on wip/look-upgrade in the finance-app-wip worktree; NOT pushed, NOT released, no version bump). Served at http://localhost:8765/ (node static server from the scratchpad). Gates run one by one: check_site = the usual single live-stamp failure only, parser pass, node --check pass, both smokes ALL PASS.
+- [x] look system — a CSS LAYER appended at the end of the <style> (the old rules stay: the gates pin strings in them): new tokens (dark + light via html[data-theme]), self-hosted Inter + Space Grotesk (fonts/, in the sw shell list), 22/26px cards, 14px inputs, pill selects, green-filled primary buttons
+- [x] header = kicker + per-tab title (renderHead: Home = date over the greeting; Committed/Ledger = the cycle window + days left; Owed = "Splits and IOUs") + the coach button (face + LED, toggles the coach) + the settings button (sliders icon); the old Fin.AI h1 and the greet block are hidden, not removed
+- [x] floating bottom nav (icons via CSS masks on the same 4 tab buttons + the green + square; the markup is unchanged)
+- [x] Home: hero "Left to spend · after Committed" + status pill (Negative / Tight / On track), big Space Grotesk number, the cycle block + spark in the theme colors, the 3-cell strip, Test a spend as an input row, the coach card (face tile, round refresh, soft-tinted attention rows, filled pay chips, "Ask Fin anything")
+- [x] Committed: the summary as a 26px hero card (big number), the One-offs/Recurring segment, section labels with color dots, "+ Add a plan" as a dashed button at the BOTTOM (CSS order)
+- [x] Ledger: the by-category card gains the spent total + per-day bars (renderDailyBars — same spend rule + window as the donut; display only), pill filters, rows with a category tile (mlTile), inflows green / spends ink
+- [x] Add sheet (segmented direction, big centered amount, pill selects), Coach (a tall bottom sheet; the floating bot is hidden by CSS — its drag code is untouched), Settings (switches, Appearance Dark/Light = applyTheme + fin.theme), Boot (112px face tile, Space Grotesk name, 140px bar), toasts (ink pill), confirm dialogs (22px)
+- NOT built (would be new behavior, not look): the Add-sheet keypad (the text input is kept on purpose — quick sums), the Home "Spending pace" card, a paid/total progress bar on the Committed hero, the Committed checkbox rows (the pay/skip chips stay)
 
 # v74.20 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-10 - "the sort row makes it look awfull" -> "Replace the 'Sort' label + full-width dropdown with a compact section header: 'PEOPLE · N' on the left, a small pill dropdown on the right (Recent / A–Z / Custom); hidden when the book is empty. Look only — the sort behavior is unchanged"

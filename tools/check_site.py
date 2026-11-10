@@ -1975,6 +1975,19 @@ def main():
           and "if (tickIdx.length === 1 && X(ti) - X(0) < tickEdgePx) continue;" in js
           and "while (tickIdx.length > 1 && X(pts.length - 1) - X(tickIdx[tickIdx.length - 1]) < tickEdgePx) tickIdx.pop();" in js
           and "'74.23': [" in js)
+    check("v74.24 (boss: 'merge the wip to main and ship'): the look upgrade ships — the CSS layer (tokens + light theme), self-hosted fonts in the sw shell, the header (kicker/title via renderHead + the Coach Fin button + LED mirror), the floating icon nav, the hero pill, the Committed paid bar (cyclePlanPaid), the Ledger daily bars (renderDailyBars), the Add-sheet chips + keypad (renderAddChips / wireAddKeypad), the coach as a bottom sheet (#coachFab hidden by CSS, its drag code untouched)",
+          "v74.24 look upgrade (boss: merge the wip to main and ship)" in html
+          and ":root[data-theme=light]{" in html
+          and "./fonts/Inter-latin.woff2" in sw and "./fonts/SpaceGrotesk-latin.woff2" in sw
+          and 'id="hdCoach"' in html and 'id="hdKicker"' in html and 'id="hdTitle"' in html and "function renderHead()" in js
+          and "byId('hdLed')" in aijs
+          and 'id="heroPill"' in html
+          and 'id="committedBar"' in html and "function cyclePlanPaid()" in js
+          and 'id="dailyBox"' in html and "function renderDailyBars(" in js
+          and 'id="addKeypad"' in html and "function renderAddChips()" in js and "function wireAddKeypad()" in js
+          and 'id="themeSeg"' in html and "function applyTheme(" in js
+          and "#coachFab{display:none}" in html
+          and "'74.24': [" in js)
     check("v74.19 (boss: 'ship new owed look' — the approved look-upgrade mockup, LOOK ONLY): the totals card is the net hero (#owedSumDir carries the direction, #owedSumNet the unsigned amount, the In/Out cells keep their ids); Add a person is one inline row; each person card is a tappable header (data-ow-open: avatar, tap-to-rename name + entry count, balance + direction) over an .ow-body that opens in place (owedToggleOpen, in-memory owedOpen, a sole person / a new person starts open) — the drag handle and the rename input never toggle it; + entry / SOA (PDF) / remove moved into the opened card; every entry row shows the running balance after it (owedRunText, oldest-first like the SOA). Every Owed behavior is unchanged (the v72.19 / v72.29 / v72.48 pins still hold)",
           'id="owedSumDir"' in html
           and 'class="card ow-sum"' in html

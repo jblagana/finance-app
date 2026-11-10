@@ -1690,7 +1690,8 @@ waitReady().then(async function (F) {
   ok(greedy21.length <= expectMax21, 'v73.65: the greedy thinning bound holds for a dense 13-point series (got ' + greedy21.length + ', max ' + expectMax21 + ')');
   ok(greedy21[0] === 0 && greedy21[greedy21.length - 1] === dense21.length - 1, 'v73.65: the first + last points always keep their tick');
   // v74.23: in the REAL render no label sits closer than the edge gap to the end-anchored last one
-  var xs21 = (sparkAfter.match(/<text x="([d.]+)" y="[d.]+" text-anchor="(?:start|middle|end)"/g) || []).map(function (t) { return Number(/x="([d.]+)"/.exec(t)[1]); });
+  var xs21 = (sparkAfter.match(/<text x="([0-9.]+)" y="[0-9.]+" text-anchor="(?:start|middle|end)"/g) || []).map(function (t) { return Number(/x="([0-9.]+)"/.exec(t)[1]); });
+  ok(xs21.length >= 2, "v74.23 precondition: the axis labels are found (" + xs21.length + ")");
   if (xs21.length >= 2) ok(xs21[xs21.length - 1] - xs21[xs21.length - 2] >= Math.round(34 * 1.4) - 0.5, 'v74.23: the last two axis labels keep the edge gap (' + (xs21[xs21.length - 1] - xs21[xs21.length - 2]).toFixed(1) + 'px)');
 
   // ============ PART 22: v73.66 — the coach + notes are roasty ==========
