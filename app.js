@@ -3718,12 +3718,21 @@
   // override when it is set above zero (a double-salary month), else the base
   // salary — the sheet's pre-payday zero (its as-of predates the 15th) is NOT
   // "no salary", it is "not received yet as of as-of".
+  // v74.10: a day-of-month CLAMPED to that month's real length (payday 31 in
+  // February = the 28th/29th, in April = the 30th). m0 is 0-based and may run
+  // past 0..11 (the year rolls). Paydays 29-31 used to be REJECTED here and
+  // silently became the 15th (Settings showed 30, every number used 15).
+  function dayInMonth(y, m0, day) {
+    var first = new Date(y, m0, 1);
+    var dim = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    return new Date(first.getFullYear(), first.getMonth(), Math.min(Math.max(1, day), dim));
+  }
   function salaryDayOf(b) {
     b = b || state.base || {};
     var sd = Math.round(Number(b.salary_day) || 0);
-    if (sd >= 1 && sd <= 28) return sd;
+    if (sd >= 1 && sd <= 31) return sd;
     var cd = Math.round(Number(b.cutoff_day) || 0);
-    if (cd >= 1 && cd <= 28) return cd;
+    if (cd >= 1 && cd <= 31) return cd;
     return 15;
   }
   function expectedSalaryFor(month, b) {
@@ -3734,8 +3743,10 @@
   }
   function cycleWindow(month, sday) {
     var p = String(month).split('-');
-    var start = new Date(Number(p[0]), Number(p[1]) - 1, sday);
-    var end = new Date(Number(p[0]), Number(p[1]), sday - 1); // next month, sday-1 (sday 1 = the calendar month)
+    var start = dayInMonth(Number(p[0]), Number(p[1]) - 1, sday);
+    // v74.10: the cycle ends the day before the NEXT payday (clamped too)
+    var end = dayInMonth(Number(p[0]), Number(p[1]), sday);
+    end.setDate(end.getDate() - 1);
     return {
       month: month,
       start: localISO(start),
@@ -3747,8 +3758,8 @@
     b = b || state.base || {};
     var sd = salaryDayOf(b);
     var p = parseISO(todayStr || todayISO());
-    var startD = new Date(p.getFullYear(), p.getMonth(), sd);
-    if (startD > p) startD = new Date(p.getFullYear(), p.getMonth() - 1, sd); // sd <= 28, so no day overflow
+    var startD = dayInMonth(p.getFullYear(), p.getMonth(), sd); // v74.10: clamped (paydays 29-31)
+    if (startD > p) startD = dayInMonth(p.getFullYear(), p.getMonth() - 1, sd);
     return startD.getFullYear() + '-' + (startD.getMonth() < 9 ? '0' : '') + (startD.getMonth() + 1);
   }
   function cycleDataFor(month, b) {
@@ -3825,7 +3836,7 @@
     var pace = r2(spent / elapsed);
     var projectedNet = r2(expected - pace * w.days);
     // the previous cycle, for the comparison line
-    var prevStartD = new Date(startP.getFullYear(), startP.getMonth() - 1, sd);
+    var prevStartD = dayInMonth(startP.getFullYear(), startP.getMonth() - 1, sd); // v74.10: clamped (a raw Feb 31 rolled into March)
     var prevM = prevStartD.getFullYear() + '-' + (prevStartD.getMonth() < 9 ? '0' : '') + (prevStartD.getMonth() + 1);
     var prevW = cycleWindow(prevM, sd);
     var prevSpent = 0;
@@ -3868,7 +3879,8 @@
       // sday .. month+1 sday-1), so the NEXT cycle end = new Date(y, m+1,
       // sday-1) — one month past the current cycle end.
       var np = String(cd.month).split('-');
-      var nEnd = new Date(Number(np[0]), Number(np[1]) + 1, cd.sday - 1);
+      var nEnd = dayInMonth(Number(np[0]), Number(np[1]) + 1, cd.sday); // v74.10: the payday after next, clamped...
+      nEnd.setDate(nEnd.getDate() - 1); // ...minus a day
       return { start: rec.date, end: localISO(nEnd), early: true, received: rec };
     }
     return { start: cd.start, end: cd.end, early: false, received: rec };
@@ -4078,15 +4090,15 @@
   // ledger; absent due_day = 5 (the default), older exports stay valid.
   function ccDueData(txns, b, todayStr) {
     var dd = Math.round(Number(b && b.due_day) || 5);
-    if (dd < 1 || dd > 28) dd = 5;
+    if (dd < 1 || dd > 31) dd = 5; // v74.10: 29-31 accepted (clamped per month below), not silently reset
     var cd = Math.round(Number(b && b.cutoff_day) || 15);
-    if (cd < 1 || cd > 28) cd = 15;
+    if (cd < 1 || cd > 31) cd = 15;
     var today = String(todayStr || todayISO());
     // Pure string/number date math — NO Date getters: parseISO yields UTC
     // dates and this machine is UTC+8, so local getters would be off by a
     // day (the v73.1 smoke failures are the same trap; the window math must
     // be timezone-proof because it is the due AMOUNT).
-    function iso(y, m, day) { return y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day; }
+    function iso(y, m, day) { day = Math.min(day, new Date(y, m, 0).getDate()); return y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day; } // v74.10: clamped to the month
     function dim(y, m) { return new Date(y, m, 0).getDate(); } // m = 1..12 (calendar month)
     function addM(y, m, k) { var t = (m - 1 + k) % 12; if (t < 0) t += 12; return { y: y + Math.floor((m - 1 + k) / 12), m: t + 1 }; }
     var tp = today.split('-'), ty = Number(tp[0]), tm = Number(tp[1]), tday = Number(tp[2]);
@@ -4524,14 +4536,13 @@
       });
     });
     var prepayDay = Number(s.prepay_day) || 14;
-    var pDay = parseISO(today);
-    pDay.setDate(prepayDay);
-    if (pDay < parseISO(today)) pDay = new Date(now.getFullYear(), now.getMonth() + 1, prepayDay);
+    var pDay = dayInMonth(now.getFullYear(), now.getMonth(), prepayDay); // v74.10: clamped (a 30th/31st in a short month)
+    if (pDay < parseISO(today)) pDay = dayInMonth(now.getFullYear(), now.getMonth() + 1, prepayDay);
     var prepayIn = Math.round((pDay - parseISO(today)) / 86400000);
     // v73.23: how many days PAST the previous prepay date (0 = today is that
     // date). Drives the card-payment window (the bill shows 1-10 days after
     // the prepay date, while the prepay rows are down).
-    var pPrev = new Date(now.getFullYear(), now.getMonth() - 1, prepayDay);
+    var pPrev = dayInMonth(now.getFullYear(), now.getMonth() - 1, prepayDay); // v74.10: clamped
     var prepayDaysAgo = Math.round((parseISO(today) - parseISO(localISO(pPrev))) / 86400000);
     var prepayAmt = r2(s.total_prepay || 0);
     if (prepayIn >= 0 && prepayIn <= 6 && prepayAmt > 0) {
@@ -4649,7 +4660,7 @@
       daily: daysLeft > 0 ? r2(Math.max(0, free - planDeduct) / daysLeft) : 0, // v73.16: net of the cycle's plan share
       todaySpend: r2(todaySpend), items: items,
       prepayDay: prepayDay, prepayIn: prepayIn, prepayDaysAgo: prepayDaysAgo, prepayAmt: prepayAmt,
-      prepayDate: localISO(new Date(now.getFullYear(), now.getMonth(), prepayDay)),
+      prepayDate: localISO(dayInMonth(now.getFullYear(), now.getMonth(), prepayDay)), // v74.10: clamped
       weekCost: weekCost, laterCount: laterCount, laterAmt: r2(laterAmt),
       monthPlans: r2(monthPlans), monthPlanCount: monthPlanCount,
       spentM: spentM, pace: pace,
@@ -6121,7 +6132,14 @@
       // later due dates have nothing to drop because unlogged charges are
       // never predicted; a logged charge grows the drop, a logged payoff
       // shrinks it, and a full payoff removes it).
-      var day0 = (c.due != null && c.due >= 1 && c.due <= 28) ? Math.round(c.due) : 15;
+      // v74.10: the card's DUE DAY lives on its base account (due_day, v73.88;
+      // the global due_day as the default). The old line read c.due — which is
+      // the manual "due this cycle" AMOUNT (v73.29), not a day — so every card
+      // dropped on the 15th (or on day N for a manual amount of N pesos).
+      var acc0 = null;
+      ((state.base && state.base.accounts) || []).forEach(function (a) { if (a && a.kind === 'card' && String(a.name) === String(c.name)) acc0 = a; });
+      var day0 = Math.round(Number(acc0 && acc0.due_day) || Number(state.base && state.base.due_day) || 5);
+      if (day0 < 1 || day0 > 31) day0 = 5;
       for (var k = 0; k < 3; k++) {
         var mm = addM(ty, tm, k);
         var dim = new Date(mm.y, mm.m, 0).getDate();
@@ -6337,7 +6355,7 @@
     // cash_in entry the cycle reads back.
     var cy0 = d.cycle;
     if (cy0 && cy0.expected > 0) {
-      var sdayISO = cy0.month + '-' + (cy0.sday < 10 ? '0' : '') + cy0.sday;
+      var sdayISO = cy0.start; // v74.10: the cycle starts ON its (clamped) payday
       var sIn = Math.round((parseISO(sdayISO) - parseISO(d.today)) / 86400000);
       // v73.32 (boss: 'the salary row is not showing even if its within
       // 10 days already, it should show up as early as the 5th since the
@@ -6351,8 +6369,7 @@
       if (sIn === 0 && !cy0.received) {
         salT = { amt: cy0.expected, sIn: 0, sday: cy0.sday };
       } else {
-        var sp = parseISO(sdayISO);
-        var nd = new Date(sp.getFullYear(), sp.getMonth() + 1, cy0.sday);
+        var nd = parseISO(cy0.end); nd.setDate(nd.getDate() + 1); // v74.10: the next payday = the day after this cycle
         var nextISO = localISO(nd);
         var sInN = Math.round((parseISO(nextISO) - parseISO(d.today)) / 86400000);
         if (sInN >= 1 && sInN <= 10) {
@@ -9339,12 +9356,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.09, live: new Date(2026, 10, 10, 12, 46) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.10, live: new Date(2026, 10, 10, 12, 50) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.10': [
+      'Paydays on the 29th, 30th or 31st now work: the app used to quietly treat them as the 15th even though Settings showed your day. In short months the payday lands on the last day (a 30th payday is Feb 28). Card prepay days on the 29th-31st no longer spill into the next month. And the cash-flow chart now drops each card payment on the card\'s real due day — it used to put every card on the 15th.'
+    ],
     '74.09': [
       'Recurring plans stay on their day: a monthly plan on the 29th, 30th or 31st no longer slides to the 28th after February (and then lose track of the payments you marked) — it lands on the last day of short months and returns to its own day after. Yearly plans on Feb 29 come back to Feb 29 in leap years. Payments already marked on a slipped date are moved to the right date automatically.'
     ],
@@ -10629,6 +10649,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     expectedSalaryFor: expectedSalaryFor, // v72.45: the cycle's expected salary (override or base)
     cycleDataFor: cycleDataFor, // v72.45: the cycle math for a given cycle month (smoke drives it)
     cycleData: cycleData, // v72.45: the current cycle (chat.js snapshot + smoke)
+    cycleWindow: cycleWindow, dayInMonth: dayInMonth, // v74.10: the clamped payday math (smoke)
     ccDueData: ccDueData, // v73.6: the cc-due math (pure — the smoke drives it with a seeded ledger)
     cardDueData: cardDueData, // v73.88: the per-card cycle math (pure - smoke PART 35)
     cardCycleInfo: cardCycleInfo, // v73.88: the in-window test for the ledger pill (pure)

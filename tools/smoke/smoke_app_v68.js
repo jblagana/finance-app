@@ -977,7 +977,11 @@ waitReady().then(async function (F) {
   F.effectiveSnap().cards.forEach(function (c) {
     var owed = Number(c.balance) || 0;
     if (!(owed > 0.004)) return;
-    var day0 = (c.due != null && c.due >= 1 && c.due <= 28) ? Math.round(c.due) : 15;
+    // v74.10: the card's own due day (base account due_day, global due_day default) — the
+    // old expectation copied the bug (c.due is the manual due AMOUNT; every card fell to the 15th)
+    var acc0 = null;
+    (F.state.base.accounts || []).forEach(function (a) { if (a.kind === 'card' && a.name === c.name) acc0 = a; });
+    var day0 = Math.round(Number(acc0 && acc0.due_day) || Number(F.state.base.due_day) || 5);
     for (var k = 0; k < 3; k++) {
       var m = (tM + k - 1) % 12 + 1, yy = tY + Math.floor((tM + k - 1) / 12);
       var dim = new Date(yy, m, 0).getDate();
@@ -1011,11 +1015,13 @@ waitReady().then(async function (F) {
     if (Math.abs(got - want) > 0.02) { deltaOK = false; deltaBad = dISO4 + ': got ' + got + ' want ' + want; break; }
   }
   ok(deltaOK && g0pts.length === tExpKeys.length + 1, 'v73.57: every point delta matches the expected event map (' + (deltaBad || g0pts.length - 1 + '/' + tExpKeys.length + ' dates') + ')');
-  // the card default-15th is in the map (both seeded cards are due=null)
-  var first15 = (Number(tp2[2]) >= 15)
-    ? (tM === 12 ? tY + 1 + '-01-15' : tY + '-' + ((tM % 12) + 1 < 10 ? '0' : '') + ((tM % 12) + 1) + '-15')
-    : tY + '-' + (tM < 10 ? '0' : '') + tM + '-15';
-  ok(tExp[first15] !== undefined, 'v73.57: the card owed drops on the default 15th (' + first15 + ')');
+  // v74.10: the card owed drops on the card's DUE DAY (the seed's cards inherit the global 5th),
+  // not on the old default 15th (which came from reading the manual due AMOUNT as a day)
+  var dueDay74 = Math.round(Number(F.state.base.due_day) || 5);
+  var firstDue = (Number(tp2[2]) > dueDay74)
+    ? (tM === 12 ? tY + 1 + '-01-' : tY + '-' + ((tM % 12) + 1 < 10 ? '0' : '') + ((tM % 12) + 1) + '-') + (dueDay74 < 10 ? '0' : '') + dueDay74
+    : tY + '-' + (tM < 10 ? '0' : '') + tM + '-' + (dueDay74 < 10 ? '0' : '') + dueDay74;
+  ok(tExp[firstDue] !== undefined && cardDates.indexOf(firstDue) >= 0, 'v74.10: the card owed drops on the card due day (' + firstDue + '), not the old default 15th');
   // (6) LIVE owed reactivity — a new card charge grows the card drop.
   var before = g0pts.map(function (p) { return p.v; });
   var chargeId = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'MariBank CC', amount: 2000, note: 'probe charge', date: tToday }, { quiet: true });
@@ -3529,6 +3535,28 @@ waitReady().then(async function (F) {
       ok(F.planAllDates(d49)[0] === '2026-11-30' && F.resolveOccurrence(d49, '2026-11-30').amount === 5500, 'v74.09: after the repair the series is current and the edit still applies');
       ok(F.migratePlanDrift() === 0, 'v74.09: the repair is idempotent (a second run touches nothing)');
       F.state.plans = plans49; F.state.txns = txns49;
+
+      // ============ PART 50: v74.10 - days 29-31 ============
+      console.log('\n== PART 50: v74.10 - paydays / prepay days 29-31 ====');
+      var b50 = F.state.base, sd50 = b50.salary_day, pd50 = b50.prepay_day;
+      b50.salary_day = 30;
+      ok(F.salaryDayOf(b50) === 30, 'v74.10: a payday of 30 is kept (was silently the 15th)');
+      var c50 = F.cycleData();
+      ok(c50.start === '2026-10-30' && c50.end === '2026-11-29', 'v74.10: payday 30 -> the cycle is Oct 30..Nov 29 (got ' + c50.start + '..' + c50.end + ')');
+      var w50a = F.cycleWindow('2027-01', 30), w50b = F.cycleWindow('2027-02', 30);
+      ok(w50a.start === '2027-01-30' && w50a.end === '2027-02-27' && w50b.start === '2027-02-28' && w50b.end === '2027-03-29',
+        'v74.10: payday 30 in February lands on the 28th and the cycles stay back-to-back (' + w50a.start + '..' + w50a.end + ', ' + w50b.start + '..' + w50b.end + ')');
+      var w50c = F.cycleWindow('2026-11', 31);
+      ok(w50c.start === '2026-11-30' && w50c.end === '2026-12-30', 'v74.10: payday 31 in a 30-day month lands on the 30th (' + w50c.start + '..' + w50c.end + ')');
+      b50.salary_day = 31;
+      var hw50 = F.headroomWindow();
+      ok(hw50 && /^\d{4}-\d{2}-\d{2}$/.test(hw50.end) && hw50.end >= F.todayISO(), 'v74.10: the headroom window resolves with payday 31 (' + (hw50 && hw50.start) + '..' + (hw50 && hw50.end) + ')');
+      b50.salary_day = sd50;
+      b50.prepay_day = 31; F.refreshLocalSnapshot && F.refreshLocalSnapshot();
+      var d50 = F.insightsData();
+      ok(d50.prepayDate === '2026-11-30', 'v74.10: a prepay day of 31 in November is Nov 30, not Dec 1 (got ' + d50.prepayDate + ')');
+      b50.prepay_day = pd50; F.refreshLocalSnapshot && F.refreshLocalSnapshot();
+      ok(F.dayInMonth(2027, 1, 31).getDate() === 28 && F.dayInMonth(2028, 1, 31).getDate() === 29 && F.dayInMonth(2026, 12, 31).getMonth() === 0, 'v74.10: dayInMonth clamps (Feb 2027 = 28, Feb 2028 = 29) and rolls the year');
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);

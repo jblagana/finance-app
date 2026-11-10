@@ -691,7 +691,7 @@ def main():
           # payday-today (unreceived) still shows immediately
           and "if (sIn === 0 && !cy0.received) {" in js
           # the next payday is computed from the current one + 1 month
-          and "var nd = new Date(sp.getFullYear(), sp.getMonth() + 1, cy0.sday);" in js
+          and "var nd = parseISO(cy0.end); nd.setDate(nd.getDate() + 1);" in js  # v74.10 successor: the next payday = the day after the cycle (clamped paydays)
           # the widened window: 1..10 days out
           and "if (sInN >= 1 && sInN <= 10) {" in js
           # the target cycle's own data (expected salary + received check)
@@ -919,7 +919,7 @@ def main():
           and "var events = {};" in js
           and "planAllDates(p).forEach(function (od) {" in js
           and "if (ro && ro.skip) return;" in js
-          and "var day0 = (c.due != null && c.due >= 1 && c.due <= 28) ? Math.round(c.due) : 15;" in js
+          and "var day0 = Math.round(Number(acc0 && acc0.due_day) || Number(state.base && state.base.due_day) || 5);" in js  # v74.10 successor: the card due DAY (c.due is the manual due amount)
           and "ev(salISO, expectedSalaryFor(" in js
           and "pts.push({ label: dayMonth(dISO), v: r2(pts[pts.length - 1].v + events[dISO]), date: dISO });" in js
           # the 2-month window (today -> end of the next 2 months)
@@ -1944,6 +1944,15 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.10 (logic review #3 + #10 + found on the way): days 29-31. dayInMonth clamps a day to its month; salaryDayOf accepts 1..31 (29-31 used to fall back to the 15th while Settings showed the typed day); cycleWindow / currentCycleMonth / the previous-cycle month / headroomWindow / the coach salary row derive from clamped paydays; the prepay date clamps (a 31st in November was Dec 1); the legacy ccDueData accepts 29-31 and clamps; the projection chart drops a card on its base account due_day (it read c.due — the manual due AMOUNT — as a day, so every card fell on the 15th). Smoke PART 50 (7) + the v73.57 chart expectations retargeted",
+          "function dayInMonth(y, m0, day) {" in js
+          and "if (sd >= 1 && sd <= 31) return sd;" in js
+          and "var start = dayInMonth(Number(p[0]), Number(p[1]) - 1, sday);" in js
+          and "var pDay = dayInMonth(now.getFullYear(), now.getMonth(), prepayDay);" in js
+          and "var day0 = Math.round(Number(acc0 && acc0.due_day) || Number(state.base && state.base.due_day) || 5);" in js
+          and "c.due >= 1 && c.due <= 28" not in js
+          and "PART 50: v74.10 - paydays / prepay days 29-31" in smoke
+          and "'74.10': [" in js)
     check("v74.09 (logic review #1): recurring occurrences are ANCHORED to the plan date (step(d, idx), never step(previous, 1)) — chaining drifted a 29th-31st monthly plan to the 28th after a short month, forever, and the drifted dates stopped matching the planRef links so real payments stopped counting (Jan 31 rent paid Jan-Oct read 'Mar 28 overdue'). migratePlanDrift (boot, import, sync pull; idempotent) moves links / override keys / applyFrom-shiftFrom-move dates off the old chained dates via planDriftMap. Smoke PART 49 (8 asserts)",
           "idx++; start = step(d, idx); guard++; continue;" in js
           and "for (var k = 0; k < n; k++) out.push(step(d, idx + k));" in js
