@@ -417,7 +417,7 @@ waitReady().then(async function (F) {
   ok(close(snapFree, 60561.36), 'boot: base free (overlay-zero view) = 60,561.36 (got ' + snapFree.toFixed(2) + ')');
 
   // ============ PART 1: the boss's exact 1k scenario ============
-  var id1 = await F.addTxn({ kind: 'cash_out', category: 'Food', account: 'Cash', amount: 1000, note: 'probe meal', date: '2026-10-13' }, { quiet: true });
+  var id1 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_out', category: 'Food', account: 'Cash', amount: 1000, note: 'probe meal', date: '2026-10-13' }, { quiet: true });
   await sleep(60);
   var freeAfterLog = F.effectiveSnap().cash.free;
   ok(close(trueFree - freeAfterLog, 1000), 'log 1k: free drops by exactly 1,000 (' + freeAfterLog.toFixed(2) + ')');
@@ -469,7 +469,7 @@ waitReady().then(async function (F) {
   ok(st.adj.free === 0, 'delete after reset: overlay still empty');
 
   // ============ PART 2: undo restores the overlay ============
-  var id2 = await F.addTxn({ kind: 'cash_out', category: 'Food', account: 'Cash', amount: 1000, note: 'probe meal 2', date: '2026-10-13' }, { quiet: true });
+  var id2 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_out', category: 'Food', account: 'Cash', amount: 1000, note: 'probe meal 2', date: '2026-10-13' }, { quiet: true });
   await sleep(60);
   var freeBeforeReset2 = F.effectiveSnap().cash.free; // snapFree − 1000
   F.resetAdj();
@@ -505,7 +505,7 @@ waitReady().then(async function (F) {
   // ============ PART 4: edit-txn no-op on an empty overlay ============
   st.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: 3 };
   await sleep(20);
-  var id3 = await F.addTxn({ kind: 'cash_out', category: 'Food', account: 'Cash', amount: 200, note: 'probe edit', date: '2026-10-13' }, { quiet: true });
+  var id3 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_out', category: 'Food', account: 'Cash', amount: 200, note: 'probe edit', date: '2026-10-13' }, { quiet: true });
   await sleep(60);
   st.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, mv: 3 }; // simulate a reset wipe
   await sleep(20);
@@ -610,7 +610,7 @@ waitReady().then(async function (F) {
   var owedBefore = F.effectiveSnap().card_owed;
   var freeBeforePay = F.effectiveSnap().cash.free;
   var rawBeforePay = F.effectiveSnap().cash.total;
-  var id4 = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'probe moneyin-cc payoff', date: '2026-10-14' }, { quiet: true });
+  var id4 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'probe moneyin-cc payoff', date: '2026-10-14' }, { quiet: true });
   await sleep(60);
   ok(close(F.effectiveSnap().card_owed, owedBefore - 500), 'v73.52: the payoff drops owed by 500 (' + F.effectiveSnap().card_owed.toFixed(2) + ')');
   ok(close(F.effectiveSnap().cash.free, freeBeforePay), 'v73.52: the payoff leaves free UNTOUCHED (' + F.effectiveSnap().cash.free.toFixed(2) + ')');
@@ -628,7 +628,7 @@ waitReady().then(async function (F) {
   var rawCb = F.effectiveSnap().cash.total;
   var mayaBal = null;
   F.effectiveSnap().cards.forEach(function (c) { if (c.name === 'Maya CC') mayaBal = c.balance; });
-  var id5 = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'probe cashback', date: '2026-10-14', cashback: true }, { quiet: true });
+  var id5 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'probe cashback', date: '2026-10-14', cashback: true }, { quiet: true });
   await sleep(60);
   var es5 = F.effectiveSnap();
   ok(close(es5.card_owed, owedCb - 500), 'v73.53: the cashback payoff drops owed by 500 (' + es5.card_owed.toFixed(2) + ')');
@@ -657,7 +657,7 @@ waitReady().then(async function (F) {
   ok(close(es6.cash.free, freeCb) && close(es6.card_owed, owedCb) && close(es6.cash.total, rawCb),
     'v73.53: deleting the cashback payoff restores free/owed/liquid exactly');
   // editing: the flag can be set, kept, and CLEARED on a card_payment
-  var id6 = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 200, note: 'probe edit flag', date: '2026-10-14' }, { quiet: true });
+  var id6 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'Maya CC', amount: 200, note: 'probe edit flag', date: '2026-10-14' }, { quiet: true });
   await sleep(40);
   var freeE0 = F.effectiveSnap().cash.free;
   await F.saveTxnEdit(id6, { kind: 'card_payment', category: '', account: 'Maya CC', amount: 200, note: 'probe edit flag', date: '2026-10-14', cashback: true });
@@ -2324,7 +2324,7 @@ waitReady().then(async function (F) {
       var mayaBefore30 = F.effectiveSnap().cards.filter(function (c) { return c.name === 'Maya CC'; })[0].balance;
       var freeBefore30 = F.effectiveSnap().cash.free;
       var liquidBefore30 = F.effectiveSnap().cash.total;
-      var id30 = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 2000, note: 'probe payto/paywith', date: '2026-11-01', payWith: 'MariBank' }, { quiet: true });
+      var id30 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'Maya CC', amount: 2000, note: 'probe payto/paywith', date: '2026-11-01', payWith: 'MariBank' }, { quiet: true });
       await tick();
       var t30 = F.state.txns.filter(function (t) { return t.id === id30; })[0];
       ok(t30 && t30.payWith === 'MariBank', 'v73.80: the funder rides the record (t.payWith = MariBank)');
@@ -2378,7 +2378,7 @@ waitReady().then(async function (F) {
       ok(close(es31.cards.filter(function (c) { return c.name === 'MariBank CC'; })[0].balance, 10864.27), 'v73.82: the untouched card kept its reconciled base (MariBank CC 10864.27)');
       ok(F.lastReconAt() > 0, 'v73.82: lastReconAt() sees the reconcile rows (the gate has a timestamp)');
       // a POST-reconcile txn: the overlay may carry exactly this
-      var id31 = await F.addTxn({ kind: 'card_charge', category: 'Grocery', account: 'Maya CC', amount: 500, note: 'v73.82 probe charge', date: '2026-11-01' }, { quiet: true });
+      var id31 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_charge', category: 'Grocery', account: 'Maya CC', amount: 500, note: 'v73.82 probe charge', date: '2026-11-01' }, { quiet: true });
       await tick();
       // TRIGGER THE RECOMPUTE PATH (what every boot runs)
       F.migratePrepayBy();
@@ -2448,7 +2448,7 @@ waitReady().then(async function (F) {
       var totalBefore32 = F.effectiveSnap().cash.total;
       ok(mbBefore32 != null && lbBefore32 != null && cashBefore32 != null, 'v73.83: the pre-state reads all three cash rows (MariBank ' + mbBefore32 + ' / LandBank ' + lbBefore32 + ' / Cash ' + cashBefore32 + ')');
       // THE PAYOFF: MariBank CC 6,156.27, PAID WITH MariBank debit (the boss's exact row)
-      var id32 = await F.addTxn({ kind: 'card_payment', category: '', account: 'MariBank CC', amount: 6156.27, note: 'v73.83 acceptance payoff', date: '2026-11-01', payWith: 'MariBank' }, { quiet: true });
+      var id32 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'MariBank CC', amount: 6156.27, note: 'v73.83 acceptance payoff', date: '2026-11-01', payWith: 'MariBank' }, { quiet: true });
       await tick();
       // TRIGGER THE RECOMPUTE PATH (what every boot runs)
       F.migrateCashBy();
@@ -2464,7 +2464,7 @@ waitReady().then(async function (F) {
       // LEGACY payoff (no payWith — a pre-v73.80 row): the funder is unknown,
       // so it lands on the Cash residual row — the NAMED debits stay untouched
       var mbL32 = debLive32('MariBank'), lbL32 = debLive32('LandBank'), cashL32 = debLive32('Cash');
-      var id32b = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 100, note: 'v73.83 legacy payoff (no funder)', date: '2026-11-01' }, { quiet: true });
+      var id32b = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'Maya CC', amount: 100, note: 'v73.83 legacy payoff (no funder)', date: '2026-11-01' }, { quiet: true });
       await tick();
       F.migrateCashBy();
       await tick();
@@ -2486,7 +2486,7 @@ waitReady().then(async function (F) {
       // account still ride the Cash residual.
       var cashU32 = debLive32('Cash'), mbU32 = debLive32('MariBank'), lbU32 = debLive32('LandBank');
       var totU32 = F.effectiveSnap().cash.total;
-      var id32c = await F.addTxn({ kind: 'cash_out', category: 'Food', account: 'LandBank', amount: 250, note: 'v73.84 spend on a named debit', date: '2026-11-01' }, { quiet: true });
+      var id32c = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_out', category: 'Food', account: 'LandBank', amount: 250, note: 'v73.84 spend on a named debit', date: '2026-11-01' }, { quiet: true });
       await tick();
       ok(close(debLive32('LandBank'), lbU32 - 250), 'v73.84: a LandBank spend drops LandBank by exactly 250 (got ' + lbU32 + ' -> ' + debLive32('LandBank') + ')');
       ok(close(debLive32('Cash'), cashU32) && close(debLive32('MariBank'), mbU32), 'v73.84: the spend leaves Cash and MariBank UNTOUCHED (Cash ' + cashU32 + ' / MariBank ' + mbU32 + ')');
@@ -2494,19 +2494,19 @@ waitReady().then(async function (F) {
       ok(F.state.adj.cashBy['LandBank'] === 250, 'v73.84: the spend rides the split (cashBy.LandBank = 250, got ' + F.state.adj.cashBy['LandBank'] + ')');
       // a MariBank-debit spend (the boss's exact case) lands on MariBank only
       var cashM32 = debLive32('Cash'), mbM32 = debLive32('MariBank'), lbM32 = debLive32('LandBank');
-      var id32d = await F.addTxn({ kind: 'cash_out', category: 'Food', account: 'MariBank', amount: 75, note: 'v73.84 boss-case spend', date: '2026-11-01' }, { quiet: true });
+      var id32d = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_out', category: 'Food', account: 'MariBank', amount: 75, note: 'v73.84 boss-case spend', date: '2026-11-01' }, { quiet: true });
       await tick();
       ok(close(debLive32('MariBank'), mbM32 - 75), 'v73.84: a MariBank-debit spend drops MariBank by exactly 75 (got ' + mbM32 + ' -> ' + debLive32('MariBank') + ')');
       ok(close(debLive32('Cash'), cashM32) && close(debLive32('LandBank'), lbM32), 'v73.84: the MariBank-debit spend leaves Cash and LandBank UNTOUCHED');
       // a MONEY-IN on a named debit lands on that debit (the exact inverse)
       var mbI32 = debLive32('MariBank'), cashI32 = debLive32('Cash');
-      var id32e = await F.addTxn({ kind: 'cash_in', category: 'Refund', account: 'MariBank', amount: 40, note: 'v73.84 inflow on a named debit', date: '2026-11-01' }, { quiet: true });
+      var id32e = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_in', category: 'Refund', account: 'MariBank', amount: 40, note: 'v73.84 inflow on a named debit', date: '2026-11-01' }, { quiet: true });
       await tick();
       ok(close(debLive32('MariBank'), mbI32 + 40), 'v73.84: a MariBank inflow raises MariBank by exactly 40 (got ' + mbI32 + ' -> ' + debLive32('MariBank') + ')');
       ok(close(debLive32('Cash'), cashI32), 'v73.84: the inflow leaves Cash UNTOUCHED');
       // a LEGACY row (no account recorded) still rides the Cash residual
       var cashL32b = debLive32('Cash'), mbL32b = debLive32('MariBank');
-      var id32f = await F.addTxn({ kind: 'cash_out', category: 'Food', amount: 60, note: 'v73.84 legacy spend (no account)', date: '2026-11-01' }, { quiet: true });
+      var id32f = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_out', category: 'Food', amount: 60, note: 'v73.84 legacy spend (no account)', date: '2026-11-01' }, { quiet: true });
       await tick();
       ok(close(debLive32('Cash'), cashL32b - 60), 'v73.84: a legacy spend (no account) lands on the Cash residual (got ' + cashL32b + ' -> ' + debLive32('Cash') + ')');
       ok(close(debLive32('MariBank'), mbL32b), 'v73.84: the legacy spend leaves the named debits untouched');
@@ -2556,9 +2556,9 @@ waitReady().then(async function (F) {
       F.state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: 2 };
       F.refreshLocalSnapshot(); // the base is source of truth — derive the snapshot from it
       // pay the Maya due (500) from Cash, then the MariBank due (700) from Cash
-      var id33a = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'v73.87 maya due', date: '2026-11-01', payWith: 'Cash' }, { quiet: true });
+      var id33a = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'v73.87 maya due', date: '2026-11-01', payWith: 'Cash' }, { quiet: true });
       await tick();
-      var id33b = await F.addTxn({ kind: 'card_payment', category: '', account: 'MariBank CC', amount: 700, note: 'v73.87 maribank due', date: '2026-11-01', payWith: 'Cash' }, { quiet: true });
+      var id33b = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'MariBank CC', amount: 700, note: 'v73.87 maribank due', date: '2026-11-01', payWith: 'Cash' }, { quiet: true });
       await tick();
       var es33a = F.effectiveSnap();
       ok(close(es33a.cash.total, 8800), 'v73.87: after both dues total cash = 8800 (got ' + es33a.cash.total + ')');
@@ -2622,7 +2622,7 @@ waitReady().then(async function (F) {
       // 1900 — the cross-reconcile: the re-anchor absorbs the Maya charge
       // into its base, zeroes the overlay, files the 'a' row, stamps the
       // durable clock
-      var id34a = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 500, note: 'v73.89 maya charge', date: '2026-11-01' }, { quiet: true });
+      var id34a = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 500, note: 'v73.89 maya charge', date: '2026-11-01' }, { quiet: true });
       await tick();
       F.reconSetInput('MariBank CC', 1900);
       F.reconSave();
@@ -2640,7 +2640,7 @@ waitReady().then(async function (F) {
       ok(F.lastReconAt() === 0, 'v73.89: the eviction is real — the legacy money-log scan now finds NO rebasing row (got ' + F.lastReconAt() + ')');
       ok(F.lastRebaseAt() >= F.state.adj.lastRebaseAt, 'v73.89: the durable clock survives the eviction (got ' + F.lastRebaseAt() + ')');
       // the post-reconcile charge that the pre-v73.89 gate used to smear
-      var id34b = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 200, note: 'v73.89 maya charge 2', date: '2026-11-01' }, { quiet: true });
+      var id34b = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 200, note: 'v73.89 maya charge 2', date: '2026-11-01' }, { quiet: true });
       await tick();
       // BOOT REBUILD: with the gate OFF (the pre-v73.89 behavior) this
       // re-includes the 500 (already in the base) and rescales the split by
@@ -2725,7 +2725,7 @@ waitReady().then(async function (F) {
       ok(pill35.indexOf('data-cycletag="t35"') >= 0 && pill35.indexOf('THIS CYCLE') >= 0, 'v73.90: the in-window charge renders the THIS CYCLE pill (got ' + pill35 + ')');
       ok(F.txnCyclePill({ id: 't35b', kind: 'card_charge', account: 'Maya CC', date: '2026-12-06' }, TODAY35) === '', 'v73.90: the post-window charge renders NO pill');
       // the pill tap: toggles t.cycle on the real ledger entry (and back)
-      var id35 = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 100, note: 'v73.90 pill probe', date: '2026-11-02' }, { quiet: true });
+      var id35 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 100, note: 'v73.90 pill probe', date: '2026-11-02' }, { quiet: true });
       await tick();
       F.toggleTxnCycle(String(id35), TODAY35);
       var t35 = null;
@@ -3102,7 +3102,7 @@ waitReady().then(async function (F) {
       ok(plans42.indexOf('data-paidbar') < 0, 'v73.99: baseline — no paid one-offs, the Paid bar does not render');
       // log a FULL payment for the seed's one-off (Calculator, 2000) — the
       // explicit planRef link is the only paid proof (v73.56).
-      var idTxn42 = await F.addTxn({ kind: 'cash_out', category: 'Misc', account: 'Cash', amount: 2000, note: 'probe paid calc', date: '2026-10-09', planRef: { planId: 'pmup5dq4iunh', date: '2026-10-09', name: 'Calculator', amount: 2000 } }, { quiet: true });
+      var idTxn42 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_out', category: 'Misc', account: 'Cash', amount: 2000, note: 'probe paid calc', date: '2026-10-09', planRef: { planId: 'pmup5dq4iunh', date: '2026-10-09', name: 'Calculator', amount: 2000 } }, { quiet: true });
       await sleep(60);
       F.renderPlans();
       plans42 = String(byIdStub('plans').innerHTML || '');
@@ -3125,7 +3125,7 @@ waitReady().then(async function (F) {
       await F.addPlan({ name: 'Probe partial', amount: 1000, date: '2026-12-20', repeat: null, kind: 'expense' });
       var partId42 = F.state.plans[F.state.plans.length - 1].id; // addPlan resolves the idb put; the plan is in state
       ok(!!partId42, 'v73.99: the probe partial one-off exists');
-      await F.addTxn({ kind: 'cash_out', category: 'Misc', account: 'Cash', amount: 400, note: 'probe partial pay', date: '2026-12-20', planRef: { planId: partId42, date: '2026-12-20', name: 'Probe partial', amount: 1000 } }, { quiet: true });
+      await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_out', category: 'Misc', account: 'Cash', amount: 400, note: 'probe partial pay', date: '2026-12-20', planRef: { planId: partId42, date: '2026-12-20', name: 'Probe partial', amount: 1000 } }, { quiet: true });
       await sleep(60);
       F.renderPlans();
       plans42 = String(byIdStub('plans').innerHTML || '');
@@ -3273,20 +3273,20 @@ waitReady().then(async function (F) {
         return i >= 0 ? h.slice(i, j > i ? j : undefined) : '';
       };
       // (1) liquid spend -> liquid line only, no card line, no free line
-      var id44a = await F.addTxn({ kind: 'cash_out', category: 'Food', account: 'MariBank', amount: 250, note: 'v74.02 spend probe', date: '2026-10-14' }, { quiet: true });
+      var id44a = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_out', category: 'Food', account: 'MariBank', amount: 250, note: 'v74.02 spend probe', date: '2026-10-14' }, { quiet: true });
       await sleep(60);
       var seg44a = segOf('v74.02 spend probe');
       ok(seg44a.indexOf('liquid ' + php(free44) + ' → ' + php(free44 - 250)) >= 0, 'v74.02: a liquid spend shows the liquid change (' + php(free44) + ' → ' + php(free44 - 250) + ')');
       ok(seg44a.indexOf('card PHP') < 0, 'v74.02: a liquid spend has NO card line');
       // (2) cash in -> liquid line, the other direction
-      var id44b = await F.addTxn({ kind: 'cash_in', category: '', account: 'Maya', amount: 400, note: 'v74.02 cashin probe', date: '2026-10-14' }, { quiet: true });
+      var id44b = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_in', category: '', account: 'Maya', amount: 400, note: 'v74.02 cashin probe', date: '2026-10-14' }, { quiet: true });
       await sleep(60);
       var free44b = F.effectiveSnap().cash.free;
       var seg44b = segOf('v74.02 cashin probe');
       ok(seg44b.indexOf('liquid ' + php(free44b - 400) + ' → ' + php(free44b)) >= 0, 'v74.02: a cash-in shows the liquid change the other way (' + php(free44b - 400) + ' → ' + php(free44b) + ')');
       ok(seg44b.indexOf('card PHP') < 0, 'v74.02: a cash-in has NO card line');
       // (3) card charge -> card line only, no liquid line
-      var id44c = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 300, note: 'v74.02 charge probe', date: '2026-10-14' }, { quiet: true });
+      var id44c = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 300, note: 'v74.02 charge probe', date: '2026-10-14' }, { quiet: true });
       await sleep(60);
       var owed44c = F.effectiveSnap().card_owed;
       var seg44c = segOf('v74.02 charge probe');
@@ -3298,14 +3298,14 @@ waitReady().then(async function (F) {
       // charge already committed the money), so a liquid line would read
       // "x → x". The card line IS the row — the approved rule of thumb
       // "show the account(s) it actually moved" holds.)
-      var id44d = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'v74.02 payoff probe', date: '2026-10-14', payWith: 'MariBank' }, { quiet: true });
+      var id44d = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'Maya CC', amount: 500, note: 'v74.02 payoff probe', date: '2026-10-14', payWith: 'MariBank' }, { quiet: true });
       await sleep(60);
       var owed44d = F.effectiveSnap().card_owed;
       var seg44d = segOf('v74.02 payoff probe');
       ok(seg44d.indexOf('card ' + php(owed44d + 500) + ' → ' + php(owed44d)) >= 0, 'v74.02: a payoff from liquid shows the card line (' + php(owed44d + 500) + ' → ' + php(owed44d) + ')');
       ok(seg44d.indexOf('liquid PHP') < 0, 'v74.02: a plain payoff has NO liquid line (free is untouched — a line would read x → x)');
       // (5) cashback payoff -> card line ONLY (the approved lean — new money)
-      var id44e = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 200, note: 'v74.02 cashback probe', date: '2026-10-14', cashback: true }, { quiet: true });
+      var id44e = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'Maya CC', amount: 200, note: 'v74.02 cashback probe', date: '2026-10-14', cashback: true }, { quiet: true });
       await sleep(60);
       var owed44e = F.effectiveSnap().card_owed;
       var seg44e = segOf('v74.02 cashback probe');
@@ -3318,7 +3318,7 @@ waitReady().then(async function (F) {
       // (the account it was charged on is a card) even though the raw
       // total moves — that's the model, not a v74.02 change.
       var raw44e = F.effectiveSnap().cash.total;
-      var id44f = await F.addTxn({ kind: 'card_payment', category: '', account: 'Maya CC', amount: 350, note: 'v74.02 ccfunded probe', date: '2026-10-14', payWith: 'MariBank CC' }, { quiet: true });
+      var id44f = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_payment', category: '', account: 'Maya CC', amount: 350, note: 'v74.02 ccfunded probe', date: '2026-10-14', payWith: 'MariBank CC' }, { quiet: true });
       await sleep(60);
       var owed44f = F.effectiveSnap().card_owed, raw44f = F.effectiveSnap().cash.total;
       var seg44f = segOf('v74.02 ccfunded probe');
@@ -3648,6 +3648,44 @@ waitReady().then(async function (F) {
       var planAfter54 = JSON.parse(JSON.stringify(plan54)); delete planAfter54.updated;
       var planWant54 = JSON.parse(planBefore54); delete planWant54.updated;
       ok(JSON.stringify(planAfter54) === JSON.stringify(planWant54), 'v74.14: the plan edit Undo restores the plan exactly (only the sync stamp moves)');
+
+      // ============ PART 55: v74.15 - backdated entries after a reconcile ============
+      console.log('\n== PART 55: v74.15 - entries the balance already holds ==');
+      function bal55(name) { var v = null; F.effectiveSnap().cards.forEach(function (c) { if (c.name === name) v = c.balance; }); return v; }
+      var yest55 = (function () { var x = F.parseISO(F.todayISO()); x.setDate(x.getDate() - 1); return F.localISO(x); })();
+      F.reconStartEdit('Maya CC');
+      F.reconSetInput('Maya CC', 1500);
+      F.reconSave();
+      await sleep(40);
+      ok(F.absorbedDateOf('Maya CC') === F.todayISO(), 'v74.15: a reconcile stamps THAT account as set from reality today (' + F.absorbedDateOf('Maya CC') + ')');
+      var maya55 = bal55('Maya CC');
+      var id55a = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 333, note: 'v74.15 forgot to log', date: yest55 });
+      await sleep(30);
+      var t55a = null; F.state.txns.forEach(function (t) { if (t.id === id55a) t55a = t; });
+      ok(t55a && t55a.recordOnly === true, 'v74.15: a Maya CC charge dated YESTERDAY files record-only (the reconciled balance already has it)');
+      ok(Math.abs(bal55('Maya CC') - maya55) < 0.005, 'v74.15: ...and does NOT move Maya CC again (' + maya55 + ' -> ' + bal55('Maya CC') + ')');
+      ok(/recorded only/.test(String(elMap['snack'].innerHTML)) && /Count it/.test(String(elMap['snack'].innerHTML)), 'v74.15: the toast says "recorded only" and offers "Count it"');
+      F.renderMoneyLog && F.renderMoneyLog(); await sleep(20);
+      ok(/recorded only/.test(String(elMap['mlBody'].innerHTML)), 'v74.15: the ledger row says "recorded only" instead of a fake before -> after');
+      elMap['snackUndo'].onclick();
+      await sleep(40);
+      ok(!t55a.recordOnly && Math.abs(bal55('Maya CC') - (maya55 + 333)) < 0.005, 'v74.15: "Count it" applies it once (' + bal55('Maya CC') + ')');
+      // an account that was NOT reconciled still counts a backdated entry
+      var other55 = null;
+      (F.state.base.accounts || []).forEach(function (a) { if (!other55 && a.kind === 'card' && a.name !== 'Maya CC') other55 = a.name; });
+      var keep55 = F.state.base.absorbedBy ? F.state.base.absorbedBy[String(other55).toLowerCase()] : undefined;
+      if (F.state.base.absorbedBy) delete F.state.base.absorbedBy[String(other55).toLowerCase()];
+      var o55 = bal55(other55);
+      var id55b = await F.addTxn({ kind: 'card_charge', category: 'Food', account: other55, amount: 44, note: 'v74.15 other card', date: yest55 }, { quiet: true });
+      await sleep(30);
+      ok(Math.abs(bal55(other55) - (o55 + 44)) < 0.005, 'v74.15: a backdated charge on a card that was NOT reconciled still counts (' + other55 + ' ' + o55 + ' -> ' + bal55(other55) + ')');
+      // today's entry on the reconciled card counts
+      var m55 = bal55('Maya CC');
+      var id55c = await F.addTxn({ kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 10, note: 'v74.15 today', date: F.todayISO() }, { quiet: true });
+      await sleep(30);
+      ok(Math.abs(bal55('Maya CC') - (m55 + 10)) < 0.005, 'v74.15: an entry dated today on the reconciled card counts normally');
+      await F.deleteTxn(id55a); await F.deleteTxn(id55b); await F.deleteTxn(id55c); await sleep(40);
+      if (keep55 !== undefined && F.state.base.absorbedBy) F.state.base.absorbedBy[String(other55).toLowerCase()] = keep55;
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);

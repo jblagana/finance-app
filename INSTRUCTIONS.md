@@ -7,7 +7,7 @@ Status: **in progress**. Subtasks (foundational first):
 - [x] v74.12 the "end of month in the red" pace counts plan payments that are already deducted as plans — DONE: pace excludes planRef spends; the cycle projection counts the cycle's plans once (paid + due). Smoke PART 52 (5) + check_site pin
 - [x] v74.13 no salary set: plans stop being deducted, and any refund reads as an early salary — DONE: plans always deducted; the salary scans require a salary. Smoke PART 53 (4) + check_site pin
 - [x] v74.14 three Undo buttons do nothing (reconcile, plan edit, card clamp) + the clamp warning is overwritten — DONE: real Undo for reconcile + plan edits; the clamp note rides the Reconciled toast. Smoke PART 54 (7) + check_site pin
-- [ ] v74.15 entries dated before the last reconcile are counted twice (record-only by default, "count it" on demand)
+- [x] v74.15 entries dated before the last reconcile are counted twice (record-only by default, "count it" on demand) — DONE, refined: PER ACCOUNT (a reconcile absorbs only the reconciled account; a Settings balance edit absorbs the changed accounts) — a first draft keyed off the global rebase clock would have wrongly frozen backdated entries on accounts that were never reconciled. Smoke PART 55 (8) + check_site pin
 - [ ] v74.16 a budget double-counts the spends logged in its category
 
 # v74.05+ batch (prepended to INSTRUCTIONS.md)

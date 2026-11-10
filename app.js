@@ -659,7 +659,7 @@
   function payoffModelDelta(txns, lastOverrideAt) {
     var dc = 0;
     (txns || []).forEach(function (t) {
-      if (t.kind !== 'card_payment') return;
+      if (t.kind !== 'card_payment' || t.recordOnly) return; // v74.15: record-only moves nothing
       var created = Date.parse(t.created) || 0;
       if (created && lastOverrideAt && created < lastOverrideAt) return; // absorbed into the sheet by a later rebasing override
       dc += Number(t.amount) || 0;
@@ -900,6 +900,10 @@
     return r2(s);
   }
   function txnAdj(t) {
+    // v74.15 (logic review #7): a RECORD-ONLY entry (dated before its accounts
+    // last took in real numbers — the balance already includes it) is history
+    // only: it shows in the ledger and the spend stats but never moves a balance.
+    if (t && t.recordOnly) return { cash: 0, free: 0, card: 0, prepay: 0 };
     var amt = Number(t.amount) || 0;
     // v72.33: the card rows carry the card name (acc) so the overlay tracks the
     // prepay delta PER CARD — a prepay question about one card answers with
@@ -1647,6 +1651,8 @@
     state.adjSig = snapSig(state.snapshot);
     persistSnapshot();
     fileReconcileRow(ch.key, kind, ch.delta);
+    if (!b.absorbedBy) b.absorbedBy = {};
+    b.absorbedBy[String(acc.name || ch.key).trim().toLowerCase()] = todayISO(); // v74.15: THIS account now holds reality as of today
     saveBase(b, { skipAdjustment: true }); // the Reconcile row IS the audit — no Adjustment on top
     reconState = null;
     reconOpen = false; // v73.76: a finished edit folds the card back
@@ -1727,8 +1733,33 @@
       accounts: [], budgets: {}, budget_overrides: {},
       one_offs: {}, debts: {}, sinking: {},
       details: {},
+      absorbedBy: {}, // v74.15: { lowercased account name: 'YYYY-MM-DD' } — the day that balance was set from reality
       migrated_from_snapshot: null, edited: null
     };
+  }
+  // v74.15 (logic review #7): the day an account's balance last took in REAL
+  // numbers — a reconcile of that account, or its balance typed in Settings.
+  // Everything dated before it is already inside that balance. (A reconcile
+  // re-anchors the OTHER accounts to their live values — those absorb nothing.)
+  function absorbedDateOf(name) {
+    var m = state.base && state.base.absorbedBy;
+    return (m && m[String(name || '').trim().toLowerCase()]) || '';
+  }
+  function txnAccounts(t) {
+    var out = [String(t.account || '').trim() || 'Cash'];
+    if (t.kind === 'card_payment' && !t.cashback) out.push(payWithOf(t) || 'Cash'); // the funder moved too
+    return out;
+  }
+  // record-only when EVERY account the entry touches already took it in
+  function txnAlreadyAbsorbed(t) {
+    var accs = txnAccounts(t);
+    for (var i = 0; i < accs.length; i++) {
+      var d = absorbedDateOf(accs[i]);
+      if (!d || !(String(t.date) < d)) return '';
+    }
+    var latest = '';
+    accs.forEach(function (a) { var d = absorbedDateOf(a); if (d > latest) latest = d; });
+    return latest;
   }
   function baseIsEmpty(b) {
     if (!b) return true;
@@ -2017,6 +2048,19 @@
   function saveBase(b, opts) {
     var prevBase = state.base; // v72.30: a balance override files the diff
     b.edited = new Date().toISOString();
+    // v74.15: a balance typed in Settings is reality as of today — stamp the
+    // money accounts whose value changed (or that are new). The reconcile /
+    // adjustment-undo paths pass skipAdjustment and stamp (or not) themselves.
+    if (!(opts && opts.skipAdjustment)) {
+      if (!b.absorbedBy) b.absorbedBy = {};
+      var oldVals = {};
+      ((prevBase && prevBase.accounts) || []).forEach(function (a) { if (a && a.name) oldVals[String(a.name).trim().toLowerCase()] = r2(Number(a.value) || 0); });
+      (b.accounts || []).forEach(function (a) {
+        if (!a || !a.name || (a.kind !== 'debit' && a.kind !== 'card')) return;
+        var k = String(a.name).trim().toLowerCase();
+        if (!(k in oldVals) || oldVals[k] !== r2(Number(a.value) || 0)) b.absorbedBy[k] = todayISO();
+      });
+    }
     // v73.88: per-card billing/due days (Maya 15/5, MariBank 20/10) - the
     // global prepay_day/cutoff_day/due_day are defaults for NEW cards only;
     // an old export's import gets its cards the globals stamped on.
@@ -2285,6 +2329,13 @@
     // v73.53: the cashback flag (a Money-in CC payoff that is NEW money —
     // owed − amt, free + amt, liquid untouched) rides the record too.
     if (data.cashback) t.cashback = true;
+    // v74.15 (logic review #7): an entry dated BEFORE its accounts last took in
+    // real numbers (a reconcile / a balance typed in Settings) is already inside
+    // those balances — counting it again took it off twice. It files
+    // RECORD-ONLY; data.recordOnly === false forces counting (the toast's
+    // "Count it"), === true forces record-only.
+    var absD = data.recordOnly === false ? '' : (data.recordOnly === true ? todayISO() : txnAlreadyAbsorbed(t));
+    if (absD) t.recordOnly = true;
     state.txns.push(t);
     addAdj(txnAdj(t), 1);
     logMoney('add', t);
@@ -2296,12 +2347,44 @@
         // the just-added entry (removeTxnQuiet: no second toast, and the
         // money-log row + account adjustment go with it — the exact inverse
         // of add).
+        if (t.recordOnly) {
+          // v74.15: say what happened, and offer the opposite
+          snack('Added ' + money(t.amount) + ' · ' + esc(t.category || t.account) + ' — recorded only: it\u2019s dated before you last set ' + esc(txnAccounts(t).join(' / ')) + ' from your real balance (' + esc(fmtDate(absD)) + '), so that balance already includes it',
+            function () { countTxnAnyway(t.id); }, 'add', 'Count it');
+        } else
         snack('Added ' + money(t.amount) + ' · ' + esc(t.category || t.account), function () {
           removeTxnQuiet(t.id);
         }, 'add');
       }
       return Promise.resolve();
     }).then(function () { return id; });
+  }
+  // v74.15: the record-only toast's "Count it" — the entry was NOT in the
+  // balance after all. Flip it, move the balances by its effect, and shift its
+  // ledger row + every later row's before/after lines by the same amount (the
+  // saveTxnEdit rebase rule).
+  function countTxnAnyway(id) {
+    var t = null;
+    state.txns.forEach(function (x) { if (x.id === id) t = x; });
+    if (!t || !t.recordOnly) return Promise.resolve();
+    delete t.recordOnly;
+    addAdj(txnAdj(t), 1);
+    var amt = Number(t.amount) || 0, dF = freeEffect(t, amt), dC = cardEffect(t.kind, amt);
+    var log = state.moneyLog || [], from = -1;
+    for (var i = 0; i < log.length; i++) if (log[i] && log[i].tid === id && from < 0) from = i;
+    if (from >= 0) {
+      delete log[from].ro;
+      for (var k = from; k < log.length; k++) {
+        if (!log[k]) continue;
+        if (log[k].f != null) log[k].f = r2(log[k].f + dF);
+        if (log[k].o != null) log[k].o = r2(log[k].o + dC);
+      }
+    }
+    return Promise.all([idbPut(STORE_TX, touchRec(t)), saveAdj(),
+      idbPut(STORE_META, { key: 'moneyLog', value: log }).catch(function () {})]).then(function () {
+      emit('txn');
+      snack('Counted ' + money(amt) + ' · ' + esc(t.category || t.account) + ' — your balances now include it');
+    });
   }
   function deleteTxn(id) {
     var t = null;
@@ -2420,7 +2503,7 @@
   // kinds; month spend counts spend, nets inflows, ignores card payments.
   // v73.53: a cashback payoff (t.cashback) moves free by +amt — the new
   // money erases the debt; the rebase math follows the same rule.
-  function freeEffect(t, amt) { if (t.kind === 'card_payment') return t.cashback ? amt : 0; return (t.kind === 'cash_in') ? amt : -amt; }
+  function freeEffect(t, amt) { if (t && t.recordOnly) return 0; if (t.kind === 'card_payment') return t.cashback ? amt : 0; return (t.kind === 'cash_in') ? amt : -amt; } // v74.15: record-only moves nothing
   function cardEffect(kind, amt) { return kind === 'card_charge' ? amt : kind === 'card_payment' ? -amt : 0; }
   // v73.7: the cycle's OWN SALARY is income, not negative spend — the money-log
   // month-spent line must not swing by the full salary when the "Salary in"
@@ -2494,6 +2577,7 @@
     // v73.80: the funder is read-only on the edit sheet — a re-save keeps
     // the record's payWith (a fresh pick only happens on a fresh add).
     if (t.kind === 'card_payment' && o.payWith) t.payWith = o.payWith;
+    if (o.recordOnly) t.recordOnly = true; // v74.15: an edit keeps it record-only
     state.txns[oIdx] = t; // in place — position preserved
     // v73.45: the add+remove pair nets to the edit's delta — but on an EMPTY
     // overlay (a reset already wiped it) the pair's +new leg would create a
@@ -2503,7 +2587,7 @@
     var oldAmt = Number(o.amount) || 0, newAmt = Number(t.amount) || 0;
     // effect delta (new − old) across free / card / month-spent
     var dFree = freeEffect(t, newAmt) - freeEffect(o, oldAmt);
-    var dCard = cardEffect(t.kind, newAmt) - cardEffect(o.kind, oldAmt);
+    var dCard = (t.recordOnly ? 0 : cardEffect(t.kind, newAmt)) - (o.recordOnly ? 0 : cardEffect(o.kind, oldAmt)); // v74.15
     var meOld = monthEffect(o.kind, oldAmt, o), meNew = monthEffect(t.kind, newAmt, t); // v73.7: salary-aware
     var M_old = String(o.date || '').slice(0, 7), M_new = String(t.date || '').slice(0, 7);
     function rebase(e, dF, dC, sMode) {
@@ -2692,6 +2776,7 @@
     // undo record (deleteTxn's Undo re-pushes from it), and a cashback
     // payoff's overlay rule is different, so the flag must survive.
     if (t.kind === 'card_payment' && t.cashback) e.cb = true;
+    if (t.recordOnly) e.ro = true; // v74.15: the row renders "recorded only" (no before/after)
     e.f = r2(s.cash ? s.cash.free : 0);
     if (t.kind === 'card_charge' || t.kind === 'card_payment') e.o = r2(s.card_owed || 0);
     if (String(t.date).slice(0, 7) === mp && t.kind !== 'card_payment') {
@@ -2916,6 +3001,8 @@
             : r2((e.f != null ? e.f : 0) + (add ? (e.k === 'i' ? -e.n : e.n) : (e.k === 'i' ? e.n : -e.n)));
           extra += '<span class="ml-f">liquid ' + money(liqBefore) + ' → ' + money(e.f != null ? e.f : 0) + '</span>';
         }
+        // v74.15: a record-only row moved nothing — no before/after line
+        if (e.ro) extra = '<span class="ml-f">recorded only — that balance already included it</span>';
         // v73.75 (boss-approved mockup_compact_livenumbers.html): the
         // "month spent X → X" chip is GONE (the v73.9/v73.10 salary guard
         // dies with it — the chip never renders, for any row).
@@ -3094,11 +3181,11 @@
     el.addEventListener('pointerup', snackDragEnd);
     el.addEventListener('pointercancel', snackDragEnd);
   }
-  function snack(msg, undoFn, kind) {
+  function snack(msg, undoFn, kind, label) {
     var el = byId('snack'); if (!el) return;
     snackDragReset(); // v72.32: a fresh show starts un-dragged
     el.innerHTML = '<span class="snack-msg">' + msg + '</span>' +
-      (undoFn ? '<button type="button" id="snackUndo">Undo</button>' : '');
+      (undoFn ? '<button type="button" id="snackUndo">' + esc(label || 'Undo') + '</button>' : ''); // v74.15: optional label
     if (undoFn) {
       var b = byId('snackUndo');
       if (b) b.onclick = function () { clearTimeout(snackTimer); hideSnack(); undoFn(); };
@@ -3402,6 +3489,7 @@
     var b = defaultBase();
     if (state.base) b.migrated_from_snapshot = state.base.migrated_from_snapshot || null;
     if (state.base && state.base.details) b.details = state.base.details; // v56: coach-recorded details survive a form commit
+    if (state.base && state.base.absorbedBy) b.absorbedBy = cloneObj(state.base.absorbedBy); // v74.15: the absorb dates survive a form commit
     var gv = function (id) { var el = byId(id); return el ? String(el.value || '') : ''; };
     var isMonth = function (s) { return /^\d{4}-\d{2}$/.test(String(s || '')); };
     b.name = gv('b_name').trim();
@@ -8917,6 +9005,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (typeof t.updated === 'string') r.updated = t.updated;
       if (typeof t.payWith === 'string' && t.payWith) r.payWith = t.payWith.slice(0, 60);
       if (t.cashback === true) r.cashback = true;
+      if (t.recordOnly === true) r.recordOnly = true; // v74.15
       var pr = t.planRef;
       if (pr && typeof pr === 'object' && typeof pr.planId === 'string' && typeof pr.date === 'string') {
         r.planRef = { planId: pr.planId, date: pr.date, name: str(pr.name, 80), amount: Number(pr.amount) || 0 };
@@ -8952,6 +9041,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (typeof e.n === 'number' && isFinite(e.n)) m.n = e.n;
       if (e.k === 'c' || e.k === 'x' || e.k === 'p' || e.k === 'i' || e.k === 'a' || e.k === 'r') m.k = e.k; // v72.14: the v72.10 p/i flavors must survive an import too; v72.30: 'a' (the Adjustment override row); v73.45: 'r' (the reset audit row)
       if (e.cb === true) m.cb = true; // v73.53: the cashback flag (a payoff that is NEW money) survives import too
+      if (e.ro === true) m.ro = true; // v74.15: the record-only row flag survives import too
       if (typeof e.f === 'number' && isFinite(e.f)) m.f = e.f;
       if (typeof e.o === 'number' && isFinite(e.o)) m.o = e.o;
       if (typeof e.s === 'number' && isFinite(e.s)) m.s = e.s;
@@ -9419,12 +9509,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.14, live: new Date(2026, 10, 10, 12, 59) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.15, live: new Date(2026, 10, 10, 13, 6) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.15': [
+      'No more counting a purchase twice: when you log an entry dated before you last set that account from your real balance (a reconcile, or typing the balance in Settings), the app now records it without changing the balance again, because that balance already includes it. The message tells you, and has a "Count it" button for the rare time it really wasn\'t included. The Ledger shows those entries as "recorded only". Other accounts are unaffected: a backdated entry on an account you didn\'t reconcile still counts.'
+    ],
     '74.14': [
       'Undo means undo: the Undo button after reconciling a balance and after editing a plan now actually puts things back (before, it did nothing). And when a card balance you type is above the card\'s limit, the message that appears now tells you it was capped — that warning used to flash and get covered instantly.'
     ],
@@ -10661,6 +10754,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     syncEncrypt: syncEncrypt, // v73.3: the envelope (the smoke round-trips it)
     syncDecrypt: syncDecrypt, // v73.3: decrypt the envelope (the smoke round-trips it)
     syncMerge: syncMerge, // v73.3: the merge rule (pure — the smoke drives it)
+    countTxnAnyway: countTxnAnyway, absorbedDateOf: absorbedDateOf, txnAlreadyAbsorbed: txnAlreadyAbsorbed, // v74.15: record-only entries (smoke)
     planDriftMap: planDriftMap, migratePlanDrift: migratePlanDrift, // v74.09: the drift repair (smoke)
     recStamp: recStamp, // v74.06: a record's sync age (newest of syncAt / updated / created)
     saveOwed: saveOwed, // v74.06: the smoke checks the per-person sync stamp

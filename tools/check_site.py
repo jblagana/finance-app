@@ -838,7 +838,7 @@ def main():
           and "hideSnack: hideSnack, // v73.50: the swipe-dismiss path (smoke drives it)" in js
           and "'73.50': [" in js)
     check("v73.51 (boss: 'if theyre delete toast, swipe to hide. if theyre add toasts, hide after 10s (unless swiped)'): snack() takes a kind — kind === 'add' schedules exactly one 10s auto-hide (swipe/Undo still beat the clock: the pointerup path clears snackTimer, and Undo's onclick does too); the default kind (delete/nudge/error) schedules NO timer and persists until swiped. The add toasts tagged 'add': new ledger entry, new plan, new owed",
-          "function snack(msg, undoFn, kind) {" in js
+          "function snack(msg, undoFn, kind, label) {" in js  # v74.15 successor: optional button label
           and "if (kind === 'add') snackTimer = setTimeout(hideSnack, 10000);" in js
           and "b.onclick = function () { clearTimeout(snackTimer); hideSnack(); undoFn(); };" in js
           and "}, 'add');" in js
@@ -868,7 +868,7 @@ def main():
           and 'id="f_cashback"' in html
           and 'id="cashbackRow"' in html
           and "if (kind === 'card_payment' && cbk && cbk.checked) payload.cashback = true;" in js
-          and "function freeEffect(t, amt) { if (t.kind === 'card_payment') return t.cashback ? amt : 0;" in js
+          and "if (t && t.recordOnly) return 0; if (t.kind === 'card_payment') return t.cashback ? amt : 0;" in js  # v74.15 successor: record-only first
           and "'73.53': [" in js)
     check("v73.54 (boss: 'a label in the plans list whenever i skip a due, so i can unskip it later'): a skipped occurrence no longer vanishes from the plans list — it renders a RECORD row (the 'skipped' pill label + the ↺ button, both data-unskip) with the date it was skipped (skippedAt rides the override, stamped by both the coach SKIP chip and the edit sheet's skip button); tapping either removes the exact-date skip-override so the due returns to the coach card's plan due rows, the free-cash deduction, and the 'On repeat' line (all existing ro.skip consumers flip back); the series header counts its skips even when collapsed",
           # v73.63: both writers carry the `was` fork under the skip (the
@@ -1598,7 +1598,7 @@ def main():
           and "addSheetKind: addSheetKind" in js)
     check("v72.42 (the payoff bug, user: 'fix the payoff bug and keep both numbers — floor stays on raw bank cash'): a card_payment settles the debt — it is NOT the exact inverse of card_charge (the charge already spent the free cash; the credit limit isn't money). The payoff drops the RAW liquid (adj.cash +a → effective total −a) and the owed/prepay, and leaves free UNTOUCHED (tuple free: 0, freeEffect → 0): a charge+payoff cycle nets free −amt and liquid −amt with owed 0 (the expense is real, the debt is settled) instead of erasing the expense; the money-log 'p' row shows the card line only (v74.02: the free line is gone from every row — free is untouched by a plain payoff, so the card line IS the row); cash.free and cash.total stay separate and the liquidity floor keeps running on the raw cash.total",
           "var plain = { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js  # the PLAIN payoff tuple (v73.53: the cashback branch above it is the new-money variant); v73.83: the funder attaches to the same object
-          and "function freeEffect(t, amt) { if (t.kind === 'card_payment') return t.cashback ? amt : 0; return (t.kind === 'cash_in') ? amt : -amt; }" in js  # v73.53: a cashback payoff moves free by +amt; a plain one by 0
+          and "function freeEffect(t, amt) { if (t && t.recordOnly) return 0; if (t.kind === 'card_payment') return t.cashback ? amt : 0; return (t.kind === 'cash_in') ? amt : -amt; }" in js  # v73.53: a cashback payoff moves free by +amt; a plain one by 0
           and "var ccFunded = e.k === 'p' && !cbRow && isCardFunder(e.w);" in js)  # v74.02: the render's payoff branch (card line only — no free line)
     check("v72.43 (prepaid cards under the old model, user: 'ive already prepaid the cards prior to this version, as such, card balance and free cash and liquid cash all changed, fix that'): the persisted overlay is NOT re-derived from txns on boot, so a pre-v72.42 phone's stored adj still carries each old prepay's old-model contribution (free inflated by the prepay total, liquid not reduced); the one-shot migration (the adj.mv model stamp) adds the {cash: +a, free: +a} delta per card_payment on boot + import — but NOT for a prepay after which a balance-override (money-log 'a') row rebased the overlay (that prepay's effect is in the sheet's numbers, not the overlay); every zeroed/fresh adj (boot initializer, both rebases, computeAdjFromTxns, the import sanitizer) carries the stamp so it fires exactly once; card owed is untouched (identical in both models)",
           "var ADJ_MODEL_V = 2" in js
@@ -1944,6 +1944,18 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.15 (logic review #7): an entry dated before ALL of its accounts last absorbed reality is RECORD-ONLY — base.absorbedBy (per account, local date) is stamped by a reconcile (that account only — the others are merely re-anchored to their live values) and by a balance typed in Settings (saveBase without skipAdjustment: changed / new money accounts). txnAdj / freeEffect / the edit's card delta return 0 for recordOnly (delete, sync, split rebuilds and the boot recompute all follow); the toast offers 'Count it' (countTxnAnyway: applies it once and rebases its ledger row + the later rows); the ledger row reads 'recorded only'; the flag survives edit / import. snack takes an optional button label. Smoke PART 55 (8); 27 fixed-date test entries pass recordOnly: false (they model new counted entries)",
+          "function txnAlreadyAbsorbed(t) {" in js
+          and "function absorbedDateOf(name) {" in js
+          and "if (t && t.recordOnly) return { cash: 0, free: 0, card: 0, prepay: 0 };" in js
+          and "function countTxnAnyway(id) {" in js
+          and "function () { countTxnAnyway(t.id); }, 'add', 'Count it');" in js
+          and "b.absorbedBy[String(acc.name || ch.key).trim().toLowerCase()] = todayISO();" in js
+          and "if (o.recordOnly) t.recordOnly = true;" in js
+          and "if (t.recordOnly === true) r.recordOnly = true;" in js
+          and "absorbedBy: {}," in js
+          and "PART 55: v74.15 - entries the balance already holds" in smoke
+          and "'74.15': [" in js)
     check("v74.14 (logic review #4): no empty Undo. reconSave snapshots base / overlay (+ sig, splits) / money log before the first write and the Reconciled toast's Undo files it back (restoreReconSnapshot — a direct restore, not saveBase, which would re-zero the restored overlay); savePlanOccurrence's two Updated toasts restore a pre-edit copy (restorePlanCopy); the clamp warning is folded into the Reconciled toast (a separate toast was overwritten in the same tick and its Undo was empty). Smoke PART 54 (7)",
           "function restoreReconSnapshot(prev) {" in js
           and "restoreReconSnapshot(reconPrev);" in js
