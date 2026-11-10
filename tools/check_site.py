@@ -1944,6 +1944,16 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.14 (logic review #4): no empty Undo. reconSave snapshots base / overlay (+ sig, splits) / money log before the first write and the Reconciled toast's Undo files it back (restoreReconSnapshot — a direct restore, not saveBase, which would re-zero the restored overlay); savePlanOccurrence's two Updated toasts restore a pre-edit copy (restorePlanCopy); the clamp warning is folded into the Reconciled toast (a separate toast was overwritten in the same tick and its Undo was empty). Smoke PART 54 (7)",
+          "function restoreReconSnapshot(prev) {" in js
+          and "restoreReconSnapshot(reconPrev);" in js
+          and "function restorePlanCopy(p, prev) {" in js
+          and js.count("restorePlanCopy(p, planPrev);") == 2
+          and "clamped to its credit limit" in js
+          and "function () {});" not in js.split("function reconSave() {")[1].split("function reconCancel() {")[0]
+          and "keep it simple */ });" not in js
+          and "PART 54: v74.14 - Undo really undoes" in smoke
+          and "'74.14': [" in js)
     check("v74.13 (logic review #5 + #6): no salary set. cyclePlanDeduction deducts the cycle's plans whether or not a salary is set (the 'no salary = no deduction' gate let P30,354 vanish: free 58,631 shown instead of 28,277); cycleDataFor's three received scans require a salary (a P150 refund with no salary read as an early payday and stretched the headroom 9 -> 39 days). Smoke PART 53 (4)",
           js.count("if (!(expected > 0) || amt < 0.9 * expected) return;") == 3
           and "if (expected > 0 && amt < 0.9 * expected) return;" not in js

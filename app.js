@@ -1537,6 +1537,13 @@
     var d = reconData();
     var ch = reconChanged(d);
     if (!d || !ch) return;
+    // v74.14 (logic review #4): the Reconciled toast's Undo used to be an empty
+    // function. Snapshot everything this save rewrites (base, overlay + its sig
+    // and per-card / per-funder splits, the money log the Reconcile row lands in)
+    // BEFORE the first write; Undo files it back.
+    var reconPrev = { base: cloneObj(state.base), adj: cloneObj(state.adj), adjSig: state.adjSig,
+      moneyLog: cloneObj(state.moneyLog || []) };
+    var clampNote = '';
     var b = state.base;
     var acc = null;
     (b.accounts || []).forEach(function (a) {
@@ -1622,7 +1629,10 @@
       var typedV = r2((Number(reconState.vals[ch.key]) || 0));
       var clampedV = cardClamp(acc, typedV); // v73.82: the constraint guard on the typed value
       if (clampedV !== typedV) {
-        snack('Clamped ' + esc(ch.key) + ' to its credit limit (' + money(clampedV) + ') — card balances must stay between 0 and the limit', function () {});
+        // v74.14: folded into the Reconciled toast below (a separate toast here
+        // was overwritten in the same tick, so the clamp was never seen — and
+        // its Undo did nothing)
+        clampNote = ' (clamped to its credit limit, ' + money(clampedV) + ' — a card balance stays between 0 and the limit)';
       }
       acc.value = clampedV;
     }
@@ -1641,7 +1651,29 @@
     reconState = null;
     reconOpen = false; // v73.76: a finished edit folds the card back
     emit('txn');
-    snack('Reconciled ' + esc(ch.key) + ' — filed ' + (ch.delta > 0 ? '+' : '\u2212') + money(Math.abs(ch.delta)), function () {});
+    snack('Reconciled ' + esc(ch.key) + ' — filed ' + (ch.delta > 0 ? '+' : '\u2212') + money(Math.abs(ch.delta)) + clampNote, function () {
+      restoreReconSnapshot(reconPrev);
+    });
+  }
+  // v74.14: Undo for a reconcile — file the pre-save snapshot back. Direct
+  // restore (not saveBase: that path re-derives the snapshot and would re-zero
+  // the restored overlay on the sig change). The base gets a fresh edited stamp
+  // (an undo IS an edit — a sync must not let the reconciled base win back).
+  function restoreReconSnapshot(prev) {
+    if (!prev || !prev.base) return Promise.resolve();
+    state.base = prev.base;
+    state.base.edited = new Date().toISOString();
+    state.adj = prev.adj;
+    state.moneyLog = prev.moneyLog;
+    state.snapshot = state.base && !baseIsEmpty(state.base) ? baseToSnapshot(state.base) : null;
+    state.adjSig = prev.adjSig;
+    reconState = null;
+    return Promise.all([
+      idbPut(STORE_META, { key: 'base', value: state.base }).catch(function () {}),
+      persistSnapshot(),
+      saveAdj(),
+      idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {})
+    ]).then(function () { emit('txn'); });
   }
   function reconCancel() {
     reconState = null;
@@ -7228,9 +7260,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       snack('Unlinked — the entry stays in the ledger, it just no longer counts as this plan\'s payment');
     });
   }
+  // v74.14 (logic review #4): put a plan back exactly as it was (same object —
+  // state.plans and the open views hold it), then persist + repaint.
+  function restorePlanCopy(p, prev) {
+    Object.keys(p).forEach(function (k) { delete p[k]; });
+    Object.keys(prev).forEach(function (k) { p[k] = prev[k]; });
+    return idbPut(STORE_PLANS, touchRec(p)).then(function () { emit('plan'); });
+  }
   function savePlanOccurrence() {
     if (!planEditCtx) return;
     var p = planEditCtx.plan, dateISO = planEditCtx.dateISO;
+    var planPrev = cloneObj(p); // v74.14: the Updated toast's Undo restores this (it used to be an empty function)
     var name = (byId('pe_name').value || '').trim();
     var amount = evalExpr(byId('pe_amount').value);
     if (amount === null) amount = NaN;
@@ -7249,7 +7289,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       planEditCtx = null;
       return idbPut(STORE_PLANS, touchRec(p)).then(function () {
         emit('plan');
-        snack('Updated ' + esc(name) + ' · ' + fmtDate(newDate1));
+        snack('Updated ' + esc(name) + ' · ' + fmtDate(newDate1), function () { restorePlanCopy(p, planPrev); }); // v74.14: real Undo
       });
     }
     var ov = p.overrides || {};
@@ -7338,7 +7378,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     planEditCtx = null;
     return idbPut(STORE_PLANS, touchRec(p)).then(function () {
       emit('plan');
-      snack('Updated ' + esc(name) + ' · ' + fmtDate(dateISO) + (scope === 'all' ? ' · all occurrences' : (scope === 'following' ? ' · this one and after' : '')), function () { /* the override stands — undo would need the prior row; keep it simple */ });
+      snack('Updated ' + esc(name) + ' · ' + fmtDate(dateISO) + (scope === 'all' ? ' · all occurrences' : (scope === 'following' ? ' · this one and after' : '')), function () { restorePlanCopy(p, planPrev); }); // v74.14: a real Undo (was an empty function)
     });
   }
   function skipPlanOccurrence() {
@@ -9379,12 +9419,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.13, live: new Date(2026, 10, 10, 12, 56) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.14, live: new Date(2026, 10, 10, 12, 59) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.14': [
+      'Undo means undo: the Undo button after reconciling a balance and after editing a plan now actually puts things back (before, it did nothing). And when a card balance you type is above the card\'s limit, the message that appears now tells you it was capped — that warning used to flash and get covered instantly.'
+    ],
     '74.13': [
       'If you haven\'t set a salary, the app no longer ignores your plans: upcoming plans are now taken out of your free cash either way (before, they simply weren\'t). And with no salary set, a small refund or any money coming in is no longer mistaken for "your salary arrived early" — which used to stretch your headroom over the wrong number of days.'
     ],

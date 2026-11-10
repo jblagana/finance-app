@@ -3602,6 +3602,53 @@ waitReady().then(async function (F) {
       ok(F.insightsData().cycleDaysLeft === d53b.cycleDaysLeft, 'v74.13: the headroom days do not jump on a refund (' + d53b.cycleDaysLeft + ')');
       b53.salary = sal53; F.state.txns = txns53;
 
+      // ============ PART 54: v74.14 - the Undo buttons work ============
+      console.log('\n== PART 54: v74.14 - Undo really undoes ==============');
+      function snap54() {
+        var es = F.effectiveSnap();
+        return JSON.stringify({ free: es.cash.free, total: es.cash.total, owed: es.card_owed,
+          cards: es.cards.map(function (c) { return c.name + ':' + c.balance; }),
+          accts: (F.state.base.accounts || []).map(function (a) { return a.name + ':' + a.value; }),
+          ml: (F.state.moneyLog || []).length });
+      }
+      // (1) reconcile -> Undo
+      var before54 = snap54();
+      F.reconStartEdit('Maya CC');
+      F.reconSetInput('Maya CC', 4321);
+      F.reconSave();
+      await sleep(40);
+      ok(snap54() !== before54, 'v74.14: precondition - the reconcile moved the numbers');
+      var undo54 = elMap['snackUndo'];
+      ok(undo54 && typeof undo54.onclick === 'function', 'v74.14: the Reconciled toast carries an Undo');
+      undo54.onclick();
+      await sleep(60);
+      ok(snap54() === before54, 'v74.14: Undo puts the balances, accounts and ledger back exactly (' + (snap54() === before54 ? 'identical' : snap54() + ' vs ' + before54) + ')');
+      // (2) a clamped reconcile says so in the toast it shows
+      var maya54 = null; (F.state.base.accounts || []).forEach(function (a) { if (a.name === 'Maya CC') maya54 = a; });
+      F.reconStartEdit('Maya CC');
+      F.reconSetInput('Maya CC', (Number(maya54 && maya54.limit) || 0) + 50000);
+      F.reconSave();
+      await sleep(40);
+      ok(/clamped to its credit limit/.test(String(elMap['snack'].innerHTML)), 'v74.14: the clamp is named in the visible toast (it used to be overwritten)');
+      elMap['snackUndo'].onclick();
+      await sleep(60);
+      ok(snap54() === before54, 'v74.14: and that Undo restores too');
+      // (3) plan edit -> Undo
+      var plan54 = null; F.state.plans.forEach(function (p) { if (!plan54 && p.repeat) plan54 = p; });
+      var occ54 = F.planOccurrences(plan54)[0];
+      var planBefore54 = JSON.stringify(plan54);
+      F.openPlanEdit(plan54.id, occ54);
+      await sleep(20);
+      byIdStub('pe_amount').value = String(Number(plan54.amount) + 777);
+      F.savePlanOccurrence();
+      await sleep(40);
+      ok(JSON.stringify(plan54) !== planBefore54, 'v74.14: precondition - the plan edit changed the plan');
+      elMap['snackUndo'].onclick();
+      await sleep(40);
+      var planAfter54 = JSON.parse(JSON.stringify(plan54)); delete planAfter54.updated;
+      var planWant54 = JSON.parse(planBefore54); delete planWant54.updated;
+      ok(JSON.stringify(planAfter54) === JSON.stringify(planWant54), 'v74.14: the plan edit Undo restores the plan exactly (only the sync stamp moves)');
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
