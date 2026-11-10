@@ -5443,7 +5443,7 @@
         // wear the dimmed .next class + the "next cycle" badge in the tag.
         if (rw.act === 'prepay' || rw.act === 'salary') {
           return '<div class="dig' + nextCls + ' ' + rw.cls + '" data-digto="money">' +
-            '<span class="dg-l"><span class="dg-tag">' + esc(rw.tag) + badge + '</span>' + esc(rw.text) + '</span>' +
+            '<span class="dg-l"><span class="dg-tag">' + esc(rw.label != null ? rw.label : rw.tag) + badge + '</span>' + esc(rw.text) + '</span>' + // v74.22: label (the card) when set
             '<span class="dg-r"><button type="button" class="rowchip ' + rw.cls + '" data-' + rw.act + '="' + chipAttr(rw) + '" aria-label="' + esc(rw.tag) + '">' + esc(rw.r) + '</button></span></div>';
         }
         // v73.18: the Plan-due row's amount is its OWN chip — tapping it
@@ -5512,7 +5512,10 @@
               var kinds = {};
               grow.forEach(function (rw) { kinds[rw.kind] = (kinds[rw.kind] || 0) + 1; });
               var bits = [];
-              if (kinds.prepay) bits.push(kinds.prepay + ' prepay');
+              if (kinds.prepay) { // v74.22: the prepay date lives here once (not on every row)
+                var pwh = ''; grow.forEach(function (rw) { if (rw.kind === 'prepay' && rw.when && !pwh) pwh = rw.when; });
+                bits.push((kinds.prepay > 1 ? kinds.prepay + ' prepays' : 'prepay') + (pwh ? ' · ' + pwh : ''));
+              }
               if (kinds.cardpay) bits.push(kinds.cardpay + ' card payment' + (kinds.cardpay > 1 ? 's' : ''));
               // v73.29: the next-cycle roll-over is surfaced in the header
               // too — it is excluded from the total but the boss should see
@@ -6565,10 +6568,19 @@
       // 'card prepay' -> 'prepay') and the row rides the 'cards' group.
       var pcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.prepay) || 0) > 0; });
       pcards.sort(function (a, b) { return (Number(b.prepay) || 0) - (Number(a.prepay) || 0); });
+      // v74.22 (boss: 'why is this redundant'): the row said the card and
+      // the amount twice (tag + sentence) and the amount a third time on the
+      // chip, and every row repeated "the 14th prepay is in N days". Now:
+      // the label is the card, the line is "Still owed", the amount lives on
+      // the chip only, and the date rides ONCE on the Cards group header
+      // (when). The tag stays the aria label (and the v73.23 pin).
+      var ppD = parseISO(d.prepayDate || todayISO());
+      var ppWhen = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][ppD.getDay()] + ', ' +
+        ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][ppD.getMonth()] + ' ' + ppD.getDate() + ' · ' + pw;
       pcards.slice(0, 4).forEach(function (c) {
-        rows.push({ cls: d.prepayIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'prepay', amt: c.prepay,
-          tag: 'Prepay · ' + c.name,
-          text: money(c.prepay) + ' still owed on ' + c.name + ' — the ' + ordinal(d.prepayDay) + ' prepay is ' + pw + '.',
+        rows.push({ cls: d.prepayIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'prepay', amt: c.prepay, when: ppWhen,
+          tag: 'Prepay · ' + c.name, label: c.name,
+          text: 'Still owed',
           r: money(c.prepay),
           act: 'prepay', payload: { amount: c.prepay, date: d.prepayDate, day: d.prepayDay, card: c.name } });
       });
@@ -6608,10 +6620,10 @@
         var hasNext = nextBal > 0.004;
         var prov = cd.manual ? ' (manual)' : ' (auto)';
         var text = hasNext
-          ? c.name + ' is at ' + money(amt) + ' due ' + dueTxt + prov + ' — ' + money(nextBal) + ' rolls to next cycle.'
-          : c.name + ' is at ' + money(amt) + ' — the bill is due ' + dueTxt + prov + '.';
+          ? 'Bill due ' + dueTxt + prov + ' — ' + money(nextBal) + ' rolls to next cycle.' // v74.22: the card + amount left the line (label + chip carry them)
+          : 'Bill due ' + dueTxt + prov + '.';
         rows.push({ cls: cd.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay', amt: amt, nextAmt: nextBal,
-          tag: 'Card payment · ' + c.name,
+          tag: 'Card payment · ' + c.name, label: c.name, // v74.22: the label shows the card; the tag stays the aria label
           text: text,
           r: money(amt),
           act: 'prepay', payload: { amount: amt, date: cd.dueDate, day: cd.due_day, card: c.name } });
@@ -9735,12 +9747,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.21, live: new Date(2026, 10, 11, 4, 6) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.22, live: new Date(2026, 10, 11, 4, 19) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.22': [
+      'The coach card\'s card rows say each thing once: the row shows the card name and "Still owed", the amount is only on the pay button, and the prepay date sits once on the Cards header instead of on every row. Card payment rows drop the repeated card name and amount too. The rows are now rounded dark-blue tiles with filled pay buttons.'
+    ],
     '74.21': [
       'The three cells on the Home cycle card are now called Per day, Payday and Spent today (they were Headroom, Days left this cycle, Spent today). Same numbers, plainer words.'
     ],

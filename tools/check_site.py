@@ -591,8 +591,8 @@ def main():
           # payload, the roll-over text) is unchanged.
           and "var amt = cd.due;" in js
           and "var nextBal = r2(Math.max(0, c.balance - amt));" in js
-          and "c.name + ' is at ' + money(amt) + ' due ' + dueTxt + prov + ' — ' + money(nextBal) + ' rolls to next cycle.'" in js
-          and "c.name + ' is at ' + money(amt) + ' — the bill is due ' + dueTxt + prov + '.'" in js
+          and "'Bill due ' + dueTxt + prov + ' — ' + money(nextBal) + ' rolls to next cycle.'" in js  # v74.22: the card + amount left the line
+          and "'Bill due ' + dueTxt + prov + '.'" in js
           and "act: 'prepay', payload: { amount: amt, date: cd.dueDate, day: cd.due_day, card: c.name }" in js
           and "rows.push({ cls: cd.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay'" in js
           and "'73.24': [" in js)
@@ -1960,6 +1960,16 @@ def main():
           and "<span class=\"unit\"> days</span>" in js
           and "Days left this cycle</div>" not in js
           and "'74.21': [" in js)
+    check("v74.22 (boss: 'why is this redundant' -> 'ship straight, including the dark blue color'): the coach card's card rows say each thing once — prepay rows show the card as the label + 'Still owed' (the amount only on the chip), the prepay date rides once on the Cards header (rw.when), card-payment rows drop the card + amount from the line; the rows are rounded card2 tiles with FILLED chips",
+          "text: 'Still owed'," in js
+          and "label: c.name" in js
+          and "esc(rw.label != null ? rw.label : rw.tag)" in js
+          and "' still owed on ' + c.name" not in js
+          and "kinds.prepay + ' prepays'" in js
+          and "c.name + ' is at ' + money(amt)" not in js
+          and ".grp-body .dig{background:var(--card2)}" in html
+          and ".rowchip.warn{background:var(--warn);color:#1F1400;border:0}" in html
+          and "'74.22': [" in js)
     check("v74.19 (boss: 'ship new owed look' — the approved look-upgrade mockup, LOOK ONLY): the totals card is the net hero (#owedSumDir carries the direction, #owedSumNet the unsigned amount, the In/Out cells keep their ids); Add a person is one inline row; each person card is a tappable header (data-ow-open: avatar, tap-to-rename name + entry count, balance + direction) over an .ow-body that opens in place (owedToggleOpen, in-memory owedOpen, a sole person / a new person starts open) — the drag handle and the rename input never toggle it; + entry / SOA (PDF) / remove moved into the opened card; every entry row shows the running balance after it (owedRunText, oldest-first like the SOA). Every Owed behavior is unchanged (the v72.19 / v72.29 / v72.48 pins still hold)",
           'id="owedSumDir"' in html
           and 'class="card ow-sum"' in html

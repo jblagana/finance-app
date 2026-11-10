@@ -1,3 +1,8 @@
+# v74.22 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-11 - (screenshot of the coach card's Cards group) "why is this redundant" -> (each prepay row said the card twice, the amount three times, and both rows repeated "the 14th prepay is in 3 days") -> "ship straight, including the dark blue color" -> "Trim the card rows on main: the label = the card, the line = 'Still owed' (card-payment rows: 'Bill due …' + roll-over), the amount only on the chip, the prepay date once on the Cards header; and the row look from the screenshot (rounded dark-blue tiles, filled pay chips). The rest of the new look stays on wip/look-upgrade"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.22, sw cache finances-pwa-v74.22 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.22 the card rows + the tile look (DONE — release.ps1 v74.22 all green; check_site v74.22 pin + the v73.24 card-payment text pins retargeted; What's-new note). Plan rows unchanged (they already name the plan once)
+
 # v74.21 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - "use the per day, payday, spent today words" + "ship this to main directly, only that" -> "Rename the three cells of the Home cycle strip: Headroom -> Per day, Days left this cycle -> Payday (value = N days), Spent today stays. Words only, same numbers. Its own release on main; the rest of the WIP look stays on wip/look-upgrade"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.21, sw cache finances-pwa-v74.21 pushed to https://github.com/jblagana/finance-app.git (main).
