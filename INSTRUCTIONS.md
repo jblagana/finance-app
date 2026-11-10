@@ -2,6 +2,14 @@
 ## 2026-11-11 - "use the per day, payday, spent today words" + "ship this to main directly, only that" -> "Rename the three cells of the Home cycle strip: Headroom -> Per day, Days left this cycle -> Payday (value = N days), Spent today stays. Words only, same numbers. Its own release on main; the rest of the WIP look stays on wip/look-upgrade"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.21, sw cache finances-pwa-v74.21 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.21 the strip words (DONE — release.ps1 v74.21 all green; check_site v74.21 pin + the v73.94 pins retargeted; smoke PART 38 retargeted; What's-new note)
+# WIP entry 2 — branch wip/look-upgrade (prepended to INSTRUCTIONS.md; NOT a release)
+## 2026-11-11 - "use the actual coach fin icon on the top right icon / apply the new addsheet look, paid progress bar on committed / use the old dark bluish color" (the strip words shipped separately as v74.21)
+Status: **done on the WIP branch** - local commit, not pushed, not released.
+- [x] the header coach button is the real Coach Fin face (the #botFace drawing, darting eyes)
+- [x] the Add sheet: chip rows for Category / Pay to and Paid with (they set the hidden selects + fire change, so the old logic runs), and a 4x4 keypad that types into the amount (inputmode=none; quick sums still work)
+- [x] Committed hero: a paid progress bar (cyclePlanPaid: what this cycle's plans already got, vs paid + still to pay)
+- [x] the dark theme is back on the old blue-grey palette (#0f1420 / #1a2233 / #212c42); Light unchanged
+
 # WIP entry — branch wip/look-upgrade (prepended to INSTRUCTIONS.md; NOT a release)
 ## 2026-11-10 - "build all ur edits to the financeapp in a wip branch and serve it in this laptop" -> "Build the whole approved look-upgrade mockup (Claude canvas 'Fin.AI look upgrade' — look system, header, bottom nav, Home, Committed, Ledger, Add sheet, Coach, Settings, Boot; Owed already shipped in v74.19/74.20) into the real app on a WIP branch (wip/look-upgrade, a separate worktree — main and the live site stay untouched, no version bump, no release.ps1, no push to main), and run a local web server on the laptop so the boss can try it. LOOK ONLY: every existing behavior stays"
 Status: **built, serving locally** - WIP branch only (one local commit on wip/look-upgrade in the finance-app-wip worktree; NOT pushed, NOT released, no version bump). Served at http://localhost:8765/ (node static server from the scratchpad). Gates run one by one: check_site = the usual single live-stamp failure only, parser pass, node --check pass, both smokes ALL PASS.

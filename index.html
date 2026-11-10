@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Fin.AI</title>
-<meta name="theme-color" content="#0A0E13">
+<meta name="theme-color" content="#0f1420">
 <script>/* WIP look-upgrade: paint the saved theme before the first frame (no flash) */try{document.documentElement.setAttribute('data-theme',localStorage.getItem('fin.theme')==='light'?'light':'dark')}catch(e){}</script>
 <meta name="description" content="Fully local personal finance tracker — your numbers live on this phone.">
 <link rel="manifest" href="./manifest.webmanifest">
@@ -818,12 +818,12 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
    ================================================================== */
 @font-face{font-family:'Inter';font-style:normal;font-weight:400 700;font-display:swap;src:url(./fonts/Inter-latin.woff2) format('woff2')}
 @font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500 700;font-display:swap;src:url(./fonts/SpaceGrotesk-latin.woff2) format('woff2')}
-:root{--bg:#0A0E13;--card:#121820;--card2:#1A222D;--s3:#273241;--ink:#EDF2F7;--mut:#9AA8B8;--line:rgba(255,255,255,.07);
- --ok:#3DDC97;--acc:#3DDC97;--accInk:#03140C;--accSoft:rgba(61,220,151,.14);--accLine:rgba(61,220,151,.35);
- --warn:#F5B547;--warnInk:#1F1400;--warnSoft:rgba(245,181,71,.13);--warnLine:rgba(245,181,71,.35);
- --info:#7AB4FF;--infoSoft:rgba(122,180,255,.14);--bad:#FF8A7A;--badSoft:rgba(255,138,122,.14);
- --nav:rgba(18,24,32,.86);--shadow:0 14px 40px rgba(0,0,0,.45);--scrim:rgba(0,0,0,.55);
- --face:#8bc5a0;--eye:#101828;--smile:#3DDC97;
+:root{--bg:#0f1420;--card:#1a2233;--card2:#212c42;--s3:#2c3a56;--ink:#e8edf7;--mut:#93a1bd;--line:#2c3a56;
+ --ok:#37d39b;--acc:#37d39b;--accInk:#03140C;--accSoft:rgba(55,211,155,.14);--accLine:rgba(55,211,155,.4);
+ --warn:#ffc45c;--warnInk:#1F1400;--warnSoft:rgba(255,196,92,.13);--warnLine:rgba(255,196,92,.4);
+ --info:#8fb0ff;--infoSoft:rgba(143,176,255,.14);--bad:#ff6b6b;--badSoft:rgba(255,107,107,.14);
+ --nav:rgba(26,34,51,.9);--shadow:0 14px 40px rgba(0,0,0,.5);--scrim:rgba(5,8,14,.6);
+ --face:#8bc5a0;--eye:#101828;--smile:#37d39b;
  --fd:'Space Grotesk','Inter',system-ui,sans-serif}
 :root[data-theme=light]{--bg:#F1F3F6;--card:#FFFFFF;--card2:#EEF1F5;--s3:#DCE2EA;--ink:#0E141B;--mut:#556372;--line:rgba(14,20,27,.09);
  --ok:#087A4D;--acc:#087A4D;--accInk:#FFFFFF;--accSoft:rgba(8,122,77,.12);--accLine:rgba(8,122,77,.35);
@@ -867,6 +867,7 @@ header>h1{display:none}
 .hd-b{position:relative;width:44px;height:44px;border-radius:15px;border:1px solid var(--line);background:var(--card);color:var(--ink);
  display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;flex:0 0 auto;-webkit-tap-highlight-color:transparent}
 .hd-b svg{display:block}
+@media (prefers-reduced-motion:reduce){.hd-eyes animateTransform{display:none}}
 .hd-b:active{transform:scale(.96)}
 .fin-eyes{animation:fin-dart 3.4s infinite}
 @keyframes fin-dart{0%,38%{transform:translateX(0)}44%,58%{transform:translateX(-2.6px)}64%,82%{transform:translateX(2.6px)}88%,100%{transform:translateX(0)}}
@@ -994,6 +995,11 @@ button.gear:active{border-color:var(--accLine);color:var(--acc)}
 .paidbar{border-top:1px solid var(--line);padding-top:14px}
 .prow .pl-name{font-size:13.5px}
 .hchip{border-radius:8px;font-size:11px}
+/* the Committed hero's paid progress */
+.cmbar{height:10px;border-radius:99px;background:var(--s3);overflow:hidden;margin-top:14px}
+.cmbar i{display:block;height:100%;border-radius:99px;background:var(--acc);width:0;transition:width .5s ease}
+.cmfoot{display:flex;justify-content:space-between;font-size:12.5px;margin-top:8px;color:var(--mut)}
+.cmfoot b{color:var(--acc);font-weight:600}
 /* ---- Ledger ---- */
 #donut.card{border-radius:26px;padding:18px}
 #donut h2{font-size:13px;text-transform:none;letter-spacing:0;font-weight:500;margin:0}
@@ -1087,6 +1093,19 @@ button.gear:active{border-color:var(--accLine);color:var(--acc)}
 #addForm .dfield input[type=date]{border-radius:999px}
 #addForm label{margin:12px 2px 6px}
 button.plchip{border-radius:14px;min-height:44px}
+/* the chip rows (renderAddChips) stand in for the selects; the keypad */
+#addForm select{display:none!important}
+.chiprow{display:flex;gap:6px;overflow-x:auto;margin:0 -16px;padding:2px 16px 4px;scrollbar-width:none}
+.chiprow::-webkit-scrollbar{display:none}
+.chiprow:empty{display:none}
+.achip{flex:none;height:36px;padding:0 13px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap}
+.achip.on{background:var(--acc);border-color:var(--acc);color:var(--accInk)}
+.achip .adot{width:7px;height:7px;border-radius:3px;flex:none}
+.achip.on .adot{background:var(--accInk)!important;opacity:.7}
+.keypad{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:14px}
+.keypad button{height:50px;border-radius:14px;border:0;background:var(--card2);color:var(--ink);font-family:var(--fd);font-size:22px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.keypad button.kfn{background:var(--s3);font-size:20px}
+.keypad button:active{filter:brightness(1.15);transform:scale(.97)}
 /* ---- the coach: a tall bottom sheet (the floating bubble + bot are retired) ---- */
 #coachFab{display:none}
 #coachOv{position:fixed!important;left:0!important;right:0!important;top:40px!important;bottom:0!important;width:auto!important;height:auto!important;
@@ -1175,7 +1194,7 @@ button.plchip{border-radius:14px;min-height:44px}
     </div>
     <div class="hwrap">
       <button class="hd-b" id="hdCoach" type="button" aria-label="Open Coach Fin">
-        <svg viewBox="0 0 64 64" width="30" height="30" aria-hidden="true"><rect x="29" y="3" width="6" height="10" rx="3" fill="var(--face)"/><circle cx="32" cy="5" r="4" fill="var(--acc)"/><rect x="8" y="12" width="48" height="42" rx="16" fill="var(--face)"/><g class="fin-eyes"><circle cx="24" cy="31" r="4.2" fill="var(--eye)"/><circle cx="40" cy="31" r="4.2" fill="var(--eye)"/></g><path d="M25 41q7 6 14 0" stroke="var(--smile)" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
+        <svg viewBox="0 0 64 64" width="34" height="34" aria-hidden="true"><line x1="32" y1="15" x2="32" y2="10" stroke="#a0d1b4" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="7.5" r="3.5" fill="#ffc45c"/><rect x="4" y="29" width="7" height="13" rx="3.5" fill="#a0d1b4"/><rect x="53" y="29" width="7" height="13" rx="3.5" fill="#a0d1b4"/><rect x="10" y="15" width="44" height="38" rx="13" fill="#8bc5a0"/><rect x="16" y="21" width="32" height="26" rx="10" fill="#101828"/><circle cx="26" cy="32" r="5" fill="#cdd9f2"/><circle cx="38" cy="32" r="5" fill="#cdd9f2"/><g class="hd-eyes"><circle cx="27.2" cy="33.4" r="2.3" fill="#16233d"/><circle cx="39.2" cy="33.4" r="2.3" fill="#16233d"/><circle cx="28.4" cy="30.6" r="1.1" fill="#ffffff"/><circle cx="40.4" cy="30.6" r="1.1" fill="#ffffff"/><animateTransform attributeName="transform" attributeType="XML" type="translate" values="0 0; 2.4 0; -2.4 0; 1.6 1.6; -1.4 1; 0 0" keyTimes="0;0.22;0.44;0.66;0.82;1" dur="3.4s" repeatCount="indefinite" calcMode="spline" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"/></g><circle cx="21" cy="38.5" r="2" fill="#f2a2b4"/><circle cx="43" cy="38.5" r="2" fill="#f2a2b4"/><path d="M27.5 40.5q4.5 3.5 9 0" stroke="#37d39b" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>
         <span class="hd-led" id="hdLed" aria-hidden="true"></span>
       </button>
       <button class="gear" id="setBtn" type="button" aria-label="Settings">⚙&#xFE0E;</button>
@@ -1275,7 +1294,10 @@ button.plchip{border-radius:14px;min-height:44px}
          Expenses (amber) / Saving for (blue) inside the One-offs/Recurring
          tabs. -->
     <h2>Committed</h2>
-    <div class="sumrow" id="committedSum" style="display:none"><div class="sum"><div class="sumlab">This cycle · committed</div><div class="sumv" id="committedSumV"></div></div><div class="sub" id="committedSumSub"></div></div>
+    <div class="sumrow" id="committedSum" style="display:none"><div class="sum"><div class="sumlab">This cycle · committed</div><div class="sumv" id="committedSumV"></div></div><div class="sub" id="committedSumSub"></div>
+      <!-- WIP look-upgrade: the paid progress (cyclePlanPaid vs the live remainder) -->
+      <div class="cmbar"><i id="committedBar"></i></div>
+      <div class="cmfoot"><span><b id="committedPaid">—</b> done</span><span id="committedOf"></span></div></div>
     <button class="act ghost" id="planAddBtn" type="button" style="margin:0 0 10px">＋ Add a plan</button>
     <div id="plans" class="card"></div>
   </div>
@@ -1566,6 +1588,8 @@ button.plchip{border-radius:14px;min-height:44px}
           <select id="f_category"><option value="" selected>Unsorted</option></select>
           <label for="f_payto" id="f_paytoLabel" style="display:none">Pay to</label>
           <select id="f_payto" style="display:none"><option value="" selected>Cash</option></select>
+          <!-- WIP look-upgrade: the chip row mirrors whichever of the two selects is shown (renderAddChips) -->
+          <div class="chiprow" id="f_categoryChips" data-for="f_category,f_payto" data-dots="1"></div>
         </div>
       </div>
       <p id="amtEq" class="amtEq" style="display:none"></p>
@@ -1579,6 +1603,7 @@ button.plchip{border-radius:14px;min-height:44px}
                Hidden outside Pay card mode. -->
           <label for="f_paywith" id="f_paywithLabel" style="display:none">Paid with</label>
           <select id="f_paywith" style="display:none"><option value="CASH::Cash" selected>Cash</option></select>
+          <div class="chiprow" id="f_accountChips" data-for="f_account,f_paywith"></div>
         </div>
         <div>
           <label for="f_date">Date</label>
@@ -1609,6 +1634,13 @@ button.plchip{border-radius:14px;min-height:44px}
            the boss's tap is the only thing that links (txn.planRef).
            Hidden unless there is a suggestion or an existing link. -->
       <button type="button" id="planLinkChip" class="plchip" style="display:none" aria-pressed="false"></button>
+      <!-- WIP look-upgrade: the keypad feeds #f_amount (digits, . + − and the quick-sum operators; ⌫ / C) -->
+      <div class="keypad" id="addKeypad" role="group" aria-label="Amount keypad">
+        <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" data-k="del" class="kfn" aria-label="Delete last">⌫</button>
+        <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" data-k="+" class="kfn">+</button>
+        <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-k="-" class="kfn">−</button>
+        <button type="button" data-k="00">00</button><button type="button" data-k="0">0</button><button type="button" data-k=".">.</button><button type="button" data-k="clr" class="kfn" aria-label="Clear">C</button>
+      </div>
       <div style="margin-top:14px">
         <button class="act" id="addSubmit" type="submit">Add expense</button>
       </div>

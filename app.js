@@ -3251,6 +3251,7 @@
     openSheetEl = sh;
     if (id === 'numSheet') renderBaseEditor();
     else if (id === 'setSheet') { renderBaseStatus(); backupSelSync(); } // v72.23: show the stored "what to include"
+    else if (id === 'addSheet') renderAddChips(); // WIP look-upgrade: the chip rows reflect the current picks
     // a11y: move focus into the sheet (first field, else first control).
     // The Settings and Your-numbers sheets are skipped: they hold many text
     // inputs and an auto-focus would pop the keyboard on open.
@@ -4355,6 +4356,27 @@
     });
     return r2(total);
   }
+  // WIP look-upgrade: the PAID side of the same cycle math — what the
+  // cycle's occurrences have already received (capped at each amount), for
+  // the Committed hero's progress bar. Display only.
+  function cyclePlanPaid() {
+    var cd = cycleData();
+    if (!cd) return 0;
+    var total = 0;
+    state.plans.forEach(function (p) {
+      planAllDates(p).forEach(function (od) {
+        if (od < cd.start || od > cd.end) return;
+        var ro = resolveOccurrence(p, od);
+        if (ro && ro.skip) return;
+        var nm = ro ? ro.name : p.name;
+        var am = ro ? ro.amount : p.amount;
+        var pp = findPaidTxn({ monthPrefix: todayISO().slice(0, 7), today: todayISO() }, { planId: p.id, date: od, name: nm, amount: am });
+        var got = Math.min(Number(am) || 0, Number(pp && pp.amount) || 0);
+        if (got > 0) total += got;
+      });
+    });
+    return r2(total);
+  }
   // ---------- v73.6: the CC due day (the 5th) ----------
   // Boss's model: the bill is DUE on the due_day (the 5th) and equals the
   // spending until the cutoff (the 15th) MINUS the prepays made in that
@@ -5013,6 +5035,50 @@
     updateAddModeFields();
     updateCashbackRow();
     updateChargeHint();
+    renderAddChips(); // WIP look-upgrade: the chip rows follow the field swap
+  }
+  // WIP look-upgrade: the Add sheet's chip rows mirror the (hidden) selects —
+  // a tap sets the select's value and fires its change event, so every
+  // existing handler (cashback row, charge hint, plan-link chip) runs as if
+  // the select itself was used. Category chips carry a color dot (mlTile).
+  function renderAddChips() {
+    try {
+      if (typeof document === 'undefined' || !document.querySelectorAll) return;
+      var rows = document.querySelectorAll('#addForm .chiprow');
+      for (var r = 0; r < rows.length; r++) (function (row) {
+        var ids = (row.getAttribute('data-for') || '').split(','), sel = null;
+        for (var i = 0; i < ids.length; i++) { var s = byId(ids[i]); if (s && s.style.display !== 'none') { sel = s; break; } }
+        if (!sel) { row.innerHTML = ''; return; }
+        var dots = row.getAttribute('data-dots') === '1', html = '';
+        for (var o = 0; o < sel.options.length; o++) {
+          var op = sel.options[o], on = op.value === sel.value;
+          html += '<button type="button" class="achip' + (on ? ' on' : '') + '" data-v="' + esc(op.value) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+            (dots ? '<span class="adot" style="background:' + mlTile(op.textContent).fg + '"></span>' : '') + esc(op.textContent) + '</button>';
+        }
+        row.innerHTML = html;
+        var bs = row.querySelectorAll('[data-v]');
+        for (var k = 0; k < bs.length; k++) bs[k].onclick = function () {
+          sel.value = this.getAttribute('data-v');
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+          renderAddChips();
+        };
+      })(rows[r]);
+    } catch (e) { /* the node smoke's DOM stub has no querySelectorAll — the chips are a browser-only mirror */ }
+  }
+  // WIP look-upgrade: the keypad types into #f_amount (digits, '.', the
+  // quick-sum + and −, 00; ⌫ deletes, C clears) and fires the input event
+  // the amount already listens to (amtEq hint, charge hint, plan link).
+  // inputmode=none keeps the phone keyboard down; a hardware keyboard still types.
+  function wireAddKeypad() {
+    var kp = byId('addKeypad'), a = byId('f_amount'); if (!kp || !a) return;
+    try { a.setAttribute('inputmode', 'none'); } catch (e) {}
+    kp.onclick = function (ev) {
+      var b = ev.target && ev.target.closest ? ev.target.closest('[data-k]') : null; if (!b) return;
+      var k = b.getAttribute('data-k'), v = String(a.value || '');
+      if (k === 'del') v = v.slice(0, -1); else if (k === 'clr') v = ''; else v = v + k;
+      a.value = v;
+      a.dispatchEvent(new Event('input', { bubbles: true }));
+    };
   }
   function prefillAdd(amt, dateISO, note, accValue, mode) {
     setAddMode(mode || 'spend');
@@ -7358,9 +7424,14 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var committed = cyclePlanDeduction();
       var d39 = insightsData();
       var freeN39 = d39 && d39.freeNet != null ? d39.freeNet : (d39 ? d39.free : null);
-      if (committed > 0.004 && freeN39 != null) {
+      var paid39 = cyclePlanPaid(); // WIP look-upgrade: the progress bar (paid of paid + still to pay)
+      if ((committed > 0.004 || paid39 > 0) && freeN39 != null) {
         sumEl.style.display = '';
         var vEl = byId('committedSumV'); if (vEl) vEl.innerHTML = '− ' + money(committed);
+        var tot39 = r2(committed + paid39);
+        var bEl = byId('committedBar'); if (bEl) bEl.style.width = (tot39 > 0 ? Math.round(paid39 / tot39 * 100) : 0) + '%';
+        var pEl = byId('committedPaid'); if (pEl) pEl.textContent = money(paid39);
+        var oEl = byId('committedOf'); if (oEl) oEl.textContent = 'of ' + money(tot39) + ' this cycle';
         var sEl = byId('committedSumSub');
         if (sEl) {
           var pct = freeN39 > 0 ? Math.round(committed / freeN39 * 1000) / 10 : 0;
@@ -10395,7 +10466,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     th = th === 'light' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', th);
     var m = document.querySelector('meta[name="theme-color"]');
-    if (m) m.setAttribute('content', th === 'light' ? '#F1F3F6' : '#0A0E13');
+    if (m) m.setAttribute('content', th === 'light' ? '#F1F3F6' : '#0f1420');
     var seg = byId('themeSeg');
     if (seg) {
       var bs = seg.querySelectorAll('[data-theme]');
@@ -11552,6 +11623,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var savedTheme = null; try { savedTheme = localStorage.getItem(LS_THEME); } catch (e) {}
     applyTheme(savedTheme);
     renderHead();
+    wireAddKeypad();
+    try { // the chip rows follow the selects' option lists (seedCategories / seedAccounts rebuild them)
+      if (typeof MutationObserver !== 'undefined') {
+        var chipObs = new MutationObserver(function () { renderAddChips(); });
+        ['f_category', 'f_payto', 'f_account', 'f_paywith'].forEach(function (id) { var s = byId(id); if (s) chipObs.observe(s, { childList: true }); });
+      }
+    } catch (e) {}
     var ib = byId('impBtn');
     if (ib) ib.onclick = function () { var f = byId('impFile'); if (f) f.click(); };
     var ifile = byId('impFile');
