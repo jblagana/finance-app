@@ -1,3 +1,8 @@
+# v74.21 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-11 - "use the per day, payday, spent today words" + "ship this to main directly, only that" -> "Rename the three cells of the Home cycle strip: Headroom -> Per day, Days left this cycle -> Payday (value = N days), Spent today stays. Words only, same numbers. Its own release on main; the rest of the WIP look stays on wip/look-upgrade"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.21, sw cache finances-pwa-v74.21 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.21 the strip words (DONE — release.ps1 v74.21 all green; check_site v74.21 pin + the v73.94 pins retargeted; smoke PART 38 retargeted; What's-new note)
+
 # v74.20 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-10 - "the sort row makes it look awfull" -> "Replace the 'Sort' label + full-width dropdown with a compact section header: 'PEOPLE · N' on the left, a small pill dropdown on the right (Recent / A–Z / Custom); hidden when the book is empty. Look only — the sort behavior is unchanged"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.20, sw cache finances-pwa-v74.20 pushed to https://github.com/jblagana/finance-app.git (main).

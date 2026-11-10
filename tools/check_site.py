@@ -1085,7 +1085,7 @@ def main():
           # cycle / month text blocks (the 3-cell strip replaced them) - the
           # pin now asserts the STRIP cells + the coach's headroom-remainder
           # reference (the roast copy that survived the cut)
-          and "Days left this cycle" in js
+          and "Payday" in js  # v74.21: the cell is 'Payday' (was 'Days left this cycle')
           and "Spent today" in js  # v73.95: renamed from 'Spent in app today'
           and "left of today’s headroom" in js
           # (d) the recap one-liner
@@ -1192,7 +1192,7 @@ def main():
           and "return dl > 0 ? dl : 1;" in js  # the guard: never zero/negative (the cycle end is today at the latest)
           and "var hDays = d.cycleDaysLeft || daysLeft;" in js  # the render uses the cycle days (calendar when absent)
           and "var hDaily = hDays > 0 ? r2(Math.max(0, free) / hDays) : 0;" in js  # the per-cycle daily
-          and "Days left this cycle" in js  # v73.94: the cycle days feed the strip's Days-left cell (the old "this cycle (to ...)" line is deleted)
+          and "Payday" in js  # v73.94: the cycle days feed the strip's days cell (v74.21: 'Payday') (the old "this cycle (to ...)" line is deleted)
           and "hDailySub" in js  # v73.94: the per-cycle daily now feeds the strip + the coach remainder (the treat check is deleted)
           and "'73.11': [" in js)
     check("v73.12 (user: 'the cards owed should be subtracted already from the liquid cash to know how much cash is free/unallocated'): the base snapshot commits the FULL card balance (free = liquid - owed - other outflows), not just the prepay-to-target slice. The v72.42 overlay rule (charge -a free, payoff 0) is unchanged - it is exactly what keeps the identity live (a charge commits free by the full amount; the payoff only drops raw liquid + owed)",
@@ -1900,9 +1900,9 @@ def main():
     check("v73.94 (boss: 'tweaks: (headroom) x/day, days left, spent in app today / no more more details / move the card above the coach card'): the Insights card is a 3-CELL CYCLE STRIP (approved mockup v4) - Headroom (net free / cycleDaysLeft, green, red when free is negative, a /day unit) + Days left this cycle + Spent in app today (only when todaySpend > 0). The Today / Next-7-days / This-cycle text blocks (treat check, 7-day one-liners, cycle detail) are DELETED - no more details; the treat input control is gone from the card header; the card title is dynamic ('This cycle - OCT 15 -> NOV 14'); the card moved ABOVE the coach card in index.html; the coach's good branch now references the REMAINDER of today's headroom (hDaily - todaySpend) instead of quoting the daily number twice (one number, one home). Smoke PART 38: the strip renders the 3 cells with the seed's real math, the title names the cycle, the coach sub quotes the remainder, and the old block copy is gone",
           "var hDays = d.cycleDaysLeft || daysLeft;" in js
           and "var hDaily = hDays > 0 ? r2(Math.max(0, free) / hDays) : 0;" in js
-          and "class=\"p\"><div class=\"k\">Headroom</div>" in js
+          and "class=\"p\"><div class=\"k\">Per day</div>" in js  # v74.21: 'Per day' (was 'Headroom')
           and "<span class=\"unit\">/day</span>" in js
-          and "Days left this cycle" in js
+          and "Payday" in js  # v74.21: 'Payday' (was 'Days left this cycle')
           and "id=\"insTitle\"" in html
           and "left of today’s headroom" in js
           and "var hDailySub = hDaysSub > 0 ? r2(Math.max(0, freeN) / hDaysSub) : 0;" in js
@@ -1953,6 +1953,13 @@ def main():
           and "if (head) head.style.display = people.length ? '' : 'none';" in js
           and "if (cnt) cnt.textContent = String(people.length);" in js
           and "'74.20': [" in js)
+    check("v74.21 (boss: 'use the per day, payday, spent today words'): the Home cycle strip's three cells read Per day · Payday · Spent today (same numbers: net free / cycle days with the /day unit, the cycle days left + a ' days' unit, today's in-app spend)",
+          "class=\"p\"><div class=\"k\">Per day</div>" in js
+          and "class=\"p\"><div class=\"k\">Payday</div>" in js
+          and "class=\"p\"><div class=\"k\">Spent today</div>" in js
+          and "<span class=\"unit\"> days</span>" in js
+          and "Days left this cycle</div>" not in js
+          and "'74.21': [" in js)
     check("v74.19 (boss: 'ship new owed look' — the approved look-upgrade mockup, LOOK ONLY): the totals card is the net hero (#owedSumDir carries the direction, #owedSumNet the unsigned amount, the In/Out cells keep their ids); Add a person is one inline row; each person card is a tappable header (data-ow-open: avatar, tap-to-rename name + entry count, balance + direction) over an .ow-body that opens in place (owedToggleOpen, in-memory owedOpen, a sole person / a new person starts open) — the drag handle and the rename input never toggle it; + entry / SOA (PDF) / remove moved into the opened card; every entry row shows the running balance after it (owedRunText, oldest-first like the SOA). Every Owed behavior is unchanged (the v72.19 / v72.29 / v72.48 pins still hold)",
           'id="owedSumDir"' in html
           and 'class="card ow-sum"' in html
