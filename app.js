@@ -3012,6 +3012,16 @@
     for (var i = 0; i < cards.length; i++) if (String(cards[i].name || '') === nm) return true;
     return false;
   }
+  // WIP look-upgrade: the ledger row's category tile — the label's first
+  // letter on a steady tint per label (same hashing idea as the Owed avatars)
+  var ML_TILE = [['#3DDC97', 'rgba(61,220,151,.16)'], ['#7AB4FF', 'rgba(122,180,255,.16)'], ['#F5B547', 'rgba(245,181,71,.16)'],
+    ['#C9A2FF', 'rgba(201,162,255,.16)'], ['#5FD9C4', 'rgba(95,217,196,.16)'], ['#FF9FC6', 'rgba(255,159,198,.16)']];
+  function mlTile(lab) {
+    var s = String(lab || '?').trim(), h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    var c = ML_TILE[h % ML_TILE.length];
+    return { ch: (s.charAt(0) || '?').toUpperCase(), fg: c[0], bg: c[1] };
+  }
   function renderMoneyLog() {
     var el = byId('moneyLog');
     if (!el) return;
@@ -3174,7 +3184,9 @@
           down = cardRow ? e.n > 0 : e.n < 0; // more owed (card) / less cash (debit) = the red side
           amtTxt = (e.n > 0 ? '+' : '−') + money(Math.abs(e.n));
         }
+        var tile = mlTile(p.lab); // WIP look-upgrade: the category tile (initial + a steady color per label)
         return '<div class="ml-row' + (add ? '' : ' del') + '">' +
+          '<span class="ml-tile" aria-hidden="true" style="background:' + tile.bg + ';color:' + tile.fg + '">' + esc(tile.ch) + '</span>' +
           '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
           (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
           '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) + (cyclePill ? ' ' + cyclePill : '') + '</div></div>' +
@@ -6130,6 +6142,14 @@
       countUp(hv, heroVal == null ? free : heroVal, free, function (v) { return money(v); });
     }
     heroVal = free;
+    // WIP look-upgrade: the status pill next to the hero label — Negative
+    // (below zero) / Tight (the coming prepay is bigger than what's left) /
+    // On track
+    var hp = byId('heroPill');
+    if (hp) {
+      var pk = free < 0 ? ['bad', 'Negative'] : (d && d.prepayAmt > 0 && d.prepayAmt > free ? ['warn', 'Tight'] : ['ok', 'On track']);
+      hp.className = 'hero-pill ' + pk[0]; hp.textContent = pk[1];
+    }
     var sub = [];
     sub.push('Liquid <b>' + money(s.cash ? s.cash.total : 0) + '</b>');
     // v73.34: the '− ₱X plans this cycle' line LEFT the hero sub — the
@@ -6460,14 +6480,14 @@
     var Y = function (v) { return PT + ih * (1 - (v - lo) / (hi - lo)); };
     var line = pts.map(function (p, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p.v).toFixed(1); }).join(' ');
     var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Projected cash for the next two months (v73.57 step chart: raw cash start, plan dues + card owed drop on their due dates, salary rises on payday)">' +
-      '<path d="' + line + ' L' + X(pts.length - 1).toFixed(1) + ' ' + (H - PB) + ' L' + X(0).toFixed(1) + ' ' + (H - PB) + ' Z" fill="rgba(55,211,155,.13)" stroke="none"/>' +
-      '<path d="' + line + '" fill="none" stroke="#37d39b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+      '<path d="' + line + ' L' + X(pts.length - 1).toFixed(1) + ' ' + (H - PB) + ' L' + X(0).toFixed(1) + ' ' + (H - PB) + ' Z" fill="var(--accSoft)" stroke="none"/>' +
+      '<path d="' + line + '" fill="none" stroke="var(--acc)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
     if (floor > 0) {
       var fy = Y(floor).toFixed(1);
-      svg += '<line x1="' + PL + '" y1="' + fy + '" x2="' + (W - PR) + '" y2="' + fy + '" stroke="#ffc45c" stroke-width="1" stroke-dasharray="4 4" opacity=".8"/>' +
-        '<text x="' + (W - PR - 2) + '" y="' + (fy - 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="#ffc45c">floor ' + fmtNum(floor) + '</text>';
+      svg += '<line x1="' + PL + '" y1="' + fy + '" x2="' + (W - PR) + '" y2="' + fy + '" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 4" opacity=".8"/>' +
+        '<text x="' + (W - PR - 2) + '" y="' + (fy - 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="var(--warn)">floor ' + fmtNum(floor) + '</text>';
     }
-    svg += '<circle cx="' + X(0).toFixed(1) + '" cy="' + Y(pts[0].v).toFixed(1) + '" r="3.2" fill="#37d39b" stroke="#0f1420" stroke-width="1.5"/>';
+    svg += '<circle cx="' + X(0).toFixed(1) + '" cy="' + Y(pts[0].v).toFixed(1) + '" r="3.2" fill="var(--acc)" stroke="var(--card)" stroke-width="1.5"/>';
     // v73.0: the TODAY marker — the start point is "now" (asOf) and the rest
     // are month-ends, so today sits ON the first point; mark it with a halo
     // so "where am I" is readable at a glance. (When the as-of predates
@@ -6877,6 +6897,30 @@
   // window anchored on the salary_day — not the calendar month. A record dated
   // the 1st lands in the cycle that started on the 15th, and the cycle's own
   // salary cash_in is excluded (it is income, not spend — the v72.45 rule).
+  // WIP look-upgrade (the approved Ledger mockup): the spent-per-day bars
+  // over the cycle — one bar per day from the cycle start to today (the
+  // same spend rule + window the donut uses: spendOf, no prepays, no
+  // salary), today's bar in full green, the rest softer, a label every 5th
+  // day. Display only — nothing is written.
+  function renderDailyBars(w, hi, byDay, grand) {
+    var box = byId('dailyBox'); if (!box) return;
+    var tot = byId('dailyTotal'); if (tot) tot.textContent = money(grand);
+    var days = [], max = 0, cur = parseISO(w.start), endD = parseISO(hi);
+    for (var guard = 0; cur <= endD && guard < 40; guard++) {
+      var k = localISO(cur), v = byDay[k] || 0;
+      if (v > max) max = v;
+      days.push({ k: k, v: v, d: cur.getDate(), last: k === hi });
+      cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
+    }
+    var bars = '', labs = '';
+    days.forEach(function (x, i) {
+      var h = max > 0 ? Math.max(3, Math.round(x.v / max * 100)) : 3;
+      bars += '<span class="db' + (x.last ? ' today' : '') + (x.v > 0 ? '' : ' zero') + '" style="height:' + h + '%" title="' + x.k + ' · ' + money(x.v) + '"></span>';
+      var showLab = x.last || i === 0 || (x.d % 5 === 0 && i < days.length - 2); // a 5th-day label never sits next to today's
+      labs += '<span class="dl' + (x.last ? ' today' : '') + '">' + (showLab ? x.d : '') + '</span>';
+    });
+    box.innerHTML = '<div class="dbars" role="img" aria-label="Spent per day this cycle">' + bars + '</div><div class="dlabs">' + labs + '</div>';
+  }
   function renderDonut() {
     var wrap = byId('donut'), svgBox = byId('donutSvg'), leg = byId('donutLegend'), rng = byId('donutRange');
     if (!wrap || !svgBox || !leg) return;
@@ -6885,7 +6929,7 @@
     var w = { start: cd.start, end: cd.end, month: cd.month };
     var hi = todayISO();
     if (w.end < hi) hi = w.end;
-    var totals = {}, grand = 0;
+    var totals = {}, grand = 0, byDay = {}; // WIP look-upgrade: byDay feeds the daily bars
     state.txns.forEach(function (t) {
       var d = String(t.date || '');
       if (d < w.start || d > hi) return; // v72.52: the cycle window, not the calendar month
@@ -6895,18 +6939,20 @@
       var c = t.category || 'Unsorted';
       totals[c] = (totals[c] || 0) + a;
       grand += a;
+      byDay[d] = (byDay[d] || 0) + a;
     });
     if (rng) rng.textContent = cycleLabelFor(w);
     var names = Object.keys(totals).sort(function (a, b) { return totals[b] - totals[a]; });
     if (!names.length || grand <= 0) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
+    renderDailyBars(w, hi, byDay, grand);
     var segs = names.slice(0, 5).map(function (n) { return { name: n, v: totals[n] }; });
     var rest = 0;
     names.slice(5).forEach(function (n) { rest += totals[n]; });
     if (rest > 0) segs.push({ name: 'Other', v: rest });
     var R = 40, C = 2 * Math.PI * R, off = 0;
     var svg = '<svg viewBox="0 0 100 100" role="img" aria-label="This cycle by category">' +
-      '<circle cx="50" cy="50" r="' + R + '" fill="none" stroke="#2c3a56" stroke-width="12" opacity=".5"/>';
+      '<circle cx="50" cy="50" r="' + R + '" fill="none" stroke="var(--s3)" stroke-width="12" opacity=".5"/>';
     segs.forEach(function (sg, i) {
       var len = C * (sg.v / grand);
       svg += '<circle cx="50" cy="50" r="' + R + '" fill="none" stroke="' + DONUT_COLORS[i % DONUT_COLORS.length] + '" stroke-width="12" ' +
@@ -6914,8 +6960,8 @@
         'transform="rotate(-90 50 50)" stroke-linecap="butt"/>';
       off += len;
     });
-    svg += '<text x="50" y="46" text-anchor="middle" font-size="8" fill="#93a1bd">spent</text>' +
-      '<text x="50" y="58" text-anchor="middle" font-size="10.5" font-weight="700" fill="#e8edf7">' + fmtNum(grand) + '</text></svg>';
+    svg += '<text x="50" y="46" text-anchor="middle" font-size="8" fill="var(--mut)">spent</text>' +
+      '<text x="50" y="58" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">' + fmtNum(grand) + '</text></svg>';
     svgBox.innerHTML = svg;
     var html = '';
     segs.forEach(function (sg, i) {
@@ -10315,6 +10361,44 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     try { localStorage.setItem(LS_TAB, name); } catch (e) {}
     window.scrollTo(0, 0);
     if (name === 'home') renderGreet();
+    renderHead();
+  }
+  // WIP look-upgrade: the header carries the shown tab's kicker + title —
+  // Home = today's date over the greeting (the old greet block, hidden),
+  // Committed / Ledger = the cycle window (+ days left), Owed = a one-liner.
+  function renderHead() {
+    var k = byId('hdKicker'), t = byId('hdTitle'); if (!k || !t) return;
+    var tab = shownTab || 'home', kick = '', title = '';
+    if (tab === 'home') {
+      var gh = byId('greetHello'), gd = byId('greetDate');
+      kick = gd ? gd.textContent : '';
+      title = gh && gh.textContent ? gh.textContent : 'Home';
+    } else {
+      var d = null; try { d = insightsData(); } catch (e) { d = null; }
+      var win = d && d.cycle && d.cycle.start && d.cycle.end ? 'Cycle ' + dayMonth(d.cycle.start) + ' – ' + dayMonth(d.cycle.end) : '';
+      if (tab === 'money') {
+        var dl = d ? Number(d.cycleDaysLeft || d.daysLeft) || 0 : 0;
+        kick = win + (dl ? (win ? ' · ' : '') + dl + ' day' + (dl === 1 ? '' : 's') + ' left' : '');
+        title = 'Committed';
+      } else if (tab === 'ledger') { kick = win; title = 'Ledger'; }
+      else { kick = 'Splits and IOUs'; title = 'Owed'; }
+    }
+    k.textContent = kick; t.textContent = title;
+  }
+  // WIP look-upgrade: Dark / Light (Settings → Appearance; fin.theme). The
+  // inline <head> script paints the saved theme before the first frame.
+  var LS_THEME = 'fin.theme';
+  function applyTheme(th) {
+    th = th === 'light' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', th);
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', th === 'light' ? '#F1F3F6' : '#0A0E13');
+    var seg = byId('themeSeg');
+    if (seg) {
+      var bs = seg.querySelectorAll('[data-theme]');
+      for (var i = 0; i < bs.length; i++) bs[i].className = 'segb' + (bs[i].getAttribute('data-theme') === th ? ' on' : '');
+    }
+    try { localStorage.setItem(LS_THEME, th); } catch (e) {}
   }
   // v23: Coach is the floating bot; v24: floating bubble above the FAB;
   // v25: clicking the bot toggles the bubble (open, or close if already open);
@@ -10858,7 +10942,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       return ((info && info.rows) || []).slice(0, 3).map(function (r) { return r.tag + ': ' + r.text; });
     } catch (e) { return []; }
   }
-  function render() { emit('ui'); if (window.__financeChat && window.__financeChat.refreshChips) window.__financeChat.refreshChips(); }
+  function render() { emit('ui'); renderHead(); if (window.__financeChat && window.__financeChat.refreshChips) window.__financeChat.refreshChips(); }
 
   // ---------- bridge for chat.js (the chat writes through the app's own actions) ----------
   window.FinApp = {
@@ -11454,6 +11538,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     backupSelSync();
     var ec = byId('expCsv');
     if (ec) ec.onclick = function () { exportData('csv'); };
+    // WIP look-upgrade: the header's coach button (toggle), the coach card's
+    // "Ask Fin anything", the theme segment
+    var hc = byId('hdCoach');
+    if (hc) hc.onclick = function () { var ov = byId('coachOv'); if (ov && ov.classList.contains('show')) closeCoach(); else openCoach(); };
+    var af = byId('askFinBtn');
+    if (af) af.onclick = function () { openCoach(); };
+    var tseg = byId('themeSeg');
+    if (tseg) tseg.onclick = function (ev) { var b = ev.target && ev.target.closest ? ev.target.closest('[data-theme]') : null; if (b) applyTheme(b.getAttribute('data-theme')); };
+    var savedTheme = null; try { savedTheme = localStorage.getItem(LS_THEME); } catch (e) {}
+    applyTheme(savedTheme);
+    renderHead();
     var ib = byId('impBtn');
     if (ib) ib.onclick = function () { var f = byId('impFile'); if (f) f.click(); };
     var ifile = byId('impFile');

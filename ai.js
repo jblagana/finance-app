@@ -178,6 +178,7 @@
     var on = remoteAvailable();
     led.className = 'coach-led' + (on ? ' on' : '');
     led.setAttribute('title', on ? 'Online coach: available' : 'Online coach: not available');
+    var hl = byId('hdLed'); if (hl) hl.className = 'hd-led' + (on ? ' on' : ''); // WIP look-upgrade: the header button's LED mirrors it
   }
 
   // Generation is a remote call to the online coach, nothing more. If it's
