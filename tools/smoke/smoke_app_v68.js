@@ -3687,6 +3687,34 @@ waitReady().then(async function (F) {
       await F.deleteTxn(id55a); await F.deleteTxn(id55b); await F.deleteTxn(id55c); await sleep(40);
       if (keep55 !== undefined && F.state.base.absorbedBy) F.state.base.absorbedBy[String(other55).toLowerCase()] = keep55;
 
+      // ============ PART 56: v74.16 - budgets don't double-count ============
+      console.log('\n== PART 56: v74.16 - a budget reserves what is left ===');
+      var snap56 = F.state.snapshot, keep56 = JSON.stringify({ m: snap56.month, b: snap56.obligations.budget, f: snap56.cash.free });
+      var txns56 = F.state.txns;
+      F.state.txns = txns56.slice();
+      // simulate a base that reserves a P10,000 Food budget for THIS month (what baseToSnapshot does)
+      snap56.month = F.todayISO().slice(0, 7);
+      snap56.obligations.budget = [{ name: 'Probe56', amount: 10000, normal: 10000, overridden: false }];
+      snap56.cash.free = Math.round((snap56.cash.free - 10000) * 100) / 100;
+      var f56a = F.effectiveSnap().cash.free;
+      var id56 = await F.addTxn({ kind: 'cash_out', category: 'Probe56', account: 'Cash', amount: 600, note: 'v74.16 lunch', date: F.todayISO() }, { quiet: true });
+      await sleep(30);
+      var f56b = F.effectiveSnap().cash.free;
+      ok(Math.abs(f56b - f56a) < 0.005, 'v74.16: a spend INSIDE its category budget leaves free unchanged — the budget already held it (' + f56a + ' -> ' + f56b + ')');
+      ok(F.effectiveSnap().budget_used.Probe56 === 600, 'v74.16: the budget shows 600 used');
+      var id56b = await F.addTxn({ kind: 'cash_out', category: 'Transpo', account: 'Cash', amount: 50, note: 'v74.16 jeep', date: F.todayISO() }, { quiet: true });
+      await sleep(30);
+      ok(Math.abs((f56b - F.effectiveSnap().cash.free) - 50) < 0.005, 'v74.16: a spend in a category WITHOUT a budget still comes off free');
+      var id56c = await F.addTxn({ kind: 'cash_out', category: 'probe56', account: 'Cash', amount: 9900, note: 'v74.16 feast', date: F.todayISO() }, { quiet: true });
+      await sleep(30);
+      ok(Math.abs((f56b - 50 - F.effectiveSnap().cash.free) - 500) < 0.005, 'v74.16: overspending the budget (10,500 of 10,000) takes only the 500 over off free (category match ignores case)');
+      // a finished month's budget is released in full
+      snap56.month = '2020-01';
+      ok(F.budgetCredit(snap56).total === 10000, 'v74.16: a budget month that is over reserves nothing (released in full)');
+      await F.deleteTxn(id56); await F.deleteTxn(id56b); await F.deleteTxn(id56c); await sleep(40);
+      var k56 = JSON.parse(keep56); snap56.month = k56.m; snap56.obligations.budget = k56.b; snap56.cash.free = k56.f;
+      F.state.txns = txns56;
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

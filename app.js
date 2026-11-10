@@ -1686,15 +1686,49 @@
     reconOpen = false; // v73.76: a dropped edit folds the card back
     reconRender();
   }
+  // v74.16 (logic review #9): a budget reserves what is LEFT of it. The base
+  // free subtracts each budget in full, and every spend also comes off free
+  // (the overlay / the reconciled cash), so a spend inside a budgeted category
+  // was counted twice — spend your whole P10,000 Food budget and free was
+  // P10,000 too low. The credit hands back, per budget, what has been spent in
+  // that category this budget month, up to the budget (overspend still lands
+  // on free). The budget month is the snapshot's (the month the base reserves).
+  function budgetCredit(s) {
+    var lines = (s && s.obligations && s.obligations.budget) || [];
+    if (!lines.length) return { total: 0, by: {} };
+    var month = String(s.month || '');
+    var spent = {};
+    (state.txns || []).forEach(function (t) {
+      if (String(t.date || '').slice(0, 7) !== month) return;
+      var k = String(t.category || '').trim().toLowerCase();
+      if (!k) return;
+      spent[k] = (spent[k] || 0) + spendOf(t);
+    });
+    // a budget month that is OVER reserves nothing any more — its budgets are
+    // released in full (the base keeps reserving its own month until it is
+    // saved again; holding a finished month's budget back understated free)
+    var over = todayISO().slice(0, 7) > month;
+    var total = 0, by = {};
+    lines.forEach(function (l) {
+      var amt = Number(l.amount) || 0;
+      if (!(amt > 0)) return;
+      var used = over ? amt : (spent[String(l.name || '').trim().toLowerCase()] || 0);
+      var c = r2(Math.min(Math.max(0, used), amt));
+      if (c > 0) { by[l.name] = c; total += c; }
+    });
+    return { total: r2(total), by: by };
+  }
   function effectiveSnap() {
     var s = state.snapshot;
     if (!s) return null;
     var e = JSON.parse(JSON.stringify(s));
+    var bc = budgetCredit(s); // v74.16
     e.cash = {
       total: r2((s.cash ? s.cash.total : 0) - state.adj.cash),
-      free: r2((s.cash ? s.cash.free : 0) - state.adj.free),
+      free: r2((s.cash ? s.cash.free : 0) - state.adj.free + bc.total),
       accounts: s.cash ? s.cash.accounts : []
     };
+    e.budget_credit = bc.total; e.budget_used = bc.by; // v74.16: what the budgets already absorbed
     e.card_owed = r2((s.card_owed || 0) + state.adj.card);
     e.total_prepay = r2((s.total_prepay || 0) + state.adj.prepay);
     // v72.33: the per-card prepay goes live too (the card's own balance delta
@@ -9509,12 +9543,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.15, live: new Date(2026, 10, 10, 13, 6) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.16, live: new Date(2026, 10, 10, 13, 9) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.16': [
+      'Budgets no longer count your spending twice: a budget now sets aside only what\'s left of it this month. Before, spending inside a budgeted category came off your free cash AND the full budget stayed set aside — spend your whole P10,000 Food budget and free cash was P10,000 too low. Spending past a budget still comes off free cash, and once a budget month is over its budgets stop being held back.'
+    ],
     '74.15': [
       'No more counting a purchase twice: when you log an entry dated before you last set that account from your real balance (a reconcile, or typing the balance in Settings), the app now records it without changing the balance again, because that balance already includes it. The message tells you, and has a "Count it" button for the rare time it really wasn\'t included. The Ledger shows those entries as "recorded only". Other accounts are unaffected: a backdated entry on an account you didn\'t reconcile still counts.'
     ],
@@ -10754,6 +10791,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     syncEncrypt: syncEncrypt, // v73.3: the envelope (the smoke round-trips it)
     syncDecrypt: syncDecrypt, // v73.3: decrypt the envelope (the smoke round-trips it)
     syncMerge: syncMerge, // v73.3: the merge rule (pure — the smoke drives it)
+    budgetCredit: budgetCredit, // v74.16: the budget-already-spent credit (smoke)
     countTxnAnyway: countTxnAnyway, absorbedDateOf: absorbedDateOf, txnAlreadyAbsorbed: txnAlreadyAbsorbed, // v74.15: record-only entries (smoke)
     planDriftMap: planDriftMap, migratePlanDrift: migratePlanDrift, // v74.09: the drift repair (smoke)
     recStamp: recStamp, // v74.06: a record's sync age (newest of syncAt / updated / created)

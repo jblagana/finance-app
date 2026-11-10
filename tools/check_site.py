@@ -1944,6 +1944,12 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.16 (logic review #9): a budget reserves what is LEFT — budgetCredit(snapshot) hands back, per budget line, the spend in that category in the budget month (spendOf, case-insensitive category) up to the budget; effectiveSnap adds it to free (budget_credit / budget_used). Overspend still lands on free; a budget month that is over is released in full. Smoke PART 56 (5)",
+          "function budgetCredit(s) {" in js
+          and "free: r2((s.cash ? s.cash.free : 0) - state.adj.free + bc.total)," in js
+          and "var over = todayISO().slice(0, 7) > month;" in js
+          and "PART 56: v74.16 - a budget reserves what is left" in smoke
+          and "'74.16': [" in js)
     check("v74.15 (logic review #7): an entry dated before ALL of its accounts last absorbed reality is RECORD-ONLY — base.absorbedBy (per account, local date) is stamped by a reconcile (that account only — the others are merely re-anchored to their live values) and by a balance typed in Settings (saveBase without skipAdjustment: changed / new money accounts). txnAdj / freeEffect / the edit's card delta return 0 for recordOnly (delete, sync, split rebuilds and the boot recompute all follow); the toast offers 'Count it' (countTxnAnyway: applies it once and rebases its ledger row + the later rows); the ledger row reads 'recorded only'; the flag survives edit / import. snack takes an optional button label. Smoke PART 55 (8); 27 fixed-date test entries pass recordOnly: false (they model new counted entries)",
           "function txnAlreadyAbsorbed(t) {" in js
           and "function absorbedDateOf(name) {" in js
