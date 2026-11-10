@@ -1,3 +1,8 @@
+# v74.23 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-11 - (screenshot: the free-cash chart's '18 Jan' on top of '29 Jan') "theres overlap in x axis, fix in main and ship" -> "Stop the chart's date labels from colliding at the ends: the last label is always drawn (end-anchored) and the first is start-anchored, so a middle label next to either needs a wider gap — drop it when there isn't room"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.23, sw cache finances-pwa-v74.23 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.23 the edge-gap rule (DONE — release.ps1 v74.23 all green; check_site v74.23 pin; smoke PART 21 + the edge-gap assert; What's-new note). The v73.65 throttle pins are unchanged
+
 # v74.22 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - (screenshot of the coach card's Cards group) "why is this redundant" -> (each prepay row said the card twice, the amount three times, and both rows repeated "the 14th prepay is in 3 days") -> "ship straight, including the dark blue color" -> "Trim the card rows on main: the label = the card, the line = 'Still owed' (card-payment rows: 'Bill due …' + roll-over), the amount only on the chip, the prepay date once on the Cards header; and the row look from the screenshot (rounded dark-blue tiles, filled pay chips). The rest of the new look stays on wip/look-upgrade"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.22, sw cache finances-pwa-v74.22 pushed to https://github.com/jblagana/finance-app.git (main).

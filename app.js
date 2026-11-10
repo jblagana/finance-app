@@ -6489,9 +6489,16 @@
     // only thins the axis, never the data.
     var tickMinPx = Math.max(34, Math.round(4.6 * 5 + 6));
     var tickIdx = [0];
+    // v74.23 (boss: 'theres overlap in x axis'): the FIRST label is
+    // start-anchored and the LAST end-anchored, so each spans a whole label
+    // width on the inner side — a middle tick next to either needs a wider
+    // gap (the old loop let '18 Jan' sit on the forced '29 Jan').
+    var tickEdgePx = Math.round(tickMinPx * 1.4);
     for (var ti = 1; ti < pts.length - 1; ti++) {
+      if (tickIdx.length === 1 && X(ti) - X(0) < tickEdgePx) continue;
       if (X(ti) - X(tickIdx[tickIdx.length - 1]) >= tickMinPx) tickIdx.push(ti);
     }
+    while (tickIdx.length > 1 && X(pts.length - 1) - X(tickIdx[tickIdx.length - 1]) < tickEdgePx) tickIdx.pop();
     tickIdx.push(pts.length - 1);
     tickIdx.forEach(function (i) {
       var p = pts[i];
@@ -9747,12 +9754,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.22, live: new Date(2026, 10, 11, 4, 19) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.23, live: new Date(2026, 10, 11, 4, 20) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.23': [
+      'The dates under the free-cash chart no longer run into each other at the ends (like "18 Jan" on top of "29 Jan"): a date next to the first or last one is left out when there is not room for both.'
+    ],
     '74.22': [
       'The coach card\'s card rows say each thing once: the row shows the card name and "Still owed", the amount is only on the pay button, and the prepay date sits once on the Cards header instead of on every row. Card payment rows drop the repeated card name and amount too. The rows are now rounded dark-blue tiles with filled pay buttons.'
     ],
