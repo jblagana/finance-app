@@ -1,3 +1,8 @@
+# v74.25 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-11 - "in card due rows, discriminate betwwen prepay and actual due (prepay is to keep the current balance below the util rate before billing date), ship to main" -> "On the coach card's Cards group, make a prepay row and a statement-bill row unmistakable: prepay = blue, 'Prepay · <card>', the line says the balance it brings the card to (limit × the util target) before the card's next billing date; bill = amber/red, 'Bill · <card>', 'Statement due …'. The header says 'N prepays' / 'N bills due'. Which rows show when (the v73.23 prepay → bill handoff) is unchanged"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.25, sw cache finances-pwa-v74.25 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.25 prepay vs bill (DONE — release.ps1 v74.25 all green; check_site v74.25 pin + the v74.22 pins retargeted; What's-new note). Note: v74.22 had dropped the kind from the row label, which is what blurred the two
+
 # v74.24 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - "merge the wip to main and ship" -> "Merge branch wip/look-upgrade (the two WIP entries below) into main and release it: the whole approved look upgrade goes live. Behavior unchanged except what the WIP entries list (the Add-sheet keypad + chips, the header coach button replacing the floating bot)"
 Status: **done** - merge commit (this one, one-commit release) with SHELL_RELEASE 74.24, sw cache finances-pwa-v74.24 pushed to https://github.com/jblagana/finance-app.git (main).

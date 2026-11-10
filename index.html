@@ -1170,6 +1170,16 @@ button.plchip{border-radius:14px;min-height:44px}
 #boot .btag{bottom:48px;font-size:12.5px;letter-spacing:0}
 /* ---- motion off ---- */
 @media (prefers-reduced-motion:reduce){.fin-eyes,.hd-led.on,.coach-led.on{animation:none}#coachOv,.sheet{transition:none}}
+/* v74.25: prepay rows are blue (info) — a utilization move, not a bill; bill rows keep amber/red */
+.dig.info{background:rgba(143,176,255,.10)}
+.grp-body .dig.info{background:var(--card2);box-shadow:inset 3px 0 0 var(--info)}
+.grp-body .dig.warn{box-shadow:inset 3px 0 0 var(--warn)}
+.grp-body .dig.bad{box-shadow:inset 3px 0 0 var(--bad)}
+.dig.info .dg-tag,.grp-body .dig.info .dg-tag{color:var(--info)}
+.grp-body .dig.warn .dg-tag{color:var(--warn)}
+.grp-body .dig.bad .dg-tag{color:var(--bad)}
+.rowchip.info{background:var(--info);color:#06142B;border:0}
+.dig.next .dg-tag{color:var(--mut)}
 </style>
 </head>
 

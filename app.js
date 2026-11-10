@@ -5594,7 +5594,7 @@
                 var pwh = ''; grow.forEach(function (rw) { if (rw.kind === 'prepay' && rw.when && !pwh) pwh = rw.when; });
                 bits.push((kinds.prepay > 1 ? kinds.prepay + ' prepays' : 'prepay') + (pwh ? ' · ' + pwh : ''));
               }
-              if (kinds.cardpay) bits.push(kinds.cardpay + ' card payment' + (kinds.cardpay > 1 ? 's' : ''));
+              if (kinds.cardpay) bits.push(kinds.cardpay + (kinds.cardpay > 1 ? ' bills' : ' bill') + ' due'); // v74.25: "bill", not "card payment"
               // v73.29: the next-cycle roll-over is surfaced in the header
               // too — it is excluded from the total but the boss should see
               // it without opening the group.
@@ -6670,10 +6670,27 @@
       var ppD = parseISO(d.prepayDate || todayISO());
       var ppWhen = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][ppD.getDay()] + ', ' +
         ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][ppD.getMonth()] + ' ' + ppD.getDate() + ' · ' + pw;
+      // v74.25 (boss: 'in card due rows, discriminate between prepay and
+      // actual due (prepay is to keep the current balance below the util rate
+      // before billing date)'): a prepay row is its OWN kind — blue (info),
+      // labelled "Prepay · <card>", and its line says what it is for: the
+      // balance it brings the card down to (limit × the util target) before
+      // the card's next billing date. The statement bill rows (cardpay) stay
+      // amber/red and say "Bill · <card>".
+      var utilT25 = Number(state.base && state.base.card_util_target) || 0;
+      var pctTxt25 = String(Math.round(utilT25 * 1000) / 10);
       pcards.slice(0, 4).forEach(function (c) {
-        rows.push({ cls: d.prepayIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'prepay', amt: c.prepay, when: ppWhen,
-          tag: 'Prepay · ' + c.name, label: c.name,
-          text: 'Still owed',
+        var bc25 = null;
+        (state.base.accounts || []).forEach(function (a) { if (String(a.name) === String(c.name)) bc25 = a; });
+        var bd25 = Math.round(Number(bc25 && bc25.billing_day) || Number(state.base.cutoff_day) || 15);
+        var tn25 = parseISO(d.today || todayISO());
+        var bill25 = dayInMonth(tn25.getFullYear(), tn25.getMonth(), bd25);
+        if (bill25 < tn25) bill25 = dayInMonth(tn25.getFullYear(), tn25.getMonth() + 1, bd25);
+        var billLbl25 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][bill25.getMonth()] + ' ' + bill25.getDate();
+        var tb25 = c.target_balance != null ? Number(c.target_balance) : r2((Number(c.limit) || 0) * utilT25);
+        rows.push({ cls: 'info', group: 'cards', kind: 'prepay', amt: c.prepay, when: ppWhen,
+          tag: 'Prepay · ' + c.name,
+          text: 'Brings it down to ' + money(tb25) + ' (' + pctTxt25 + '% of the limit) before it bills on ' + billLbl25,
           r: money(c.prepay),
           act: 'prepay', payload: { amount: c.prepay, date: d.prepayDate, day: d.prepayDay, card: c.name } });
       });
@@ -6713,10 +6730,10 @@
         var hasNext = nextBal > 0.004;
         var prov = cd.manual ? ' (manual)' : ' (auto)';
         var text = hasNext
-          ? 'Bill due ' + dueTxt + prov + ' — ' + money(nextBal) + ' rolls to next cycle.' // v74.22: the card + amount left the line (label + chip carry them)
-          : 'Bill due ' + dueTxt + prov + '.';
+          ? 'Statement due ' + dueTxt + prov + ' — ' + money(nextBal) + ' rolls to next cycle.' // v74.22: the card + amount left the line; v74.25: "Statement" (the bill, not a prepay)
+          : 'Statement due ' + dueTxt + prov + '.';
         rows.push({ cls: cd.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay', amt: amt, nextAmt: nextBal,
-          tag: 'Card payment · ' + c.name, label: c.name, // v74.22: the label shows the card; the tag stays the aria label
+          tag: 'Card payment · ' + c.name, label: 'Bill · ' + c.name, // v74.25: the label names the kind (Bill vs Prepay); the tag stays the aria label
           text: text,
           r: money(amt),
           act: 'prepay', payload: { amount: amt, date: cd.dueDate, day: cd.due_day, card: c.name } });
@@ -9871,12 +9888,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.24, live: new Date(2026, 10, 11, 4, 22) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.25, live: new Date(2026, 10, 11, 4, 27) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.25': [
+      'On the coach card, a card prepay and a card bill now look different. A prepay row is blue, says "Prepay · <card>", and tells you what it is for: the balance it brings the card down to (your target % of the limit) before that card bills. A bill row is amber or red, says "Bill · <card>", and shows when the statement is due. The Cards header says "N prepays" or "N bills due".'
+    ],
     '74.24': [
       'A new look for the whole app. Rounder cards, new fonts (bundled, so they work offline) and the same dark blue colours. A Light theme is in Settings → Appearance.',
       'The top of each tab now shows a small line and a big title: the date and your greeting on Home, the cycle dates and days left on Committed and Ledger. The Coach Fin face in the top right opens the coach, and the floating bot is gone. Settings is the button next to it.',
