@@ -3588,6 +3588,20 @@ waitReady().then(async function (F) {
       ok(c52d.spent === Math.round((c52a.spent + 3300) * 100) / 100, 'v74.12: "spent this cycle" still shows the full total (plans included)');
       F.state.plans = plans52; F.state.txns = txns52;
 
+      // ============ PART 53: v74.13 - no salary set ============
+      console.log('\n== PART 53: v74.13 - no salary set ======================');
+      var b53 = F.state.base, sal53 = b53.salary, txns53 = F.state.txns;
+      var d53a = F.insightsData();
+      b53.salary = 0;
+      var d53b = F.insightsData();
+      ok(d53b.planDeduct === d53a.planDeduct && d53b.planDeduct > 0, 'v74.13: with no salary the plans are STILL deducted (' + d53b.planDeduct + ' == ' + d53a.planDeduct + ')');
+      ok(d53b.freeNet === d53a.freeNet, 'v74.13: the free cash is the same with or without a salary set (' + d53b.freeNet + ')');
+      F.state.txns = txns53.concat([{ id: 'r53', date: F.todayISO(), account: 'Cash', kind: 'cash_in', category: 'Refund', amount: 150, note: 'refund', created: new Date().toISOString() }]);
+      var hw53 = F.headroomWindow(), c53 = F.cycleData();
+      ok(!c53.received && hw53 && !hw53.early, 'v74.13: with no salary a P150 refund is not "the salary arriving early" (received ' + JSON.stringify(c53.received) + ', early ' + (hw53 && hw53.early) + ')');
+      ok(F.insightsData().cycleDaysLeft === d53b.cycleDaysLeft, 'v74.13: the headroom days do not jump on a refund (' + d53b.cycleDaysLeft + ')');
+      b53.salary = sal53; F.state.txns = txns53;
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

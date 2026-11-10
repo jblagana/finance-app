@@ -3782,7 +3782,7 @@
       if (t.kind !== 'cash_in') return;
       var amt = Number(t.amount) || 0;
       if (amt <= 0) return;
-      if (expected > 0 && amt < 0.9 * expected) return;
+      if (!(expected > 0) || amt < 0.9 * expected) return; // v74.13: no salary set = nothing is "the salary" (a P150 refund read as an early payday)
       var d = String(t.date || '');
       if (d < lo || d > hi) return;
       if (!received || d < received.date) received = { date: d, amount: r2(amt), id: t.id || null };
@@ -3801,7 +3801,7 @@
         if (t.kind !== 'cash_in') return;
         var amt = Number(t.amount) || 0;
         if (amt <= 0) return;
-        if (expected > 0 && amt < 0.9 * expected) return;
+        if (!(expected > 0) || amt < 0.9 * expected) return; // v74.13
         var d = String(t.date || '');
         if (d <= hi || d > w.end) return;
         if (d > received.date) received = { date: d, amount: r2(amt), id: t.id || null };
@@ -3811,7 +3811,7 @@
         if (t.kind !== 'cash_in') return;
         var amt = Number(t.amount) || 0;
         if (amt <= 0) return;
-        if (expected > 0 && amt < 0.9 * expected) return;
+        if (!(expected > 0) || amt < 0.9 * expected) return; // v74.13
         var d = String(t.date || '');
         if (d <= hi || d > w.end) return;
         if (!received || d < received.date) received = { date: d, amount: r2(amt), id: t.id || null };
@@ -4063,7 +4063,10 @@
   // salary = no cycle = no deduction.
   function cyclePlanDeduction() {
     var cd = cycleData();
-    if (!cd || !(cd.expected > 0)) return 0;
+    // v74.13 (logic review #5): plans are deducted whether or not a salary is set —
+    // the old "no salary = no deduction" gate let P30,354 of upcoming plans vanish
+    // from the free cash (58,631 shown instead of 28,277) for anyone without a salary.
+    if (!cd) return 0;
     var total = 0;
     state.plans.forEach(function (p) {
       // v73.27: planAllDates (the WHOLE series), not planOccurrences (the
@@ -9376,12 +9379,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.12, live: new Date(2026, 10, 10, 12, 55) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.13, live: new Date(2026, 10, 10, 12, 56) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.13': [
+      'If you haven\'t set a salary, the app no longer ignores your plans: upcoming plans are now taken out of your free cash either way (before, they simply weren\'t). And with no salary set, a small refund or any money coming in is no longer mistaken for "your salary arrived early" — which used to stretch your headroom over the wrong number of days.'
+    ],
     '74.12': [
       'Fairer forecasts: your spending pace (and the "you\'ll be in the red by payday" warning, and the coach\'s worried mood) now counts only your everyday spending. Plan payments like rent or the AC installment were also being treated as a daily habit, even though they\'re already set aside as plans — so the forecast came out thousands of pesos too gloomy. "Spent this cycle" still shows everything.'
     ],

@@ -1944,6 +1944,12 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.13 (logic review #5 + #6): no salary set. cyclePlanDeduction deducts the cycle's plans whether or not a salary is set (the 'no salary = no deduction' gate let P30,354 vanish: free 58,631 shown instead of 28,277); cycleDataFor's three received scans require a salary (a P150 refund with no salary read as an early payday and stretched the headroom 9 -> 39 days). Smoke PART 53 (4)",
+          js.count("if (!(expected > 0) || amt < 0.9 * expected) return;") == 3
+          and "if (expected > 0 && amt < 0.9 * expected) return;" not in js
+          and "if (!cd || !(cd.expected > 0)) return 0;" not in js
+          and "PART 53: v74.13 - no salary set" in smoke
+          and "'74.13': [" in js)
     check("v74.12 (logic review #8): the spending PACE is the everyday spend only — linked plan payments (planRef) are planned money the plan deduction already counts, and extrapolating them as a daily rate counted them twice (Oct 12: P1,212/day vs P936; the forecast P5,240 too dark). cycleDataFor: pace = (spent - spentPlans) / elapsed, projectedNet = expected - pace*days - spentPlans - plansDue (the cycle's plans counted once); the calendar paceMonth uses the same rule; 'spent' still shows the full total. Smoke PART 52 (5)",
           "var pace = r2((spent - spentPlans) / elapsed);" in js
           and "var projectedNet = r2(expected - pace * w.days - spentPlans - plansDue);" in js

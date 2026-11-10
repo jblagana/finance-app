@@ -5,7 +5,7 @@ Status: **in progress**. Subtasks (foundational first):
 - [x] v74.10 paydays 29-31 silently became the 15th; card prepay days 29-31 overflow into the next month (clamp to the month's last day) — DONE (+ found on the way: the projection chart read the card's manual due AMOUNT as its due DAY, so every card dropped on the 15th; now the card's due_day). Smoke PART 50 (7), v73.57 chart expectations retargeted, check_site pin
 - [x] v74.11 the coach headline's per-day number uses the calendar month while the strip uses the pay cycle (one number: the cycle) — DONE: daily / pace / freeAfterPace all on the cycle. Smoke PART 51 (5) + check_site pin
 - [x] v74.12 the "end of month in the red" pace counts plan payments that are already deducted as plans — DONE: pace excludes planRef spends; the cycle projection counts the cycle's plans once (paid + due). Smoke PART 52 (5) + check_site pin
-- [ ] v74.13 no salary set: plans stop being deducted, and any refund reads as an early salary
+- [x] v74.13 no salary set: plans stop being deducted, and any refund reads as an early salary — DONE: plans always deducted; the salary scans require a salary. Smoke PART 53 (4) + check_site pin
 - [ ] v74.14 three Undo buttons do nothing (reconcile, plan edit, card clamp) + the clamp warning is overwritten
 - [ ] v74.15 entries dated before the last reconcile are counted twice (record-only by default, "count it" on demand)
 - [ ] v74.16 a budget double-counts the spends logged in its category
