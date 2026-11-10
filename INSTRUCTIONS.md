@@ -1,3 +1,8 @@
+# v74.20 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-10 - "the sort row makes it look awfull" -> "Replace the 'Sort' label + full-width dropdown with a compact section header: 'PEOPLE · N' on the left, a small pill dropdown on the right (Recent / A–Z / Custom); hidden when the book is empty. Look only — the sort behavior is unchanged"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.20, sw cache finances-pwa-v74.20 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.20 the Owed sort row → the People header (DONE — release.ps1 v74.20 all green; check_site v74.20 pin; previewed in headless Edge: "PEOPLE · 4" + the Custom pill)
+
 # v74.19 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-10 - "ship new owed look" -> "Ship the Owed tab look from the approved look-upgrade mockup (Claude canvas 'Fin.AI look upgrade', phone 4 · Owed) — LOOK ONLY: every existing Owed behavior stays (4-direction entry form with the Total/Mine/Theirs split, edit/delete per entry, rename, drag reorder + sort, SOA (PDF), remove person, See more/less, ledger filing rules untouched)"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.19, sw cache finances-pwa-v74.19 pushed to https://github.com/jblagana/finance-app.git (main).

@@ -7970,6 +7970,11 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var people = owedSortedPeople();
     var ssel = byId('owedSort'); // v72.7: keep the control in sync (drag -> custom)
     if (ssel && ssel.value !== (state.owed.sort || 'recent')) ssel.value = state.owed.sort || 'recent';
+    // v74.20: the People header (count + the sort pill) shows once anyone is in the book
+    var head = byId('owedHead');
+    if (head) head.style.display = people.length ? '' : 'none';
+    var cnt = byId('owedCount');
+    if (cnt) cnt.textContent = String(people.length);
     if (sum) {
       if (!people.length) {
         sum.style.display = 'none';
@@ -9730,12 +9735,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.19, live: new Date(2026, 10, 10, 22, 35) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.20, live: new Date(2026, 10, 10, 22, 51) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.20': [
+      'The Owed tab\'s sort control is now a small pill on the right of a "People" header (with how many people you have), instead of a full-width row. Sorting works the same: Recent, A–Z, or Custom (drag a card by its handle).'
+    ],
     '74.19': [
       'The Owed tab has a new look. The top card shows your net first — how much is owed to you, or how much you owe — with the two totals underneath. Each person is now a compact card with their initial, how many entries they have, and their balance in green (owes you) or amber (you owe). Tap a card to open it: + entry, the statement PDF and remove are inside, and every entry now shows the running balance after it. Nothing about how entries work has changed.'
     ],

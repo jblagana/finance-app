@@ -435,6 +435,11 @@ border-top:1px solid var(--line);background:var(--card)}
 .ow-amtbox{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;font-variant-numeric:tabular-nums}
 .ow-run{color:var(--mut);font-size:11px;white-space:nowrap;margin-top:1px}
 @media (prefers-reduced-motion:reduce){.ow-chev{transition:none}.ow-p.open .ow-body{animation:none}}
+/* v74.20: the People header — the section label + the compact sort pill */
+.ow-head{display:flex;align-items:center;gap:8px;margin:16px 4px 8px}
+.ow-head-t{flex:1;color:var(--mut);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.ow-head-l{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+select.ow-sort{flex:0 0 auto;width:auto;font-size:12.5px;font-weight:600;padding:6px 28px 6px 12px;border-radius:999px;background-color:var(--card)}
 .oent-btns .act{flex:1;width:auto}
 .oent-inline{margin:8px 0 0;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--card2)}
 .oent{margin-top:10px}
@@ -995,12 +1000,16 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
       <button class="act" type="submit">Add</button>
     </form>
 
-    <div style="display:flex;align-items:center;gap:8px;margin:10px 2px">
-      <label for="owedSort" class="note" style="margin:0">Sort</label>
-      <select id="owedSort">
+    <!-- v74.20 (boss: 'the sort row makes it look awfull'): the sort control is
+         a compact pill on the People section header (hidden while the book
+         is empty — renderOwed); the ⠿ handle still pins the sort to Custom -->
+    <div id="owedHead" class="ow-head" style="display:none">
+      <span class="ow-head-t">People · <span id="owedCount">0</span></span>
+      <label for="owedSort" class="ow-head-l">Sort</label>
+      <select id="owedSort" class="ow-sort">
         <option value="recent" selected>Recent</option>
         <option value="az">A–Z</option>
-        <option value="custom">Custom (drag)</option>
+        <option value="custom">Custom</option>
       </select>
     </div>
 

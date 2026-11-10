@@ -1944,6 +1944,15 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.20 (boss: 'the sort row makes it look awfull'): the Owed sort row (label + full-width select) is GONE — the sort is a compact pill (select.ow-sort, auto width) on the People section header (#owedHead: 'People · N' via #owedCount), which renderOwed hides while the book is empty; the options read Recent / A–Z / Custom; the sort behavior is unchanged (the v72.7 pin still holds)",
+          'id="owedHead" class="ow-head"' in html
+          and 'id="owedCount"' in html
+          and '<select id="owedSort" class="ow-sort">' in html
+          and "select.ow-sort{flex:0 0 auto;width:auto" in html
+          and '<option value="custom">Custom (drag)</option>' not in html
+          and "if (head) head.style.display = people.length ? '' : 'none';" in js
+          and "if (cnt) cnt.textContent = String(people.length);" in js
+          and "'74.20': [" in js)
     check("v74.19 (boss: 'ship new owed look' — the approved look-upgrade mockup, LOOK ONLY): the totals card is the net hero (#owedSumDir carries the direction, #owedSumNet the unsigned amount, the In/Out cells keep their ids); Add a person is one inline row; each person card is a tappable header (data-ow-open: avatar, tap-to-rename name + entry count, balance + direction) over an .ow-body that opens in place (owedToggleOpen, in-memory owedOpen, a sole person / a new person starts open) — the drag handle and the rename input never toggle it; + entry / SOA (PDF) / remove moved into the opened card; every entry row shows the running balance after it (owedRunText, oldest-first like the SOA). Every Owed behavior is unchanged (the v72.19 / v72.29 / v72.48 pins still hold)",
           'id="owedSumDir"' in html
           and 'class="card ow-sum"' in html
