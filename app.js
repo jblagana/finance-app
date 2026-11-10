@@ -6667,9 +6667,7 @@
       // the label is the card, the line is "Still owed", the amount lives on
       // the chip only, and the date rides ONCE on the Cards group header
       // (when). The tag stays the aria label (and the v73.23 pin).
-      var ppD = parseISO(d.prepayDate || todayISO());
-      var ppWhen = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][ppD.getDay()] + ', ' +
-        ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][ppD.getMonth()] + ' ' + ppD.getDate() + ' · ' + pw;
+      var ppWhen = pw; // v74.26 (boss: 'remove Sat, Nov 14 from the card header prepay'): the header says only "in N days"
       // v74.25 (boss: 'in card due rows, discriminate between prepay and
       // actual due (prepay is to keep the current balance below the util rate
       // before billing date)'): a prepay row is its OWN kind — blue (info),
@@ -9888,12 +9886,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.25, live: new Date(2026, 10, 11, 4, 27) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.26, live: new Date(2026, 10, 11, 4, 30) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.26': [
+      'The Cards header on the coach card no longer shows the prepay date (like "Sat, Nov 14"). It just says how many prepays there are and when, like "2 prepays · in 3 days".'
+    ],
     '74.25': [
       'On the coach card, a card prepay and a card bill now look different. A prepay row is blue, says "Prepay · <card>", and tells you what it is for: the balance it brings the card down to (your target % of the limit) before that card bills. A bill row is amber or red, says "Bill · <card>", and shows when the statement is due. The Cards header says "N prepays" or "N bills due".'
     ],

@@ -1,3 +1,8 @@
+# v74.26 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-11 - "Sat, Nov 14 / remove that from card header prepy" -> "Drop the weekday + date from the coach card's Cards header prepay bit: '2 prepays · in 3 days'"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.26, sw cache finances-pwa-v74.26 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.26 (DONE — release.ps1 v74.26 all green; check_site v74.26 pin; What's-new note)
+
 # v74.25 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - "in card due rows, discriminate betwwen prepay and actual due (prepay is to keep the current balance below the util rate before billing date), ship to main" -> "On the coach card's Cards group, make a prepay row and a statement-bill row unmistakable: prepay = blue, 'Prepay · <card>', the line says the balance it brings the card to (limit × the util target) before the card's next billing date; bill = amber/red, 'Bill · <card>', 'Statement due …'. The header says 'N prepays' / 'N bills due'. Which rows show when (the v73.23 prepay → bill handoff) is unchanged"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.25, sw cache finances-pwa-v74.25 pushed to https://github.com/jblagana/finance-app.git (main).

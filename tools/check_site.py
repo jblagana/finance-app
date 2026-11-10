@@ -1998,6 +1998,10 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.26 (boss: 'Sat, Nov 14 — remove that from card header prepay'): the Cards header's prepay bit is 'N prepays · in N days' — no weekday/date",
+          "var ppWhen = pw;" in js
+          and "ppD.getDate() + ' · ' + pw" not in js
+          and "'74.26': [" in js)
     check("v74.19 (boss: 'ship new owed look' — the approved look-upgrade mockup, LOOK ONLY): the totals card is the net hero (#owedSumDir carries the direction, #owedSumNet the unsigned amount, the In/Out cells keep their ids); Add a person is one inline row; each person card is a tappable header (data-ow-open: avatar, tap-to-rename name + entry count, balance + direction) over an .ow-body that opens in place (owedToggleOpen, in-memory owedOpen, a sole person / a new person starts open) — the drag handle and the rename input never toggle it; + entry / SOA (PDF) / remove moved into the opened card; every entry row shows the running balance after it (owedRunText, oldest-first like the SOA). Every Owed behavior is unchanged (the v72.19 / v72.29 / v72.48 pins still hold)",
           'id="owedSumDir"' in html
           and 'class="card ow-sum"' in html
