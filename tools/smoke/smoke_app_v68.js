@@ -3569,6 +3569,25 @@ waitReady().then(async function (F) {
       ok(appSrcHas51("you reach payday"), 'v74.11: the coach says "by payday", not "end the month"');
       function appSrcHas51(x) { return require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'app.js'), 'utf8').indexOf(x) >= 0; }
 
+      // ============ PART 52: v74.12 - plan payments are not the pace ============
+      console.log('\n== PART 52: v74.12 - plan payments stay out of the pace ==');
+      var plans52 = F.state.plans, txns52 = F.state.txns;
+      F.state.plans = plans52.slice(); F.state.txns = txns52.slice();
+      var c52a = F.cycleData();
+      var due52 = (function () { var x = F.parseISO(F.todayISO()); x.setDate(x.getDate() + 1); return F.localISO(x); })();
+      F.state.plans.push({ id: 'p52', name: 'Probe52', amount: 3000, date: due52, created: '2026-11-01T00:00:00Z' });
+      var c52b = F.cycleData();
+      ok(Math.abs((c52a.projectedNet - c52b.projectedNet) - 3000) < 0.011, 'v74.12: a 3,000 plan due this cycle lowers the projection by exactly 3,000 (' + (c52a.projectedNet - c52b.projectedNet).toFixed(2) + ')');
+      F.state.txns.push({ id: 't52a', date: F.todayISO(), account: 'Cash', kind: 'cash_out', category: 'Bills', amount: 3000, note: 'Probe52', created: new Date().toISOString(), planRef: { planId: 'p52', date: due52, name: 'Probe52', amount: 3000 } });
+      var c52c = F.cycleData();
+      ok(c52c.pace === c52b.pace, 'v74.12: paying the plan does NOT raise the pace (' + c52b.pace + ' -> ' + c52c.pace + ')');
+      ok(Math.abs(c52c.projectedNet - c52b.projectedNet) < 0.011, 'v74.12: paying the plan leaves the projection unchanged — it moves from due to paid (' + c52b.projectedNet + ' -> ' + c52c.projectedNet + ')');
+      F.state.txns.push({ id: 't52b', date: F.todayISO(), account: 'Cash', kind: 'cash_out', category: 'Food', amount: 300, note: 'lunch', created: new Date().toISOString() });
+      var c52d = F.cycleData();
+      ok(Math.abs((c52d.pace - c52c.pace) - Math.round(300 / c52d.elapsed * 100) / 100) < 0.011, 'v74.12: an everyday spend still moves the pace by amount / elapsed days');
+      ok(c52d.spent === Math.round((c52a.spent + 3300) * 100) / 100, 'v74.12: "spent this cycle" still shows the full total (plans included)');
+      F.state.plans = plans52; F.state.txns = txns52;
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

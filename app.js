@@ -3822,19 +3822,29 @@
     // The cycle's own salary cash_in is excluded from the spend: it is income
     // shown on the Salary line, not negative spend — an early payday (the
     // 13th) sits in the PREVIOUS cycle's window and would sink its spend.
-    var spent = 0;
+    var spent = 0, spentPlans = 0;
     state.txns.forEach(function (t) {
       if (receivedId && t.id && t.id === receivedId) return;
       var d = String(t.date || '');
       if (d < w.start || d > today) return;
-      spent += spendOf(t);
+      var sp = spendOf(t);
+      spent += sp;
+      if (t.planRef) spentPlans += sp; // v74.12: a linked plan payment — planned money, not the daily run-rate
     });
     var startP = parseISO(w.start);
     var todayP = parseISO(today);
     var elapsed = Math.max(1, Math.round((todayP - startP) / 86400000) + 1);
     if (elapsed > w.days) elapsed = w.days;
-    var pace = r2(spent / elapsed);
-    var projectedNet = r2(expected - pace * w.days);
+    // v74.12 (logic review #8): the PACE is the everyday spend only. A linked
+    // plan payment (rent, the AC installment) is planned money that the plan
+    // deduction already counts; extrapolating it as a daily rate counted it
+    // twice (Oct 12: P1,212/day with them vs P936 without - the month-end
+    // forecast came out P5,240 too dark). The projection now takes the
+    // everyday pace over the whole cycle plus the cycle's plans ONCE (what's
+    // already paid + what's still due).
+    var pace = r2((spent - spentPlans) / elapsed);
+    var plansDue = planWindowTotal({ start: w.start, end: w.end }).total;
+    var projectedNet = r2(expected - pace * w.days - spentPlans - plansDue);
     // the previous cycle, for the comparison line
     var prevStartD = dayInMonth(startP.getFullYear(), startP.getMonth() - 1, sd); // v74.10: clamped (a raw Feb 31 rolled into March)
     var prevM = prevStartD.getFullYear() + '-' + (prevStartD.getMonth() < 9 ? '0' : '') + (prevStartD.getMonth() + 1);
@@ -3850,7 +3860,7 @@
     return {
       month: month, sday: sd, start: w.start, end: w.end, days: w.days,
       expected: expected, received: received,
-      spent: r2(spent), elapsed: elapsed, pace: pace, projectedNet: projectedNet,
+      spent: r2(spent), spentPlans: r2(spentPlans), plansDue: plansDue, elapsed: elapsed, pace: pace, projectedNet: projectedNet,
       prev: { month: prevM, start: prevW.start, end: prevW.end, expected: prevExpected, spent: r2(prevSpent), net: r2(prevExpected - prevSpent) }
     };
   }
@@ -4562,9 +4572,9 @@
         }
       }
     });
-    var spentM = 0;
-    state.txns.forEach(function (t) { if (String(t.date).slice(0, 7) === monthPrefix) spentM += spendOf(t); }); // v72.44
-    var pace = now.getDate() > 0 ? r2(spentM / now.getDate()) : 0;
+    var spentM = 0, spentMPlans = 0;
+    state.txns.forEach(function (t) { if (String(t.date).slice(0, 7) === monthPrefix) { var sp = spendOf(t); spentM += sp; if (t.planRef) spentMPlans += sp; } }); // v72.44
+    var pace = now.getDate() > 0 ? r2((spentM - spentMPlans) / now.getDate()) : 0; // v74.12: everyday spend only (plan payments are deducted as plans)
     // v68 item 4: per-category pace — this month's daily run-rate vs the
     // trailing-3-month daily average; flag >25% above (₱500 noise floor).
     var catPace = [];
@@ -9366,12 +9376,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.11, live: new Date(2026, 10, 10, 12, 52) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.12, live: new Date(2026, 10, 10, 12, 55) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.12': [
+      'Fairer forecasts: your spending pace (and the "you\'ll be in the red by payday" warning, and the coach\'s worried mood) now counts only your everyday spending. Plan payments like rent or the AC installment were also being treated as a daily habit, even though they\'re already set aside as plans — so the forecast came out thousands of pesos too gloomy. "Spent this cycle" still shows everything.'
+    ],
     '74.11': [
       'One spend-per-day number: the coach\'s "you can spend up to ... today" now matches the Headroom number above it. The coach used to divide your free cash by the days left in the calendar month, while the Headroom divided by the days until payday — so the two could be three times apart. Both now count to payday, and the "you\'ll be in the red" warning now means "by payday".'
     ],

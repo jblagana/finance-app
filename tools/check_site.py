@@ -1618,9 +1618,9 @@ def main():
           and "if (t.kind === 'card_payment') return 0;" in js
           and "if (t.kind === 'cash_in') return 0;" in js  # v73.8: cash_in is income, not negative spend (was -a)
           and "todaySpend += spendOf(t)" in js
-          and "spentM += spendOf(t)" in js
+          and "var sp = spendOf(t); spentM += sp;" in js  # v74.12 successor: same spend rule, plan payments split out for the pace
           and js.count("var a = spendOf(t);") >= 2
-          and "spent += spendOf(t)" in js
+          and "var sp = spendOf(t);\n      spent += sp;" in js  # v74.12 successor
           and "spendOf: spendOf" in js
           and "F.spendOf(tn)" in chatjs
           and "var ccFunded = e.k === 'p' && !cbRow && isCardFunder(e.w);" in js)  # (3) user edit: the prepay row shows only the card change, not the unchanged free line — v74.02 generalized it: the free line is gone from EVERY row, so the payoff branch (card line only) IS the pin
@@ -1944,6 +1944,13 @@ def main():
           and 'stored only on this device' in html
           and 'encrypted on this phone' in html
           and "'73.97': [" in js)
+    check("v74.12 (logic review #8): the spending PACE is the everyday spend only — linked plan payments (planRef) are planned money the plan deduction already counts, and extrapolating them as a daily rate counted them twice (Oct 12: P1,212/day vs P936; the forecast P5,240 too dark). cycleDataFor: pace = (spent - spentPlans) / elapsed, projectedNet = expected - pace*days - spentPlans - plansDue (the cycle's plans counted once); the calendar paceMonth uses the same rule; 'spent' still shows the full total. Smoke PART 52 (5)",
+          "var pace = r2((spent - spentPlans) / elapsed);" in js
+          and "var projectedNet = r2(expected - pace * w.days - spentPlans - plansDue);" in js
+          and "if (t.planRef) spentPlans += sp;" in js
+          and "r2((spentM - spentMPlans) / now.getDate())" in js
+          and "PART 52: v74.12 - plan payments stay out of the pace" in smoke
+          and "'74.12': [" in js)
     check("v74.11 (logic review #2): one per-day number — insightsData.daily divides the net free by the CYCLE days (cycDays, the headroom window the strip uses) instead of the calendar days left (the coach headline and the strip were ~3x apart: P1,131 vs P3,142); pace = the cycle pace (paceMonth keeps the old calendar rate); freeAfterPace projects to payday; the coach wording says payday. headroomWindow / cycleData computed once. Smoke PART 51 (5)",
           "daily: cycDays > 0 ? r2(Math.max(0, freeNetI) / cycDays) : 0," in js
           and "pace: paceC, paceMonth: pace," in js
