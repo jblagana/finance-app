@@ -2891,8 +2891,8 @@ waitReady().then(async function (F) {
       F.renderInsights();
       var ins38 = String(byIdStub('insBody').innerHTML || '');
       ok(ins38.indexOf('class="pace"') >= 0, 'v73.94: the strip renders in the .pace row');
-      ok(ins38.indexOf('Headroom') >= 0 && ins38.indexOf('Days left this cycle') >= 0,
-        'v73.94: the two always-on cells render (Headroom + Days left this cycle)');
+      ok(ins38.indexOf('Per day') >= 0 && ins38.indexOf('Payday') >= 0,
+        'v73.94/v74.21: the two always-on cells render (Per day + Payday — the v74.21 words)');
       ok(ins38.indexOf(money22(hDaily38)) >= 0 && ins38.indexOf('/day') >= 0,
         'v73.94: the Headroom cell quotes the per-cycle daily math (' + money22(hDaily38) + '/day, net free ' + money22(freeN38) + ' / ' + hDays38 + ' days)');
       ok(ins38.indexOf('>' + hDays38 + '<') >= 0, 'v73.94: the Days-left cell quotes cycleDaysLeft (' + hDays38 + ')');

@@ -5,7 +5,7 @@
  * the network. The online coach is remote-only — there is no local model to
  * cache.
  */
-const CACHE = 'finances-pwa-v74.20';
+const CACHE = 'finances-pwa-v74.21';
 const SHELL = ['./', './index.html', './app.js', './chat.js', './ai.js',
   './manifest.webmanifest', './icon-192.png', './icon-512.png', './favicon.png',
   './fonts/Inter-latin.woff2', './fonts/SpaceGrotesk-latin.woff2']; // WIP look-upgrade: self-hosted type (offline too)

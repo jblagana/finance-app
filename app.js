@@ -5729,8 +5729,8 @@
     // the cell is ALWAYS rendered (0.00 on a no-spend day — the strip is a fixed
     // 3-cell strip, no conditional hiding) and the label is "Spent today".
     // The headroom value gets the .sm size so '₱X,XXX.XX/day' fits one row.
-    var cells = '<div class="p"><div class="k">Headroom</div><div class="v sm"' + (free < 0 ? ' style="color:var(--bad)"' : ' style="color:var(--ok)"') + '>' + money(hDaily) + '<span class="unit">/day</span></div></div>'
-      + '<div class="p"><div class="k">Days left this cycle</div><div class="v">' + hDays + '</div></div>'
+    var cells = '<div class="p"><div class="k">Per day</div><div class="v sm"' + (free < 0 ? ' style="color:var(--bad)"' : ' style="color:var(--ok)"') + '>' + money(hDaily) + '<span class="unit">/day</span></div></div>'
+      + '<div class="p"><div class="k">Payday</div><div class="v">' + hDays + '<span class="unit"> days</span></div></div>' // v74.21: 'Payday' + N days (boss: 'use the per day, payday, spent today words')
       + '<div class="p"><div class="k">Spent today</div><div class="v">' + money(todaySpend) + '</div></div>';
     body.innerHTML = '<div class="pace">' + cells + '</div>';
   }
@@ -9781,12 +9781,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.20, live: new Date(2026, 10, 10, 22, 51) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.21, live: new Date(2026, 10, 11, 4, 6) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.21': [
+      'The three cells on the Home cycle card are now called Per day, Payday and Spent today (they were Headroom, Days left this cycle, Spent today). Same numbers, plainer words.'
+    ],
     '74.20': [
       'The Owed tab\'s sort control is now a small pill on the right of a "People" header (with how many people you have), instead of a full-width row. Sorting works the same: Recent, A–Z, or Custom (drag a card by its handle).'
     ],
