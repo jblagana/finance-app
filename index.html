@@ -1189,6 +1189,12 @@ button.plchip{border-radius:11px;min-height:44px}
 .grp-body .dig.bad .dg-tag{color:var(--bad)}
 .rowchip.info{background:var(--info);color:#06142B;border:0}
 .dig.next .dg-tag{color:var(--mut)}
+/* v74.39: Settings -> App (Check for update & restart) */
+#setSheet .set-app{padding:12px 14px 14px}
+#setSheet .set-app .note{margin:0 0 10px}
+#setSheet .set-app .act{min-height:46px;width:100%}
+#setSheet .set-restart-note{margin:10px 0 0!important}
+#setSheet .set-restart-note:empty{display:none}
 /* v74.38: the Add sheet's top (direction + amount + = hint) stays put while the rest scrolls */
 #addSheet .add-top{position:sticky;top:-4px;z-index:3;background:var(--card);margin:0 -16px;padding:6px 16px 8px}
 #addSheet .add-amt{margin-top:6px}
@@ -1888,6 +1894,15 @@ button.plchip{border-radius:11px;min-height:44px}
       </div>
       <p id="syncNote" class="note" style="margin:10px 0 0" aria-live="polite"></p>
     </section>
+    <!-- v74.39 (boss: 'add a restart button so that it updates to the latest shell if ever its stubborn to refresh'):
+         forceShellUpdate — checks the server first (offline / unreachable = nothing changes), then clears only the
+         app's cached files and reloads. Entries, numbers and settings live elsewhere and stay. -->
+    <h2 class="set-lab">App</h2>
+    <section class="card set-app">
+      <p class="note">Stuck on an old version? Restart to pull the latest from the server. Your entries and numbers stay on this phone.</p>
+      <button class="act ghost" id="setRestart" type="button">Check for update &amp; restart</button>
+      <p class="note set-restart-note" id="setRestartNote" aria-live="polite"></p>
+    </section>
     <h2 class="set-lab" id="wnTitle">What's new</h2>
     <section class="card" id="wnSec">
       <ul id="wnList" style="margin:6px 0 0;padding-left:18px;font-size:13.5px;line-height:1.5"></ul>
@@ -1935,9 +1950,14 @@ button.plchip{border-radius:11px;min-height:44px}
     <button type="button" class="tab" data-tab="owed">Owed</button>
   </div>
 </nav>
-<script src="./app.js"></script>
-<script src="./chat.js"></script>
-<script src="./ai.js"></script>
+<!-- v74.39: the three app scripts, in order and parser-blocking as before. After "Check for update &
+     restart" (forceShellUpdate sets fin.freshBoot) they load ONCE with a ?r= stamp — a new address the
+     browser's in-memory / HTTP caches can't answer, so the restart really runs the newest files. -->
+<script>(function () {
+  var q = '';
+  try { var r = sessionStorage.getItem('fin.freshBoot'); if (r) { q = '?r=' + encodeURIComponent(r); sessionStorage.removeItem('fin.freshBoot'); } } catch (e) {}
+  ['app.js', 'chat.js', 'ai.js'].forEach(function (f) { document.write('<scr' + 'ipt src="./' + f + q + '"></scr' + 'ipt>'); });
+})();</script>
 </body>
 </html>
 

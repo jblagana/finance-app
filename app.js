@@ -10016,12 +10016,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.38, live: new Date(2026, 10, 11, 16, 26) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.39, live: new Date(2026, 10, 11, 16, 47) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.39': [
+      'Settings has a new App section with a \u201cCheck for update & restart\u201d button. If the app ever refuses to update on its own, tap it: it checks the server, pulls the newest version and restarts. Your entries and numbers are not touched, and if you\u2019re offline it changes nothing.'
+    ],
     '74.38': [
       'In the Add sheet, the Spend / Pay card / Money in buttons and the amount now stay at the top while you scroll down to the category, account and keypad, so you can always see the amount you are typing.'
     ],
@@ -11527,6 +11530,65 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       setTimeout(function () { location.reload(); }, 350);
     };
   }
+  // v74.39 (boss: 'add a restart button so that it updates to the latest
+  // shell if ever its stubborn to refresh on its own'): Settings -> App ->
+  // "Check for update & restart". Order matters for safety:
+  //  1. refuse while offline or with unsaved Your-numbers edits;
+  //  2. read the LIVE sw.js from the network (no-store — the sw lets it
+  //     through) for the latest version; a failure here stops with nothing
+  //     changed, so the app can never be left without a cached shell;
+  //  3. re-download the shell files with cache:'reload' (refreshes the
+  //     browser's HTTP cache, which GitHub Pages keeps for ~10 min);
+  //  4. delete ONLY the finances-pwa-* shell caches + unregister the sw —
+  //     IndexedDB / localStorage (entries, numbers, chat, settings) are
+  //     never touched — and reload; the page re-registers the new sw.
+  function forceShellUpdate() {
+    var btn = byId('setRestart'), note = byId('setRestartNote');
+    function say(t) { if (note) note.textContent = t; }
+    if (baseDirty) { say('Save your numbers first (the Save bar at the bottom of Your numbers), then restart.'); return; }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      say('You\u2019re offline \u2014 updating needs a connection. Nothing was changed.');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    say('Checking for the latest version\u2026');
+    var cur = Number(SHELL_RELEASE.v) || 0;
+    fetch('./sw.js', { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function (txt) {
+      var m = /finances-pwa-v(\d+(?:\.\d+)?)/.exec(txt || '');
+      var latest = m ? Number(m[1]) : null;
+      say(latest != null && latest > cur + 1e-9
+        ? 'Updating v' + cur.toFixed(2) + ' \u2192 v' + latest.toFixed(2) + '\u2026'
+        : 'You already have the latest (v' + cur.toFixed(2) + ') \u2014 restarting fresh anyway\u2026');
+      var files = ['./', './index.html', './app.js', './chat.js', './ai.js', './sw.js', './manifest.webmanifest'];
+      return Promise.all(files.map(function (f) {
+        return fetch(f, { cache: 'reload' }).then(function (r) { if (!r.ok) throw new Error(f + ' HTTP ' + r.status); });
+      }));
+    }).then(function () {
+      var jobs = [];
+      if (typeof caches !== 'undefined' && caches.keys) {
+        jobs.push(caches.keys().then(function (ks) {
+          return Promise.all(ks.filter(function (k) { return k.indexOf('finances-pwa-') === 0; })
+            .map(function (k) { return caches.delete(k); }));
+        }));
+      }
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+          return Promise.all(rs.map(function (r) { return r.unregister(); }));
+        }));
+      }
+      return Promise.all(jobs);
+    }).then(function () {
+      // the next boot loads the scripts under a one-time ?r= address (index.html's loader)
+      try { sessionStorage.setItem('fin.freshBoot', String(Date.now())); } catch (e) {}
+      setTimeout(function () { location.reload(); }, 300);
+    })['catch'](function (e) {
+      if (btn) btn.disabled = false;
+      say('Couldn\u2019t reach the app\u2019s server (' + (e && e.message ? e.message : e) + '). Nothing was changed \u2014 try again when you have a connection.');
+    });
+  }
   function init() {
     // v72.53: the splash starts cycling now (it is already visible from the
     // HTML) and a safety timer guarantees a stuck load can never trap the UI.
@@ -11801,6 +11863,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (scb) scb.onclick = closeSheets;
     var ncb = byId('numClose');
     if (ncb) ncb.onclick = closeSheets;
+    var srb = byId('setRestart'); // v74.39: Check for update & restart
+    if (srb) srb.onclick = forceShellUpdate;
     var sno = byId('setNumOpen');
     if (sno) sno.onclick = function () { openSheet('numSheet'); };
     var snc = byId('setNumCoach');

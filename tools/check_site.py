@@ -1998,6 +1998,21 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.39 (boss: 'add a restart button so that it updates to the latest shell if ever its stubborn to refresh on its own'): Settings -> App -> #setRestart runs forceShellUpdate: offline / unsaved-numbers guard, the LIVE sw.js read first (no-store; a failure changes nothing), the shell re-fetched with cache:'reload', then ONLY finances-pwa-* caches deleted + the sw unregistered + reload; the sw lets no-store/reload requests through to the network",
+          'id="setRestart"' in html and 'id="setRestartNote"' in html
+          and "function forceShellUpdate() {" in js
+          and "if (srb) srb.onclick = forceShellUpdate;" in js
+          and "fetch('./sw.js', { cache: 'no-store' })" in js
+          and "return fetch(f, { cache: 'reload' })" in js
+          and "k.indexOf('finances-pwa-') === 0" in js
+          and "r.unregister()" in js
+          and "indexedDB.deleteDatabase" not in js.split("function forceShellUpdate() {")[1].split("function init() {")[0]
+          and "localStorage.clear" not in js.split("function forceShellUpdate() {")[1].split("function init() {")[0]
+          and "if (req.cache === 'no-store' || req.cache === 'reload') return;" in sw
+          and "sessionStorage.setItem('fin.freshBoot', String(Date.now()));" in js
+          and "var r = sessionStorage.getItem('fin.freshBoot');" in html
+          and "['app.js', 'chat.js', 'ai.js'].forEach(function (f) { document.write(" in html
+          and "'74.39': [" in js)
     check("v74.38 (boss: 'in add expense sheet, make the part above the horizontal line (the one below the amount field) frozen'): the direction buttons + the amount + its = hint are one sticky block (#addTop) at the top of the Add sheet's scroll area; Category starts the scrolling part",
           '<div class="add-top" id="addTop">' in html
           and "#addSheet .add-top{position:sticky;top:-4px;" in html

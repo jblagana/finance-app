@@ -5,7 +5,7 @@
  * the network. The online coach is remote-only — there is no local model to
  * cache.
  */
-const CACHE = 'finances-pwa-v74.38';
+const CACHE = 'finances-pwa-v74.39';
 const SHELL = ['./', './index.html', './app.js', './chat.js', './ai.js',
   './manifest.webmanifest', './icon-192.png', './icon-512.png', './favicon.png',
   './fonts/Inter-latin.woff2', './fonts/SpaceGrotesk-latin.woff2']; // v74.24 look upgrade: self-hosted type (offline too)
@@ -35,6 +35,10 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return; // let API POSTs hit the network directly
+  // v74.39: the Settings "Check for update & restart" button asks for fresh
+  // copies (cache: 'no-store' / 'reload') — those must reach the network,
+  // not this cache, or the button would only ever see the old shell.
+  if (req.cache === 'no-store' || req.cache === 'reload') return;
   let url;
   try { url = new URL(req.url); } catch (err) { return; }
 
