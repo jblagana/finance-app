@@ -1,5 +1,9 @@
+## 2026-11-12 - "how can we make the add expense sheet shown fully on screen, the top remains where it is currently and the bottom is the actual bottom without having to scroll. show me a mockup" -> canvas board 10 · Add sheet that fits -> "do 74.57 and the add sheet build" -> "The Add sheet fits one screen: the amount line holds the = hint, Date + Note share a row (Today), the keypad is an operator strip + 4 rows with =, the keys stretch to fill what is left; same top on the boss's phone"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.58 (headless Chromium: no scroll at 390x844 / 375x667 / 430x932 in Spend, Pay card and Money in; = turns 300-125+10 into 185; a full add saves; stress A 53/53 + U 7/7)
+
 ## 2026-11-12 - "run the stress test" (+ "have u included cases of reconcile and rebase") -> report: 104 checks, 16 real problems -> "do all" -> "Fix every stress-test finding, one release per group, each failing case kept as a check"
-Status: **in progress**.
+Status: **done** - v74.51-v74.57 pushed; the full stress suite (tools/stress) 106/106.
 - [x] v74.51 #1 one balance edit reset every other account (per-account rebase: accountRebase + rebaseBy + effAdj; All numbers shows live balances) + #3 rename moves entries + #4 type switch asks first and no longer resets the rest
 - [x] v74.52 #2 removing an account / #12 category with entries warns + #7 back-to-back removals keep every Undo
 - [x] v74.53 #5 a salary logged from the chip always counts as salary + #9 the chip pre-picks the account the salary lands in + #14 a second salary in one cycle asks first

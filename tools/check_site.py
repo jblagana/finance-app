@@ -246,7 +246,7 @@ def main():
           and "addAmtEq(amtEl); updateChargeHint()" in js
           and 'id="amtEq" class="amtEq"' in html and ".amtEq{" in html)
     check("v54: amount keyboards are full (operators typeable) on the quick-sum inputs",
-          'id="f_amount" type="text" placeholder="0.00, or a quick sum like 300-125+10"' in html
+          'id="f_amount" type="text" placeholder="0.00 or 300-125+10"' in html  # v74.58 successor: the shorter placeholder (the amount line holds ₱ + the = hint)
           and '<input type="text" class="oent-amt" maxlength="40" autocomplete="off">' in js
           and 'id="p_amount" type="text"' in html
           and "evalExpr(raw)" in js)
@@ -1999,6 +1999,16 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.58 (boss: 'make the add expense sheet shown fully on screen, the top remains where it is currently and the bottom is the actual bottom without having to scroll' -> mockup -> build): the amount line holds ₱ + the amount + #amtEq; Date + Note share .dnrow; the keypad is an operator strip (.kops: ( ) × ÷ C) + 4 rows (.kmain) ending in = (data-k eq works the sum out); the sheet is a full-height column whose keypad stretches (grid-auto-rows minmax(40px,1fr)); the date label reads Today; every field id kept",
+          '<div class="amtline">' in html and '<div class="dnrow">' in html
+          and '<div class="kops">' in html and '<div class="kmain">' in html
+          and 'data-k="eq"' in html
+          and "#addKeypad .kmain{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:minmax(40px,1fr)" in html
+          and "#addSheet{height:min(calc(100dvh - 24px),720px)" in html
+          and all(('id="' + i + '"') in html for i in ["f_amount", "amtEq", "f_category", "f_payto", "f_account", "f_paywith", "f_date", "f_dateLabel", "f_note", "addKeypad", "addSubmit", "planLinkChip", "cashbackRow", "chargeHint", "paywithNote", "addTop"])
+          and "else if (k === 'eq') { var ev0 = evalExpr(v);" in js
+          and "input.value === todayISO() ? 'Today' : fmtDate(input.value)" in js
+          and "'74.58': [" in js)
     check("v74.57 (stress test: a 10,000-entry ledger): findPaidTxn reads only the plan-linked entries for that occurrence (planPaidList: an index keyed planId|date, rebuilt when the list is replaced or changes length, dropped every task, cleared by the in-place edit and unlink); the stress suite lives in tools/stress",
           "function planPaidList(planId, date) {" in js
           and "(kind === 'prepay' ? state.txns : planPaidList(kind.planId, kind.date)).forEach(function (t) {" in js

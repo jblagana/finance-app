@@ -149,7 +149,7 @@
     var lab = byId(input.id + 'Label');
     if (!lab) return;
     if (!input.value) { lab.textContent = 'Pick a date'; lab.className = 'dlabel empty'; return; }
-    lab.textContent = fmtDate(input.value);
+    lab.textContent = input.value === todayISO() ? 'Today' : fmtDate(input.value); // v74.58: the common case, short
     lab.className = 'dlabel';
   }
   function r2(x) { return Math.round((Number(x) || 0) * 100) / 100; }
@@ -5813,7 +5813,9 @@
     kp.onclick = function (ev) {
       var b = ev.target && ev.target.closest ? ev.target.closest('[data-k]') : null; if (!b) return;
       var k = b.getAttribute('data-k'), v = String(a.value || '');
-      if (k === 'del') v = v.slice(0, -1); else if (k === 'clr') v = ''; else v = v + k;
+      if (k === 'del') v = v.slice(0, -1); else if (k === 'clr') v = '';
+      else if (k === 'eq') { var ev0 = evalExpr(v); if (ev0 != null && isFinite(ev0)) v = String(ev0); } // v74.58: = turns the quick sum into its result
+      else v = v + k;
       a.value = v;
       a.dispatchEvent(new Event('input', { bubbles: true }));
     };
@@ -10708,12 +10710,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.57, live: new Date(2026, 10, 12, 3, 23) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.58, live: new Date(2026, 10, 12, 3, 33) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.58': [
+      'The Add sheet fits on one screen \u2014 no scrolling to reach the keypad or Add expense. The amount and its \u201c= \u20b1\u2026\u201d sit on one line, Date and Note share a row (the date says \u201cToday\u201d), and the keypad has ( ) \u00d7 \u00f7 C on a slim strip with a new = key that works out the sum. The keys stretch to fill your screen.'
+    ],
     '74.57': [
       'Faster with a big ledger: checking which plans are paid no longer re-reads every entry for every plan date. With 10,000 entries, logging one was taking over a second.'
     ],

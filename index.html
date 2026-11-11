@@ -1262,6 +1262,39 @@ button.plchip{border-radius:11px;min-height:44px}
 .cbseg button{min-height:36px}
 .cbrow.cbcards,.cbrow.cbplans{min-height:40px;align-items:center}
 .mini{min-width:40px;min-height:40px}
+/* v74.58: the Add sheet fits ONE screen — the sheet always reaches the bottom, the form is a column and the
+   keypad takes whatever height is left (keys min 40px), so Add expense is never below the fold */
+.sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;margin:0!important;padding:0!important}
+#addSheet{height:min(calc(100dvh - 24px),720px);max-height:min(calc(100dvh - 24px),720px)}
+#addSheet .sheet-b{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+#addSheet #addForm{display:flex;flex-direction:column;flex:1 0 auto}
+#addSheet .amtline{display:flex;align-items:baseline;gap:6px;border-bottom:2px solid var(--accLine);padding:0 2px 6px;margin-top:6px}
+#addSheet .amtcur{flex:none;font-size:22px;font-weight:600;color:var(--mut)}
+#addSheet #f_amount{flex:1;min-width:0;text-align:left;border:0;padding:2px 0}
+#addSheet .amtline .amtEq{margin:0;flex:none;max-width:48%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;font-size:13px}
+#addForm label{margin:10px 2px 5px;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}
+#addForm .dnrow{display:flex;gap:8px;margin-top:12px}
+#addForm .dnrow .dfield{flex:none;width:138px}
+#addForm .dnrow .dfield .dlabel{padding:0 14px;height:44px;box-sizing:border-box}
+#addForm .dnrow .dfield input[type=date]{height:44px}
+#addForm .dnrow #f_note{flex:1;min-width:0;height:44px;border-radius:11px}
+#addKeypad{display:flex;flex-direction:column;gap:6px;flex:1 1 auto;margin-top:12px;min-height:0}
+#addKeypad .kops{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+#addKeypad .kops button{height:34px;font-size:15px}
+#addKeypad .kmain{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:minmax(40px,1fr);gap:6px;flex:1 1 auto}
+#addKeypad .kmain button{height:auto;min-height:40px}
+#addForm .addgo{margin-top:10px}
+@media (max-height:720px){ /* short phones (iPhone SE size): the sheet takes the screen, everything a notch tighter */
+#addSheet .sheet-h{padding-top:18px;padding-bottom:6px}
+#addForm label{margin:7px 2px 4px}
+#addForm .dnrow{margin-top:8px}
+#addKeypad{margin-top:8px;gap:4px}
+#addKeypad .kops button{height:32px}
+#addKeypad .kmain{grid-auto-rows:minmax(34px,1fr);gap:4px}
+#addKeypad .kmain button{min-height:34px}
+#addForm .addgo{margin-top:2px}
+#addForm .addgo .act{min-height:44px}
+}
 .nv-acc .nv-drag{margin:0 -4px 0 -6px;padding:12px 4px;font-size:16px} /* v74.49: the reorder handle */
 .nv-acc.dragging{position:relative;z-index:20;background:var(--card2);box-shadow:0 8px 22px rgba(0,0,0,.35);border-radius:12px}
 .nv-tile{flex:none;width:38px;height:38px;border-radius:10px;background:var(--accSoft);color:var(--acc);display:flex;align-items:center;justify-content:center;font-weight:700}
@@ -1839,11 +1872,16 @@ button.plchip{border-radius:11px;min-height:44px}
         <button type="button" id="addModePrepay" class="amb">Pay card</button>
         <button type="button" id="addModeMoneyin" class="amb">Money in</button>
       </div>
+      <!-- v74.58 (boss: 'make the add expense sheet shown fully on screen, the top remains where it is
+           and the bottom is the actual bottom without having to scroll'): ₱ + the amount + its = hint on one line -->
       <div class="add-amt">
-        <label for="f_amount">Amount (₱)</label>
-        <input id="f_amount" type="text" placeholder="0.00, or a quick sum like 300-125+10">
+        <label for="f_amount" class="sr">Amount (₱)</label>
+        <div class="amtline">
+          <span class="amtcur" aria-hidden="true">₱</span>
+          <input id="f_amount" type="text" placeholder="0.00 or 300-125+10">
+          <p id="amtEq" class="amtEq" style="display:none"></p>
+        </div>
       </div>
-      <p id="amtEq" class="amtEq" style="display:none"></p>
       </div>
       <div class="row rowpair">
         <!-- v73.80: in Pay card mode this cell is "Pay to" (the card being
@@ -1872,13 +1910,6 @@ button.plchip{border-radius:11px;min-height:44px}
           <select id="f_paywith" style="display:none"><option value="CASH::Cash" selected>Cash</option></select>
           <div class="chiprow" id="f_accountChips" data-for="f_account,f_paywith"></div>
         </div>
-        <div>
-          <label for="f_date">Date</label>
-          <div class="dfield">
-            <input id="f_date" type="date">
-            <span class="dlabel empty" id="f_dateLabel" aria-hidden="true">Pick a date</span>
-          </div>
-        </div>
       </div>
       <!-- v73.53: the cashback flag — Money in on a CC where the money is
            NEW (a cashback): owed drops, free RISES by the full amount,
@@ -1894,8 +1925,16 @@ button.plchip{border-radius:11px;min-height:44px}
            card_payment (the edit sheet is Spend-shaped, so the funder is
            read-only; the card sits in Paid with as before). -->
       <p id="paywithNote" class="note" style="display:none;margin:8px 0 0"></p>
-      <label for="f_note">Note (optional)</label>
-      <input id="f_note">
+      <!-- v74.58: Date + Note share ONE row (a date pill + the note field) -->
+      <div class="dnrow">
+        <div class="dfield dpill">
+          <label for="f_date" class="sr">Date</label>
+          <input id="f_date" type="date">
+          <span class="dlabel empty" id="f_dateLabel" aria-hidden="true">Pick a date</span>
+        </div>
+        <label for="f_note" class="sr">Note (optional)</label>
+        <input id="f_note" placeholder="Note (optional)">
+      </div>
       <!-- v73.17: the plan-link chip — the add form's fuzzy match
            (planLinkSuggestion) offers "this looks like a plan payment";
            the boss's tap is the only thing that links (txn.planRef).
@@ -1903,14 +1942,20 @@ button.plchip{border-radius:11px;min-height:44px}
       <button type="button" id="planLinkChip" class="plchip" style="display:none" aria-pressed="false"></button>
       <!-- v74.24 look upgrade: the keypad feeds #f_amount (digits, . + − and the quick-sum operators; ⌫ / C) -->
       <!-- v74.28 (boss: add multiply, divide, and parenthesis): a top row of ( ) × ÷ — evalExpr already reads them -->
+      <!-- v74.58: ( ) × ÷ C on a slim strip; 4 rows of digits with = (it turns the quick sum into its result);
+           the keys stretch to fill what is left of the screen, so Add is always on screen -->
       <div class="keypad" id="addKeypad" role="group" aria-label="Amount keypad">
-        <button type="button" data-k="(" class="kfn" aria-label="Open bracket">(</button><button type="button" data-k=")" class="kfn" aria-label="Close bracket">)</button><button type="button" data-k="×" class="kfn" aria-label="Multiply">×</button><button type="button" data-k="÷" class="kfn" aria-label="Divide">÷</button>
-        <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" data-k="del" class="kfn" aria-label="Delete last">⌫</button>
-        <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" data-k="+" class="kfn">+</button>
-        <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-k="-" class="kfn">−</button>
-        <button type="button" data-k="00">00</button><button type="button" data-k="0">0</button><button type="button" data-k=".">.</button><button type="button" data-k="clr" class="kfn" aria-label="Clear">C</button>
+        <div class="kops">
+          <button type="button" data-k="(" class="kfn" aria-label="Open bracket">(</button><button type="button" data-k=")" class="kfn" aria-label="Close bracket">)</button><button type="button" data-k="×" class="kfn" aria-label="Multiply">×</button><button type="button" data-k="÷" class="kfn" aria-label="Divide">÷</button><button type="button" data-k="clr" class="kfn" aria-label="Clear">C</button>
+        </div>
+        <div class="kmain">
+          <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" data-k="del" class="kfn" aria-label="Delete last">⌫</button>
+          <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" data-k="+" class="kfn">+</button>
+          <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-k="-" class="kfn">−</button>
+          <button type="button" data-k="00">00</button><button type="button" data-k="0">0</button><button type="button" data-k=".">.</button><button type="button" data-k="eq" class="kfn" aria-label="Work out the sum">=</button>
+        </div>
       </div>
-      <div style="margin-top:14px">
+      <div class="addgo">
         <button class="act" id="addSubmit" type="submit">Add expense</button>
       </div>
     </form>
