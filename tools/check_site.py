@@ -1998,6 +1998,14 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.27 (boss: 'revert to the old font of the app, lil bit less rounded cards, more empty space at the top'): the look layer uses the system font stack (--fd + body), its radii are ~25% smaller (hero 20, card 16), and the header has 44px of top room",
+          "v74.27 (boss: 'revert to the old font of the app" in html
+          and ' --fd:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}' in html
+          and 'body{font-family:-apple-system,BlinkMacSystemFont,' in html
+          and "--fd:'Space Grotesk'" not in html
+          and ".hero{border-radius:20px;" in html and ".card{border-radius:16px;" in html
+          and "header{padding:44px 16px 10px;" in html
+          and "'74.27': [" in js)
     check("v74.26 (boss: 'Sat, Nov 14 — remove that from card header prepay'): the Cards header's prepay bit is 'N prepays · in N days' — no weekday/date",
           "var ppWhen = pw;" in js
           and "ppD.getDate() + ' · ' + pw" not in js

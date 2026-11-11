@@ -9886,12 +9886,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.26, live: new Date(2026, 10, 11, 4, 30) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.27, live: new Date(2026, 10, 11, 10, 41) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.27': [
+      'The app is back on the built-in font of your phone (the one it used before the new look), the cards and buttons are a little less rounded, and there is more breathing room above the header at the top.'
+    ],
     '74.26': [
       'The Cards header on the coach card no longer shows the prepay date (like "Sat, Nov 14"). It just says how many prepays there are and when, like "2 prepays · in 3 days".'
     ],

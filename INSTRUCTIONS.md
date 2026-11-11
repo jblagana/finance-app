@@ -1,3 +1,8 @@
+# v74.27 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-11 - (on the Fin.AI look upgrade canvas) "revert to the old font of the app and use lil bit less rounded cards, and add more empty space at the top" -> "build it and ship to main" -> "Back to the pre-v74.24 system font (-apple-system / Segoe UI / Roboto) for body AND the big numbers/titles; every radius in the look layer ~25% smaller (26->20, 22->16, 18->14, 16->12, 14->11 ...; pills, dots, bars unchanged); the header's top padding 18px -> 44px. LOOK ONLY"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.27, sw cache finances-pwa-v74.27 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.27 (release.ps1 v74.27 all green; check_site v74.27 pin; What's-new note; the canvas mockup was updated first and approved). The Inter / Space Grotesk files stay in fonts/ + the sw shell (the v74.24 pin holds) but nothing references them
+
 # v74.26 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - "Sat, Nov 14 / remove that from card header prepy" -> "Drop the weekday + date from the coach card's Cards header prepay bit: '2 prepays · in 3 days'"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.26, sw cache finances-pwa-v74.26 pushed to https://github.com/jblagana/finance-app.git (main).
