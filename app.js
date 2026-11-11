@@ -3950,12 +3950,13 @@
       }
       var ch = (nm || '?').charAt(0).toUpperCase();
       ah += '<button type="button" class="nv-row nv-acc" data-nv="acc" data-nvi="' + i + '">' +
+        '<span class="bdrag nv-drag" data-drag="1" aria-hidden="true">\u283f</span>' + // v74.49: drag to reorder
         '<span class="nv-tile' + (card ? ' card' : '') + '" aria-hidden="true">' + esc(ch) + '</span>' +
         '<span class="nv-l"><span class="nv-t">' + esc(nm || 'New account') + '</span><span class="nv-s">' + sub + '</span></span>' +
         '<span class="nv-amt' + (card ? ' owe' : '') + '">' + money(amt) + (card ? '<small>owed</small>' : '') + '</span></button>';
     }
     h += '<div class="nv-labrow"><h2 class="nv-lab">Accounts</h2><span>' + money(r2(liq)) + ' cash · ' + money(r2(owed)) + ' owed</span></div>' +
-      '<section class="nv-card">' + ah + '<button type="button" class="nv-add" data-nvadd="acc">+ Add account</button></section>';
+      '<section class="nv-card"><div class="nv-accs">' + ah + '</div><button type="button" class="nv-add" data-nvadd="acc">+ Add account</button></section>';
     // v74.45: the shared Card rules section is gone — each card's rules live
     // in its own account page (the shared values only seed new cards)
     // Budgets
@@ -4011,7 +4012,19 @@
     var mv = host.querySelector('[data-nvmove]'); // v74.46: the old debts / goals / one-offs -> plans
     if (mv) mv.onclick = moveLegacyToPlans;
     var bt = host.querySelectorAll('[data-nv],[data-nvadd]');
+    // v74.49 (boss: 'make the accounts entries draggable so i can rearrange them, their order in the
+    // add expense sheet should also update'): the ⠿ on each account row drags it (baseDragStart / Move /
+    // End, the form's own drag); the drop reorders the form's account blocks the same way, so Save writes
+    // the new order — and the Add sheet lists accounts in the saved order.
+    if (!host.__nvDrag) {
+      host.__nvDrag = true;
+      host.addEventListener('pointerdown', baseDragStart);
+      host.addEventListener('pointermove', baseDragMove);
+      host.addEventListener('pointerup', baseDragEnd);
+      host.addEventListener('pointercancel', baseDragEnd);
+    }
     for (var q = 0; q < bt.length; q++) bt[q].onclick = function () {
+      if (nvDragJust) { nvDragJust = false; return; } // v74.49: the drop is not a tap
       var add = this.getAttribute('data-nvadd'), go = this.getAttribute('data-nv') || add;
       var idx = this.getAttribute('data-nvi');
       if (add) {
@@ -4356,6 +4369,7 @@
       dragSt.offY = ev.clientY - oldTop;
     }
   }
+  var nvDragJust = false; // v74.49: swallow the click that follows a drop on an All numbers row
   function baseDragEnd(ev) {
     if (!dragSt) return;
     var row = dragSt.row, moved = dragSt.moved;
@@ -4363,6 +4377,18 @@
     row.style.transform = '';
     try { if (ev.target && ev.target.releasePointerCapture) ev.target.releasePointerCapture(ev.pointerId); } catch (e) {}
     dragSt = null;
+    if (moved && row.classList.contains('nv-acc')) {
+      // v74.49: an All numbers account row — mirror the new order onto the form's blocks
+      nvDragJust = true;
+      setTimeout(function () { nvDragJust = false; }, 400);
+      var rowsAcc = byId('rowsAcc');
+      var blks = rowsAcc ? Array.prototype.slice.call(rowsAcc.querySelectorAll('.accblk')) : [];
+      var order = Array.prototype.map.call(row.parentElement.querySelectorAll('.nv-acc'), function (b) { return Number(b.getAttribute('data-nvi')); });
+      order.forEach(function (ix) { if (blks[ix]) rowsAcc.appendChild(blks[ix]); });
+      markBaseDirty();
+      renderNumOverview();
+      return;
+    }
     if (moved) markBaseDirty();
   }
   function renderBaseStatus() {
@@ -10487,12 +10513,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.48, live: new Date(2026, 10, 12, 1, 17) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.49, live: new Date(2026, 10, 12, 1, 21) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.49': [
+      'Accounts can be rearranged: in All numbers, drag an account by its \u283f handle, then Save (or just close). The Add sheet lists your accounts in that order.'
+    ],
     '74.48': [
       'Fixed: removing an account (like MariBank CC) reset every account\u2019s live numbers to the \u201cas of\u201d balances. Now only that account\u2019s own numbers go with it, and the \u2715 shows an Undo. Re-adding an account with the same name brings its live numbers back too.',
       'The \u2715 at the top right now goes back one step: a section goes back to All numbers, All numbers to Settings, and a Settings page to Settings. Only Settings\u2019 own \u2715 closes it.',

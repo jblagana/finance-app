@@ -1999,6 +1999,14 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.49 (boss: 'make the accounts entries draggable so i can rearrange them, their order in the add expense sheet should also update'): each All numbers account row has a ⠿ handle (data-drag) inside a .nv-accs list; the overview host runs the form's drag handlers; a drop mirrors the new order onto the #rowsAcc blocks (markBaseDirty -> Save writes base.accounts in that order, which seedAccounts / seedPayTo / seedPayWith follow) and the following click is swallowed (nvDragJust)",
+          "'<span class=\"bdrag nv-drag\" data-drag=\"1\" aria-hidden=\"true\">" in js
+          and '<div class=\"nv-accs\">' in js
+          and "host.addEventListener('pointerdown', baseDragStart);" in js
+          and "if (moved && row.classList.contains('nv-acc')) {" in js
+          and "order.forEach(function (ix) { if (blks[ix]) rowsAcc.appendChild(blks[ix]); });" in js
+          and "if (nvDragJust) { nvDragJust = false; return; }" in js
+          and "'74.49': [" in js)
     check("v74.48 (boss: 'i accidentally x-ed maribank cc from accounts and it deleted without warning' + 'when i tap areas in the app it zooms in' + 'the x in setting should only be for settings ... go back a page only'): an account add / remove / rename is structural (structuralAdj moves only that account's overlay share, parks it in adj.goneBy for a re-add, keepAdjOnce skips the rebase); every numbers-form ✕ offers an Undo (row re-inserted while open, the saved base restored after); the top-right ✕ and Esc step back one layer (closeTop); no zoom (maximum-scale=1 + touch-action:manipulation)",
           "function structuralAdj(oldB, newB) {" in js
           and "if (prevBase && structuralAdj(prevBase, b)) state.keepAdjOnce = true;" in js
