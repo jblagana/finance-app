@@ -2,7 +2,7 @@
 Status: **in progress** - one release per part.
 - [x] v74.44 Settings redesign (one All numbers card -> All numbers overview with ‹ Settings; a section's back -> All numbers; Coach / Your data / App as row cards; Worker & key, backup contents, Sync, What's new as small pages; every control id kept; headless Chromium: the full round trip + all four pages, dark + light)
 - [x] v74.45 card rules per card
-- [ ] v74.46 More -> Committed
+- [x] v74.46 More -> Committed
 - [ ] v74.47 Categories + plan category
 
 ## 2026-11-11 - "when i open setting ... click any tab like salary, it opens another page which is the basics and then theres a back arrow that says all numbers which when clicked shows another view of the your numbers, thats confusing. also in add sheet, i added an amount 500 and logged it. when i open the add expense sheet again ... it shows the green = php 500 despite no amount added yet, fix and ship" -> "(1) A Settings row opens its part of Your numbers and the back button there reads '‹ Settings' and returns to Settings (no second overview in between); the overview only shows when Your numbers is opened from elsewhere. (2) The Add sheet's '= ₱…' hint is refreshed when the amount is cleared after logging and every time the sheet opens"

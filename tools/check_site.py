@@ -1999,6 +1999,15 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.46 (boss: 'the more section, are they still needed given the commited section has them'): the All numbers More card is gone — a Committed row (data-nvcommit -> the money tab) replaces it; Basics shows the one-month salary group and Budgets the one-month budget group (NUM_GRP_WITH, .sub keeps their heading); old debts / sinking / one-offs show in a From before card (legacyCount) whose Move to Committed (moveLegacyToPlans) turns them into plans (consecutive equal months -> one monthly plan x N) and clears them from the base",
+          "lab('More')" not in js
+          and "var NUM_GRP_WITH = { basics: ['sal'], bud: ['bov'], legacy: ['debt', 'sink', 'one'] };" in js
+          and "nvCls(groups[k], 'sub', withG);" in js
+          and "#baseBody .ngrp.sub>.bhead{display:block" in html
+          and "if (cmt) cmt.onclick = function () { closeSheets(); setTab('money'); };" in js
+          and "function legacyCount() {" in js and "function legacyPlanList(b) {" in js and "function moveLegacyToPlans() {" in js
+          and "nb.debts = {}; nb.sinking = {}; nb.one_offs = {};" in js
+          and "'74.46': [" in js)
     check("v74.45 (boss: 'lets have the card rules per card in their account entries'): each card stores its own prepay_day + util_target (accCcRow pday / util, saved by readBaseForm); cardUtilOf / cardPrepayDayOf fall back to the shared b.prepay_day / b.card_util_target (new-card seeds); baseCardPrepays + the snapshot cards + effectiveSnap use the card's own target; insightsData keeps prepayAt per card and follows the NEAREST card prepay (unchanged when all share a day); the coach prepay rows use each card's own target + date; the All numbers Card rules section is gone",
           "function cardUtilOf(c, b) {" in js and "function cardPrepayDayOf(c, b) {" in js
           and "var target = cardUtilOf(c, b); // v74.45" in js

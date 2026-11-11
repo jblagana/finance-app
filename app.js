@@ -3672,8 +3672,8 @@
     h += '</div>';
     var salRows = '';
     Object.keys(b.salary_overrides || {}).forEach(function (m) { salRows += payRow(m, b.salary_overrides[m], true); });
-    h += '<div class="ngrp" data-grp="sal">' + bsec('Salary overrides') + '<p class="note ngrp-note">A month whose salary is different from the usual — month · amount.</p><div id="rowsSal">' + salRows + '</div>' +
-      '<button type="button" class="addrow" data-add="sal">+ override month</button></div>';
+    h += '<div class="ngrp" data-grp="sal">' + bsec('A different salary one month') + '<p class="note ngrp-note">A bonus, a 13th month, unpaid leave — month · amount.</p><div id="rowsSal">' + salRows + '</div>' +
+      '<button type="button" class="addrow" data-add="sal">+ Add a month</button></div>';
     var accRows = (b.accounts || []).map(accRow).join('');
     // v72.30 (user: 'add a way to override the current accounts'
     // amount/balances'): the third column is the account's CURRENT balance —
@@ -3701,7 +3701,7 @@
           '<input data-r="a" type="text" value="' + (Number(b.budget_overrides[m][k]) || '') + '">' + delBtn('Remove override'));
       });
     });
-    h += '<div class="ngrp" data-grp="bov">' + bsec('Budget overrides (one month)') + '<p class="note ngrp-note">Month · category · amount for that month only.</p><div id="rowsBov">' + bovRows + '</div>' +
+    h += '<div class="ngrp" data-grp="bov">' + bsec('One month only') + '<p class="note ngrp-note">Month · category · amount for that month only.</p><div id="rowsBov">' + bovRows + '</div>' +
       '<button type="button" class="addrow" data-add="bov">+ override</button></div>';
     var debtBlocks = '';
     Object.keys(b.debts || {}).forEach(function (k) {
@@ -3775,7 +3775,12 @@
   function numBackTap() { numGo(null); }
   function openNumFromSet() { openSheet('numSheet'); numFromSet = true; numBackLabel(); }
   var NUM_GRP_T = { basics: 'Basics', cardrules: 'Card rules', acc: 'Accounts', bud: 'Monthly budgets', bov: 'A different budget one month',
-    sal: 'A different salary one month', debt: 'Debts', one: 'One-offs', sink: 'Savings goals', mm: 'Learned from your notes' };
+    sal: 'A different salary one month', debt: 'Debts', one: 'One-offs', sink: 'Savings goals', mm: 'Learned from your notes', legacy: 'From before' };
+  // v74.46 (boss: 'the more section, are they still needed given the commited section has them'):
+  // a page can show companion groups under its own (with their heading): Basics
+  // carries the one-month salary, Budgets the one-month budget, and "From before"
+  // the old debts / savings goals / one-offs (shown only while any exist).
+  var NUM_GRP_WITH = { basics: ['sal'], bud: ['bov'], legacy: ['debt', 'sink', 'one'] };
   function numGo(grp, i) {
     numView = grp ? { grp: grp, i: (i == null ? null : i) } : null;
     applyNumView();
@@ -3796,8 +3801,11 @@
     nvCls(sh, 'nv-grp', !!g);
     var groups = bb.querySelectorAll ? bb.querySelectorAll('.ngrp') : [];
     for (var k = 0; k < groups.length; k++) {
-      var on = groups[k].getAttribute('data-grp') === g;
+      var gk = groups[k].getAttribute('data-grp');
+      var withG = (NUM_GRP_WITH[g] || []).indexOf(gk) >= 0; // v74.46: a companion group (keeps its heading)
+      var on = gk === g || withG;
       nvCls(groups[k], 'on', on);
+      nvCls(groups[k], 'sub', withG);
       nvCls(groups[k], 'one', on && g === 'acc' && numView.i != null);
     }
     if (g === 'acc') {
@@ -3889,15 +3897,21 @@
     h += '<div class="nv-labrow"><h2 class="nv-lab">Monthly budgets</h2><span>' + nb + ' categor' + (nb === 1 ? 'y' : 'ies') + (nb ? (nset ? ' · ' + nset + ' with a limit' : ' · no limits set') : '') + '</span></div>' +
       '<section class="nv-card nv-pad">' + (bh ? '<div class="nv-buds">' + bh + '</div>' : '') +
       '<button type="button" class="nv-add" data-nvadd="bud">+ Add budget</button></section>';
-    // More (the usually-empty sections, one card)
-    var cnt = function (sel) { return bb.querySelectorAll(sel).length; };
-    var more = [['debt', 'Debts', cnt('.bblk[data-sec="debt"]')], ['sink', 'Savings goals', cnt('.bblk[data-sec="sink"]')],
-      ['one', 'One-offs', cnt('#rowsOne .brow')], ['sal', 'A different salary one month', cnt('#rowsSal .brow')],
-      ['bov', 'A different budget one month', cnt('#rowsBov .brow')]];
-    h += lab('More') + '<section class="nv-card">' + more.map(function (m) {
-      return '<button type="button" class="nv-row" data-nv="' + m[0] + '"' + (m[2] ? '' : ' data-nvadd="' + m[0] + '"') + '><span class="k">' + m[1] + '</span>' +
-        '<span class="v">' + (m[2] ? m[2] + '' : 'none') + '</span><span class="nv-plus" aria-hidden="true">' + (m[2] ? '›' : '+') + '</span></button>';
-    }).join('') + '</section>';
+    // v74.46: the More card is gone — debts, savings goals and one-offs are
+    // plans in Committed (Expense / Goal, once or repeating × N); the one-month
+    // salary lives in Basics and the one-month budget in Budgets.
+    var nPl = (state.plans || []).length, nGoal = (state.plans || []).filter(function (p) { return p && p.kind === 'goal'; }).length;
+    h += '<section class="nv-card" style="margin-top:14px"><button type="button" class="nv-row" data-nvcommit="1">' +
+      '<span class="nv-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span>' +
+      '<span class="k">Bills, installments, goals &amp; one-offs<small>They live in Committed — ' + nPl + ' plan' + (nPl === 1 ? '' : 's') + (nGoal ? ' · ' + nGoal + ' goal' + (nGoal === 1 ? '' : 's') : '') + '</small></span>' +
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></section>';
+    var nLeg = legacyCount();
+    if (nLeg) {
+      h += lab('From before') + '<section class="nv-card nv-pad">' +
+        nvRow('legacy', 'Debts, savings goals &amp; one-offs', nLeg + ' item' + (nLeg === 1 ? '' : 's')) +
+        '<p class="nv-foot">These were set up before Committed. Move them there so the plan-dues and the hero count them.</p>' +
+        '<button type="button" class="nv-move" data-nvmove="1">Move to Committed</button></section>';
+    }
     // Learned merchants (top 4)
     var learned = learnedMerchantCat(), mmov = merchantOv();
     var names = Object.keys(learned).sort();
@@ -3912,6 +3926,10 @@
         '</section><p class="nv-foot">Log “jollibee” under Food a couple of times and it’s filed there automatically. Tap one to hide or block it.</p>';
     }
     host.innerHTML = h;
+    var cmt = host.querySelector('[data-nvcommit]'); // v74.46: -> the Committed tab
+    if (cmt) cmt.onclick = function () { closeSheets(); setTab('money'); };
+    var mv = host.querySelector('[data-nvmove]'); // v74.46: the old debts / goals / one-offs -> plans
+    if (mv) mv.onclick = moveLegacyToPlans;
     var bt = host.querySelectorAll('[data-nv],[data-nvadd]');
     for (var q = 0; q < bt.length; q++) bt[q].onclick = function () {
       var add = this.getAttribute('data-nvadd'), go = this.getAttribute('data-nv') || add;
@@ -3922,6 +3940,74 @@
       }
       numGo(go, idx != null ? Number(idx) : null);
     };
+  }
+  // v74.46: the old debts / sinking funds / one-offs (base fields from before
+  // Committed). legacyCount reads the SAVED base; moveLegacyToPlans turns each
+  // into plans — a run of consecutive months with the same amount becomes ONE
+  // monthly plan × N, anything else a one-off — then clears them from the base.
+  function legacyCount() {
+    var b = state.base || {}, n = Object.keys(b.debts || {}).length + Object.keys(b.sinking || {}).length;
+    Object.keys(b.one_offs || {}).forEach(function (m) { n += Object.keys(b.one_offs[m] || {}).length; });
+    return n;
+  }
+  function legacyPlanList(b) {
+    var day = Math.min(28, Math.max(1, Math.round(Number(b.salary_day) || 15)));
+    var dd = (day < 10 ? '0' : '') + day;
+    var out = [];
+    var nextM = function (m) { var p = m.split('-'), y = Number(p[0]), mo = Number(p[1]) + 1; if (mo > 12) { mo = 1; y++; } return y + '-' + (mo < 10 ? '0' : '') + mo; };
+    var runs = function (name, byMonth, kind) {
+      var ms = Object.keys(byMonth).filter(function (m) { return /^\d{4}-\d{2}$/.test(m) && (Number(byMonth[m]) || 0) > 0; }).sort();
+      var cur = null;
+      ms.forEach(function (m) {
+        var a = r2(Number(byMonth[m]) || 0);
+        if (cur && cur.amount === a && nextM(cur.last) === m) { cur.n++; cur.last = m; return; }
+        if (cur) out.push(cur);
+        cur = { name: name, amount: a, first: m, last: m, n: 1, kind: kind };
+      });
+      if (cur) out.push(cur);
+    };
+    Object.keys(b.debts || {}).forEach(function (nm) {
+      var d = b.debts[nm] || {}, by = {};
+      (d.active_months || []).forEach(function (m) { if (d.monthly) by[m] = Number(d.monthly) || 0; });
+      Object.keys(d.payments || {}).forEach(function (m) { by[m] = Number(d.payments[m]) || 0; });
+      runs(nm, by, 'expense');
+    });
+    Object.keys(b.sinking || {}).forEach(function (nm) {
+      var s = b.sinking[nm] || {}, by = {};
+      Object.keys(s.payments || {}).forEach(function (m) { by[m] = Number(s.payments[m]) || 0; });
+      if (!Object.keys(by).length) {
+        var left = r2((Number(s.goal) || 0) - (Number(s.funded) || 0));
+        var dm = /^\d{4}-\d{2}/.test(String(s.deadline || '')) ? String(s.deadline).slice(0, 7) : todayISO().slice(0, 7);
+        if (left > 0) by[dm] = left;
+      }
+      runs(nm, by, 'goal');
+    });
+    Object.keys(b.one_offs || {}).forEach(function (m) {
+      Object.keys(b.one_offs[m] || {}).forEach(function (nm) { var by = {}; by[m] = Number(b.one_offs[m][nm]) || 0; runs(nm, by, 'expense'); });
+    });
+    return out.map(function (r) {
+      return { name: r.name, amount: r.amount, date: r.first + '-' + dd, repeat: r.n > 1 ? 'monthly' : null, count: r.n > 1 ? r.n : null, kind: r.kind };
+    });
+  }
+  function moveLegacyToPlans() {
+    if (baseDirty) { snack('Save your numbers first, then move them.'); return; }
+    var b0 = state.base; if (!b0) return;
+    var list = legacyPlanList(b0);
+    var n = legacyCount();
+    confirmAsk('Move ' + n + ' item' + (n === 1 ? '' : 's') + ' to Committed as ' + list.length + ' plan' + (list.length === 1 ? '' : 's') + '? They\u2019ll show in plan-dues and the hero from now on.', 'Move', function () {
+      var made = list.map(function (d) {
+        var id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        var p = { id: id, name: d.name, amount: d.amount, date: d.date, repeat: d.repeat, count: d.count, overrides: {}, kind: d.kind, created: new Date().toISOString() };
+        state.plans.push(p);
+        return idbPut(STORE_PLANS, touchRec(p));
+      });
+      var nb = cloneObj(b0);
+      nb.debts = {}; nb.sinking = {}; nb.one_offs = {};
+      Promise.all(made).then(function () { return saveBase(nb, { skipAdjustment: true }); }).then(function () {
+        emit('plan'); renderBaseEditor();
+        snack('Moved ' + list.length + ' plan' + (list.length === 1 ? '' : 's') + ' to Committed');
+      });
+    });
   }
   function readBaseForm() {
     var bb = byId('baseBody');
@@ -10295,12 +10381,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.45, live: new Date(2026, 10, 12, 0, 55) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.46, live: new Date(2026, 10, 12, 0, 58) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.46': [
+      'All numbers: the More card is gone. Debts, savings goals and one-offs are plans in Committed (Expense or Goal, once or repeating), and a row links straight there. A different salary for one month now sits under Basics, and a one-month budget under Budgets.',
+      'If you had debts, savings goals or one-offs set up the old way, a From before card shows them with a Move to Committed button.'
+    ],
     '74.45': [
       'Card rules now live in each card. Open a card in All numbers to set its own Prepay by day and Keep use under %, next to its bill and due days. The shared Card rules section is gone (its values only fill in new cards), and the coach\u2019s prepay reminders follow each card\u2019s own date and target.',
       'Fixed: changing a card\u2019s credit limit or its % no longer resets your live numbers to the \u201cas of\u201d balances. Only a real balance change does that now.'
