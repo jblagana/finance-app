@@ -1475,7 +1475,7 @@ def main():
           and "function monthOfTxn(tid)" in js
           and "var origRow = li >= 0 ? Object.assign({}, log[li]) : null;" in js
           and "function removeTxnRow(tid, keepInStore)" in js
-          and "return { t: t, removed: removed, txIdx: txIdx, logIdxs: logIdxs, persist: done };" in js
+          and "return { t: t, removed: removed, txIdx: txIdx, logIdxs: logIdxs, persist: done, adjUsed: t ? rmAdj : null };" in js  # v74.51 successor: the share the removal took rides along for Undo
           and "state.txns.splice(ti, 0, r.t);" in js
           and "var r = removeTxnRow(tid, true); // keep the persistent row (see above)" in js)
     check("owed entries: only 'they paid for me' is a real ledger txn (v72.10, the filing rule was finalized in the v72.28 follow-ups — the ledger records CONSUMPTION, not loans: ipf/itb/tmb are ledger-silent, tpf always files a Cash cash_out): cash_in remains the exact inverse of cash_out (txnAdj, manual ledger use); v72.42: card_payment settles the debt instead of inverting the charge (raw liquid + owed drop, free untouched — the v72.42 check pins it), the log row flavor i/p renders before→after correctly and nets month spend, the Account section stays on ipf/itb/tmb as an informational record (user edit: 'dont drop it anymore' — never a txn), subentries edit the linked txn in place (v72.9) and delete/undo cover entry + txn together; 'Owed' joined the add-sheet categories (out again in v72.30); the v72.28 sections + filing rules are the NEXT check",
@@ -1696,8 +1696,8 @@ def main():
           and "mlFilterCat = mlf.value; mlShownCount = ML_PAGE; renderMoneyLog();" in js)
     check("v72.30 (user, four items): (1) 'Owed' is out of the add-sheet categories (old ledger rows keep their data — no migration); (2) the owed in-place edit Cancel closes the form — the valueless flag attribute read '' (falsy) so the handler branch never fired, it carries a value now; (3) 'See less' beside 'See more' in Owed (data-ow-less; re-hides 5 per tap, floor = the first page of 5; hides itself there) and the Ledger (mlLess, same floor); (4) the account balance override: the account row's third column is labeled the current balance, and a saveBase that moves a debit/card account's value files the SIGNED diff as a moneyLog-ONLY row (no txn — the base rebase already zeroed the overlay, and the spend insights sum txns, so they can never be skewed) under category 'Adjustment' (k='a', f = the new effective free, o = the card owed after on card rows, no tid = an audit record corrected by the next override); 'snap' re-renders the ledger for this; the import sanitizer keeps the 'a' flavor",
           "function accountBalanceDiffs(oldB, newB)" in js
-          and "function fileBalanceAdjustment(name, kind, diff)" in js
-          and "accountBalanceDiffs(prevBase, state.base).forEach" in js
+          and "function fileBalanceAdjustment(name, kind, diff, perAcc)" in js  # v74.51 successor: + the per-account flag
+          and "(acctDiffs || accountBalanceDiffs(prevBase, state.base)).forEach" in js  # v74.51 successor: the per-account diffs (typed − live) first
           and "l: 'Adjustment', c: 'Adjustment'" in js
           and "n: r2(diff), k: 'a'" in js
           and "Changing a balance files the difference in the Ledger as an <b>Adjustment</b>" in js  # v74.42: the accounts note was shortened (same meaning)
@@ -1999,6 +1999,18 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.51 (stress test #1 #3 #4): a save re-bases account by account (accountRebase: unchanged keeps its share, a corrected number drops only that account's share + stamps adj.rebaseBy + files typed − live, a rename carries share / clock / ledger entries, a type switch starts fresh, a removal parks its share); absorbedFor keeps the boot split rebuilds from re-adding an account's absorbed entries; All numbers shows live balances (computeNumLive) and each block remembers data-orig; a type switch on an account with money asks first; the Settings card shows live totals",
+          "function accountRebase(prevB, newB, live) {" in js
+          and "function absorbedFor(t, name) {" in js
+          and "if (d.cash && d.funder && !absorbedFor(t, d.funder)) s += d.cash;" in js
+          and "acctDiffs = accountRebase(prevBase, b, (opts && opts.live) || null); state.keepAdjOnce = true;" in js
+          and "saveBase(nb, { live: numLive })" in js
+          and 'data-orig=\"' in js
+          and "numLive = computeNumLive();" in js
+          and "would count as CASH you have, not debt." in js
+          and "if (e.k === 'a' && !e.pa && e.at && e.at > m) m = e.at;" in js  # a per-account correction is not a global rebase
+          and "function effAdj(t) {" in js and "var rmAdj = keepInStore ? txnAdj(t) : effAdj(t);" in js  # a delete takes back only what still counts
+          and "'74.51': [" in js)
     check("v74.50 (boss: 'for version updates, keep the whats new of old version shown below the new version's'): renderWhatNew lists every SHELL_NOTES version up to the current one, newest first (the current one tagged), the latest WN_SHOW at first and a Show older versions button for the rest",
           "var WN_SHOW = 10, wnAllOpen = false;" in js
           and ".sort(function (a, b) { return parseFloat(b) - parseFloat(a); });" in js
@@ -2085,7 +2097,7 @@ def main():
           and "var nv = function (id) { return numVal(byId(id), false); };" in js
           and ", true)" not in js.split("function renderNumOverview() {")[1].split("host.innerHTML = h;")[0]
           and all(('data-grp="' + k + '"') in js for k in ["basics", "cardrules", "sal", "acc", "bud", "bov", "debt", "one", "sink", "mm"])
-          and "'<div class=\"bblk accblk\" data-sec=\"acc\">'" in js
+          and "'<div class=\"bblk accblk\" data-sec=\"acc\" data-orig=\"'" in js  # v74.51 successor: the block remembers its original name
           and "function accCcRow(a) {" in js
           and "main.insertAdjacentHTML('afterend', accCcRow(" in js
           and "if (id === 'numSheet') { numView = null; numFromSet = false; numBackLabel(); renderBaseEditor(); }" in js  # v74.43 adds the Settings-back flag

@@ -754,7 +754,7 @@
   // after this release — no manual data surgery.
   function lastReconAt() {
     var m = 0;
-    (state.moneyLog || []).forEach(function (e) { if (e.k === 'a' && e.at && e.at > m) m = e.at; });
+    (state.moneyLog || []).forEach(function (e) { if (e.k === 'a' && !e.pa && e.at && e.at > m) m = e.at; }); // v74.51: a per-account correction (pa) is not a global rebase
     return m;
   }
   // v73.89 (the durable-stamp fix, boss-approved): the gate's DURABLE clock.
@@ -804,6 +804,7 @@
       }
       var d = txnAdj(t);
       if (d.prepay && d.acc) {
+        if (absorbedFor(t, d.acc)) return; // v74.51: inside that card's own re-based balance
         by[d.acc] = r2((by[d.acc] || 0) + d.prepay);
         if (!by[d.acc]) delete by[d.acc];
       }
@@ -876,6 +877,7 @@
       }
       var d = txnAdj(t);
       if (d.cash && d.funder) {
+        if (absorbedFor(t, d.funder)) return; // v74.51: inside that account's own re-based balance
         by[d.funder] = r2((by[d.funder] || 0) + d.cash);
         if (!by[d.funder]) delete by[d.funder];
       }
@@ -935,6 +937,32 @@
   // to THIS, not to adj.cash. lastR scopes to the overlay's own window: a
   // reconcile (or rebase) zeroes the overlay, so pre-reconcile moves are in
   // the BASE, not the overlay.
+  // v74.51 (stress test #1): each account can be re-based on its own (a balance
+  // typed for ONE account, a removal, a type switch) — adj.rebaseBy[name] is
+  // that account's clock. An entry created before it is already inside the
+  // typed balance, so the boot-time split rebuilds must skip it for that
+  // account (otherwise the next open would add it back).
+  // v74.51: what an entry still contributes to the live overlay — nothing when
+  // it predates the last full rebase, and minus the side(s) whose account was
+  // re-based after it (free = cash side + card side). A DELETE reverses this
+  // (no phantom); an EDIT keeps the full old→new pair (the real difference).
+  function effAdj(t) {
+    var d = txnAdj(t);
+    var c = Date.parse(t && t.created) || 0, lr = lastRebaseAt();
+    if (c && lr && c < lr) return { cash: 0, free: 0, card: 0, prepay: 0 };
+    var cardGone = !!(d.acc && absorbedFor(t, d.acc)), cashGone = !!(d.funder && absorbedFor(t, d.funder));
+    if (!cardGone && !cashGone) return d;
+    var o = {}; Object.keys(d).forEach(function (k) { o[k] = d[k]; });
+    if (cardGone) { o.free = r2(o.free - o.card); o.card = 0; o.prepay = 0; delete o.acc; }
+    if (cashGone) { o.free = r2(o.free - o.cash); o.cash = 0; delete o.funder; }
+    return o;
+  }
+  function absorbedFor(t, name) {
+    var rb = state.adj && state.adj.rebaseBy && state.adj.rebaseBy[name];
+    if (!rb) return false;
+    var c = Date.parse(t && t.created) || 0;
+    return !!c && c < rb;
+  }
   function attributedCashTotal(txns, lastR) {
     var s = 0;
     (txns || []).forEach(function (t) {
@@ -943,7 +971,7 @@
         if (created && created < lastR) return; // absorbed into the base by the later reconcile
       }
       var d = txnAdj(t);
-      if (d.cash && d.funder) s += d.cash;
+      if (d.cash && d.funder && !absorbedFor(t, d.funder)) s += d.cash; // v74.51
     });
     return r2(s);
   }
@@ -2222,15 +2250,119 @@
       var g = A.goneBy[key(x.name)];
       if (!g || g.kind !== x.kind) return;
       delete A.goneBy[key(x.name)];
+      if (A.rebaseBy) delete A.rebaseBy[x.name]; // v74.51: its entries count again
       if (g.pb) { A.prepayBy[x.name] = r2((Number(A.prepayBy[x.name]) || 0) + g.pb); A.card = r2(A.card + g.pb); A.prepay = r2(A.prepay + g.pb); A.free = r2(A.free + g.pb); }
       if (g.cb) { A.cashBy[x.name] = r2((Number(A.cashBy[x.name]) || 0) + g.cb); A.cash = r2(A.cash + g.cb); A.free = r2(A.free + g.cb); }
     });
     if (!Object.keys(A.goneBy).length) delete A.goneBy;
     return true;
   }
+  // v74.51 (stress test #1, #3, #4): a save re-bases ACCOUNT BY ACCOUNT, never
+  // all of them. Each new account is matched to its previous self (a.was =
+  // the name it had when the form opened; otherwise by name):
+  //  - same number as shown (live)  -> untouched: keeps its base + overlay share
+  //  - a different number           -> THAT account takes the typed number as
+  //    reality: its overlay share leaves, its clock (rebaseBy) is stamped and
+  //    the Adjustment row files typed − live (the real correction)
+  //  - renamed                      -> its share, clock and ledger entries follow
+  //  - type switched (debit <-> card) -> like a fresh account at the typed number
+  //  - removed                      -> its share leaves, parked in goneBy; a re-add
+  //    at its old as-of number (Undo) restores it, at its live number needs nothing
+  // free = liquid − owed, so every share moves free with it.
+  function accountRebase(prevB, newB, live) {
+    var A = state.adj;
+    A.prepayBy = A.prepayBy || {}; A.cashBy = A.cashBy || {}; A.rebaseBy = A.rebaseBy || {}; A.goneBy = A.goneBy || {};
+    var key = function (n) { return String(n || '').trim().toLowerCase(); };
+    var now = Date.now(), prevBy = {}, used = {}, diffs = [], renames = [];
+    (prevB.accounts || []).forEach(function (a) { if (a && a.name) prevBy[a.name] = a; });
+    var liveOf = function (p) {
+      if (live && live[p.name] != null) return r2(Number(live[p.name]) || 0);
+      var v = Number(p.value) || 0;
+      if (p.kind === 'card') return r2(v + (Number(A.prepayBy[p.name]) || 0));
+      if (p.kind === 'debit') return r2(v - (Number(A.cashBy[p.name]) || 0));
+      return r2(v);
+    };
+    var drop = function (p, lv) {
+      var v = Number(p.value) || 0, sh;
+      if (p.kind === 'card') { sh = r2(lv - v); A.card = r2(A.card - sh); A.prepay = r2(A.prepay - sh); A.free = r2(A.free - sh); delete A.prepayBy[p.name]; }
+      else if (p.kind === 'debit') { sh = r2(v - lv); A.cash = r2(A.cash - sh); A.free = r2(A.free - sh); delete A.cashBy[p.name]; }
+      return sh || 0;
+    };
+    var move = function (o, from, to) { if (o[from] != null) { o[to] = o[from]; delete o[from]; } };
+    (newB.accounts || []).forEach(function (n) {
+      if (!n || !n.name) return;
+      var k = n.was !== undefined ? n.was : n.name;
+      var p = k ? prevBy[k] : null;
+      if (!p || used[p.name]) { // a new account
+        var g = A.goneBy[key(n.name)];
+        if (g && g.kind === n.kind) {
+          delete A.goneBy[key(n.name)];
+          if (g.base != null && Math.abs((Number(n.value) || 0) - g.base) < 0.005) { // re-entered at its old as-of number: its share comes back
+            if (g.pb) { A.prepayBy[n.name] = r2((Number(A.prepayBy[n.name]) || 0) + g.pb); A.card = r2(A.card + g.pb); A.prepay = r2(A.prepay + g.pb); A.free = r2(A.free + g.pb); }
+            if (g.cb) { A.cashBy[n.name] = r2((Number(A.cashBy[n.name]) || 0) + g.cb); A.cash = r2(A.cash + g.cb); A.free = r2(A.free + g.cb); }
+            delete A.rebaseBy[n.name];
+          }
+        }
+        return;
+      }
+      used[p.name] = true;
+      var lv = liveOf(p);
+      if (p.kind !== n.kind) { // a type switch: the typed number starts fresh under the new type
+        drop(p, lv); A.rebaseBy[n.name] = now;
+        if (p.name !== n.name) { delete A.rebaseBy[p.name]; renames.push([p.name, n.name]); }
+        return;
+      }
+      var typed = Number(n.value) || 0, ref = live ? lv : (Number(p.value) || 0);
+      if (Math.abs(typed - ref) < 0.005) {
+        if (live) n.value = p.value; // unchanged: keep the as-of base (the overlay carries the rest)
+      } else {
+        drop(p, lv); A.rebaseBy[n.name] = now;
+        diffs.push({ name: n.name, kind: n.kind, diff: r2(typed - lv) });
+      }
+      if (p.name !== n.name) {
+        move(A.prepayBy, p.name, n.name); move(A.cashBy, p.name, n.name); move(A.rebaseBy, p.name, n.name);
+        renames.push([p.name, n.name]);
+      }
+    });
+    Object.keys(prevBy).forEach(function (nm) {
+      if (used[nm]) return;
+      var p = prevBy[nm], lv = liveOf(p), base0 = Number(p.value) || 0;
+      var pb = p.kind === 'card' ? r2(lv - base0) : 0, cb = p.kind === 'debit' ? r2(base0 - lv) : 0;
+      drop(p, lv);
+      A.goneBy[key(nm)] = { kind: p.kind, pb: pb, cb: cb, base: r2(base0), live: lv, at: now };
+      A.rebaseBy[nm] = now;
+    });
+    if (!Object.keys(A.goneBy).length) delete A.goneBy;
+    // a rename carries its ledger entries along (the account name lives on each entry)
+    renames.forEach(function (rn) {
+      (state.txns || []).forEach(function (t) {
+        var ch = false;
+        if (t.account === rn[0]) { t.account = rn[1]; ch = true; }
+        if (t.payWith === rn[0]) { t.payWith = rn[1]; ch = true; }
+        if (ch) idbPut(STORE_TX, touchRec(t)).catch(function () {});
+      });
+      (state.moneyLog || []).forEach(function (e) { if (e.m === rn[0]) e.m = rn[1]; if (e.w === rn[0]) e.w = rn[1]; });
+    });
+    return diffs;
+  }
+  // v74.51: the live balance of every account as All numbers shows it (the
+  // form's values — a save compares what you typed against these)
+  var numLive = null;
+  function computeNumLive() {
+    var d = reconData(), m = {};
+    if (!d) return null;
+    var names = {};
+    ((state.base && state.base.accounts) || []).forEach(function (a) { if (a && a.name) names[a.name] = a.kind; });
+    d.cards.forEach(function (r) { m[r.name] = r.live; });
+    d.debits.forEach(function (r) { if (r.isCash) { if (names.Cash === 'debit') m.Cash = r.live; } else m[r.name] = r.live; });
+    return m;
+  }
   function saveBase(b, opts) {
     var prevBase = state.base; // v72.30: a balance override files the diff
-    if (prevBase && structuralAdj(prevBase, b)) state.keepAdjOnce = true; // v74.48: add / remove / rename keeps the live overlay
+    var acctDiffs = null;
+    if (prevBase && !(opts && opts.skipAdjustment)) { acctDiffs = accountRebase(prevBase, b, (opts && opts.live) || null); state.keepAdjOnce = true; } // v74.51: account by account
+    else if (prevBase && structuralAdj(prevBase, b)) state.keepAdjOnce = true; // v74.48: add / remove / rename keeps the live overlay
+    (b.accounts || []).forEach(function (a) { if (a) delete a.was; });
     b.edited = new Date().toISOString();
     // v74.15: a balance typed in Settings is reality as of today — stamp the
     // money accounts whose value changed (or that are new). The reconcile /
@@ -2254,8 +2386,8 @@
     // same path — that reversal must not file a NEW Adjustment (no audit of
     // the audit), so the undo passes skipAdjustment.
     if (!(opts && opts.skipAdjustment)) {
-      accountBalanceDiffs(prevBase, state.base).forEach(function (d) {
-        fileBalanceAdjustment(d.name, d.kind, d.diff);
+      (acctDiffs || accountBalanceDiffs(prevBase, state.base)).forEach(function (d) { // v74.51: typed − LIVE, per corrected account
+        fileBalanceAdjustment(d.name, d.kind, d.diff, !!acctDiffs);
       });
     }
     return Promise.all([
@@ -2299,7 +2431,7 @@
   // chain, before = o − n — free never moves). No s line: an override is not
   // spend. The row has no tid — it's the record (a wrong override is
   // corrected by the next one, which files its own row).
-  function fileBalanceAdjustment(name, kind, diff) {
+  function fileBalanceAdjustment(name, kind, diff, perAcc) {
     var s = effectiveSnap();
     if (!s) return;
     var e = {
@@ -2307,6 +2439,7 @@
       l: 'Adjustment', c: 'Adjustment', nt: 'balance override', m: name || '',
       n: r2(diff), k: 'a'
     };
+    if (perAcc) e.pa = 1; // v74.51: ONE account re-based (accountRebase) — the other accounts' overlay stands
     e.f = r2(s.cash ? s.cash.free : 0);
     if (kind === 'card') e.o = r2(s.card_owed || 0);
     else e.q = r2(s.cash ? s.cash.total : 0); // v74.17: a debit override moves liquid by its diff
@@ -2356,6 +2489,7 @@
     idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
     if (acc) {
       acc.value = r2((Number(acc.value) || 0) - Number(e.n));
+      if (e.pa) state.keepAdjOnce = true; // v74.51: a per-account correction undone moves ONLY that account (back to its live number before it)
       saveBase(state.base, { skipAdjustment: true });
     }
     emit('txn');
@@ -2368,6 +2502,7 @@
       idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
       if (acc) {
         acc.value = oldVal;
+        if (e.pa) state.keepAdjOnce = true; // v74.51
         saveBase(state.base, { skipAdjustment: true });
       }
       emit('txn');
@@ -2578,7 +2713,8 @@
     for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === id) t = state.txns[i];
     if (!t) return Promise.resolve();
     state.txns = state.txns.filter(function (x) { return x.id !== id; });
-    if (!adjEmpty()) addAdj(txnAdj(t), -1); // v73.45: no-op on an empty overlay (no phantom)
+    var dEff = effAdj(t); // v74.51: only what still counts
+    if (!adjEmpty()) addAdj(dEff, -1); // v73.45: no-op on an empty overlay (no phantom)
     logMoney('del', t);
     syncTombAdd('t', id); // v73.3: the deletion syncs (tombstone; Undo clears it)
     return Promise.all([idbDel(STORE_TX, id), saveAdj()]).then(function () {
@@ -2586,7 +2722,7 @@
       snack('Deleted ' + money(t.amount) + ' · ' + esc(t.category || t.account), function () {
         syncTombRemove('t', id); // the record is back — the tombstone goes
         state.txns.push(t);
-        addAdj(txnAdj(t), 1);
+        addAdj(dEff, 1); // v74.51: the same share the delete took
         logMoney('add', t);
         Promise.all([idbPut(STORE_TX, touchRec(t)), saveAdj()]).then(function () { emit('txn'); });
       });
@@ -2617,7 +2753,8 @@
     if (!t && !removed.length) return null;
     if (t) {
       state.txns = state.txns.filter(function (x) { return x.id !== tid; });
-      if (!adjEmpty()) addAdj(txnAdj(t), -1); // v73.45: no-op on an empty overlay (no phantom)
+      var rmAdj = keepInStore ? txnAdj(t) : effAdj(t); // v74.51: a delete takes back only what still counts; an edit keeps the full pair
+      if (!adjEmpty()) addAdj(rmAdj, -1); // v73.45: no-op on an empty overlay (no phantom)
       // v73.3: the deletion syncs (Undo clears the tombstone). keepInStore =
       // the EDIT path (the row is re-logged under the same id) — not a delete.
       if (!keepInStore) syncTombAdd('t', tid);
@@ -2627,7 +2764,7 @@
     var done = t
       ? (keepInStore ? Promise.resolve() : Promise.all([idbDel(STORE_TX, tid), saveAdj()]))
       : Promise.resolve();
-    return { t: t, removed: removed, txIdx: txIdx, logIdxs: logIdxs, persist: done };
+    return { t: t, removed: removed, txIdx: txIdx, logIdxs: logIdxs, persist: done, adjUsed: t ? rmAdj : null };
   }
   function restoreTxnRow(r) {
     if (r.t) {
@@ -2636,7 +2773,7 @@
       // v72.9: back at the original index (clamped — the list may have shrunk)
       var ti = (typeof r.txIdx === 'number' && r.txIdx >= 0) ? Math.min(r.txIdx, state.txns.length) : state.txns.length;
       state.txns.splice(ti, 0, r.t);
-      addAdj(txnAdj(r.t), 1);
+      addAdj(r.adjUsed || txnAdj(r.t), 1); // v74.51: the same share the removal took
       idbPut(STORE_TX, touchRec(r.t)).catch(function () {});
     }
     if (r.removed.length) {
@@ -3633,7 +3770,7 @@
     // drag + Remove act on the whole account, both rows); readBaseForm still reads
     // '#rowsAcc .brow' + the card row as the main row's nextElementSibling. The
     // older data-r="due" field stays (hidden) so a stored value is never lost.
-    return '<div class="bblk accblk" data-sec="acc">' +
+    return '<div class="bblk accblk" data-sec="acc" data-orig="' + esc(a.name || '') + '">' + // v74.51: the name it had when the form opened
       '<div class="brow acc-main">' + dragH() +
       nfL('Name', '<input class="grow" data-r="name" value="' + esc(a.name || '') + '" autocomplete="off">', 'nf-name') +
       nfL('Type', '<select data-r="kind">' + kindOpts + '</select>', 'nf-kind') +
@@ -3748,7 +3885,11 @@
     Object.keys(b.salary_overrides || {}).forEach(function (m) { salRows += payRow(m, b.salary_overrides[m], true); });
     h += '<div class="ngrp" data-grp="sal">' + bsec('A different salary one month') + '<p class="note ngrp-note">A bonus, a 13th month, unpaid leave — month · amount.</p><div id="rowsSal">' + salRows + '</div>' +
       '<button type="button" class="addrow" data-add="sal">+ Add a month</button></div>';
-    var accRows = (b.accounts || []).map(accRow).join('');
+    numLive = computeNumLive(); // v74.51: All numbers shows each account's LIVE balance (what your bank app says), not the as-of one
+    var accRows = (b.accounts || []).map(function (a) {
+      var lv = numLive && a && numLive[a.name] != null ? numLive[a.name] : null;
+      return accRow(lv == null ? a : Object.assign({}, a, { value: lv }));
+    }).join('');
     // v72.30 (user: 'add a way to override the current accounts'
     // amount/balances'): the third column is the account's CURRENT balance —
     // a save that moves it files the difference in the Ledger under
@@ -4175,6 +4316,8 @@
         var utv = numVal(uti, true);
         if (utv > 0 && utv <= 100) acc.util_target = r2(utv / 100 * 1000) / 1000;
       }
+      var ob = row.closest ? row.closest('.accblk') : null; // v74.51: who this account WAS (rename / switch / edit)
+      if (ob && ob.getAttribute && ob.getAttribute('data-orig') != null) acc.was = ob.getAttribute('data-orig');
       b.accounts.push(acc);
     });
     bb.querySelectorAll('#rowsBud .brow').forEach(function (row) {
@@ -4271,7 +4414,10 @@
   function commitBaseForm() {
     var nb = readBaseForm();
     if (!nb) return;
-    saveBase(nb).then(function () {
+    saveBase(nb, { live: numLive }).then(function () { // v74.51: compared against the live balances the form showed
+      numLive = computeNumLive();
+      var bbx = byId('baseBody'); // the saved names are the originals now
+      if (bbx) bbx.querySelectorAll('#rowsAcc .accblk').forEach(function (blk) { var ni = blk.querySelector('[data-r="name"]'); if (ni) blk.setAttribute('data-orig', ni.value.trim()); });
       emit('snap');
       renderFooter();
       renderBaseStatus();
@@ -4450,6 +4596,8 @@
     if (sumEl) sumEl.innerHTML = '';
     var aa = b.accounts || [], cash0 = 0, owed0 = 0, nCard0 = 0;
     aa.forEach(function (a) { if (a.kind === 'card') { owed0 += Number(a.value) || 0; nCard0++; } else cash0 += Number(a.value) || 0; });
+    var eS = effectiveSnap(); // v74.51: the card shows the LIVE totals (not the as-of ones)
+    if (eS && eS.cash) { cash0 = eS.cash.total; owed0 = eS.card_owed; }
     var nBud0 = Object.keys(b.budgets || {}).length, nPl0 = (state.plans || []).length;
     var line0 = [aa.length + ' account' + (aa.length === 1 ? '' : 's'), nCard0 + ' card' + (nCard0 === 1 ? '' : 's'),
       nBud0 + ' categor' + (nBud0 === 1 ? 'y' : 'ies'), nPl0 + ' plan' + (nPl0 === 1 ? '' : 's') + ' in Committed'].join(' · ');
@@ -10513,12 +10661,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.50, live: new Date(2026, 10, 12, 1, 22) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.51, live: new Date(2026, 10, 12, 2, 30) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.51': [
+      'Fixed (from the stress test): correcting ONE account\u2019s balance in All numbers reset every other account to its \u201cas of\u201d balance. Now only the account you change takes the new number (with an Adjustment row for the real difference); the rest keep their live numbers.',
+      'All numbers now shows each account\u2019s live balance (what your bank app should say), not the old \u201cas of\u201d one.',
+      'Renaming an account moves its ledger entries with it. Switching an account between Debit and Credit while it holds money asks first, and no longer resets the other accounts.'
+    ],
     '74.50': [
       'What\u2019s new keeps the history: the current version is on top and the older versions\u2019 notes stay below it (the latest 10, then Show older versions).'
     ],
@@ -12506,6 +12659,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           var blk = t.closest('.accblk');
           if (!blk) return;
           var isCard = t.value === 'card';
+          // v74.51 (stress test #4): a type switch on an account that holds money asks first
+          var vIn = blk.querySelector('[data-r="value"]'), nIn = blk.querySelector('[data-r="name"]');
+          var amt0 = vIn ? numVal(vIn, false) : 0, nm0 = nIn && nIn.value ? nIn.value : 'this account';
+          if (Math.abs(amt0) > 0.004 && !window.confirm(isCard
+              ? 'Switch ' + nm0 + ' to Credit? Its ' + money(amt0) + ' would count as money you OWE, not cash you have.'
+              : 'Switch ' + nm0 + ' to Debit? The ' + money(amt0) + ' it owes would count as CASH you have, not debt.')) {
+            t.value = isCard ? 'debit' : 'card';
+            return;
+          }
           var li = blk.querySelector('[data-r="limit"]'); if (li) li.disabled = !isCard;
           var od = blk.querySelector('[data-r="due"]'); if (od) od.disabled = !isCard;
           var cc = blk.querySelector('.acc-cc');
