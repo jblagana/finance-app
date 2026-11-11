@@ -2996,6 +2996,25 @@
       msel.innerHTML = mhtml;
       msel.value = mlFilterM;
       if (msel.value !== mlFilterM) mlFilterM = msel.value; // filtered method no longer present
+      // v74.36 (the mockup): the payment-method filter is a CHIP row (the
+      // select stays as the value holder, hidden by CSS) — same values,
+      // same reset-to-first-page as the select's onchange.
+      var chipsEl = byId('mlChips');
+      if (chipsEl) {
+        var copts = [['', 'All']];
+        if (hasMccpay) copts.push(['__m:CC Payment', 'CC Payment']);
+        ms.forEach(function (c) { copts.push(['__m:' + c, c]); });
+        chipsEl.innerHTML = copts.map(function (o) {
+          var on = mlFilterM === o[0];
+          return '<button type="button" class="mlchip' + (on ? ' on' : '') + '" data-mlm="' + esc(o[0]) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(o[1]) + '</button>';
+        }).join('');
+        var cb = chipsEl.querySelectorAll ? chipsEl.querySelectorAll('[data-mlm]') : [];
+        for (var cbi = 0; cbi < cb.length; cbi++) cb[cbi].onclick = function () {
+          mlFilterM = this.getAttribute('data-mlm') || '';
+          msel.value = mlFilterM;
+          mlShownCount = ML_PAGE; renderMoneyLog();
+        };
+      }
     }
   }
   // v74.02: is the payoff's FUNDER a credit card? The funder rides the row
@@ -3021,6 +3040,45 @@
     for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
     var c = ML_TILE[h % ML_TILE.length];
     return { ch: (s.charAt(0) || '?').toUpperCase(), fg: c[0], bg: c[1] };
+  }
+  // v74.36: the Ledger list groups rows by day (the mockup) — a header per
+  // day (Today / Yesterday / Wed, Nov 11) with that day's spend total (spend
+  // + card charges added that day, minus the ones deleted that day; across
+  // ALL filtered rows, so paging never changes a day's total).
+  var mlOpenKey = null; // v74.36: the one open ledger row ('i' + its moneyLog index), in-memory
+  function mlDayKey(ts) { var d = new Date(ts); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+  function mlDayLabel(ts) {
+    var d = new Date(ts), now = new Date();
+    var y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    if (mlDayKey(ts) === mlDayKey(now.getTime())) return 'Today';
+    if (mlDayKey(ts) === mlDayKey(y.getTime())) return 'Yesterday';
+    var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var DW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return d.getFullYear() === now.getFullYear()
+      ? DW[d.getDay()] + ', ' + MO[d.getMonth()] + ' ' + d.getDate()
+      : MO[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+  }
+  function mlGroupDays(rows, htmls, all) {
+    var tot = {};
+    (all || []).forEach(function (e) {
+      if (!e || e.ro || !(e.k === 'x' || e.k === 'c' || !e.k)) return;
+      var k = mlDayKey(e.at);
+      tot[k] = r2((tot[k] || 0) + (e.a === 'add' ? 1 : -1) * (Number(e.n) || 0));
+    });
+    var out = '', cur = null;
+    rows.forEach(function (e, i) {
+      var k = mlDayKey(e.at);
+      if (k !== cur) {
+        if (cur !== null) out += '</section>';
+        cur = k;
+        var t = tot[k] || 0;
+        out += '<section class="ml-grp"><div class="ml-day"><span>' + mlDayLabel(e.at) + '</span><span>' +
+          (t > 0.004 ? '−' + money(t) : '') + '</span></div>';
+      }
+      out += htmls[i];
+    });
+    if (cur !== null) out += '</section>';
+    return out;
   }
   function renderMoneyLog() {
     var el = byId('moneyLog');
@@ -3061,7 +3119,7 @@
     if (noteEl) noteEl.style.display = '';
     // v72.29 (user edit): "See more" — the old ones hidden; v73.91: page 50, step 20
     var limited = shown.slice(0, mlShownCount);
-    body.innerHTML = limited.map(function (e) {
+    var mlRowsH = limited.map(function (e) {
         var add = e.a === 'add';
         // v72.10: inflow rows (i cash in) move free the OTHER way — a row's
         // before→after follows its flavor, not its add/del side.
@@ -3166,9 +3224,9 @@
         // v73.75: the row is NO LONGER a tap target — each editable entry
         // carries its own ✎ (opens the edit sheet) beside the ✕ (delete).
         var editBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-edit="' + esc(e.tid) +
-          '" aria-label="Edit this entry" title="Edit this entry">\u270e</button>' : '';
+          '" aria-label="Edit this entry" title="Edit this entry">Edit \u270e</button>' : '';
         var delBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-del="' + esc(e.tid) +
-          '" aria-label="Delete this expense" title="Delete this expense">\u2715</button>' : '';
+          '" aria-label="Delete this expense" title="Delete this expense">Delete \u2715</button>' : '';
         // v72.31: Adjustment rows (no txn behind them) get their own ✕ — it
         // removes the record and reverses the override in Settings. The key is
         // the row's index in state.moneyLog (true at render time; every change
@@ -3185,14 +3243,27 @@
           amtTxt = (e.n > 0 ? '+' : '−') + money(Math.abs(e.n));
         }
         var tile = mlTile(p.lab); // v74.24 look upgrade: the category tile (initial + a steady color per label)
-        return '<div class="ml-row' + (add ? '' : ' del') + '">' +
+        // v74.36 (boss: 'for the your expenses card in ledger, use the layout in mockup'):
+        // the compact mockup row — tile · title · ONE sub line · amount — is the
+        // tap target (a real button); the details (date/time + account, the
+        // card/liquid before -> after lines, the cycle pill) and Edit / Delete
+        // drop in under it when it is open (mlOpenKey, in-memory, one at a time).
+        var mk = 'i' + log.indexOf(e);
+        var isOpen = mlOpenKey === mk;
+        var subTxt = p.note || ((e.k === 'p' && e.w) ? (p.m || 'card') + ' from ' + e.w : (p.m || ''));
+        return '<div class="ml-row' + (add ? '' : ' del') + (isOpen ? ' open' : '') + '">' +
+          '<button type="button" class="ml-main" data-ml-tog="' + mk + '" aria-expanded="' + (isOpen ? 'true' : 'false') + '">' +
           '<span class="ml-tile" aria-hidden="true" style="background:' + tile.bg + ';color:' + tile.fg + '">' + esc(tile.ch) + '</span>' +
-          '<div class="ml-l"><div class="ml-cat">' + esc(p.lab) + '</div>' +
-          (p.note ? '<div class="ml-note">' + esc(p.note) + '</div>' : '') +
-          '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) + (cyclePill ? ' ' + cyclePill : '') + '</div></div>' +
-          '<div class="ml-r"><b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b>' +
-          extra + editBtn + delBtn + adjDel + '</div></div>';
-      }).join('') +
+          '<span class="ml-l"><span class="ml-cat">' + esc(p.lab) + '</span>' +
+          (subTxt ? '<span class="ml-sub">' + esc(subTxt) + '</span>' : '') + '</span>' +
+          '<b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b></button>' +
+          '<div class="ml-more">' +
+          '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) + (cyclePill ? ' ' + cyclePill : '') + '</div>' +
+          extra +
+          ((editBtn || delBtn || adjDel) ? '<div class="ml-acts">' + editBtn + delBtn + adjDel + '</div>' : '') +
+          '</div></div>';
+      });
+    body.innerHTML = mlGroupDays(limited, mlRowsH, shown) +
       // v72.30 (user edit: 'see less beside see more'): the buttons share one
       // row — See less re-hides per tap down to the first page (hidden there);
       // v73.92: the first page is 10, the step is 10 (v73.91: 50/20)
@@ -3216,6 +3287,12 @@
     for (var aj = 0; aj < adj.length; aj++) adj[aj].onclick = function (ev) {
       ev.stopPropagation();
       askDeleteAdjustment(Number(this.getAttribute('data-adj-del')));
+    };
+    var tg = body.querySelectorAll('[data-ml-tog]'); // v74.36: tap a row = open/close its details
+    for (var ti = 0; ti < tg.length; ti++) tg[ti].onclick = function () {
+      var k = this.getAttribute('data-ml-tog');
+      mlOpenKey = mlOpenKey === k ? null : k;
+      renderMoneyLog();
     };
     var ed = body.querySelectorAll('[data-ml-edit]');
     for (var ei = 0; ei < ed.length; ei++) ed[ei].onclick = function () { openTxnEdit(this.getAttribute('data-ml-edit')); };
@@ -9904,12 +9981,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.35, live: new Date(2026, 10, 11, 15, 52) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.36, live: new Date(2026, 10, 11, 15, 56) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.36': [
+      'The Ledger list has a new look: entries are grouped by day (with what you spent that day), each one is a single tidy line, and tapping it shows the details (time, before \u2192 after, the card cycle tag) plus Edit and Delete. The account filter is now a row of chips.'
+    ],
     '74.35': [
       'Coach Fin\u2019s card on Home is shorter: one \u201cCoach\u2019s note\u201d header and one short paragraph. When the online coach has written a note, that note is what you see; otherwise it\u2019s the quick rule-based tip. The long \u201cOn repeat\u2026\u201d list is gone from the text because the Plans and Cards rows below already show it.'
     ],

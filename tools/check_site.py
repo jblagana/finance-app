@@ -1998,6 +1998,16 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.36 (boss: 'for the your expenses card in ledger, use the layout in mockup'): the Ledger list groups rows by day (.ml-grp + .ml-day with the day's spend total), each row is a compact button (tile · title · one sub line · amount) that opens its details + Edit / Delete, and the payment-method filter is a chip row (#mlChips; #mlFilterM holds the value, hidden)",
+          'id="mlChips"' in html
+          and ".ml-fbar select+select{display:none}" in html
+          and ".ml-row.open .ml-more{display:block}" in html
+          and "body.innerHTML = mlGroupDays(limited, mlRowsH, shown) +" in js
+          and "function mlGroupDays(rows, htmls, all) {" in js
+          and "'<button type=\"button\" class=\"ml-main\" data-ml-tog=\"' + mk + '\"" in js
+          and "mlOpenKey = mlOpenKey === k ? null : k;" in js
+          and "class=\"mlchip' + (on ? ' on' : '')" in js
+          and "'74.36': [" in js)
     check("v74.35 (boss: 'combine the coach note and hey jan contents, currently its too verbose'): the coach card has ONE always-visible Coach's note header; an AI note hides the rule line (#coach.has-note), else the rule line shows only its core sentence (no On repeat / last-check add-ons)",
           "#coach.has-note #coachHead,#coach.has-note #coachSub{display:none}" in html
           and html.index('class="coachnote-h"') < html.index('id="coachNoteBlock"')

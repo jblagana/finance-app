@@ -1189,6 +1189,31 @@ button.plchip{border-radius:11px;min-height:44px}
 .grp-body .dig.bad .dg-tag{color:var(--bad)}
 .rowchip.info{background:var(--info);color:#06142B;border:0}
 .dig.next .dg-tag{color:var(--mut)}
+/* v74.36: Ledger "Your expenses" = the mockup list (account chips, a card per day, compact rows; tap a row for its details) */
+#txnCard.card{background:transparent;border:0;box-shadow:none;padding:0}
+.ml-chips{display:flex;gap:6px;overflow-x:auto;margin:0 -16px 12px;padding:0 16px;scrollbar-width:none}
+.ml-chips::-webkit-scrollbar{display:none}
+.mlchip{flex:none;height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.mlchip.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.ml-fbar select+select{display:none}
+.ml-fbar select{flex:0 1 170px}
+.ml-grp{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:6px 8px;margin-bottom:12px}
+.ml-day{display:flex;justify-content:space-between;gap:8px;padding:10px 8px 4px;font-size:12.5px;font-weight:600;color:var(--mut)}
+.ml-row{display:block;padding:0;border:0}
+.ml-main{width:100%;display:flex;align-items:center;gap:12px;padding:10px 8px;border:0;border-radius:11px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer;min-height:58px}
+.ml-row.open .ml-main{background:var(--card2)}
+.ml-main .ml-tile{width:38px;height:38px}
+.ml-main .ml-l{flex:1;min-width:0;display:block}
+.ml-main .ml-cat{display:block;font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ml-sub{display:block;font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.ml-main b{flex:none;font-size:14.5px;font-weight:600;white-space:nowrap}
+.ml-more{display:none;padding:4px 8px 10px 58px}
+.ml-row.open .ml-more{display:block}
+.ml-more .ml-meta{margin:0 0 4px}
+.ml-acts{display:flex;gap:8px;margin-top:8px}
+.ml-acts .mini{min-height:34px;padding:0 12px;margin:0;border-radius:8px;font-size:13px;font-weight:600}
+.ml-acts [data-ml-del],.ml-acts [data-adj-del]{background:var(--badSoft);color:var(--bad);border-color:transparent}
+.ml-row.del .ml-main{opacity:.85}
 /* v74.35: the coach card = one header + one paragraph (the AI note hides the rule line) */
 #coach.has-note #coachHead,#coach.has-note #coachSub{display:none}
 #coach .coach-h{font-size:15px;font-weight:400;line-height:1.55;margin:0 0 4px}
@@ -1391,6 +1416,8 @@ button.plchip{border-radius:11px;min-height:44px}
         <select id="mlFilter" aria-label="Filter by category"></select>
         <select id="mlFilterM" aria-label="Filter by payment method"></select>
       </div>
+      <!-- v74.36: the payment-method filter as chips (the mockup); #mlFilterM above holds the value -->
+      <div class="ml-chips" id="mlChips" role="group" aria-label="Filter by account"></div>
       <div id="moneyLog">
         <div id="mlBody"></div>
       </div>
