@@ -2649,6 +2649,9 @@
     // v73.53: the cashback flag (a Money-in CC payoff that is NEW money —
     // owed − amt, free + amt, liquid untouched) rides the record too.
     if (data.cashback) t.cashback = true;
+    // v74.53 (stress test #5): logged from the salary chip = the salary, at
+    // any amount (deductions, a half month, a bonus) — not only >= 90% of it
+    if (data.salary && t.kind === 'cash_in') t.salary = true;
     // v74.15 (logic review #7): an entry dated BEFORE its accounts last took in
     // real numbers (a reconcile / a balance typed in Settings) is already inside
     // those balances — counting it again took it off twice. It files
@@ -2850,7 +2853,7 @@
     state.txns.forEach(function (t) {
       if (t.kind !== 'cash_in') return;
       var amt = Number(t.amount) || 0;
-      if (amt < 0.9 * expected) return;
+      if (!t.salary && amt < 0.9 * expected) return; // v74.53: the chip's salary counts at any amount
       if (!best || String(t.date || '') < String(best.date || '')) best = t;
     });
     return best ? best.id : null;
@@ -2874,7 +2877,7 @@
     if (!t) return false;
     var a = (amt !== undefined) ? Number(amt) : (Number(t.amount) || 0);
     var exp = expectedSalaryFor(String(t.date || '').slice(0, 7), state.base || {});
-    return a >= 0.9 * exp;
+    return !!t.salary || a >= 0.9 * exp; // v74.53: the chip's salary is the salary at any amount
   }
   function monthEffect(kind, amt, t) {
     if (kind === 'card_payment') return 0;
@@ -2902,6 +2905,7 @@
     // the record's payWith (a fresh pick only happens on a fresh add).
     if (t.kind === 'card_payment' && o.payWith) t.payWith = o.payWith;
     if (o.recordOnly) t.recordOnly = true; // v74.15: an edit keeps it record-only
+    if (o.salary && t.kind === 'cash_in') t.salary = true; // v74.53: an edit keeps it the salary
     state.txns[oIdx] = t; // in place — position preserved
     // v73.45: the add+remove pair nets to the edit's delta — but on an EMPTY
     // overlay (a reset already wiped it) the pair's +new leg would create a
@@ -3530,7 +3534,7 @@
     // Save button is the fast path, but nothing typed is ever dropped.
     if (openSheetEl && openSheetEl.id === 'numSheet' && baseDirty) commitBaseForm();
     // v71: closing the Add sheet leaves edit mode (title/button back to add).
-    if (openSheetEl && openSheetEl.id === 'addSheet') exitTxnEdit();
+    if (openSheetEl && openSheetEl.id === 'addSheet') { exitTxnEdit(); salaryChipPending = false; } // v74.53
     if (openSheetEl) { openSheetEl.classList.remove('show'); openSheetEl = null; }
     if (wasOpen && lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
     lastFocus = null;
@@ -4745,7 +4749,7 @@
       if (t.kind !== 'cash_in') return;
       var amt = Number(t.amount) || 0;
       if (amt <= 0) return;
-      if (!(expected > 0) || amt < 0.9 * expected) return; // v74.13: no salary set = nothing is "the salary" (a P150 refund read as an early payday)
+      if (!t.salary && (!(expected > 0) || amt < 0.9 * expected)) return; // v74.13: no salary set = nothing is "the salary" (a P150 refund read as an early payday); v74.53: the chip's salary always is
       var d = String(t.date || '');
       if (d < lo || d > hi) return;
       if (!received || d < received.date) received = { date: d, amount: r2(amt), id: t.id || null };
@@ -4764,7 +4768,7 @@
         if (t.kind !== 'cash_in') return;
         var amt = Number(t.amount) || 0;
         if (amt <= 0) return;
-        if (!(expected > 0) || amt < 0.9 * expected) return; // v74.13
+        if (!t.salary && (!(expected > 0) || amt < 0.9 * expected)) return; // v74.13; v74.53
         var d = String(t.date || '');
         if (d <= hi || d > w.end) return;
         if (d > received.date) received = { date: d, amount: r2(amt), id: t.id || null };
@@ -4774,7 +4778,7 @@
         if (t.kind !== 'cash_in') return;
         var amt = Number(t.amount) || 0;
         if (amt <= 0) return;
-        if (!(expected > 0) || amt < 0.9 * expected) return; // v74.13
+        if (!t.salary && (!(expected > 0) || amt < 0.9 * expected)) return; // v74.13; v74.53
         var d = String(t.date || '');
         if (d <= hi || d > w.end) return;
         if (!received || d < received.date) received = { date: d, amount: r2(amt), id: t.id || null };
@@ -5894,13 +5898,24 @@
       'Card prepay (the ' + ordinal(day) + ')' + (card ? ' — ' + card : ''),
       card || null, 'prepay');
   }
+  // v74.53 (stress test #9): the chip pre-picks the account your last salary
+  // landed in (it used to take the LAST bank account in the list — which moved
+  // with every reorder); no salary yet -> the first bank account
+  function salaryAccountGuess() {
+    var debits = ((state.base && state.base.accounts) || []).filter(function (a) { return a && a.kind === 'debit' && a.name; }).map(function (a) { return a.name; });
+    var exp = Number(state.base && state.base.salary) || 0, best = null;
+    (state.txns || []).forEach(function (t) {
+      if (t.kind !== 'cash_in' || debits.indexOf(t.account) < 0) return;
+      if (!(t.salary || (exp > 0 && (Number(t.amount) || 0) >= 0.9 * exp))) return;
+      if (!best || String(t.date) > String(best.date)) best = t;
+    });
+    return best ? best.account : (debits[0] || 'Cash');
+  }
+  var salaryChipPending = false; // v74.53: the Add sheet was opened from the salary chip
   function salaryRowChip(attr) {
     var parts = String(attr).split('|');
-    var cashAcc = 'CASH::Cash';
-    ((state.base && state.base.accounts) || []).forEach(function (a) {
-      if (a.kind === 'debit' && a.name) cashAcc = 'CASH::' + a.name;
-    });
-    prefillAdd(Number(parts[0]) || 0, parts[1], 'Salary (the ' + ordinal(Number(parts[2]) || 15) + ')', cashAcc, 'salary');
+    prefillAdd(Number(parts[0]) || 0, parts[1], 'Salary (the ' + ordinal(Number(parts[2]) || 15) + ')', 'CASH::' + salaryAccountGuess(), 'salary');
+    salaryChipPending = true; // the entry it logs IS the salary (any amount)
   }
   // v73.22 (user: 'the plan rows still have unclickable chips'): the plan-chip
   // handler body. v73.18 shipped it ONLY as the window.FinApp export property
@@ -10662,12 +10677,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.52, live: new Date(2026, 10, 12, 2, 35) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.53, live: new Date(2026, 10, 12, 2, 39) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.53': [
+      'Fixed: a salary logged from the salary chip now always counts as your salary, even when it\u2019s less (deductions, a half month) or more (a bonus). Before, anything under 90% kept the chip up and pushed \u201cmonth spent\u201d below zero.',
+      'The salary chip now picks the account your last salary landed in (not just the last bank account in your list), and logging a second salary within about three weeks asks first.'
+    ],
     '74.52': [
       'Removing an account or a category that your entries use now asks first and says how many entries use it (they stay in your Ledger as history).',
       'Removing several things in a row keeps them all undoable: the toast says \u201cRemoved X and 2 more\u201d and one Undo brings every one back.'
@@ -12398,6 +12417,20 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       // chip re-rendered unlinked) can't happen: submit reads the CURRENT
       // ref, and the chip only holds it while its suggestion still matches.
       if (state.planLinkRef) payload.planRef = state.planLinkRef;
+      if (salaryChipPending && kind === 'cash_in' && !editingTxn) payload.salary = true; // v74.53 (stress test #5)
+      // v74.53 (stress test #14): a salary when one already landed within ~3 weeks asks first
+      if (!editingTxn && kind === 'cash_in') {
+        var expS = Number(state.base && state.base.salary) || 0;
+        var isSal = payload.salary || (expS > 0 && amount >= 0.9 * expS);
+        if (isSal) {
+          var dNew = parseISO(payload.date || todayISO()), dup = null;
+          (state.txns || []).forEach(function (x) {
+            if (x.kind !== 'cash_in' || !(x.salary || (expS > 0 && (Number(x.amount) || 0) >= 0.9 * expS))) return;
+            if (Math.abs((parseISO(x.date) - dNew) / 86400000) <= 20) dup = x;
+          });
+          if (dup && !window.confirm('You already logged a salary on ' + fmtDate(dup.date) + ' (' + money(dup.amount) + '). Log another one?')) return;
+        }
+      }
       // v71: the same sheet doubles as the ledger editor — when an entry is
       // being edited, its values re-log through saveTxnEdit (same id, Undo
       // restores the ORIGINAL entry); otherwise a plain add.
@@ -12408,6 +12441,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         // smiles for a beat (the flash reverts to the real mood on its own)
         if (!editId && (kind === 'cash_in' || kind === 'card_payment')) happyMoodFlash(1800);
         if (editId) exitTxnEdit();
+        salaryChipPending = false; // v74.53
         byId('f_amount').value = '';
         addAmtEq(byId('f_amount')); // v74.43: the cleared amount clears its "= ₱…" hint too
         byId('f_category').value = '';

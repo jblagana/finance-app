@@ -1184,7 +1184,7 @@ def main():
           and "if (kind === 'cash_in') return salaryIsTxn(t, amt) ? 0 : -amt;" in js  # monthEffect routes through it
           and "salaryIsTxn: salaryIsTxn" in js  # exported (smoke drives it)
           # v73.75: the isSalRow chip-hide pin is gone with the chip (the chip never renders now)
-          and "if (amt < 0.9 * expected) return;" in js  # salaryTxnIdInMonth keeps its amount gate (the v73.7 pins + row identity still use it)
+          and "if (!t.salary && amt < 0.9 * expected) return;" in js  # v74.53 successor: the chip salary counts at any amount  # salaryTxnIdInMonth keeps its amount gate (the v73.7 pins + row identity still use it)
           and "if (d < lo || d > hi) return;" in js  # cycleDataFor's received display still uses its own window
           and "'73.10': [" in js)
     check("v73.11 (user: 'In finance-app todays insights headroom, base it per cycle too'): the Today block's headroom ran the free cash across the CALENDAR month (dim - date + 1), but the money has to last until the NEXT salary (the 14th) - the cycle end. insightsData gains cycleDaysLeft (days to cycleData's window end, calendar fallback when there is no cycle) and the Today block divides by it, names the cycle end, and the treat check compares against the per-cycle daily",
@@ -1999,6 +1999,15 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.53 (stress test #5 #9 #14): an entry logged from the salary chip carries t.salary and counts as the salary at any amount (salaryIsTxn, salaryTxnIdInMonth, cycleDataFor's three scans); the chip pre-picks the account the last salary landed in (salaryAccountGuess); a second salary within 20 days asks first",
+          "if (data.salary && t.kind === 'cash_in') t.salary = true;" in js
+          and "return !!t.salary || a >= 0.9 * exp;" in js
+          and js.count("if (!t.salary && (!(expected > 0) || amt < 0.9 * expected)) return;") == 3
+          and "function salaryAccountGuess() {" in js
+          and "'CASH::' + salaryAccountGuess(), 'salary');" in js
+          and "if (salaryChipPending && kind === 'cash_in' && !editingTxn) payload.salary = true;" in js
+          and "You already logged a salary on " in js
+          and "'74.53': [" in js)
     check("v74.52 (stress test #2 #7 #12): removing an account (or a category) that entries use asks first with the count; back-to-back ✕ removals form one burst (rmBurst, data-rmburst on the toast) whose Undo restores every one",
           "if (rmUses && !window.confirm(rmAcc" in js
           and "rmBurst = { id: 'rb' + Date.now(), items: [], base: state.base ? cloneObj(state.base) : null };" in js
@@ -2290,7 +2299,7 @@ def main():
           and "PART 54: v74.14 - Undo really undoes" in smoke
           and "'74.14': [" in js)
     check("v74.13 (logic review #5 + #6): no salary set. cyclePlanDeduction deducts the cycle's plans whether or not a salary is set (the 'no salary = no deduction' gate let P30,354 vanish: free 58,631 shown instead of 28,277); cycleDataFor's three received scans require a salary (a P150 refund with no salary read as an early payday and stretched the headroom 9 -> 39 days). Smoke PART 53 (4)",
-          js.count("if (!(expected > 0) || amt < 0.9 * expected) return;") == 3
+          js.count("if (!t.salary && (!(expected > 0) || amt < 0.9 * expected)) return;") == 3  # v74.53 successor
           and "if (expected > 0 && amt < 0.9 * expected) return;" not in js
           and "if (!cd || !(cd.expected > 0)) return 0;" not in js
           and "PART 53: v74.13 - no salary set" in smoke
