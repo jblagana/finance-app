@@ -1189,6 +1189,87 @@ button.plchip{border-radius:11px;min-height:44px}
 .grp-body .dig.bad .dg-tag{color:var(--bad)}
 .rowchip.info{background:var(--info);color:#06142B;border:0}
 .dig.next .dg-tag{color:var(--mut)}
+/* v74.42: Your numbers = overview + drill-ins (the approved mockup) */
+#numSheet .numnav,#numSheet .numqs{display:none}
+#numSheet.nv-grp .numnav{display:block;margin:0 0 6px}
+#numSheet.nv-grp .numqs{display:block;margin:0 0 6px}
+#numSheet.nv-grp #numOverview{display:none}
+#numSheet:not(.nv-grp) #baseBody{display:none}
+#baseBody .ngrp{display:none}
+#baseBody .ngrp.on{display:block}
+#baseBody .ngrp>.bhead{display:none}
+.numback{display:inline-flex;align-items:center;gap:4px;min-height:40px;padding:0 10px 0 4px;margin-left:-4px;border:0;border-radius:10px;background:transparent;color:var(--acc);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+#numSheet .numnav-t{margin:2px 0 0;font-size:20px;font-weight:600;letter-spacing:-.01em;color:var(--ink);text-transform:none}
+#baseBody .ngrp.one .bdrag{display:none}
+#baseBody .ngrp.one .acc-main{grid-template-columns:0 1fr 1fr auto!important;column-gap:0}
+#baseBody .ngrp.one .acc-main .nf-kind{margin-right:10px}
+.ngrp-note{margin:4px 0 10px!important}
+/* the basics / card-rules drill-ins: label above each field */
+#baseBody .ngrp[data-grp=basics] .brow,#baseBody .ngrp[data-grp=cardrules] .brow{display:grid;grid-template-columns:1fr;gap:6px;border-top:0;padding:6px 0}
+#baseBody .ngrp[data-grp=cardrules] .brow:first-child{grid-template-columns:1fr 1fr}
+#baseBody .ngrp[data-grp=cardrules] .brow:first-child .bnote:nth-of-type(2){grid-row:1;grid-column:2}
+#baseBody .ngrp[data-grp=basics] .bnote,#baseBody .ngrp[data-grp=cardrules] .bnote{font-size:12.5px;font-weight:600;color:var(--mut);text-transform:none}
+#baseBody .ngrp input,#baseBody .ngrp select{min-height:46px;border-radius:11px}
+/* accounts: one labelled card per account */
+#rowsAcc .accblk{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 12px 8px;margin:0 0 10px}
+#rowsAcc .accblk .brow{display:grid;grid-template-columns:1fr 1fr;gap:10px 10px;border-top:0;padding:4px 0}
+#rowsAcc .acc-main{grid-template-columns:auto 1fr 1fr auto!important}
+#rowsAcc .acc-main .bdrag{grid-row:1;grid-column:1;align-self:end;padding-bottom:12px}
+#rowsAcc .acc-main .nf-name{grid-row:1;grid-column:2/4}
+#rowsAcc .acc-main [data-rm]{grid-row:1;grid-column:4;align-self:end;min-height:46px;background:var(--badSoft);color:var(--bad)}
+#rowsAcc .acc-main .nf-kind{grid-column:2/3}
+#rowsAcc .acc-main .nf-val{grid-column:3/5}
+#rowsAcc .acc-main .nf-lim{grid-column:2/5}
+#rowsAcc .acc-cc .nf-wide{grid-column:1/3}
+#rowsAcc .acc-olddue{display:none}
+.nf{display:flex;flex-direction:column;gap:5px;min-width:0;margin:0}
+.nfl{font-size:12.5px;font-weight:600;color:var(--mut)}
+.nfl small{font-weight:400}
+.nf input,.nf select{width:100%;min-width:0;box-sizing:border-box}
+.nf input:disabled{opacity:.45}
+#baseBody .ngrp.one .accblk{display:none}
+#baseBody .ngrp.one .accblk.on{display:block}
+#baseBody .ngrp.one>.addrow{display:none}
+/* the overview */
+.nv-lab{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:22px 4px 8px}
+#numOverview>.nv-lab:first-child{margin-top:4px}
+.nv-labrow{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:22px 4px 8px}
+.nv-labrow .nv-lab{margin:0}
+.nv-labrow>span{font-size:12.5px;color:var(--mut);text-align:right}
+.nv-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:0 14px}
+.nv-card.nv-pad{padding:14px}
+.nv-row{width:100%;display:flex;align-items:center;gap:10px;min-height:52px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:14.5px;text-align:left;padding:0;cursor:pointer}
+.nv-card>.nv-row:last-child{border-bottom:0}
+.nv-row .k{flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nv-row .v{color:var(--mut);font-size:13.5px;text-align:right;white-space:nowrap}
+.nv-row svg{flex:none;color:var(--mut)}
+.nv-plus{flex:none;width:20px;text-align:center;color:var(--acc);font-size:20px;font-weight:500;line-height:1}
+.nv-mm .nv-plus{color:var(--mut);font-size:18px}
+.nv-cat{flex:none;font-size:12.5px;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--card2)}
+.nv-acc{min-height:64px;gap:12px}
+.nv-tile{flex:none;width:38px;height:38px;border-radius:10px;background:var(--accSoft);color:var(--acc);display:flex;align-items:center;justify-content:center;font-weight:700}
+.nv-tile.card{background:var(--infoSoft);color:var(--info)}
+.nv-l{flex:1;min-width:0}
+.nv-t{display:block;font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nv-s{display:block;font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nv-amt{flex:none;text-align:right;font-size:14.5px;font-weight:600}
+.nv-amt.owe{color:var(--warn)}
+.nv-amt small{display:block;font-size:11.5px;font-weight:400;color:var(--mut)}
+.nv-add{width:100%;min-height:50px;border:0;background:transparent;color:var(--acc);font:inherit;font-size:14px;font-weight:600;text-align:left;padding:0;cursor:pointer}
+.nv-pad .nv-add{min-height:44px;margin-top:6px}
+.nv-more{color:var(--mut)}
+.nv-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:4px}
+.nv-tile3{background:var(--card2);border:0;border-radius:11px;padding:10px 12px;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.nv-tile3 span{display:block;font-size:11.5px;color:var(--mut)}
+.nv-tile3 b{display:block;font-size:15px;font-weight:650;margin-top:2px}
+.nv-pad>.nv-row{border-bottom:0}
+.nv-buds{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.nv-bud{display:flex;align-items:center;gap:8px;min-width:0;height:46px;padding:0 12px;border:0;border-radius:11px;background:var(--card2);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.nv-bud .dot{flex:none;width:8px;height:8px;border-radius:3px}
+.nv-bud .n{flex:1;min-width:0;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nv-bud .a{flex:none;font-size:12.5px;color:var(--mut)}
+.nv-foot{margin:10px 4px 0;font-size:12.5px;color:var(--mut)}
+.nv-card .nv-foot{margin:8px 0 0}
 /* v74.40: a Your-numbers row opens the editor at its part — scrolled there + a short highlight */
 #numSheet .brow,#numSheet .bhead,#rowsAcc>*{scroll-margin-top:12px}
 .numflash{animation:numflash 2.2s ease-out;border-radius:10px}
@@ -1782,7 +1863,14 @@ button.plchip{border-radius:11px;min-height:44px}
   </div>
   <div class="sheet-b">
     <p id="baseStatus" class="note" style="margin:10px 0 14px" aria-live="polite"></p>
-    <p class="note" style="margin-top:2px">Amounts take quick sums like 300-125+10.</p>
+    <!-- v74.42 (boss-approved mockup): the overview (tappable rows) + a drill-in per section; #baseBody is still the form -->
+    <div class="numnav" id="numNav">
+      <button type="button" id="numBack" class="numback" aria-label="Back to all your numbers">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>All numbers</button>
+      <h2 class="numnav-t" id="numNavT"></h2>
+    </div>
+    <div id="numOverview"></div>
+    <p class="note numqs">Amounts take quick sums like 300-125+10.</p>
     <div id="baseBody"></div>
     <div id="qsBar" class="qsbar" style="display:none" aria-live="polite"></div>
     <p id="baseMigrated" class="note" style="display:none;margin-top:10px"></p>

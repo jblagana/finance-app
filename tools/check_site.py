@@ -1699,7 +1699,7 @@ def main():
           and "accountBalanceDiffs(prevBase, state.base).forEach" in js
           and "l: 'Adjustment', c: 'Adjustment'" in js
           and "n: r2(diff), k: 'a'" in js
-          and "set a balance to what it really is" in js
+          and "Changing a balance files the difference in the Ledger as an <b>Adjustment</b>" in js  # v74.42: the accounts note was shortened (same meaning)
           and "var isAdj = e.k === 'a' || e.k === 'r';" in js  # v73.45: 'r' (reset audit row) joins the Adjustment render family
           and "var down = add ? !inflow : inflow;" in js  # v74.02: the adjustment's red/green side (card row: more owed = down; debit: less cash = down) — the freeTxt-suppression clause was replaced by the free-line removal
           and "data-ow-edit-cancel=\"1\"" in js
@@ -1998,6 +1998,21 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.42 (boss: 'show me a mockup of the your numbers, currently it looks so cluttered' -> 'build n ship'): Your numbers opens on an overview (renderNumOverview: Basics / Accounts / Card rules / Budgets / More / Learned) drawn from the LIVE form; each row drills into ONE .ngrp of the real form (numGo / applyNumView, back = #numBack); every account is a labelled .accblk (drag + Remove act on the whole account); flipping an account to Credit adds its card row at once; readBaseForm + the Save bar are unchanged",
+          'id="numOverview"' in html and 'id="numBack"' in html and 'id="numNavT"' in html
+          and "#numSheet:not(.nv-grp) #baseBody{display:none}" in html
+          and "function renderNumOverview() {" in js
+          and "function applyNumView() {" in js
+          and "function numGo(grp, i) {" in js
+          and "split(/\\s+/).filter(function (c) { return c && c !== name; })" in js  # the class helper splits on WHITESPACE (a lost backslash split on the letter s and broke the sheet)
+          and "var nv = function (id) { return numVal(byId(id), false); };" in js
+          and ", true)" not in js.split("function renderNumOverview() {")[1].split("host.innerHTML = h;")[0]
+          and all(('data-grp="' + k + '"') in js for k in ["basics", "cardrules", "sal", "acc", "bud", "bov", "debt", "one", "sink", "mm"])
+          and "'<div class=\"bblk accblk\" data-sec=\"acc\">'" in js
+          and "function accCcRow(a) {" in js
+          and "main.insertAdjacentHTML('afterend', accCcRow(" in js
+          and "if (id === 'numSheet') { numView = null; renderBaseEditor(); }" in js
+          and "'74.42': [" in js)
     check("v74.41 (boss: 'when i click restart and update, it does update but theres a toast that says new version and when i click that toast, the shell reverts to the previous version'): the sw precache fetches every shell file with cache:'reload' (never the HTTP cache, so a new version can't be cached with old files); the New-version banner shows only when an older version controls the page (not on the first install after a restart); the footer prints the version with two decimals",
           "c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))" in sw
           and "if (reg.waiting && navigator.serviceWorker.controller) showSwToast();" in js

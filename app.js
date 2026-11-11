@@ -3326,7 +3326,7 @@
     sc.classList.add('show');
     sh.classList.add('show');
     openSheetEl = sh;
-    if (id === 'numSheet') renderBaseEditor();
+    if (id === 'numSheet') { numView = null; renderBaseEditor(); } // v74.42: opens on the overview
     else if (id === 'setSheet') { renderBaseStatus(); backupSelSync(); } // v72.23: show the stored "what to include"
     else if (id === 'addSheet') renderAddChips(); // v74.24 look upgrade: the chip rows reflect the current picks
     // a11y: move focus into the sheet (first field, else first control).
@@ -3529,26 +3529,42 @@
     // 1..28 cap silently dropped a 29-31 day on save and the global default
     // came back); a day past the month's length clamps to the month's last
     // day at render time.
-    var ccGrid = (a.kind === 'card')
-      ? brow('<span class="bnote">billing</span><input data-r="billing" type="text" value="' + (a.billing_day != null ? a.billing_day : '') + '"' +
-          ' title="billing date (day) - the statement cut for THIS card (1-31; clamps to the month length)">' +
-        '<span class="bnote">due</span><input data-r="dued" type="text" value="' + (a.due_day != null ? a.due_day : '') + '"' +
-          ' title="due date (day) - when THIS card is paid (1-31; clamps to the month length)">' +
-        '<span class="bnote">due this cycle</span><input data-r="duo" type="text" value="' + (a.due_override != null ? a.due_override : '') + '"' +
-          ' placeholder="optional" title="manual due override (blank = auto: balance minus next-cycle charges)">'
-      ) : '';
+    var ccGrid = (a.kind === 'card') ? accCcRow(a) : '';
     // v73.29: the card row gains a 5th column, "due this cycle" — the
     // manual statement amount the coach card's Card-payment row shows.
     // Blank = auto (the row falls back to the card's live balance). It is
     // the roll-over control: set it to the real bill and whatever balance
     // sits above it is carried as the NEXT cycle (dimmed + badged).
-    return brow(dragH() + '<input class="grow" data-r="name" value="' + esc(a.name || '') + '" autocomplete="off">' +
-      '<select data-r="kind">' + kindOpts + '</select>' +
-      '<input data-r="value" type="text" value="' + (a.value != null ? a.value : '') + '">' +
-      '<input data-r="limit" type="text" value="' + (a.limit ? a.limit : '') + '"' + (a.kind === 'card' ? '' : ' disabled') + '>' +
-      '<input data-r="due" type="text" value="' + (a.due != null ? a.due : '') + '"' + (a.kind === 'card' ? '' : ' disabled') +
+    // v74.42 (boss-approved mockup 8b): ONE labelled block per account (.bblk.accblk —
+    // drag + Remove act on the whole account, both rows); readBaseForm still reads
+    // '#rowsAcc .brow' + the card row as the main row's nextElementSibling. The
+    // older data-r="due" field stays (hidden) so a stored value is never lost.
+    return '<div class="bblk accblk" data-sec="acc">' +
+      '<div class="brow acc-main">' + dragH() +
+      nfL('Name', '<input class="grow" data-r="name" value="' + esc(a.name || '') + '" autocomplete="off">', 'nf-name') +
+      nfL('Type', '<select data-r="kind">' + kindOpts + '</select>', 'nf-kind') +
+      nfL('Balance <small>(owed, for a card)</small>', '<input data-r="value" type="text" inputmode="decimal" value="' + (a.value != null ? a.value : '') + '">', 'nf-val') +
+      nfL('Credit limit', '<input data-r="limit" type="text" inputmode="decimal" value="' + (a.limit ? a.limit : '') + '"' + (a.kind === 'card' ? '' : ' disabled') + '>', 'nf-lim') +
+      '<input class="acc-olddue" data-r="due" type="text" value="' + (a.due != null ? a.due : '') + '"' + (a.kind === 'card' ? '' : ' disabled') +
         ' title="due this cycle (blank = the live balance); the balance above it rolls to next cycle">' +
-      delBtn('Remove account')) + ccGrid + detChips(a.kind + ':' + a.name);
+      delBtn('Remove account', true) + '</div>' + ccGrid + detChips(a.kind + ':' + a.name) + '</div>';
+  }
+  // v74.42: a labelled field (the label sits above the input in the drill-in)
+  function nfL(lbl, inner, cls) {
+    return '<label class="nf' + (cls ? ' ' + cls : '') + '"><span class="nfl">' + lbl + '</span>' + inner + '</label>';
+  }
+  // v73.88 (the CC cycle model) — v74.42: its own builder, so flipping an
+  // account to Credit in the editor can add the card row right away
+  function accCcRow(a) {
+    a = a || {};
+    return '<div class="brow acc-cc">' +
+      nfL('Bills on the', '<input data-r="billing" type="text" inputmode="numeric" value="' + (a.billing_day != null ? a.billing_day : '') + '"' +
+        ' title="billing date (day) - the statement cut for THIS card (1-31; clamps to the month length)">') +
+      nfL('Due on the', '<input data-r="dued" type="text" inputmode="numeric" value="' + (a.due_day != null ? a.due_day : '') + '"' +
+        ' title="due date (day) - when THIS card is paid (1-31; clamps to the month length)">') +
+      nfL('This cycle’s bill <small>(optional)</small>', '<input data-r="duo" type="text" inputmode="decimal" value="' + (a.due_override != null ? a.due_override : '') + '"' +
+        ' placeholder="worked out if empty" title="manual due override (blank = auto: balance minus next-cycle charges)">', 'nf-wide') +
+      '</div>';
   }
   function debtBlock(d) {
     d = d || {};
@@ -3610,37 +3626,44 @@
     var sb0 = byId('baseSaveBar'); if (sb0) sb0.style.display = 'none';
     var b = state.base || defaultBase();
     var h = '';
+    // v74.42: the form is split into drill-in groups (.ngrp[data-grp]) — the
+    // overview (renderNumOverview) shows one at a time; every input keeps its
+    // id / data-r, so readBaseForm and the save path are unchanged.
+    h += '<div class="ngrp" data-grp="basics">';
     h += brow('<span class="bnote">your name</span><input class="grow" id="b_name" type="text" placeholder="e.g. Jan" value="' + esc(b.name || '') + '" autocomplete="off">');
     h += brow('<span class="bnote">as of</span><input class="grow" id="b_asof" type="date" value="' + esc(b.as_of || '') + '">');
     // v71: amount fields are text inputs (full keyboard, operators typeable)
     // and numVal() evaluates quick sums like 300-125+10 on save.
     h += brow('<span class="bnote">salary / month</span><input class="grow" id="b_salary" type="text" placeholder="0.00, or a quick sum like 300-125+10" value="' + (b.salary || '') + '">');
     h += brow('<span class="bnote">liquidity floor</span><input class="grow" id="b_floor" type="text" value="' + (b.liquidity_floor || '') + '">');
+    h += brow('<span class="bnote">salary day</span><input class="grow" id="b_sday" type="text" value="' + (b.salary_day || b.cutoff_day || 15) + '" title="the day of the month your salary lands — the salary cycle starts on it">');
+    h += '</div><div class="ngrp" data-grp="cardrules">';
     h += brow('<span class="bnote">cc prepay day</span><input class="grow" id="b_pday" type="text" value="' + (b.prepay_day || 14) + '">' +
       '<span class="bnote">cutoff</span><input class="grow" id="b_cday" type="text" value="' + (b.cutoff_day || 15) + '">');
     h += brow('<span class="bnote">cc due day</span><input class="grow" id="b_dday" type="text" value="' + (b.due_day || 5) + '" title="the day of the month the card bill is due — the due amount is the charges since the last cutoff minus the prepays logged in that window">');
-    h += brow('<span class="bnote">salary day</span><input class="grow" id="b_sday" type="text" value="' + (b.salary_day || b.cutoff_day || 15) + '" title="the day of the month your salary lands — the salary cycle starts on it">');
     h += brow('<span class="bnote">card target util</span><input class="grow" id="b_util" type="text" value="' + (b.card_util_target || '') + '" title="0.099 = just under 10%">');
+    h += '<p class="note ngrp-note">Target util is a fraction: 0.09 = keep each card under 9% of its limit. These days are the defaults for NEW cards — each card keeps its own billing / due day (Accounts).</p>';
+    h += '</div>';
     var salRows = '';
     Object.keys(b.salary_overrides || {}).forEach(function (m) { salRows += payRow(m, b.salary_overrides[m], true); });
-    h += bsec('Salary overrides') + '<div id="rowsSal">' + salRows + '</div>' +
-      '<button type="button" class="addrow" data-add="sal">+ override month</button>';
+    h += '<div class="ngrp" data-grp="sal">' + bsec('Salary overrides') + '<p class="note ngrp-note">A month whose salary is different from the usual — month · amount.</p><div id="rowsSal">' + salRows + '</div>' +
+      '<button type="button" class="addrow" data-add="sal">+ override month</button></div>';
     var accRows = (b.accounts || []).map(accRow).join('');
     // v72.30 (user: 'add a way to override the current accounts'
     // amount/balances'): the third column is the account's CURRENT balance —
     // a save that moves it files the difference in the Ledger under
     // 'Adjustment' (saveBase → accountBalanceDiffs)
-    h += bsec('Accounts (debit, credit)') +
-      '<p class="note" style="margin:0 0 6px">name · kind · <b>current balance</b> · limit · <b>due this cycle</b> (cards) — set a balance to what it really is (the difference is filed in the Ledger under <b>Adjustment</b>); set a card&#39;s due to its real bill — the balance above it is shown as next cycle on the coach card</p>' +
+    h += '<div class="ngrp" data-grp="acc">' + bsec('Accounts (debit, credit)') +
+      '<p class="note ngrp-note">Changing a balance files the difference in the Ledger as an <b>Adjustment</b>. A card&#39;s “this cycle&#39;s bill” is worked out for you — type the real bill to override it.</p>' +
       '<div id="rowsAcc">' + accRows + '</div>' +
-      '<button type="button" class="addrow" data-add="acc">+ account</button>';
+      '<button type="button" class="addrow" data-add="acc">+ account</button></div>';
     var budRows = '';
     Object.keys(b.budgets || {}).forEach(function (k) {
       budRows += brow(dragH() + '<input class="grow" data-r="name" value="' + esc(k) + '" autocomplete="off">' +
         '<input data-r="a" type="text" value="' + (Number(b.budgets[k]) || '') + '">' + delBtn('Remove budget')) + detChips('budget:' + k);
     });
-    h += bsec('Monthly budgets') + '<div id="rowsBud">' + budRows + '</div>' +
-      '<button type="button" class="addrow" data-add="bud">+ budget</button>';
+    h += '<div class="ngrp" data-grp="bud">' + bsec('Monthly budgets') + '<p class="note ngrp-note">Category · ₱ per month (blank = no limit).</p><div id="rowsBud">' + budRows + '</div>' +
+      '<button type="button" class="addrow" data-add="bud">+ budget</button></div>';
     var bovRows = '';
     Object.keys(b.budget_overrides || {}).forEach(function (m) {
       Object.keys(b.budget_overrides[m] || {}).forEach(function (k) {
@@ -3652,15 +3675,15 @@
           '<input data-r="a" type="text" value="' + (Number(b.budget_overrides[m][k]) || '') + '">' + delBtn('Remove override'));
       });
     });
-    h += bsec('Budget overrides (one month)') + '<div id="rowsBov">' + bovRows + '</div>' +
-      '<button type="button" class="addrow" data-add="bov">+ override</button>';
+    h += '<div class="ngrp" data-grp="bov">' + bsec('Budget overrides (one month)') + '<p class="note ngrp-note">Month · category · amount for that month only.</p><div id="rowsBov">' + bovRows + '</div>' +
+      '<button type="button" class="addrow" data-add="bov">+ override</button></div>';
     var debtBlocks = '';
     Object.keys(b.debts || {}).forEach(function (k) {
       var d = Object.assign({ name: k }, b.debts[k]);
       debtBlocks += debtBlock(d);
     });
-    h += bsec('Debts') + '<div id="rowsDebt">' + debtBlocks + '</div>' +
-      '<button type="button" class="addrow" data-add="debt">+ debt</button>';
+    h += '<div class="ngrp" data-grp="debt">' + bsec('Debts') + '<div id="rowsDebt">' + debtBlocks + '</div>' +
+      '<button type="button" class="addrow" data-add="debt">+ debt</button></div>';
     var oneRows = '';
     Object.keys(b.one_offs || {}).forEach(function (m) {
       Object.keys(b.one_offs[m] || {}).forEach(function (k) {
@@ -3669,15 +3692,15 @@
           '<input data-r="a" type="text" value="' + (Number(b.one_offs[m][k]) || '') + '">' + delBtn('Remove one-off'));
       });
     });
-    h += bsec('One-offs') + '<div id="rowsOne">' + oneRows + '</div>' +
-      '<button type="button" class="addrow" data-add="one">+ one-off</button>';
+    h += '<div class="ngrp" data-grp="one">' + bsec('One-offs') + '<p class="note ngrp-note">Month · what · amount.</p><div id="rowsOne">' + oneRows + '</div>' +
+      '<button type="button" class="addrow" data-add="one">+ one-off</button></div>';
     var sinkBlocks = '';
     Object.keys(b.sinking || {}).forEach(function (k) {
       var s = Object.assign({ name: k }, b.sinking[k]);
       sinkBlocks += sinkBlock(s);
     });
-    h += bsec('Sinking funds') + '<div id="rowsSink">' + sinkBlocks + '</div>' +
-      '<button type="button" class="addrow" data-add="sink">+ goal</button>';
+    h += '<div class="ngrp" data-grp="sink">' + bsec('Sinking funds') + '<div id="rowsSink">' + sinkBlocks + '</div>' +
+      '<button type="button" class="addrow" data-add="sink">+ goal</button></div>';
     // v68 item 1: learned merchant→category map — learned automatically from
     // the ledger; the user can hide (✕) or block (⊘) any entry, both reversible.
     var learned = learnedMerchantCat();
@@ -3697,13 +3720,173 @@
         '<button type="button" class="mini" data-mm="' + esc(nm) + '" data-mmact="delete" aria-label="' + (mmov.deleted[nm] ? 'Show again' : 'Hide') + ' ' + esc(nm) + '">' + (mmov.deleted[nm] ? '↺' : '✕') + '</button>' +
         '</div>';
     });
-    h += bsec('Merchant categories (learned from your log)') +
+    h += '<div class="ngrp" data-grp="mm">' + bsec('Merchant categories (learned from your log)') +
       (mmNames.length
         ? '<div id="rowsMm">' + mmRows + '</div>' +
           '<div class="note">Learned automatically — log <b>jollibee</b> under Food a couple of times and “log 200 jollibee” is filed under Food. ✕ hides an entry, ⊘ blocks it (both come back if you tap again).</div>'
-        : '<div class="note">Log a few expenses with a note and a category and I’ll start filing similar ones for you.</div>');
+        : '<div class="note">Log a few expenses with a note and a category and I’ll start filing similar ones for you.</div>') + '</div>';
     bb.innerHTML = h;
     renderBaseStatus();
+    applyNumView(); // v74.42: the overview, or the open drill-in
+  }
+  // ---------- v74.42 (boss: 'show me a mockup of the your numbers, currently
+  // it looks so cluttered' -> 'build n ship'): Your numbers = an OVERVIEW of
+  // tappable rows (the approved mockup) + a drill-in per section. The overview
+  // is drawn from the LIVE form (so unsaved edits show), the drill-in shows
+  // one .ngrp of the real form; the Save bar + readBaseForm are unchanged.
+  var numView = null; // null = overview; { grp, i } = a drill-in (i = one account)
+  var NUM_GRP_T = { basics: 'Basics', cardrules: 'Card rules', acc: 'Accounts', bud: 'Monthly budgets', bov: 'A different budget one month',
+    sal: 'A different salary one month', debt: 'Debts', one: 'One-offs', sink: 'Savings goals', mm: 'Learned from your notes' };
+  function numGo(grp, i) {
+    numView = grp ? { grp: grp, i: (i == null ? null : i) } : null;
+    applyNumView();
+    var sb = document.querySelector ? document.querySelector('#numSheet .sheet-b') : null;
+    if (sb) sb.scrollTop = 0;
+  }
+  // v74.42: class on/off without relying on classList.toggle (the smoke's shim DOM has none)
+  function nvCls(el, name, on) {
+    if (!el) return;
+    var cs = String(el.className || '').split(/\s+/).filter(function (c) { return c && c !== name; });
+    if (on) cs.push(name);
+    el.className = cs.join(' ');
+  }
+  function applyNumView() {
+    var sh = byId('numSheet'), bb = byId('baseBody');
+    if (!bb) return;
+    var g = numView ? numView.grp : null;
+    nvCls(sh, 'nv-grp', !!g);
+    var groups = bb.querySelectorAll ? bb.querySelectorAll('.ngrp') : [];
+    for (var k = 0; k < groups.length; k++) {
+      var on = groups[k].getAttribute('data-grp') === g;
+      nvCls(groups[k], 'on', on);
+      nvCls(groups[k], 'one', on && g === 'acc' && numView.i != null);
+    }
+    if (g === 'acc') {
+      var blks = bb.querySelectorAll('#rowsAcc .accblk');
+      for (var j = 0; j < blks.length; j++) nvCls(blks[j], 'on', numView.i === j);
+    }
+    var t = byId('numNavT');
+    if (t) {
+      var nm = '';
+      if (g === 'acc' && numView.i != null) {
+        var bk = bb.querySelectorAll('#rowsAcc .accblk')[numView.i];
+        var ni = bk ? bk.querySelector('[data-r="name"]') : null;
+        nm = ni && ni.value ? ni.value : 'New account';
+      }
+      t.textContent = nm || (g ? (NUM_GRP_T[g] || '') : '');
+    }
+    if (!g) renderNumOverview();
+  }
+  function nvRow(go, k, v, extra) {
+    return '<button type="button" class="nv-row" data-nv="' + go + '"' + (extra || '') + '><span class="k">' + k + '</span><span class="v">' + v + '</span>' +
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>';
+  }
+  function renderNumOverview() {
+    var host = byId('numOverview'), bb = byId('baseBody');
+    if (!host || !bb || !bb.querySelectorAll) return;
+    // READ-ONLY view of the live form: numVal(el, false) never rewrites an input
+    // (readBaseForm, or numVal with normalize on, would turn a typed "300-125" into 175)
+    var val = function (el) { return el ? String(el.value || '').trim() : ''; };
+    var nv = function (id) { return numVal(byId(id), false); };
+    var b0 = state.base || defaultBase();
+    var b = {
+      name: byId('b_name') ? val(byId('b_name')) : b0.name,
+      as_of: (byId('b_asof') ? val(byId('b_asof')) : '') || b0.as_of,
+      salary: byId('b_salary') ? nv('b_salary') : b0.salary,
+      salary_day: (byId('b_sday') ? Math.round(nv('b_sday')) : 0) || b0.salary_day,
+      liquidity_floor: byId('b_floor') ? nv('b_floor') : b0.liquidity_floor,
+      prepay_day: (byId('b_pday') ? Math.round(nv('b_pday')) : 0) || b0.prepay_day,
+      cutoff_day: (byId('b_cday') ? Math.round(nv('b_cday')) : 0) || b0.cutoff_day,
+      due_day: (byId('b_dday') ? Math.round(nv('b_dday')) : 0) || b0.due_day,
+      card_util_target: byId('b_util') ? nv('b_util') : b0.card_util_target
+    };
+    var lab = function (t) { return '<h2 class="nv-lab">' + t + '</h2>'; };
+    var h = '';
+    // Basics
+    h += lab('Basics') + '<section class="nv-card">' +
+      nvRow('basics', 'Your name', esc(b.name || 'not set')) +
+      nvRow('basics', 'Salary', (Number(b.salary) || 0) > 0 ? money(b.salary) + ' · the ' + ordinal(b.salary_day || 15) : 'not set') +
+      nvRow('basics', 'Cash floor', (Number(b.liquidity_floor) || 0) > 0 ? money(b.liquidity_floor) : 'not set') +
+      nvRow('basics', 'Balances as of', esc(fmtDate(b.as_of))) + '</section>';
+    // Accounts (from the form's blocks — the index is the drill-in target)
+    var blks = bb.querySelectorAll('#rowsAcc .accblk'), liq = 0, owed = 0, ah = '';
+    for (var i = 0; i < blks.length; i++) {
+      var bk = blks[i];
+      var nm = val(bk.querySelector('[data-r="name"]'));
+      var kd = val(bk.querySelector('[data-r="kind"]')) || 'debit';
+      var amt = numVal(bk.querySelector('[data-r="value"]'), false);
+      var card = kd === 'card';
+      if (card) owed += amt; else liq += amt;
+      var sub = card ? 'Credit' : (kd === 'debit' ? 'Debit' : esc(kd));
+      if (card) {
+        var lim = numVal(bk.querySelector('[data-r="limit"]'), false);
+        var bd = Math.round(numVal(bk.querySelector('[data-r="billing"]'), false));
+        var dd = Math.round(numVal(bk.querySelector('[data-r="dued"]'), false));
+        if (lim > 0) sub += ' · ' + money(lim) + ' limit';
+        if (bd > 0) sub += ' · bills ' + ordinal(bd) + (dd > 0 ? ', due ' + ordinal(dd) : '');
+      }
+      var ch = (nm || '?').charAt(0).toUpperCase();
+      ah += '<button type="button" class="nv-row nv-acc" data-nv="acc" data-nvi="' + i + '">' +
+        '<span class="nv-tile' + (card ? ' card' : '') + '" aria-hidden="true">' + esc(ch) + '</span>' +
+        '<span class="nv-l"><span class="nv-t">' + esc(nm || 'New account') + '</span><span class="nv-s">' + sub + '</span></span>' +
+        '<span class="nv-amt' + (card ? ' owe' : '') + '">' + money(amt) + (card ? '<small>owed</small>' : '') + '</span></button>';
+    }
+    h += '<div class="nv-labrow"><h2 class="nv-lab">Accounts</h2><span>' + money(r2(liq)) + ' cash · ' + money(r2(owed)) + ' owed</span></div>' +
+      '<section class="nv-card">' + ah + '<button type="button" class="nv-add" data-nvadd="acc">+ Add account</button></section>';
+    // Card rules
+    var ut = Number(b.card_util_target) || 0;
+    h += lab('Card rules') + '<section class="nv-card nv-pad"><div class="nv-tiles">' +
+      '<button type="button" class="nv-tile3" data-nv="cardrules"><span>Prepay by</span><b>the ' + ordinal(b.prepay_day || 14) + '</b></button>' +
+      '<button type="button" class="nv-tile3" data-nv="cardrules"><span>Cutoff</span><b>the ' + ordinal(b.cutoff_day || 15) + '</b></button>' +
+      '<button type="button" class="nv-tile3" data-nv="cardrules"><span>Bill due</span><b>the ' + ordinal(b.due_day || 5) + '</b></button></div>' +
+      nvRow('cardrules', 'Keep card use under', ut > 0 ? Math.round(ut * 1000) / 10 + '%' : 'not set') +
+      '<p class="nv-foot">New cards start with these days — each card keeps its own (tap the card above).</p></section>';
+    // Budgets
+    var buds = bb.querySelectorAll('#rowsBud .brow'), bh = '', nb = 0, nset = 0;
+    for (var u = 0; u < buds.length; u++) {
+      var bn = val(buds[u].querySelector('[data-r="name"]'));
+      if (!bn) continue;
+      var ba = numVal(buds[u].querySelector('[data-r="a"]'), false);
+      nb++; if (ba > 0) nset++;
+      var tl = mlTile(bn);
+      bh += '<button type="button" class="nv-bud" data-nv="bud"><span class="dot" style="background:' + tl.fg + '"></span><span class="n">' + esc(bn) + '</span><span class="a">' + (ba > 0 ? money(ba) : 'no limit') + '</span></button>';
+    }
+    h += '<div class="nv-labrow"><h2 class="nv-lab">Monthly budgets</h2><span>' + nb + ' categor' + (nb === 1 ? 'y' : 'ies') + (nb ? (nset ? ' · ' + nset + ' with a limit' : ' · no limits set') : '') + '</span></div>' +
+      '<section class="nv-card nv-pad">' + (bh ? '<div class="nv-buds">' + bh + '</div>' : '') +
+      '<button type="button" class="nv-add" data-nvadd="bud">+ Add budget</button></section>';
+    // More (the usually-empty sections, one card)
+    var cnt = function (sel) { return bb.querySelectorAll(sel).length; };
+    var more = [['debt', 'Debts', cnt('.bblk[data-sec="debt"]')], ['sink', 'Savings goals', cnt('.bblk[data-sec="sink"]')],
+      ['one', 'One-offs', cnt('#rowsOne .brow')], ['sal', 'A different salary one month', cnt('#rowsSal .brow')],
+      ['bov', 'A different budget one month', cnt('#rowsBov .brow')]];
+    h += lab('More') + '<section class="nv-card">' + more.map(function (m) {
+      return '<button type="button" class="nv-row" data-nv="' + m[0] + '"' + (m[2] ? '' : ' data-nvadd="' + m[0] + '"') + '><span class="k">' + m[1] + '</span>' +
+        '<span class="v">' + (m[2] ? m[2] + '' : 'none') + '</span><span class="nv-plus" aria-hidden="true">' + (m[2] ? '›' : '+') + '</span></button>';
+    }).join('') + '</section>';
+    // Learned merchants (top 4)
+    var learned = learnedMerchantCat(), mmov = merchantOv();
+    var names = Object.keys(learned).sort();
+    if (names.length) {
+      h += '<div class="nv-labrow"><h2 class="nv-lab">Learned from your notes</h2><span>' + names.length + '</span></div><section class="nv-card">' +
+        names.slice(0, 4).map(function (nm) {
+          var st = mmov.blocked[nm] ? ' · blocked' : (mmov.deleted[nm] ? ' · hidden' : '');
+          return '<button type="button" class="nv-row nv-mm" data-nv="mm"><span class="k">' + esc(nm) + '</span><span class="nv-cat">' + esc(learned[nm].cat) + '</span>' +
+            '<span class="v">' + learned[nm].n + '×' + st + '</span><span class="nv-plus" aria-hidden="true">⋯</span></button>';
+        }).join('') +
+        (names.length > 4 ? '<button type="button" class="nv-add nv-more" data-nv="mm">Show ' + (names.length - 4) + ' more</button>' : '') +
+        '</section><p class="nv-foot">Log “jollibee” under Food a couple of times and it’s filed there automatically. Tap one to hide or block it.</p>';
+    }
+    host.innerHTML = h;
+    var bt = host.querySelectorAll('[data-nv],[data-nvadd]');
+    for (var q = 0; q < bt.length; q++) bt[q].onclick = function () {
+      var add = this.getAttribute('data-nvadd'), go = this.getAttribute('data-nv') || add;
+      var idx = this.getAttribute('data-nvi');
+      if (add) {
+        addBaseRow(add);
+        if (add === 'acc') { numGo('acc', bb.querySelectorAll('#rowsAcc .accblk').length - 1); return; }
+      }
+      numGo(go, idx != null ? Number(idx) : null);
+    };
   }
   function readBaseForm() {
     var bb = byId('baseBody');
@@ -4055,6 +4238,8 @@
   function openNumAt(go) {
     if (go === 'committed') { closeSheets(); setTab('money'); return; }
     openSheet('numSheet');
+    // v74.42: straight into that section's page (then the v74.40 scroll + highlight)
+    numGo({ cash: 'acc', cards: 'acc', salary: 'basics', asof: 'basics', carddays: 'cardrules' }[go] || null);
     setTimeout(function () {
       var els = [];
       var rowOf = function (id) { var e = byId(id); return e && e.closest ? e.closest('.brow') : null; };
@@ -10055,12 +10240,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.41, live: new Date(2026, 10, 11, 17, 3) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.42, live: new Date(2026, 10, 11, 18, 2) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.42': [
+      'Your numbers is redesigned: it opens on a tidy overview (basics, accounts, card rules, budgets, and a single \u201cMore\u201d card for debts, goals and one-offs), and tapping any row opens just that part with labelled fields. Each account has its own page (name, type, balance, limit, bill days). Save works the same as before.'
+    ],
     '74.41': [
       'Fixed: after \u201cCheck for update & restart\u201d a \u201cNew version ready\u201d banner could pop up, and tapping it brought the old version back. The banner now only shows when there really is a newer version, and updates always download fresh files so they can\u2019t slip back. The version at the bottom of Settings also shows properly now (v74.40 instead of v74.4).'
     ],
@@ -11911,6 +12099,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (ncb) ncb.onclick = closeSheets;
     var srb = byId('setRestart'); // v74.39: Check for update & restart
     if (srb) srb.onclick = forceShellUpdate;
+    var nbk = byId('numBack'); // v74.42: drill-in -> back to the Your-numbers overview
+    if (nbk) nbk.onclick = function () { numGo(null); };
     var sno = byId('setNumOpen');
     if (sno) sno.onclick = function () { openSheet('numSheet'); };
     var snc = byId('setNumCoach');
@@ -11975,7 +12165,24 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       // mark the sheet dirty; the Save button commits. Closing the sheet
       // commits too (closeSheets), so nothing typed is ever lost.
       bb.addEventListener('input', function (ev) { markBaseDirty(); qsHint(ev.target); });
-      bb.addEventListener('change', function () { markBaseDirty(); });
+      bb.addEventListener('change', function (ev) {
+        markBaseDirty();
+        // v74.42: an account flipped to Credit gets its card row (bills on / due on /
+        // this cycle's bill) at once, and the limit unlocks; back to Debit locks it
+        var t = ev && ev.target;
+        if (t && t.getAttribute && t.getAttribute('data-r') === 'kind' && t.closest) {
+          var blk = t.closest('.accblk');
+          if (!blk) return;
+          var isCard = t.value === 'card';
+          var li = blk.querySelector('[data-r="limit"]'); if (li) li.disabled = !isCard;
+          var od = blk.querySelector('[data-r="due"]'); if (od) od.disabled = !isCard;
+          var cc = blk.querySelector('.acc-cc');
+          if (isCard && !cc) {
+            var main = blk.querySelector('.acc-main');
+            if (main) main.insertAdjacentHTML('afterend', accCcRow({ billing_day: (state.base && state.base.cutoff_day) || 15, due_day: (state.base && state.base.due_day) || 5 }));
+          } else if (!isCard && cc) cc.parentNode.removeChild(cc);
+        }
+      });
       bb.addEventListener('pointerdown', baseDragStart);
       bb.addEventListener('pointermove', baseDragMove);
       bb.addEventListener('pointerup', baseDragEnd);
