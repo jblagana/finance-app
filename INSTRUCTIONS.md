@@ -1,3 +1,8 @@
+# v74.31 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-11 - "on the app bot opened, move it down the same sapce length added to the top in the latest updates" -> "The open coach sheet starts 26px lower (top 40px -> 66px): the same +26px v74.27 added to the header's top padding (18 -> 44px). Look only"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.31, sw cache finances-pwa-v74.31 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.31 (release.ps1 v74.31 all green; check_site v74.31 pin; What's-new note)
+
 # v74.30 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - "in boot screen, remove that square card around the icon" -> "Drop the v74.24 tile behind the boot face (background, border, radius); the face grows 80 -> 96px in the same 112px box so it doesn't look lost. Look only"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.30, sw cache finances-pwa-v74.30 pushed to https://github.com/jblagana/finance-app.git (main).

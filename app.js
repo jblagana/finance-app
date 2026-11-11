@@ -9887,12 +9887,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.30, live: new Date(2026, 10, 11, 10, 53) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.31, live: new Date(2026, 10, 11, 15, 24) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.31': [
+      'The Coach Fin chat now opens a little lower, matching the extra space at the top of the app.'
+    ],
     '74.30': [
       'The loading screen shows Coach Fin on his own now, without the square card behind him, and a little bigger.'
     ],

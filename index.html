@@ -1128,7 +1128,8 @@ button.plchip{border-radius:11px;min-height:44px}
 .keypad button:active{filter:brightness(1.15);transform:scale(.97)}
 /* ---- the coach: a tall bottom sheet (the floating bubble + bot are retired) ---- */
 #coachFab{display:none}
-#coachOv{position:fixed!important;left:0!important;right:0!important;top:40px!important;bottom:0!important;width:auto!important;height:auto!important;
+/* v74.31 (boss: 'on the app bot opened, move it down the same space length added to the top'): the sheet starts 26px lower (40 -> 66px), the same +26px v74.27 gave the header (18 -> 44px) */
+#coachOv{position:fixed!important;left:0!important;right:0!important;top:66px!important;bottom:0!important;width:auto!important;height:auto!important;
  max-height:none;border:0;border-top:1px solid var(--line);border-radius:24px 24px 0 0;background:var(--bg);box-shadow:var(--shadow);
  opacity:1;transform:translateY(104%)!important;transform-origin:center bottom!important;transition:transform .28s cubic-bezier(.2,.8,.2,1)}
 #coachOv.show{transform:translateY(0)!important}

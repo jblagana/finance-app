@@ -1998,6 +1998,10 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.31 (boss: 'on the app bot opened, move it down the same space length added to the top'): the coach sheet starts at 66px (40 + the 26px v74.27 added to the header)",
+          "#coachOv{position:fixed!important;left:0!important;right:0!important;top:66px!important;" in html
+          and "top:40px!important" not in html
+          and "'74.31': [" in js)
     check("v74.30 (boss: 'in boot screen, remove that square card around the icon'): the boot face has no tile (no background, border or radius) and is drawn at 96px",
           "#boot .bface{width:112px;height:112px;border-radius:0;background:none;border:0;" in html
           and "#boot .bface svg{width:96px;height:96px}" in html
