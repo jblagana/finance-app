@@ -5424,6 +5424,11 @@
       var hDailySub = hDaysSub > 0 ? r2(Math.max(0, freeN) / hDaysSub) : 0; // freeN = the net free (line above)
       sub = 'You still have ' + money(r2(Math.max(0, hDailySub - d.todaySpend))) + ' left of today’s headroom — spend it. Go on, the app is watching.';
     }
+    // v74.35 (boss: 'too verbose'): the card shows only this core line — the
+    // "On repeat" and "Since your last check" add-ons below still compute
+    // (the coach memory + pins read them) but are no longer displayed; the
+    // Plans / Cards rows under the note already list the same dues.
+    var coreSub = sub;
     // v73.23 (boss: 'for the how much is owed, show only what is owed within
     // the cycle'): the "On repeat" line is CYCLE-SCOPED — only the recurring
     // plans with UNPAID occurrences landing in the CURRENT salary cycle
@@ -5482,10 +5487,10 @@
         sub = 'Same story as your last check — ' + (info.alerts.indexOf('prepay') >= 0 ? 'the prepay is still the priority. Nothing happened, and I respect the commitment. ' : 'the items below are still the priority. You have not changed, and that is its own kind of loyalty. ') + sub;
       }
     }
-    el.className = 'card coach ' + cls;
+    el.className = 'card coach ' + cls + (coachNoteOn ? ' has-note' : '');
     var h = byId('coachHead'), sb = byId('coachSub');
     if (h) h.textContent = head;
-    if (sb) sb.textContent = sub;
+    if (sb) sb.textContent = coreSub; // v74.35: the core line only
     // ---- attention rows (same card, no duplicate card) ----
     var body = byId('digBody');
     if (body) {
@@ -6076,6 +6081,7 @@
   // numbers yet; when the coach is unreachable the last note is kept with a
   // note, or the card hides. The coach only writes chat text — never data.
   var NOTE_KEY = 'fin.ai.coachnote.v1';
+  var coachNoteOn = false; // v74.35: an AI note is showing (the rule line hides)
   var noteInFlight = false;
   function readNoteCache() {
     try { return JSON.parse(localStorage.getItem(NOTE_KEY) || 'null'); } catch (e) { return null; }
@@ -6083,6 +6089,11 @@
   function paintCoachNote(el, txt, stale) {
     // v73.14: el is the note BLOCK inside the coach card (not a card) —
     // hiding it never touches the coach card itself
+    // v74.35 (boss: 'combine the coach note and hey jan contents, currently its too verbose'):
+    // the AI note REPLACES the rule line (one paragraph under one header) —
+    // coachNoteOn rides the coach card's class (renderCoach re-applies it)
+    coachNoteOn = !!txt;
+    var cc35 = byId('coach'); if (cc35 && cc35.classList) cc35.classList.toggle('has-note', coachNoteOn);
     if (!txt) { el.style.display = 'none'; return; }
     el.style.display = '';
     var body = byId('coachNoteBody');
@@ -6103,17 +6114,17 @@
     var FAI = typeof window !== 'undefined' ? window.FinAI : null;
     var chat = typeof window !== 'undefined' ? window.__financeChat : null;
     if (!FAI || typeof FAI.note !== 'function' || !chat || typeof chat.ctx !== 'function' || typeof chat.coachSnapshot !== 'function') {
-      el.style.display = 'none';
+      paintCoachNote(el, '');
       return;
     }
     chat.ctx().then(function (ctx) {
       var snap = chat.coachSnapshot(ctx);
-      if (!snap.text) { el.style.display = 'none'; return; } // no numbers yet
+      if (!snap.text) { paintCoachNote(el, ''); return; } // no numbers yet
       var cache = readNoteCache();
       if (cache && cache.fp === snap.fp && cache.txt) { paintCoachNote(el, cache.txt, false); return; }
       if (!FAI.remoteAvailable()) {
         if (cache && cache.txt) paintCoachNote(el, cache.txt, true); // keep the last note
-        else el.style.display = 'none';
+        else paintCoachNote(el, '');
         return;
       }
       if (noteInFlight) return;
@@ -6126,13 +6137,13 @@
         } else if (cache && cache.txt) {
           paintCoachNote(el, cache.txt, true);
         } else {
-          el.style.display = 'none';
+          paintCoachNote(el, '');
         }
       })['catch'](function () {
         if (cache && cache.txt) paintCoachNote(el, cache.txt, true);
-        else el.style.display = 'none';
+        else paintCoachNote(el, '');
       })['then'](function () { noteInFlight = false; });
-    })['catch'](function () { el.style.display = 'none'; });
+    })['catch'](function () { paintCoachNote(el, ''); });
   }
 
   // ---------- v73.0: Coach Fin's mood — the face IS the status ----------
@@ -9893,12 +9904,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.34, live: new Date(2026, 10, 11, 15, 50) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.35, live: new Date(2026, 10, 11, 15, 52) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.35': [
+      'Coach Fin\u2019s card on Home is shorter: one \u201cCoach\u2019s note\u201d header and one short paragraph. When the online coach has written a note, that note is what you see; otherwise it\u2019s the quick rule-based tip. The long \u201cOn repeat\u2026\u201d list is gone from the text because the Plans and Cards rows below already show it.'
+    ],
     '74.34': [
       'Test a spend has a new look inside the This cycle card: a box with \u20b1 where you just type the amount (\u201cWhat if I buy\u2026\u201d). The new per-day number and the Log button show up as you type, same as before.'
     ],

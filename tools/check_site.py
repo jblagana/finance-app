@@ -1998,6 +1998,14 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.35 (boss: 'combine the coach note and hey jan contents, currently its too verbose'): the coach card has ONE always-visible Coach's note header; an AI note hides the rule line (#coach.has-note), else the rule line shows only its core sentence (no On repeat / last-check add-ons)",
+          "#coach.has-note #coachHead,#coach.has-note #coachSub{display:none}" in html
+          and html.index('class="coachnote-h"') < html.index('id="coachNoteBlock"')
+          and "coachNoteOn = !!txt;" in js
+          and "el.className = 'card coach ' + cls + (coachNoteOn ? ' has-note' : '');" in js
+          and "var coreSub = sub;" in js
+          and "if (sb) sb.textContent = coreSub; // v74.35" in js
+          and "'74.35': [" in js)
     check("v74.34 (boss: 'use the layout for the test spend in the img, but still in this cycle card'): the Test-a-spend row is the mockup box — a 'Test a spend' label over an always-visible ₱ input (placeholder 'What if I buy… e.g. 2500'), the hint hidden, the ✕ also empties the input, typing shows the ✕",
           '<label class="tr-label" id="tsOpen" for="tsAmt">Test a spend</label>' in html
           and 'placeholder="What if I buy… e.g. 2500"' in html

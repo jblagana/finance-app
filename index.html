@@ -1189,6 +1189,11 @@ button.plchip{border-radius:11px;min-height:44px}
 .grp-body .dig.bad .dg-tag{color:var(--bad)}
 .rowchip.info{background:var(--info);color:#06142B;border:0}
 .dig.next .dg-tag{color:var(--mut)}
+/* v74.35: the coach card = one header + one paragraph (the AI note hides the rule line) */
+#coach.has-note #coachHead,#coach.has-note #coachSub{display:none}
+#coach .coach-h{font-size:15px;font-weight:400;line-height:1.55;margin:0 0 4px}
+#coach .coach-s{font-size:13.5px;line-height:1.5;margin:0 0 12px}
+#coach .coachnote-block{margin-bottom:12px}
 /* v74.34: Test a spend = the mockup box (label over an always-visible ₱ input; the ✕ shows once something is typed) */
 .testrow{cursor:default}
 .testrow .tr-label,.testrow.ts-open .tr-label{display:block;font-size:13px;font-weight:600;color:var(--ink);margin:0 0 8px;cursor:default;white-space:nowrap}
@@ -1308,11 +1313,13 @@ button.plchip{border-radius:11px;min-height:44px}
          the coach's note is the opening block INSIDE the coach card, so Home
          reads as one coach voice, not two bot cards back to back. -->
     <section id="coach" class="card coach" style="display:none">
+      <!-- v74.35 (boss: 'combine the coach note and hey jan contents'): ONE header for the card, always shown;
+           the paragraph under it is the AI note when there is one (#coachNoteBlock), else the rule line (#coachHead + #coachSub) -->
+      <div class="coachnote-h">
+        <svg class="coachnote-av" viewBox="0 0 64 64" aria-hidden="true"><use href="#botFace"/></svg>Coach’s note
+        <button type="button" id="coachNoteRefresh" class="coachnote-r" title="Ask the coach again" aria-label="Refresh coach’s note">↻</button>
+      </div>
       <div id="coachNoteBlock" class="coachnote-block" style="display:none">
-        <div class="coachnote-h">
-          <svg class="coachnote-av" viewBox="0 0 64 64" aria-hidden="true"><use href="#botFace"/></svg>Coach’s note
-          <button type="button" id="coachNoteRefresh" class="coachnote-r" title="Ask the coach again" aria-label="Refresh coach’s note">↻</button>
-        </div>
         <p class="coachnote-t" id="coachNoteBody"></p>
         <p class="note" id="coachNoteSub" style="margin:6px 0 0"></p>
       </div>
