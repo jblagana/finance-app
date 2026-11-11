@@ -4095,13 +4095,16 @@
         if (bd > 0) sub += ' · bills ' + ordinal(bd) + (dd > 0 ? ', due ' + ordinal(dd) : '');
         var ut1 = numVal(bk.querySelector('[data-r="util"]'), false); // v74.45: the card's own target
         if (ut1 > 0) sub += ' · under ' + ut1 + '%';
+        if (lim > 0 && amt > lim + 0.004) sub = '<b class="nv-over">over limit</b> · ' + sub; // v74.55 (stress test #11)
       }
       var ch = (nm || '?').charAt(0).toUpperCase();
       ah += '<button type="button" class="nv-row nv-acc" data-nv="acc" data-nvi="' + i + '">' +
         '<span class="bdrag nv-drag" data-drag="1" aria-hidden="true">\u283f</span>' + // v74.49: drag to reorder
         '<span class="nv-tile' + (card ? ' card' : '') + '" aria-hidden="true">' + esc(ch) + '</span>' +
         '<span class="nv-l"><span class="nv-t">' + esc(nm || 'New account') + '</span><span class="nv-s">' + sub + '</span></span>' +
-        '<span class="nv-amt' + (card ? ' owe' : '') + '">' + money(amt) + (card ? '<small>owed</small>' : '') + '</span></button>';
+        (card && amt < -0.004 // v74.55 (stress test #10): an overpaid card holds a CREDIT, never a negative "owed"
+          ? '<span class="nv-amt">+' + money(-amt) + '<small>credit</small></span></button>'
+          : '<span class="nv-amt' + (card ? ' owe' : '') + '">' + money(amt) + (card ? '<small>owed</small>' : '') + '</span></button>');
     }
     h += '<div class="nv-labrow"><h2 class="nv-lab">Accounts</h2><span>' + money(r2(liq)) + ' cash · ' + money(r2(owed)) + ' owed</span></div>' +
       '<section class="nv-card"><div class="nv-accs">' + ah + '</div><button type="button" class="nv-add" data-nvadd="acc">+ Add account</button></section>';
@@ -6982,7 +6985,8 @@
     // On track
     var hp = byId('heroPill');
     if (hp) {
-      var pk = free < 0 ? ['bad', 'Negative'] : (d && d.prepayAmt > 0 && d.prepayAmt > free ? ['warn', 'Tight'] : ['ok', 'On track']);
+      var overC = (s.cards || []).filter(function (c) { return (Number(c.limit) || 0) > 0 && (Number(c.balance) || 0) > (Number(c.limit) || 0) + 0.004; }); // v74.55 (stress test #11)
+      var pk = free < 0 ? ['bad', 'Negative'] : (overC.length ? ['bad', overC.length === 1 ? overC[0].name + ' over limit' : 'Cards over limit'] : (d && d.prepayAmt > 0 && d.prepayAmt > free ? ['warn', 'Tight'] : ['ok', 'On track']));
       hp.className = 'hero-pill ' + pk[0]; hp.textContent = pk[1];
     }
     var sub = [];
@@ -7069,7 +7073,9 @@
         (ces ? ces.cards : []).forEach(function (c) {
           var cdd = cardDueData(b.accounts.filter(function (a) { return a.kind === 'card' && a.name === c.name; })[0], state.txns, b, todayISO(), c.balance);
           var dueTxt = cdd ? (dayMonth(cdd.dueDate) + (cdd.dueIn <= 0 ? ' \u00b7 due' : ' \u00b7 in ' + cdd.dueIn + 'd') + (cdd.manual ? ' \u00b7 manual' : '')) : '';
-          csubs += '<div class="cbsub"><span class="sl">' + esc(c.name) + (c.limit > 0 ? ' \u00b7 ' + money(c.limit) : '') + '</span><span class="sv">− ' + money(c.balance) + (dueTxt ? ' <small style="color:var(--mut)">' + dueTxt + '</small>' : '') + '</span></div>';
+          var cOver = c.limit > 0 && c.balance > c.limit + 0.004; // v74.55: over the limit / a credit
+          csubs += '<div class="cbsub"><span class="sl">' + esc(c.name) + (c.limit > 0 ? ' \u00b7 ' + money(c.limit) : '') + (cOver ? ' <b class="nv-over">over limit</b>' : '') + '</span><span class="sv">' +
+            (c.balance < -0.004 ? '+ ' + money(-c.balance) + ' <small style="color:var(--mut)">credit</small>' : '− ' + money(c.balance) + (dueTxt ? ' <small style="color:var(--mut)">' + dueTxt + '</small>' : '')) + '</span></div>';
         });
         if (!csubs) csubs = '<div class="cbsub mut"><span class="sl">no credit cards on file</span></div>';
         rows += '<div class="cbsubwrap">' + csubs + '</div>';
@@ -10680,12 +10686,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.54, live: new Date(2026, 10, 12, 2, 46) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.55, live: new Date(2026, 10, 12, 2, 51) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.55': [
+      'A card over its limit is flagged: the hero pill says \u201cMaya CC over limit\u201d, and the card is marked in Cards owed and in All numbers. Logging a charge that would push a card past its limit asks first.',
+      'Paying more than a card owes now shows the extra as a credit (\u201c+\u20b15,000 credit\u201d) instead of a negative amount owed, and asks first.'
+    ],
     '74.54': [
       'Fixed: a double tap on \u201cAdd expense\u201d saved the entry twice. It saves once now.',
       'Amounts with thousands commas work: \u201c1,000\u201d or \u201c12,500.50\u201d.',
@@ -12448,6 +12458,18 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       // today's cash — ask (an upcoming payment belongs in Committed)
       if (!editId && (kind === 'cash_out' || kind === 'card_charge') && String(payload.date || '') > todayISO() &&
           !window.confirm('This is dated ' + fmtDate(payload.date) + ' \u2014 in the future. Logged now, it comes out of your cash today. Log it anyway?\n\n(For a payment that\u2019s coming up, add it as a plan in Committed instead.)')) return;
+      // v74.55 (stress test #10 / #11): a charge past the card's limit, or a payment past what it owes, asks first
+      if (!editId && (kind === 'card_charge' || kind === 'card_payment')) {
+        var cs55 = effectiveSnap(), cc55 = null;
+        ((cs55 && cs55.cards) || []).forEach(function (c) { if (c.name === payload.account) cc55 = c; });
+        if (cc55) {
+          var bal55 = Number(cc55.balance) || 0, lim55 = Number(cc55.limit) || 0;
+          if (kind === 'card_charge' && lim55 > 0 && bal55 + amount > lim55 + 0.004 &&
+              !window.confirm('This puts ' + cc55.name + ' at ' + money(bal55 + amount) + ' \u2014 over its ' + money(lim55) + ' limit. Log it anyway?')) return;
+          if (kind === 'card_payment' && amount > Math.max(0, bal55) + 0.004 &&
+              !window.confirm('That\u2019s ' + money(amount - Math.max(0, bal55)) + ' more than ' + cc55.name + ' owes (' + money(Math.max(0, bal55)) + '). The extra becomes a credit on the card. Log it anyway?')) return;
+        }
+      }
       // v74.54 (stress test #6): a double tap saves ONCE
       if (addBusy) return;
       addBusy = true;

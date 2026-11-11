@@ -1999,6 +1999,15 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.55 (stress test #10 #11): an over-limit card is flagged (hero pill, the Cards owed sub-row, the All numbers row) and a charge past the limit asks first; an overpaid card shows a credit (never a negative owed) and a payment past what it owes asks first",
+          "var overC = (s.cards || []).filter(function (c) {" in js
+          and "overC[0].name + ' over limit'" in js
+          and "<b class=\"nv-over\">over limit</b>" in js
+          and "<small>credit</small></span></button>'" in js
+          and "over its ' + money(lim55) + ' limit. Log it anyway?" in js
+          and "The extra becomes a credit on the card. Log it anyway?" in js
+          and ".nv-over{" in html
+          and "'74.55': [" in js)
     check("v74.54 (stress test #6 #8 #13): the Add submit ignores a second tap while saving (addBusy); a future-dated spend asks first; evalExpr reads a comma before exactly three digits as a thousands separator",
           "var addBusy = false;" in js and "if (addBusy) return;" in js
           and "done.then(function () { addBusy = false; }, function () { addBusy = false; });" in js
