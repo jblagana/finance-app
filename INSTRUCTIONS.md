@@ -1,13 +1,13 @@
 # v74.32-v74.37 batch entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - "in hero card, remve "all cards". move "2 due in window" o the rame row as "Plan dues" changed to "Plan dues · 2 due" / -remove "same as the hero number" and "salary follows ... amount." / -use the layout for the test spend in the img, but still in "this cycle" card / -combine the coach note and "hey jan" contents, currently its too verbose / -for the "your expnses card" in ledger, use the layout in mockup / -for the settings, use the layout from the mockup" (+ a screenshot of the mockup's Test-a-spend box)
 -> Six releases, fastest first (all independent; LOOK ONLY unless noted):
-Status: **in progress**
+Status: **done** - six one-commit releases v74.32-v74.37 pushed to https://github.com/jblagana/finance-app.git (main); each release.ps1 all green; v74.34-v74.37 also checked in headless Chromium with the smoke seed
 - [x] v74.32 hero This-cycle rows: the Cards owed row drops its 'all cards' sub-label; the Plan dues row reads 'Plan dues · N due' on one line (no sub-label)
 - [x] v74.33 hero: the Free cash row drops 'same as the hero number'; the footnote drops 'Salary follows the target cycle's amount.' (keeps 'Estimate — pace & one-offs excluded.')
 - [x] v74.34 Test a spend (still inside the This cycle card): the mockup box — a 'Test a spend' label over an always-visible ₱ input ('What if I buy… e.g. 2500'), ✕ once something is typed; the live line + Log button below unchanged
 - [x] v74.35 the coach card: ONE 'Coach's note' header (face + ↻) and ONE short paragraph — the AI note when there is one, else the rule line + its main tip; the 'On repeat …' and 'Since your last check …' add-ons are no longer shown (the Plans/Cards rows below already list them)
 - [x] v74.36 Ledger 'Your expenses': the mockup list — rows grouped by day (day label + the day's spend total), each row = tile · title · one-line sub · amount; tap a row to see its details (time, account before → after, cycle tag) and Edit / Delete; the payment-method filter becomes a chip row (category dropdown stays)
-- [ ] v74.37 Settings: the mockup layout — section labels above the cards; 'Your numbers' as tappable rows + 'Update them with the coach'; the coach toggles as switches with the Worker URL / own-key setup under Advanced; Backup = three buttons in a row (the include list folded); Sync + What's new kept
+- [x] v74.37 Settings: the mockup layout — section labels above the cards; 'Your numbers' as tappable rows + 'Update them with the coach'; the coach toggles as switches with the Worker URL / own-key setup under Advanced; Backup = three buttons in a row (the include list folded); Sync + What's new kept
 
 # v74.31 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - "on the app bot opened, move it down the same sapce length added to the top in the latest updates" -> "The open coach sheet starts 26px lower (top 40px -> 66px): the same +26px v74.27 added to the header's top padding (18 -> 44px). Look only"

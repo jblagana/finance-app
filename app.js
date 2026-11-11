@@ -4011,6 +4011,41 @@
     var nDebt = Object.keys(b.debts || {}).length;
     if (nDebt) bits.push(nDebt + ' debt' + (nDebt === 1 ? '' : 's'));
     el.innerHTML = bits.join(' · ');
+    renderSetNumRows();
+  }
+  // v74.37 (boss: 'for the settings, use the layout from the mockup'): the
+  // Your numbers card is a list of rows (k · v · ›) — each opens the numbers
+  // editor (the same as the old Open button, kept hidden as #setNumOpen).
+  // The base values (as entered, as of b.as_of); the summary line above
+  // them is only shown for the empty state.
+  function renderSetNumRows() {
+    var host = byId('setNumRows'), sumEl = byId('setBaseSum');
+    if (!host) return;
+    var b = state.base;
+    if (!b || baseIsEmpty(b)) { host.innerHTML = ''; return; }
+    if (sumEl) sumEl.innerHTML = '';
+    var accts = b.accounts || [];
+    var liq = 0, nLiq = 0, owed = 0, nCard = 0;
+    accts.forEach(function (a) {
+      if (a.kind === 'card') { owed += Number(a.value) || 0; nCard++; }
+      else { liq += Number(a.value) || 0; nLiq++; }
+    });
+    var plans = state.plans || [];
+    var nRep = plans.filter(function (p) { return p && p.repeat; }).length;
+    var rows = [
+      ['Cash & debit', money(r2(liq)) + ' · ' + nLiq + ' account' + (nLiq === 1 ? '' : 's')],
+      ['Cards', money(r2(owed)) + ' owed · ' + nCard + ' card' + (nCard === 1 ? '' : 's')],
+      ['Salary', (Number(b.salary) || 0) > 0 ? money(b.salary) + ' · the ' + ordinal(b.salary_day || 15) : 'not set'],
+      ['Card days', 'statement ' + ordinal(b.due_day || 5) + ' · prepay ' + ordinal(b.prepay_day || 14) + ((Number(b.card_util_target) || 0) > 0 ? ' · ' + Math.round(b.card_util_target * 100) + '%' : '')],
+      ['Committed', nRep + ' recurring · ' + (plans.length - nRep) + ' one-off'],
+      ['As of', esc(fmtDate(b.as_of))]
+    ];
+    host.innerHTML = rows.map(function (r) {
+      return '<button type="button" class="set-row" data-setnum="1"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span>' +
+        '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>';
+    }).join('');
+    var rb = host.querySelectorAll ? host.querySelectorAll('[data-setnum]') : [];
+    for (var i = 0; i < rb.length; i++) rb[i].onclick = function () { openSheet('numSheet'); };
   }
   // ---- render ----
   // v73.42 (boss: 'in money tab, reorder to: projection then coming up,
@@ -9981,12 +10016,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.36, live: new Date(2026, 10, 11, 15, 56) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.37, live: new Date(2026, 10, 11, 15, 59) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.37': [
+      'Settings has a cleaner layout: your numbers are a list you can tap to edit, the coach options are two switches (the Worker URL and your own key are under Advanced), and Backup is three buttons in a row (what goes in the JSON is folded under them).'
+    ],
     '74.36': [
       'The Ledger list has a new look: entries are grouped by day (with what you spent that day), each one is a single tidy line, and tapping it shows the details (time, before \u2192 after, the card cycle tag) plus Edit and Delete. The account filter is now a row of chips.'
     ],

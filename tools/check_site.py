@@ -1998,6 +1998,18 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.37 (boss: 'for the settings, use the layout from the mockup'): Settings section labels sit above the cards (h2.set-lab), Your numbers is a row list (renderSetNumRows -> the numbers editor) + 'Update them with the coach', the coach toggles are switch rows with the Worker / own key under Advanced, Backup is three buttons in a row; every control id is kept",
+          '<h2 class="set-lab">Your numbers</h2>' in html
+          and '<div id="setNumRows"></div>' in html
+          and '<button class="set-link" id="setNumCoach" type="button">Update them with the coach</button>' in html
+          and '<label class="set-sw">' in html
+          and '<summary>Advanced · Worker URL and your own key</summary>' in html
+          and '<div class="set-bk">' in html
+          and '<h2 class="set-lab" id="wnTitle">What' in html
+          and "function renderSetNumRows() {" in js
+          and "rb[i].onclick = function () { openSheet('numSheet'); };" in js
+          and all(('id="' + k + '"') in html for k in ["setBaseSum", "setNumOpen", "aiRemoteToggle", "aiForceOnline", "aiRemoteUrl", "aiRemoteTest", "aiByoProvider", "aiByoKey", "expJson", "expCsv", "impBtn", "impFile", "bkBase", "syncPush", "wnSec", "wnList", "themeSeg"])
+          and "'74.37': [" in js)
     check("v74.36 (boss: 'for the your expenses card in ledger, use the layout in mockup'): the Ledger list groups rows by day (.ml-grp + .ml-day with the day's spend total), each row is a compact button (tile · title · one sub line · amount) that opens its details + Edit / Delete, and the payment-method filter is a chip row (#mlChips; #mlFilterM holds the value, hidden)",
           'id="mlChips"' in html
           and ".ml-fbar select+select{display:none}" in html

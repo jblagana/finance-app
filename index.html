@@ -1189,6 +1189,29 @@ button.plchip{border-radius:11px;min-height:44px}
 .grp-body .dig.bad .dg-tag{color:var(--bad)}
 .rowchip.info{background:var(--info);color:#06142B;border:0}
 .dig.next .dg-tag{color:var(--mut)}
+/* v74.37: Settings = the mockup layout */
+#setSheet .set-lab{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:22px 4px 8px}
+#setSheet .sheet-b>.set-lab:first-child{margin-top:4px}
+#setSheet .set-list{padding:0 14px}
+#setSheet .set-hide{display:none}
+#setSheet .set-sum{margin:12px 0 4px}
+#setSheet .set-sum:empty{display:none}
+.set-row{width:100%;display:flex;align-items:center;gap:10px;min-height:52px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:14.5px;text-align:left;padding:0;cursor:pointer}
+.set-row .k{flex:none;font-weight:500}
+.set-row .v{flex:1;min-width:0;color:var(--mut);font-size:13.5px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.set-row svg{flex:none;color:var(--mut)}
+.set-link{width:100%;min-height:50px;border:0;background:transparent;color:var(--acc);font:inherit;font-size:14px;font-weight:600;text-align:left;padding:0;cursor:pointer}
+#setSheet label.set-sw{display:flex;align-items:center;gap:12px;min-height:60px;margin:0;border-bottom:1px solid var(--line);cursor:pointer}
+.set-sw span{flex:1;font-size:14.5px;font-weight:500}
+.set-adv{padding:4px 0}
+.set-adv summary{min-height:48px;display:flex;align-items:center;font-size:14px;font-weight:600;color:var(--acc);cursor:pointer;list-style:none}
+.set-adv summary::-webkit-details-marker{display:none}
+.set-adv summary::after{content:"\25B8";margin-left:8px;font-size:11px;transition:transform .2s}
+.set-adv[open] summary::after{transform:rotate(90deg)}
+.set-adv-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:0 14px;margin-top:10px}
+.set-bk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+#setSheet .set-bk .act{min-height:46px;border-radius:11px;font-size:13px;padding:0 6px}
+#setSheet .set-foot{margin:10px 4px 0}
 /* v74.36: Ledger "Your expenses" = the mockup list (account chips, a card per day, compact rows; tap a row for its details) */
 #txnCard.card{background:transparent;border:0;box-shadow:none;padding:0}
 .ml-chips{display:flex;gap:6px;overflow-x:auto;margin:0 -16px 12px;padding:0 16px;scrollbar-width:none}
@@ -1757,25 +1780,30 @@ button.plchip{border-radius:11px;min-height:44px}
     <button id="setClose" class="sheet-x" type="button" aria-label="Close">✕</button>
   </div>
   <div class="sheet-b">
-    <section class="card">
-      <h2 style="margin-top:0">Your numbers</h2>
-      <p id="setBaseSum" class="note" style="margin-top:2px">…</p>
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="act" id="setNumOpen" type="button">Open</button>
-        <button class="act ghost" id="setNumCoach" type="button">Set up with the coach</button>
-      </div>
+    <!-- v74.37 (boss: 'for the settings, use the layout from the mockup'): section labels sit ABOVE the cards;
+         Your numbers = tappable rows (each opens the editor) + 'Update them with the coach'; the coach toggles are
+         switch rows with the Worker / own-key setup under Advanced; Backup = three buttons in a row. Every control id is unchanged. -->
+    <h2 class="set-lab">Your numbers</h2>
+    <section class="card set-list">
+      <div id="setNumRows"></div>
+      <p id="setBaseSum" class="note set-sum">…</p>
+      <button class="act set-hide" id="setNumOpen" type="button">Open</button>
+      <button class="set-link" id="setNumCoach" type="button">Update them with the coach</button>
     </section>
-    <section class="card" style="margin-top:16px">
-      <h2 style="margin-top:0">Coach (online)</h2>
-      <p class="note" style="margin-top:2px">A smarter, faster coach for when you're online, from a free LLM behind your own Cloudflare Worker. The Worker holds the API key — only your question leaves this phone, never your numbers. When you're offline, or the remote is down, the rule engine answers automatically. Free, no card.</p>
-      <label style="display:flex;align-items:center;gap:10px;margin:12px 0 4px;cursor:pointer">
+    <h2 class="set-lab">Coach (online)</h2>
+    <section class="card set-list">
+      <p class="note set-hide">A smarter, faster coach for when you're online, from a free LLM behind your own Cloudflare Worker. The Worker holds the API key — only your question leaves this phone, never your numbers. When you're offline, or the remote is down, the rule engine answers automatically. Free, no card.</p>
+      <label class="set-sw">
+        <span>Use the online coach when online</span>
         <input type="checkbox" id="aiRemoteToggle" style="width:auto">
-        <span style="font-size:14px;font-weight:600">Use remote coach when online (free)</span>
       </label>
-      <label style="display:flex;align-items:center;gap:10px;margin:8px 0 4px;cursor:pointer">
+      <label class="set-sw">
+        <span>Let the coach answer questions the rules don’t own</span>
         <input type="checkbox" id="aiForceOnline" style="width:auto">
-        <span style="font-size:14px;font-weight:600">Let the coach answer questions the rules don’t own — the rule engine answers every command first; open questions go to the online coach while it’s available (off → a “needs the online coach” card)</span>
       </label>
+      <details class="set-adv">
+      <summary>Advanced · Worker URL and your own key</summary>
+      <p class="note" style="margin:4px 0 10px">The rule engine answers every command first; open questions go to the online coach while it’s available. The coach runs on a free LLM behind your own Cloudflare Worker (it holds the API key — only your question leaves this phone, never your numbers), or on your own key below.</p>
       <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
         <input type="url" id="aiRemoteUrl" inputmode="url" placeholder="https://your-worker.your-subdomain.workers.dev"
           style="flex:1;min-width:0;font-size:12.5px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
@@ -1805,38 +1833,36 @@ button.plchip{border-radius:11px;min-height:44px}
           </div>
         </div>
       </div>
-      <p id="aiRemoteNote" class="note" style="margin:8px 0 0" aria-live="polite"></p>
+      </details>
+      <p id="aiRemoteNote" class="note" style="margin:8px 0 12px" aria-live="polite"></p>
     </section>
     
     <!-- v74.24 look upgrade: Appearance — Dark / Light (fin.theme, applyTheme) -->
-    <section class="card" style="margin-top:16px">
-      <h2 style="margin-top:0">Appearance</h2>
-      <div class="segctl" id="themeSeg" role="group" aria-label="Theme">
-        <button type="button" class="segb on" data-theme="dark">Dark</button>
-        <button type="button" class="segb" data-theme="light">Light</button>
-      </div>
-    </section>
-    <section class="card" style="margin-top:16px">
-      <h2 style="margin-top:0">Backup</h2>
-      <p class="note" style="margin:4px 0 10px">Download a backup of this phone's data — choose what goes in the JSON, import restores it (only what the file holds; the rest stays as it is). CSV holds the ledger only.</p>
-      <div style="font-size:13px;font-weight:700;margin:2px 0 6px">What to include (JSON)</div>
+    <h2 class="set-lab">Appearance</h2>
+    <div class="segctl" id="themeSeg" role="group" aria-label="Theme">
+      <button type="button" class="segb on" data-theme="dark">Dark</button>
+      <button type="button" class="segb" data-theme="light">Light</button>
+    </div>
+    <h2 class="set-lab">Backup</h2>
+    <div class="set-bk">
+      <button class="act ghost" id="expJson" type="button">Export JSON</button>
+      <button class="act ghost" id="expCsv" type="button">Export CSV</button>
+      <button class="act ghost" id="impBtn" type="button">Import</button>
+    </div>
+    <input id="impFile" type="file" accept="application/json,.json" style="display:none">
+    <p class="note set-foot">Your numbers live on this phone. Exports never leave it unless you share the file. CSV holds the ledger only.</p>
+    <details class="set-adv set-adv-card">
+      <summary>What goes in the JSON</summary>
       <label style="display:flex;align-items:center;gap:10px;margin:6px 0;cursor:pointer"><input type="checkbox" id="bkBase" checked style="width:auto"><span style="font-size:13.5px">Your numbers (accounts, salary, debts)</span></label>
       <label style="display:flex;align-items:center;gap:10px;margin:6px 0;cursor:pointer"><input type="checkbox" id="bkTxns" checked style="width:auto"><span style="font-size:13.5px">Ledger entries</span></label>
       <label style="display:flex;align-items:center;gap:10px;margin:6px 0;cursor:pointer"><input type="checkbox" id="bkPlans" checked style="width:auto"><span style="font-size:13.5px">Plans</span></label>
       <label style="display:flex;align-items:center;gap:10px;margin:6px 0;cursor:pointer"><input type="checkbox" id="bkOwed" checked style="width:auto"><span style="font-size:13.5px">Owed — people + entries</span></label>
       <label style="display:flex;align-items:center;gap:10px;margin:6px 0;cursor:pointer"><input type="checkbox" id="bkLog" checked style="width:auto"><span style="font-size:13.5px">Money log + balance overlay</span></label>
       <label style="display:flex;align-items:center;gap:10px;margin:6px 0;cursor:pointer"><input type="checkbox" id="bkChat" checked style="width:auto"><span style="font-size:13.5px">Coach chat thread</span></label>
-      <div class="row" style="margin-top:10px">
-        <div><button class="act" id="expJson" type="button">Export JSON</button></div>
-        <div><button class="act" id="expCsv" type="button">Export CSV</button></div>
-      </div>
-      <div style="margin-top:8px">
-        <button class="act ghost" id="impBtn" type="button">Import JSON…</button>
-        <input id="impFile" type="file" accept="application/json,.json" style="display:none">
-      </div>
-    </section>
-    <section class="card" style="margin-top:16px">
-      <h2 style="margin-top:0">Sync (your own GitHub gist)</h2>
+      <p class="note" style="margin:6px 0 4px">Import restores only what the file holds; the rest stays as it is.</p>
+    </details>
+    <h2 class="set-lab">Sync (your own GitHub gist)</h2>
+    <section class="card">
       <p class="note" style="margin:4px 0 10px">Move your numbers to another phone through a PRIVATE gist — the data is encrypted on this phone (AES-GCM, key from your passphrase) before it ever leaves; GitHub only ever sees ciphertext. Push uploads, pull downloads + merges (per record, newest wins — nothing is silently overwritten). You need a GitHub account + a gist token (fine-grained, "Gists: read &amp; write").</p>
       <label style="font-size:12px;color:var(--mut);font-weight:600" for="syncUrl">Gist URL <span style="font-weight:400">(leave empty on the first push to create one)</span></label>
       <input type="url" id="syncUrl" inputmode="url" placeholder="https://gist.github.com/YOU/abc123" autocomplete="off" spellcheck="false"
@@ -1853,8 +1879,8 @@ button.plchip{border-radius:11px;min-height:44px}
       </div>
       <p id="syncNote" class="note" style="margin:10px 0 0" aria-live="polite"></p>
     </section>
-    <section class="card" style="margin-top:16px" id="wnSec">
-      <h2 style="margin-top:0" id="wnTitle">What's new</h2>
+    <h2 class="set-lab" id="wnTitle">What's new</h2>
+    <section class="card" id="wnSec">
       <ul id="wnList" style="margin:6px 0 0;padding-left:18px;font-size:13.5px;line-height:1.5"></ul>
     </section>
     <p class="note" style="margin:14px 0 0" id="setFoot"></p>
