@@ -1465,7 +1465,7 @@ def main():
           and "function hasSec(n) { return !secs || secs.indexOf(n) >= 0; }" in js
           and "if (hasSec('txns')) state.txns = impTxns;" in js  # v74.05 successor: the sanitized array (was data.txns raw)
           and "if (hasSec('owed')) saveOwed({ asIs: true });" in js  # v74.06 successor: imported as-is (no sync stamp)
-          and "if (id === 'setSheet') { renderBaseStatus(); backupSelSync(); }" in js
+          and "if (id === 'setSheet') { setPage(''); renderBaseStatus(); backupSelSync(); renderSetMeta(); }" in js  # v74.44 successor: Settings opens on its main page
           and "backupSelRead: backupSelRead" in js)
     check("ledger edits stay in place (v72.9): the edit rewrites the txn at its OWN index (no re-file at the end), keeps the money-log row's ORIGINAL timestamp, and rebases that row + every later row by the constant delta (month lines by each row's own txn month); Undo is the exact inverse (un-rebase + original row at its position, no delete+re-add)",
           "state.txns[oIdx] = t; // in place — position preserved" in js
@@ -1998,10 +1998,21 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.44 (boss: 'redesign the settings entirely that fits [All numbers]' -> prototype -> 'build'): Settings = one main page (.sp-main) + four pages (data-sp worker / bk / sync / news, each with a .sp-back); Your numbers is ONE #setNumAll card that opens All numbers (openNumFromSet); All numbers' #numSetBack (shown via .from-set) goes back to Settings; a section's back (#numBack) always goes to All numbers; the v74.40 openNumAt rows are gone; every Settings control id is kept",
+          '<div class="sp-main">' in html
+          and all(('<div class="sp-page" data-sp="' + p + '">') in html for p in ["worker", "bk", "sync", "news"])
+          and all(('data-spgo="' + p + '"') in html for p in ["worker", "bk", "sync", "news"])
+          and all(('id="' + i + '"') in html for i in ["aiRemoteToggle", "aiForceOnline", "aiRemoteUrl", "aiRemoteTest", "aiByoProvider", "aiByoKey", "aiByoBase", "aiByoModel", "aiRemoteNote", "themeSeg", "expJson", "expCsv", "impBtn", "impFile", "bkBase", "bkTxns", "bkPlans", "bkOwed", "bkLog", "bkChat", "syncUrl", "syncToken", "syncPass", "syncPush", "syncPull", "syncNote", "setRestart", "setRestartNote", "wnTitle", "wnSec", "wnList", "setFoot", "setNumRows", "setNumCoach", "numSetBack"])
+          and "function openNumFromSet() { openSheet('numSheet'); numFromSet = true; numBackLabel(); }" in js
+          and "function numBackTap() { numGo(null); }" in js
+          and "if (nsb) nsb.onclick = function () { closeSheets(); openSheet('setSheet'); };" in js
+          and "function setPage(p) {" in js and "function renderSetMeta() {" in js
+          and "function openNumAt(" not in js
+          and ".replace(/\\.00$/, '')" in js
+          and "'74.44': [" in js)
     check("v74.43 (boss: 'click any tab like salary ... back arrow that says all numbers ... shows another view of the your numbers, thats confusing' + 'it shows the green = php 500 despite no amount added yet'): a Settings row opens its part and #numBack reads Settings and returns to the Settings sheet; the Add sheet's amtEq hint is refreshed on open and after the amount is cleared on log",
           'id="numBackT"' in html
-          and "if (numFromSet) { closeSheets(); openSheet('setSheet'); return; }" in js
-          and "numFromSet = true; numBackLabel();" in js
+          and "numFromSet = true; numBackLabel();" in js  # v74.44 successor: Settings opens All numbers, whose own back (#numSetBack) returns to Settings
           and "nbk.onclick = numBackTap;" in js
           and "addAmtEq(byId('f_amount') || { value: '' });" in js
           and "addAmtEq(byId('f_amount')); // v74.43" in js
@@ -2029,11 +2040,9 @@ def main():
           and "if (!swInitialController) { swInitialController = navigator.serviceWorker.controller; return; }" in js
           and "'74.41': [" in js)
     check("v74.40 (boss: 'each tab in the settings in your numbers open the same page'): each Your-numbers row carries its target (data-setnum = cash / cards / salary / carddays / committed / asof) and openNumAt scrolls the editor to that part + highlights it; Committed opens the Committed tab",
-          "rb[i].onclick = function () { openNumAt(this.getAttribute('data-setnum')); };" in js
-          and "function openNumAt(go) {" in js
-          and "if (go === 'committed') { closeSheets(); setTab('money'); return; }" in js
-          and all(("'" + k + "']") in js for k in ["cash", "cards", "salary", "carddays", "committed", "asof"])
-          and "@keyframes numflash{" in html
+          # v74.44 successor: the per-part Settings rows are gone (Settings has ONE All numbers card; its overview rows open each part) — openNumAt went with them
+          "function openNumAt(" not in js
+          and "function openNumFromSet() {" in js
           and "'74.40': [" in js)
     check("v74.39 (boss: 'add a restart button so that it updates to the latest shell if ever its stubborn to refresh on its own'): Settings -> App -> #setRestart runs forceShellUpdate: offline / unsaved-numbers guard, the LIVE sw.js read first (no-store; a failure changes nothing), the shell re-fetched with cache:'reload', then ONLY finances-pwa-* caches deleted + the sw unregistered + reload; the sw lets no-store/reload requests through to the network",
           'id="setRestart"' in html and 'id="setRestartNote"' in html
@@ -2056,15 +2065,16 @@ def main():
           and html.index('id="addTop"') < html.index('id="addModeSpend"') < html.index('id="f_amount"') < html.index('id="amtEq"') < html.index('id="f_category"')
           and "'74.38': [" in js)
     check("v74.37 (boss: 'for the settings, use the layout from the mockup'): Settings section labels sit above the cards (h2.set-lab), Your numbers is a row list (renderSetNumRows -> the numbers editor) + 'Update them with the coach', the coach toggles are switch rows with the Worker / own key under Advanced, Backup is three buttons in a row; every control id is kept",
+          # v74.44 successor: labels above the cards stay; Your numbers is ONE All numbers card; the Worker / own key, backup
+          # contents, Sync and What's new moved to their own small pages (data-sp) instead of Advanced / inline blocks
           '<h2 class="set-lab">Your numbers</h2>' in html
           and '<div id="setNumRows"></div>' in html
-          and '<button class="set-link" id="setNumCoach" type="button">Update them with the coach</button>' in html
+          and 'id="setNumCoach"' in html
           and '<label class="set-sw">' in html
-          and '<summary>Advanced · Worker URL and your own key</summary>' in html
-          and '<div class="set-bk">' in html
-          and '<h2 class="set-lab" id="wnTitle">What' in html
+          and '<div class="sp-page" data-sp="worker">' in html
+          and 'id="wnTitle"' in html
           and "function renderSetNumRows() {" in js
-          and "rb[i].onclick = function () { openNumAt(this.getAttribute('data-setnum')); };" in js  # v74.40: each row opens its own part
+          and "ea.onclick = openNumFromSet;" in js
           and all(('id="' + k + '"') in html for k in ["setBaseSum", "setNumOpen", "aiRemoteToggle", "aiForceOnline", "aiRemoteUrl", "aiRemoteTest", "aiByoProvider", "aiByoKey", "expJson", "expCsv", "impBtn", "impFile", "bkBase", "syncPush", "wnSec", "wnList", "themeSeg"])
           and "'74.37': [" in js)
     check("v74.36 (boss: 'for the your expenses card in ledger, use the layout in mockup'): the Ledger list groups rows by day (.ml-grp + .ml-day with the day's spend total), each row is a compact button (tile · title · one sub line · amount) that opens its details + Edit / Delete, and the payment-method filter is a chip row (#mlChips; #mlFilterM holds the value, hidden)",

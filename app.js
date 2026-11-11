@@ -3327,7 +3327,7 @@
     sh.classList.add('show');
     openSheetEl = sh;
     if (id === 'numSheet') { numView = null; numFromSet = false; numBackLabel(); renderBaseEditor(); } // v74.42: opens on the overview
-    else if (id === 'setSheet') { renderBaseStatus(); backupSelSync(); } // v72.23: show the stored "what to include"
+    else if (id === 'setSheet') { setPage(''); renderBaseStatus(); backupSelSync(); renderSetMeta(); } // v72.23: show the stored "what to include"; v74.44: opens on the main page
     else if (id === 'addSheet') { renderAddChips(); addAmtEq(byId('f_amount') || { value: '' }); } // v74.24 chips; v74.43: the "= ₱…" hint follows the CURRENT amount (no stale "= ₱500")
     // a11y: move focus into the sheet (first field, else first control).
     // The Settings and Your-numbers sheets are skipped: they hold many text
@@ -3735,18 +3735,19 @@
   // is drawn from the LIVE form (so unsaved edits show), the drill-in shows
   // one .ngrp of the real form; the Save bar + readBaseForm are unchanged.
   var numView = null; // null = overview; { grp, i } = a drill-in (i = one account)
-  // v74.43: opened from a Settings row -> the back button goes back to Settings
-  // (Settings' rows ARE the overview there; a second overview was confusing)
+  // v74.44 (boss: 'i like [All numbers]... redesign the settings entirely that fits it'):
+  // Settings has ONE card that opens All numbers; a section's back goes to All
+  // numbers, and All numbers' own back (#numSetBack, .from-set) goes to Settings.
+  // One step up each time, one list of the numbers (the v74.43 skip is gone).
   var numFromSet = false;
   function numBackLabel() {
     var t = byId('numBackT'), b = byId('numBack');
-    if (t) t.textContent = numFromSet ? 'Settings' : 'All numbers';
-    if (b) b.setAttribute('aria-label', numFromSet ? 'Back to Settings' : 'Back to all your numbers');
+    if (t) t.textContent = 'All numbers';
+    if (b) b.setAttribute('aria-label', 'Back to all your numbers');
+    nvCls(byId('numSheet'), 'from-set', numFromSet);
   }
-  function numBackTap() {
-    if (numFromSet) { closeSheets(); openSheet('setSheet'); return; }
-    numGo(null);
-  }
+  function numBackTap() { numGo(null); }
+  function openNumFromSet() { openSheet('numSheet'); numFromSet = true; numBackLabel(); }
   var NUM_GRP_T = { basics: 'Basics', cardrules: 'Card rules', acc: 'Accounts', bud: 'Monthly budgets', bov: 'A different budget one month',
     sal: 'A different salary one month', debt: 'Debts', one: 'One-offs', sink: 'Savings goals', mm: 'Learned from your notes' };
   function numGo(grp, i) {
@@ -4213,76 +4214,54 @@
   // editor (the same as the old Open button, kept hidden as #setNumOpen).
   // The base values (as entered, as of b.as_of); the summary line above
   // them is only shown for the empty state.
+  // v74.44: Settings shows ONE card — All numbers, with Cash · Cards owe ·
+  // Salary at a glance — that opens the All numbers overview (openNumFromSet).
   function renderSetNumRows() {
     var host = byId('setNumRows'), sumEl = byId('setBaseSum');
     if (!host) return;
     var b = state.base;
-    if (!b || baseIsEmpty(b)) { host.innerHTML = ''; return; }
+    var CHEV = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+    if (!b || baseIsEmpty(b)) {
+      host.innerHTML = '<button type="button" class="set-all" id="setNumAll"><span class="sa-top"><span class="sa-t">Set up your numbers</span>' + CHEV + '</span></button>';
+      var e0 = byId('setNumAll'); if (e0) e0.onclick = openNumFromSet;
+      return;
+    }
     if (sumEl) sumEl.innerHTML = '';
-    var accts = b.accounts || [];
-    var liq = 0, nLiq = 0, owed = 0, nCard = 0;
-    accts.forEach(function (a) {
-      if (a.kind === 'card') { owed += Number(a.value) || 0; nCard++; }
-      else { liq += Number(a.value) || 0; nLiq++; }
-    });
-    var plans = state.plans || [];
-    var nRep = plans.filter(function (p) { return p && p.repeat; }).length;
-    var rows = [ // v74.40: the 3rd field = where the row goes (openNumAt)
-      ['Cash & debit', money(r2(liq)) + ' · ' + nLiq + ' account' + (nLiq === 1 ? '' : 's'), 'cash'],
-      ['Cards', money(r2(owed)) + ' owed · ' + nCard + ' card' + (nCard === 1 ? '' : 's'), 'cards'],
-      ['Salary', (Number(b.salary) || 0) > 0 ? money(b.salary) + ' · the ' + ordinal(b.salary_day || 15) : 'not set', 'salary'],
-      ['Card days', 'statement ' + ordinal(b.due_day || 5) + ' · prepay ' + ordinal(b.prepay_day || 14) + ((Number(b.card_util_target) || 0) > 0 ? ' · ' + Math.round(b.card_util_target * 100) + '%' : ''), 'carddays'],
-      ['Committed', nRep + ' recurring · ' + (plans.length - nRep) + ' one-off', 'committed'],
-      ['As of', esc(fmtDate(b.as_of)), 'asof']
-    ];
-    host.innerHTML = rows.map(function (r) {
-      return '<button type="button" class="set-row" data-setnum="' + r[2] + '"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span>' +
-        '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>';
-    }).join('');
-    var rb = host.querySelectorAll ? host.querySelectorAll('[data-setnum]') : [];
-    for (var i = 0; i < rb.length; i++) rb[i].onclick = function () { openNumAt(this.getAttribute('data-setnum')); };
+    var aa = b.accounts || [], cash0 = 0, owed0 = 0, nCard0 = 0;
+    aa.forEach(function (a) { if (a.kind === 'card') { owed0 += Number(a.value) || 0; nCard0++; } else cash0 += Number(a.value) || 0; });
+    var nBud0 = Object.keys(b.budgets || {}).length, nPl0 = (state.plans || []).length;
+    var line0 = [aa.length + ' account' + (aa.length === 1 ? '' : 's'), nCard0 + ' card' + (nCard0 === 1 ? '' : 's'),
+      nBud0 + ' categor' + (nBud0 === 1 ? 'y' : 'ies'), nPl0 + ' plan' + (nPl0 === 1 ? '' : 's') + ' in Committed'].join(' · ');
+    var asof0 = String(fmtDate(b.as_of) || '').replace(/,? \d{4}$/, '');
+    host.innerHTML = '<button type="button" class="set-all" id="setNumAll">' +
+      '<span class="sa-top"><span class="sa-t">All numbers</span><span class="sa-asof">as of ' + esc(asof0) + '</span>' + CHEV + '</span>' +
+      '<span class="sa-tiles">' +
+        '<span class="sa-tile"><span class="k">Cash</span><span class="n">' + money0(cash0) + '</span></span>' +
+        '<span class="sa-tile"><span class="k">Cards owe</span><span class="n warn">' + money0(owed0) + '</span></span>' +
+        '<span class="sa-tile"><span class="k">Salary</span><span class="n">' + ((Number(b.salary) || 0) > 0 ? money0(b.salary) : 'not set') + '</span></span>' +
+      '</span><span class="sa-line">' + esc(line0) + '</span></button>';
+    var ea = byId('setNumAll'); if (ea) ea.onclick = openNumFromSet;
+    function money0(x) { return money(Math.round(Number(x) || 0)).replace(/\.00$/, ''); } // the tiles: whole pesos
+    return;
   }
-  // v74.40 (boss: 'each tab in the settings in your numbers open the same
-  // page'): each Your-numbers row opens the editor AT its own part — scrolled
-  // there and briefly highlighted (no focus: a focused input would pop the
-  // keyboard). Committed lives on its own tab (the plans aren't in the
-  // numbers editor), so that row closes Settings and opens the Committed tab.
-  function openNumAt(go) {
-    if (go === 'committed') { closeSheets(); setTab('money'); return; }
-    openSheet('numSheet');
-    numFromSet = true; numBackLabel(); // v74.43: back -> Settings
-    // v74.42: straight into that section's page (then the v74.40 scroll + highlight)
-    numGo({ cash: 'acc', cards: 'acc', salary: 'basics', asof: 'basics', carddays: 'cardrules' }[go] || null);
-    setTimeout(function () {
-      var els = [];
-      var rowOf = function (id) { var e = byId(id); return e && e.closest ? e.closest('.brow') : null; };
-      var acc = byId('rowsAcc');
-      var accKids = function (wantCard) {
-        // a card is TWO rows (the name/kind row + its billing/due row, which
-        // has no kind select) — a row without a select belongs to the one above
-        if (!acc) return [];
-        var lastCard = false;
-        return Array.prototype.filter.call(acc.children, function (c) {
-          var k = c.querySelector ? c.querySelector('select[data-r="kind"]') : null;
-          if (k) lastCard = k.value === 'card';
-          return wantCard ? lastCard : !lastCard;
-        });
-      };
-      if (go === 'cash' && acc) {
-        var hd = acc.previousElementSibling;
-        while (hd && !(hd.classList && hd.classList.contains('bhead'))) hd = hd.previousElementSibling;
-        if (hd) els.push(hd);
-        els = els.concat(accKids(false));
-      } else if (go === 'cards') els = accKids(true);
-      else if (go === 'salary') els = [rowOf('b_salary'), rowOf('b_sday')];
-      else if (go === 'carddays') els = [rowOf('b_pday'), rowOf('b_dday'), rowOf('b_util')];
-      else if (go === 'asof') els = [rowOf('b_asof')];
-      els = els.filter(Boolean);
-      if (!els.length) return;
-      try { els[0].scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { els[0].scrollIntoView(); }
-      els.forEach(function (e) { e.classList.remove('numflash'); void e.offsetWidth; e.classList.add('numflash'); });
-      setTimeout(function () { els.forEach(function (e) { e.classList.remove('numflash'); }); }, 2400);
-    }, 60);
+  // v74.44: the Settings pages + the small values on their rows
+  function setPage(p) {
+    var sh = byId('setSheet'); if (!sh) return;
+    sh.setAttribute('data-sp', p || '');
+    var sb = sh.querySelector ? sh.querySelector('.sheet-b') : null;
+    if (sb) sb.scrollTop = 0;
+    if (p === 'news') renderWhatNew();
+    if (!p) renderSetMeta();
+  }
+  function renderSetMeta() {
+    var v = function (id) { var e = byId(id); return e ? String(e.value || '').trim() : ''; };
+    var on = function (id) { var e = byId(id); return !!(e && e.checked); };
+    var wv = byId('setWorkerV'); if (wv) wv.textContent = (v('aiRemoteUrl') || v('aiByoKey')) ? 'set up' : 'not set';
+    var nb = ['bkBase', 'bkTxns', 'bkPlans', 'bkOwed', 'bkLog', 'bkChat'].filter(on).length;
+    var bv = byId('setBkV'); if (bv) bv.textContent = nb === 6 ? 'everything' : nb + ' of 6';
+    var sv = byId('setSyncV'); if (sv) sv.textContent = (v('syncUrl') && v('syncToken')) ? 'set up' : 'not set up';
+    var nv = byId('setNewsV');
+    if (nv) { var inf = shellNotesFor(SHELL_RELEASE.v); var n0 = inf && inf.notes[0] ? String(inf.notes[0]) : ''; nv.textContent = inf ? 'v' + inf.v + ' \u00b7 ' + (n0.length > 60 ? n0.slice(0, 58) + '\u2026' : n0) : ''; }
   }
   // ---- render ----
   // v73.42 (boss: 'in money tab, reorder to: projection then coming up,
@@ -10253,12 +10232,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.43, live: new Date(2026, 10, 11, 23, 58) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.44, live: new Date(2026, 10, 12, 0, 50) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.44': [
+      'Settings, redesigned around All numbers. Your numbers is one card (Cash, Cards owe, Salary at a glance) that opens All numbers; a section\u2019s back goes to All numbers, and All numbers\u2019 back goes to Settings.',
+      'Every Settings section now has the All numbers look: rows with a \u203a. The Worker & own-key setup, what goes in the backup, Sync and What\u2019s new each open their own small page.'
+    ],
     '74.43': [
       'Tapping a row in Settings \u2192 Your numbers (like Salary) opens that part, and the back button now says \u201c\u2039 Settings\u201d and takes you straight back to Settings \u2014 no second list of your numbers in between.',
       'Fixed: after logging an amount, opening Add again no longer shows the old green \u201c= \u20b1500\u201d before you type anything.'
@@ -12118,7 +12101,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var srb = byId('setRestart'); // v74.39: Check for update & restart
     if (srb) srb.onclick = forceShellUpdate;
     var nbk = byId('numBack'); // v74.42: drill-in -> back to the Your-numbers overview
-    if (nbk) nbk.onclick = numBackTap; // v74.43: back to Settings when opened from a Settings row
+    if (nbk) nbk.onclick = numBackTap; // v74.44: a section -> All numbers
+    var nsb = byId('numSetBack'); // v74.44: All numbers -> Settings
+    if (nsb) nsb.onclick = function () { closeSheets(); openSheet('setSheet'); };
+    // v74.44: the Settings pages (Worker & key / backup contents / Sync / What's new)
+    var spg = document.querySelectorAll ? document.querySelectorAll('#setSheet [data-spgo]') : [];
+    for (var spi = 0; spi < spg.length; spi++) spg[spi].onclick = function () { setPage(this.getAttribute('data-spgo')); };
+    var spb = document.querySelectorAll ? document.querySelectorAll('#setSheet .sp-back') : [];
+    for (var spj = 0; spj < spb.length; spj++) spb[spj].onclick = function () { setPage(''); };
+    ['bkBase', 'bkTxns', 'bkPlans', 'bkOwed', 'bkLog', 'bkChat', 'syncUrl', 'syncToken', 'aiRemoteUrl', 'aiByoKey'].forEach(function (id) {
+      var el = byId(id); if (el && el.addEventListener) el.addEventListener('change', renderSetMeta);
+    });
     var sno = byId('setNumOpen');
     if (sno) sno.onclick = function () { openSheet('numSheet'); };
     var snc = byId('setNumCoach');

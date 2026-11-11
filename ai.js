@@ -237,7 +237,7 @@
       rn.style.color = '';
       rn.textContent = remoteEnabled()
         ? 'On — the coach answers from your numbers via ' + backend + ' (online only).'
-        : 'Off — the on-device rule engine answers. Connect a Worker URL or your own key below for the online coach.';
+        : 'Off — the on-device rule engine answers. Set up a Worker or your own key (Worker & your own key) for the online coach.';
     }
     refreshLed();
   }
