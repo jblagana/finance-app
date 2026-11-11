@@ -1174,6 +1174,9 @@ button.plchip{border-radius:11px;min-height:44px}
 #boot .btag{bottom:48px;font-size:12.5px;letter-spacing:0}
 /* ---- motion off ---- */
 @media (prefers-reduced-motion:reduce){.fin-eyes,.hd-led.on,.coach-led.on{animation:none}#coachOv,.sheet{transition:none}}
+/* v74.29: the coach header's ✕ sits beside the i (same 40px, the coach's card tone) */
+.chat-hbtns{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+#chatClose{background:var(--card)}
 /* v74.25: prepay rows are blue (info) — a utilization move, not a bill; bill rows keep amber/red */
 .dig.info{background:rgba(143,176,255,.10)}
 .grp-body .dig.info{background:var(--card2);box-shadow:inset 3px 0 0 var(--info)}
@@ -1576,7 +1579,11 @@ button.plchip{border-radius:11px;min-height:44px}
         <div id="chatFresh"></div>
       </div>
     </div>
-    <button id="chatInfo" type="button" aria-label="What I can do" title="What I can do">i</button>
+    <!-- v74.29 (boss: when i click to open the bot, add an x button): ✕ closes the coach (closeCoach) -->
+    <div class="chat-hbtns">
+      <button id="chatInfo" type="button" aria-label="What I can do" title="What I can do">i</button>
+      <button id="chatClose" class="sheet-x" type="button" aria-label="Close the coach" title="Close">✕</button>
+    </div>
   </div>
   <div id="chatTip" title="Examples — try typing one of these"><b>Try</b><span id="chatTipText"></span></div>
   <div id="chatMsgs"></div>

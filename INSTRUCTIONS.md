@@ -1,3 +1,8 @@
+# v74.29 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-11 - "also when i click to open the bot, add an x button" -> "Add a close ✕ to the coach panel's header, beside the i (What I can do): it calls closeCoach (the same close as the scrim tap / the header coach button toggle). Look of the existing sheet ✕ (.sheet-x)"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.29, sw cache finances-pwa-v74.29 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.29 (release.ps1 v74.29 all green; check_site v74.29 pin; What's-new note)
+
 # v74.28 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - "add multiple, divide, and parenthesis in add sheet number pad" -> "Add a top row to the Add-sheet keypad: ( ) × ÷. The quick-sum evaluator (evalExpr) already handles * / ( ) and maps × ÷, so the keys only type; submit, the live = hint and the plan link read the same evalExpr"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.28, sw cache finances-pwa-v74.28 pushed to https://github.com/jblagana/finance-app.git (main).

@@ -9887,12 +9887,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.28, live: new Date(2026, 10, 11, 10, 49) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.29, live: new Date(2026, 10, 11, 10, 52) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.29': [
+      'Coach Fin now has an ✕ button at the top right (next to the i) to close the chat. Tapping outside it or tapping the coach button again still works too.'
+    ],
     '74.28': [
       'The Add sheet keypad has a new top row: ( ) × ÷. Quick sums can now multiply, divide and use brackets, like (300+120)÷2 or 3×45.'
     ],
@@ -11650,6 +11653,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (nco) nco.onclick = function () { startSetup(); };
     var scrim = byId('scrim');
     if (scrim) scrim.onclick = function () { closeCoach(); closeSheets(); };
+    var chatX = byId('chatClose'); if (chatX) chatX.onclick = function () { if (window.__financeChat && window.__financeChat.closeInfo) window.__financeChat.closeInfo(); closeCoach(); }; // v74.29: the coach header's ✕
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { if (window.__financeChat && window.__financeChat.closeInfo && window.__financeChat.closeInfo()) return; closeCoach(); closeSheets(); } }); // v68 Jan add-on: Esc closes the info panel first
     // a11y: trap Tab focus inside the open sheet
     document.addEventListener('keydown', function (e) {

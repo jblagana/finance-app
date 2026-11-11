@@ -1237,7 +1237,7 @@ def main():
           'id="coachLed"' in html and ".coach-led" in html
           and "function refreshRemoteNote" in aijs)
     check("chat header (v68 Jan add-on → v69): the 'i' info button TOGGLES the full 'what I can do' details (tap 'i' again to close — the back button is gone; scrim / Esc also close); the rotating example strip is pinned below the header, DISPLAY-ONLY (tap does nothing), rendered as a quoted example in italics",
-          'id="chatInfo"' in html and 'id="chatClose"' not in html
+          'id="chatInfo"' in html  # v74.29: the boss asked for a close ✕ again — #chatClose is back (its own v74.29 pin)
           and 'id="chatTip"' in html and 'id="chatTipText"' in html
           and 'id="chatInfoView"' in html and 'id="chatInfoBack"' not in html
           and "function openInfoView" in chatjs and "function closeInfoView" in chatjs
@@ -1998,6 +1998,11 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.29 (boss: 'when i click to open the bot, add an x button'): the coach header has a close ✕ (#chatClose, beside the i) wired to closeCoach",
+          'id="chatClose" class="sheet-x"' in html
+          and '<div class="chat-hbtns">' in html
+          and "var chatX = byId('chatClose'); if (chatX) chatX.onclick = function () { if (window.__financeChat && window.__financeChat.closeInfo) window.__financeChat.closeInfo(); closeCoach(); };" in js
+          and "'74.29': [" in js)
     check("v74.28 (boss: 'add multiple, divide, and parenthesis in add sheet number pad'): the Add-sheet keypad has a top row of ( ) × ÷ keys, and evalExpr reads × and ÷",
           '<button type="button" data-k="(" class="kfn"' in html
           and '<button type="button" data-k=")" class="kfn"' in html
