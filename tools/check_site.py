@@ -1998,6 +1998,13 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.28 (boss: 'add multiple, divide, and parenthesis in add sheet number pad'): the Add-sheet keypad has a top row of ( ) × ÷ keys, and evalExpr reads × and ÷",
+          '<button type="button" data-k="(" class="kfn"' in html
+          and '<button type="button" data-k=")" class="kfn"' in html
+          and '<button type="button" data-k="×" class="kfn" aria-label="Multiply">' in html
+          and '<button type="button" data-k="÷" class="kfn" aria-label="Divide">' in html
+          and r".replace(/[\u00d7xX]/g, '*').replace(/\u00f7/g, '/')" in js
+          and "'74.28': [" in js)
     check("v74.27 (boss: 'revert to the old font of the app, lil bit less rounded cards, more empty space at the top'): the look layer uses the system font stack (--fd + body), its radii are ~25% smaller (hero 20, card 16), and the header has 44px of top room",
           "v74.27 (boss: 'revert to the old font of the app" in html
           and ' --fd:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}' in html

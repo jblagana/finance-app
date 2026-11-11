@@ -1665,7 +1665,9 @@ button.plchip{border-radius:11px;min-height:44px}
            Hidden unless there is a suggestion or an existing link. -->
       <button type="button" id="planLinkChip" class="plchip" style="display:none" aria-pressed="false"></button>
       <!-- v74.24 look upgrade: the keypad feeds #f_amount (digits, . + − and the quick-sum operators; ⌫ / C) -->
+      <!-- v74.28 (boss: add multiply, divide, and parenthesis): a top row of ( ) × ÷ — evalExpr already reads them -->
       <div class="keypad" id="addKeypad" role="group" aria-label="Amount keypad">
+        <button type="button" data-k="(" class="kfn" aria-label="Open bracket">(</button><button type="button" data-k=")" class="kfn" aria-label="Close bracket">)</button><button type="button" data-k="×" class="kfn" aria-label="Multiply">×</button><button type="button" data-k="÷" class="kfn" aria-label="Divide">÷</button>
         <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" data-k="del" class="kfn" aria-label="Delete last">⌫</button>
         <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" data-k="+" class="kfn">+</button>
         <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-k="-" class="kfn">−</button>

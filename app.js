@@ -5069,6 +5069,7 @@
   // quick-sum + and −, 00; ⌫ deletes, C clears) and fires the input event
   // the amount already listens to (amtEq hint, charge hint, plan link).
   // inputmode=none keeps the phone keyboard down; a hardware keyboard still types.
+  // v74.28: the top row adds ( ) × ÷ — typed as-is; evalExpr maps × -> * and ÷ -> /.
   function wireAddKeypad() {
     var kp = byId('addKeypad'), a = byId('f_amount'); if (!kp || !a) return;
     try { a.setAttribute('inputmode', 'none'); } catch (e) {}
@@ -9886,12 +9887,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.27, live: new Date(2026, 10, 11, 10, 41) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.28, live: new Date(2026, 10, 11, 10, 49) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.28': [
+      'The Add sheet keypad has a new top row: ( ) × ÷. Quick sums can now multiply, divide and use brackets, like (300+120)÷2 or 3×45.'
+    ],
     '74.27': [
       'The app is back on the built-in font of your phone (the one it used before the new look), the cards and buttons are a little less rounded, and there is more breathing room above the header at the top.'
     ],

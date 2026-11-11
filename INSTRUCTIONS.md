@@ -1,3 +1,8 @@
+# v74.28 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-11 - "add multiple, divide, and parenthesis in add sheet number pad" -> "Add a top row to the Add-sheet keypad: ( ) × ÷. The quick-sum evaluator (evalExpr) already handles * / ( ) and maps × ÷, so the keys only type; submit, the live = hint and the plan link read the same evalExpr"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.28, sw cache finances-pwa-v74.28 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.28 (release.ps1 v74.28 all green; check_site v74.28 pin; What's-new note). The keypad is 4x5 now
+
 # v74.27 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - (on the Fin.AI look upgrade canvas) "revert to the old font of the app and use lil bit less rounded cards, and add more empty space at the top" -> "build it and ship to main" -> "Back to the pre-v74.24 system font (-apple-system / Segoe UI / Roboto) for body AND the big numbers/titles; every radius in the look layer ~25% smaller (26->20, 22->16, 18->14, 16->12, 14->11 ...; pills, dots, bars unchanged); the header's top padding 18px -> 44px. LOOK ONLY"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.27, sw cache finances-pwa-v74.27 pushed to https://github.com/jblagana/finance-app.git (main).
