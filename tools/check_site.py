@@ -1999,6 +1999,16 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.47 (boss: 'i use the monthly budgets section to just add categories ... suggestion on whether to link or merge' -> 'build ... with the plans on budgets/commited'): Monthly budgets is Categories (a limit is optional and only shows when set); plans carry an optional category (p_cat / pe_cat selects, fillPlanCats; addPlan + savePlanOccurrence store it plan-wide); paying a plan from its chip pre-picks it on the Add sheet; a category with a limit that plans also file under is flagged (planCatUsers) — the coach's outlook would count both",
+          "<h2 class=\"nv-lab\">Categories</h2>" in js
+          and "bsec('Categories')" in js
+          and 'id="p_cat"' in html and 'id="pe_cat"' in html
+          and "function fillPlanCats(id, sel) {" in js and "function planCatUsers(cat) {" in js
+          and "if (data.category) p.category = String(data.category);" in js
+          and "if (peCat) { if (peCat.value) p.category = peCat.value; else delete p.category; }" in js
+          and "if (pcat && fc) { fc.value = pcat; renderAddChips(); }" in js
+          and "if (ba > 0 && planCatUsers(bn).length) dbl.push(bn);" in js
+          and "'74.47': [" in js)
     check("v74.46 (boss: 'the more section, are they still needed given the commited section has them'): the All numbers More card is gone — a Committed row (data-nvcommit -> the money tab) replaces it; Basics shows the one-month salary group and Budgets the one-month budget group (NUM_GRP_WITH, .sub keeps their heading); old debts / sinking / one-offs show in a From before card (legacyCount) whose Move to Committed (moveLegacyToPlans) turns them into plans (consecutive equal months -> one monthly plan x N) and clears them from the base",
           "lab('More')" not in js
           and "var NUM_GRP_WITH = { basics: ['sal'], bud: ['bov'], legacy: ['debt', 'sink', 'one'] };" in js

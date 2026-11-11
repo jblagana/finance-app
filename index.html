@@ -1273,6 +1273,7 @@ button.plchip{border-radius:11px;min-height:44px}
 .nv-bud .n{flex:1;min-width:0;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nv-bud .a{flex:none;font-size:12.5px;color:var(--mut)}
 .nv-foot{margin:10px 4px 0;font-size:12.5px;color:var(--mut)}
+.nv-foot.nv-warn{color:var(--warn)}
 .nv-card .nv-foot{margin:8px 0 0}
 /* v74.40: a Your-numbers row opens the editor at its part — scrolled there + a short highlight */
 #numSheet .brow,#numSheet .bhead,#rowsAcc>*{scroll-margin-top:12px}
@@ -1676,6 +1677,9 @@ button.plchip{border-radius:11px;min-height:44px}
         <div id="p_kind_expense" class="pltab on">Expense</div>
         <div id="p_kind_goal" class="pltab">Saving for</div>
       </div>
+      <!-- v74.47: the category a payment of this plan is filed under (the Add sheet pre-picks it) -->
+      <label for="p_cat" style="margin-top:12px;display:block">Files under</label>
+      <select id="p_cat"><option value="">No category</option></select>
       <div style="margin-top:14px">
         <button class="act" type="submit">Add plan</button>
       </div>
@@ -1707,6 +1711,8 @@ button.plchip{border-radius:11px;min-height:44px}
         </div>
       </div>
     </div>
+    <label for="pe_cat" style="margin-top:12px;display:block">Files under <span class="note" style="margin-left:6px">every payment of this plan</span></label>
+    <select id="pe_cat"><option value="">No category</option></select>
     <label for="pe_scope" style="margin-top:12px;display:block">Apply to</label>
     <select id="pe_scope">
       <option value="this" selected>Just this one</option>

@@ -3688,8 +3688,8 @@
       budRows += brow(dragH() + '<input class="grow" data-r="name" value="' + esc(k) + '" autocomplete="off">' +
         '<input data-r="a" type="text" value="' + (Number(b.budgets[k]) || '') + '">' + delBtn('Remove budget')) + detChips('budget:' + k);
     });
-    h += '<div class="ngrp" data-grp="bud">' + bsec('Monthly budgets') + '<p class="note ngrp-note">Category · ₱ per month (blank = no limit).</p><div id="rowsBud">' + budRows + '</div>' +
-      '<button type="button" class="addrow" data-add="bud">+ budget</button></div>';
+    h += '<div class="ngrp" data-grp="bud">' + bsec('Categories') + '<p class="note ngrp-note">The labels for your entries. A monthly limit is optional — leave it blank for none.</p><div id="rowsBud">' + budRows + '</div>' +
+      '<button type="button" class="addrow" data-add="bud">+ Add category</button></div>';
     var bovRows = '';
     Object.keys(b.budget_overrides || {}).forEach(function (m) {
       Object.keys(b.budget_overrides[m] || {}).forEach(function (k) {
@@ -3774,7 +3774,7 @@
   }
   function numBackTap() { numGo(null); }
   function openNumFromSet() { openSheet('numSheet'); numFromSet = true; numBackLabel(); }
-  var NUM_GRP_T = { basics: 'Basics', cardrules: 'Card rules', acc: 'Accounts', bud: 'Monthly budgets', bov: 'A different budget one month',
+  var NUM_GRP_T = { basics: 'Basics', cardrules: 'Card rules', acc: 'Accounts', bud: 'Categories', bov: 'A different budget one month',
     sal: 'A different salary one month', debt: 'Debts', one: 'One-offs', sink: 'Savings goals', mm: 'Learned from your notes', legacy: 'From before' };
   // v74.46 (boss: 'the more section, are they still needed given the commited section has them'):
   // a page can show companion groups under its own (with their heading): Basics
@@ -3885,18 +3885,24 @@
     // v74.45: the shared Card rules section is gone — each card's rules live
     // in its own account page (the shared values only seed new cards)
     // Budgets
-    var buds = bb.querySelectorAll('#rowsBud .brow'), bh = '', nb = 0, nset = 0;
+    var buds = bb.querySelectorAll('#rowsBud .brow'), bh = '', nb = 0, nset = 0, dbl = [];
     for (var u = 0; u < buds.length; u++) {
       var bn = val(buds[u].querySelector('[data-r="name"]'));
       if (!bn) continue;
       var ba = numVal(buds[u].querySelector('[data-r="a"]'), false);
       nb++; if (ba > 0) nset++;
       var tl = mlTile(bn);
-      bh += '<button type="button" class="nv-bud" data-nv="bud"><span class="dot" style="background:' + tl.fg + '"></span><span class="n">' + esc(bn) + '</span><span class="a">' + (ba > 0 ? money(ba) : 'no limit') + '</span></button>';
+      bh += '<button type="button" class="nv-bud" data-nv="bud"><span class="dot" style="background:' + tl.fg + '"></span><span class="n">' + esc(bn) + '</span><span class="a">' + (ba > 0 ? money(ba) : '') + '</span></button>';
+      if (ba > 0 && planCatUsers(bn).length) dbl.push(bn); // v74.47: a limit AND plans filing under it
     }
-    h += '<div class="nv-labrow"><h2 class="nv-lab">Monthly budgets</h2><span>' + nb + ' categor' + (nb === 1 ? 'y' : 'ies') + (nb ? (nset ? ' · ' + nset + ' with a limit' : ' · no limits set') : '') + '</span></div>' +
+    // v74.47 (boss: 'i use the monthly budgets section to just add categories for my ledger entries'):
+    // the section is Categories — the labels for entries; a limit is optional
+    // and only shows when set. A category with a limit that Committed plans
+    // also file under is flagged: the coach's outlook would count it twice.
+    h += '<div class="nv-labrow"><h2 class="nv-lab">Categories</h2><span>' + nb + ' categor' + (nb === 1 ? 'y' : 'ies') + (nset ? ' · ' + nset + ' with a limit' : '') + '</span></div>' +
       '<section class="nv-card nv-pad">' + (bh ? '<div class="nv-buds">' + bh + '</div>' : '') +
-      '<button type="button" class="nv-add" data-nvadd="bud">+ Add budget</button></section>';
+      (dbl.length ? '<p class="nv-foot nv-warn">' + esc(dbl.join(', ')) + (dbl.length === 1 ? ' has' : ' have') + ' a limit and plans in Committed filing under ' + (dbl.length === 1 ? 'it' : 'them') + ' — the coach\u2019s outlook counts both. Clear the limit, or unlink the plan.</p>' : '') +
+      '<button type="button" class="nv-add" data-nvadd="bud">+ Add category</button></section>';
     // v74.46: the More card is gone — debts, savings goals and one-offs are
     // plans in Committed (Expense / Goal, once or repeating × N); the one-month
     // salary lives in Basics and the one-month budget in Budgets.
@@ -5659,6 +5665,11 @@
     var parts = String(attr).split('|');
     var pid = parts[0], pdate = parts[1], pname = parts[2], pamt = Number(parts[3]) || 0;
     prefillAdd(pamt, pdate, pname + ' (plan payment)');
+    // v74.47: the payment is filed under the plan's category (pre-picked; still changeable)
+    var pcat = null;
+    (state.plans || []).forEach(function (pp) { if (pp && pp.id === pid && pp.category) pcat = pp.category; });
+    var fc = byId('f_category');
+    if (pcat && fc) { fc.value = pcat; renderAddChips(); }
     state.planLinkRef = { planId: pid, date: pdate, name: pname, amount: pamt };
     updatePlanLinkChip();
   }
@@ -8015,6 +8026,21 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       renderPlans();
     };
   }
+  // v74.47: plans file under a category — the select options are the
+  // categories (base.budgets keys); planCatUsers lists the plans filing
+  // under one (the overlap flag on All numbers).
+  function fillPlanCats(id, sel) {
+    var el = byId(id); if (!el) return;
+    var names = Object.keys((state.base && state.base.budgets) || {}).filter(function (n) { return String(n).trim(); });
+    if (sel && names.indexOf(sel) < 0) names.push(sel); // a renamed / removed category stays selectable
+    el.innerHTML = '<option value="">No category</option>' + names.map(function (n) {
+      return '<option value="' + esc(n) + '"' + (n === sel ? ' selected' : '') + '>' + esc(n) + '</option>';
+    }).join('');
+    el.value = sel || '';
+  }
+  function planCatUsers(cat) {
+    return (state.plans || []).filter(function (p) { return p && p.category && String(p.category) === String(cat); });
+  }
   function addPlan(data) {
     var id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
     // v73.1: weekly + annual ride the same row (the v68 monthly-only guard
@@ -8032,6 +8058,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       repeat: rep, count: (rep && cnt >= 1) ? cnt : null, overrides: {},
       kind: kind,
       created: new Date().toISOString() };
+    if (data.category) p.category = String(data.category); // v74.47: files under
     state.plans.push(p);
     return idbPut(STORE_PLANS, touchRec(p)).then(function () {
       emit('plan');
@@ -8076,6 +8103,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (n) n.value = ro.name || '';
     if (a) a.value = String(ro.amount != null ? ro.amount : '');
     if (dt) { dt.value = dateISO; syncDateLabel(dt); } // v73.46: show the real date, not "Pick a date"
+    fillPlanCats('pe_cat', p.category || ''); // v74.47: files under (the whole plan)
     if (sc) sc.value = 'this';
     if (h) {
       // v73.41: the date is now editable — the hint says what each scope does
@@ -8142,6 +8170,10 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (amount === null) amount = NaN;
     if (!name) { alert('Give the plan a name.'); return; }
     if (!(amount > 0)) { alert('Enter an amount greater than 0.'); return; }
+    // v74.47: the category is the WHOLE plan's (not per occurrence) — it rides
+    // the record on every scope; planPrev (above) restores it on Undo
+    var peCat = byId('pe_cat');
+    if (peCat) { if (peCat.value) p.category = peCat.value; else delete p.category; }
     var scope = byId('pe_scope').value;
     // v73.59: a one-off has no series to fork — name/amount/date write
     // STRAIGHT onto the record (the date field is the move; there is no
@@ -10381,12 +10413,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.46, live: new Date(2026, 10, 12, 0, 58) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.47, live: new Date(2026, 10, 12, 1, 1) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.47': [
+      'Monthly budgets are now Categories: the labels for your entries. A monthly limit is still there if you want one, but it only shows when it\u2019s set.',
+      'Plans can file under a category (Files under, in the plan\u2019s add and edit sheets). Paying a plan from its chip pre-picks that category. If a category has a limit AND plans filing under it, All numbers warns you, because the coach\u2019s outlook would count it twice.'
+    ],
     '74.46': [
       'All numbers: the More card is gone. Debts, savings goals and one-offs are plans in Committed (Expense or Goal, once or repeating), and a row links straight there. A different salary for one month now sits under Basics, and a one-month budget under Budgets.',
       'If you had debts, savings goals or one-offs set up the old way, a From before card shows them with a Move to Committed button.'
@@ -12103,7 +12139,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     // ("＋ Add a plan") opens it, the same bottom-sheet family as the edit
     // sheet. The Money tab is just heading + trigger + list now.
     var pAddBtn = byId('planAddBtn');
-    if (pAddBtn) pAddBtn.onclick = function () { openSheet('planSheet'); };
+    if (pAddBtn) pAddBtn.onclick = function () { openSheet('planSheet'); fillPlanCats('p_cat', ''); }; // v74.47: the category list is fresh
     var pAddClose = byId('planAddClose');
     if (pAddClose) pAddClose.onclick = function () { closeSheets(); };
     var pform = byId('planForm');
@@ -12139,7 +12175,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var cntVal = cntEl ? Math.floor(Number(cntEl.value)) : NaN;
         if (!(cntVal >= 1)) cntVal = null;
         addPlan({ name: name, amount: amount, date: byId('p_date').value || todayISO(),
-          repeat: repVal === 'once' ? null : repVal, count: cntVal, kind: kindSel }).then(function () {
+          repeat: repVal === 'once' ? null : repVal, count: cntVal, kind: kindSel,
+          category: byId('p_cat') ? byId('p_cat').value : '' }).then(function () { // v74.47: files under
           byId('p_name').value = '';
           byId('p_amount').value = '';
           if (cntEl) cntEl.value = '';
