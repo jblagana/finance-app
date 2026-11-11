@@ -4032,20 +4032,59 @@
     });
     var plans = state.plans || [];
     var nRep = plans.filter(function (p) { return p && p.repeat; }).length;
-    var rows = [
-      ['Cash & debit', money(r2(liq)) + ' · ' + nLiq + ' account' + (nLiq === 1 ? '' : 's')],
-      ['Cards', money(r2(owed)) + ' owed · ' + nCard + ' card' + (nCard === 1 ? '' : 's')],
-      ['Salary', (Number(b.salary) || 0) > 0 ? money(b.salary) + ' · the ' + ordinal(b.salary_day || 15) : 'not set'],
-      ['Card days', 'statement ' + ordinal(b.due_day || 5) + ' · prepay ' + ordinal(b.prepay_day || 14) + ((Number(b.card_util_target) || 0) > 0 ? ' · ' + Math.round(b.card_util_target * 100) + '%' : '')],
-      ['Committed', nRep + ' recurring · ' + (plans.length - nRep) + ' one-off'],
-      ['As of', esc(fmtDate(b.as_of))]
+    var rows = [ // v74.40: the 3rd field = where the row goes (openNumAt)
+      ['Cash & debit', money(r2(liq)) + ' · ' + nLiq + ' account' + (nLiq === 1 ? '' : 's'), 'cash'],
+      ['Cards', money(r2(owed)) + ' owed · ' + nCard + ' card' + (nCard === 1 ? '' : 's'), 'cards'],
+      ['Salary', (Number(b.salary) || 0) > 0 ? money(b.salary) + ' · the ' + ordinal(b.salary_day || 15) : 'not set', 'salary'],
+      ['Card days', 'statement ' + ordinal(b.due_day || 5) + ' · prepay ' + ordinal(b.prepay_day || 14) + ((Number(b.card_util_target) || 0) > 0 ? ' · ' + Math.round(b.card_util_target * 100) + '%' : ''), 'carddays'],
+      ['Committed', nRep + ' recurring · ' + (plans.length - nRep) + ' one-off', 'committed'],
+      ['As of', esc(fmtDate(b.as_of)), 'asof']
     ];
     host.innerHTML = rows.map(function (r) {
-      return '<button type="button" class="set-row" data-setnum="1"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span>' +
+      return '<button type="button" class="set-row" data-setnum="' + r[2] + '"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span>' +
         '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>';
     }).join('');
     var rb = host.querySelectorAll ? host.querySelectorAll('[data-setnum]') : [];
-    for (var i = 0; i < rb.length; i++) rb[i].onclick = function () { openSheet('numSheet'); };
+    for (var i = 0; i < rb.length; i++) rb[i].onclick = function () { openNumAt(this.getAttribute('data-setnum')); };
+  }
+  // v74.40 (boss: 'each tab in the settings in your numbers open the same
+  // page'): each Your-numbers row opens the editor AT its own part — scrolled
+  // there and briefly highlighted (no focus: a focused input would pop the
+  // keyboard). Committed lives on its own tab (the plans aren't in the
+  // numbers editor), so that row closes Settings and opens the Committed tab.
+  function openNumAt(go) {
+    if (go === 'committed') { closeSheets(); setTab('money'); return; }
+    openSheet('numSheet');
+    setTimeout(function () {
+      var els = [];
+      var rowOf = function (id) { var e = byId(id); return e && e.closest ? e.closest('.brow') : null; };
+      var acc = byId('rowsAcc');
+      var accKids = function (wantCard) {
+        // a card is TWO rows (the name/kind row + its billing/due row, which
+        // has no kind select) — a row without a select belongs to the one above
+        if (!acc) return [];
+        var lastCard = false;
+        return Array.prototype.filter.call(acc.children, function (c) {
+          var k = c.querySelector ? c.querySelector('select[data-r="kind"]') : null;
+          if (k) lastCard = k.value === 'card';
+          return wantCard ? lastCard : !lastCard;
+        });
+      };
+      if (go === 'cash' && acc) {
+        var hd = acc.previousElementSibling;
+        while (hd && !(hd.classList && hd.classList.contains('bhead'))) hd = hd.previousElementSibling;
+        if (hd) els.push(hd);
+        els = els.concat(accKids(false));
+      } else if (go === 'cards') els = accKids(true);
+      else if (go === 'salary') els = [rowOf('b_salary'), rowOf('b_sday')];
+      else if (go === 'carddays') els = [rowOf('b_pday'), rowOf('b_dday'), rowOf('b_util')];
+      else if (go === 'asof') els = [rowOf('b_asof')];
+      els = els.filter(Boolean);
+      if (!els.length) return;
+      try { els[0].scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { els[0].scrollIntoView(); }
+      els.forEach(function (e) { e.classList.remove('numflash'); void e.offsetWidth; e.classList.add('numflash'); });
+      setTimeout(function () { els.forEach(function (e) { e.classList.remove('numflash'); }); }, 2400);
+    }, 60);
   }
   // ---- render ----
   // v73.42 (boss: 'in money tab, reorder to: projection then coming up,
@@ -10016,12 +10055,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.39, live: new Date(2026, 10, 11, 16, 47) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.40, live: new Date(2026, 10, 11, 16, 54) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.40': [
+      'In Settings \u2192 Your numbers, each row now takes you to its own part: Cash & debit and Cards jump to those accounts, Salary to the salary fields, Card days to the card day settings, As of to the date (each briefly highlighted), and Committed opens the Committed tab.'
+    ],
     '74.39': [
       'Settings has a new App section with a \u201cCheck for update & restart\u201d button. If the app ever refuses to update on its own, tap it: it checks the server, pulls the newest version and restarts. Your entries and numbers are not touched, and if you\u2019re offline it changes nothing.'
     ],

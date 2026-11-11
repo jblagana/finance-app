@@ -1,3 +1,8 @@
+# v74.40 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-11 - "currently, each tab in the settings in your numbers open the same page" -> "Each Your-numbers row opens the numbers editor AT its own part, scrolled there + briefly highlighted (no focus, so no keyboard): Cash & debit -> the Accounts heading + the debit accounts; Cards -> the card accounts (with their billing/due rows); Salary -> salary / month + salary day; Card days -> prepay/cutoff, due day, target util; As of -> the as-of date; Committed -> the Committed tab (the plans are not in the editor)"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.40, sw cache finances-pwa-v74.40 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.40 (release.ps1 v74.40 all green; check_site v74.40 pin + the v74.37 row-click pin retargeted; What's-new note; each of the 6 rows driven in headless Chromium and its highlighted target checked)
+
 # v74.39 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - "is it possible to add a restart button the app so that it updates to the latest shell if ever its stubborn to refresh on its own" -> "Settings -> App -> Check for update & restart: refuse offline / with unsaved numbers; read the live sw.js first (a failure changes nothing); re-fetch the shell; delete ONLY the finances-pwa-* caches + unregister the service worker; reload with the scripts on a one-time ?r= address so no cached copy can answer. Entries, numbers, chat and settings (IndexedDB / localStorage) are never touched"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.39, sw cache finances-pwa-v74.39 pushed to https://github.com/jblagana/finance-app.git (main).

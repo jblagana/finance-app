@@ -1189,6 +1189,11 @@ button.plchip{border-radius:11px;min-height:44px}
 .grp-body .dig.bad .dg-tag{color:var(--bad)}
 .rowchip.info{background:var(--info);color:#06142B;border:0}
 .dig.next .dg-tag{color:var(--mut)}
+/* v74.40: a Your-numbers row opens the editor at its part — scrolled there + a short highlight */
+#numSheet .brow,#numSheet .bhead,#rowsAcc>*{scroll-margin-top:12px}
+.numflash{animation:numflash 2.2s ease-out;border-radius:10px}
+@keyframes numflash{0%,35%{background:var(--accSoft);box-shadow:0 0 0 2px var(--accLine)}100%{background:transparent;box-shadow:0 0 0 2px transparent}}
+@media (prefers-reduced-motion:reduce){.numflash{animation:none;background:var(--accSoft)}}
 /* v74.39: Settings -> App (Check for update & restart) */
 #setSheet .set-app{padding:12px 14px 14px}
 #setSheet .set-app .note{margin:0 0 10px}

@@ -1998,6 +1998,13 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.40 (boss: 'each tab in the settings in your numbers open the same page'): each Your-numbers row carries its target (data-setnum = cash / cards / salary / carddays / committed / asof) and openNumAt scrolls the editor to that part + highlights it; Committed opens the Committed tab",
+          "rb[i].onclick = function () { openNumAt(this.getAttribute('data-setnum')); };" in js
+          and "function openNumAt(go) {" in js
+          and "if (go === 'committed') { closeSheets(); setTab('money'); return; }" in js
+          and all(("'" + k + "']") in js for k in ["cash", "cards", "salary", "carddays", "committed", "asof"])
+          and "@keyframes numflash{" in html
+          and "'74.40': [" in js)
     check("v74.39 (boss: 'add a restart button so that it updates to the latest shell if ever its stubborn to refresh on its own'): Settings -> App -> #setRestart runs forceShellUpdate: offline / unsaved-numbers guard, the LIVE sw.js read first (no-store; a failure changes nothing), the shell re-fetched with cache:'reload', then ONLY finances-pwa-* caches deleted + the sw unregistered + reload; the sw lets no-store/reload requests through to the network",
           'id="setRestart"' in html and 'id="setRestartNote"' in html
           and "function forceShellUpdate() {" in js
@@ -2027,7 +2034,7 @@ def main():
           and '<div class="set-bk">' in html
           and '<h2 class="set-lab" id="wnTitle">What' in html
           and "function renderSetNumRows() {" in js
-          and "rb[i].onclick = function () { openSheet('numSheet'); };" in js
+          and "rb[i].onclick = function () { openNumAt(this.getAttribute('data-setnum')); };" in js  # v74.40: each row opens its own part
           and all(('id="' + k + '"') in html for k in ["setBaseSum", "setNumOpen", "aiRemoteToggle", "aiForceOnline", "aiRemoteUrl", "aiRemoteTest", "aiByoProvider", "aiByoKey", "expJson", "expCsv", "impBtn", "impFile", "bkBase", "syncPush", "wnSec", "wnList", "themeSeg"])
           and "'74.37': [" in js)
     check("v74.36 (boss: 'for the your expenses card in ledger, use the layout in mockup'): the Ledger list groups rows by day (.ml-grp + .ml-day with the day's spend total), each row is a compact button (tile · title · one sub line · amount) that opens its details + Edit / Delete, and the payment-method filter is a chip row (#mlChips; #mlFilterM holds the value, hidden)",
