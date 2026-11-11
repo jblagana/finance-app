@@ -1,3 +1,7 @@
+## 2026-11-12 - "the icons for the cards in accounts are not centered" -> "The All numbers card tiles were .nv-tile.card — the global .card panel class added its padding + border and pushed the letter off-centre; the tile class is .cc now"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.60 (headless Chromium: every account tile 38x38 with its letter centred, cards and banks alike)
+
 ## 2026-11-12 - "there are times that scrolling thru card in front like the add sheet or the setting, its the background page thats scrolling instead" -> "While a sheet or the coach is open the page behind is pinned (body position:fixed at its offset, restored on close) and a touch guard stops vertical drags that would leak (from a non-scrolling part, or past a list's end); sideways chip swipes and the sheets' own lists still scroll"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.59 (headless touch emulation: page at 385 stays 385 through Add-sheet header/keypad swipes and Settings past its end, back at 385 on close; Settings list, the chat log and the chip rows still scroll; stress U 8/8 incl. the new U8 + monkey 3/3)

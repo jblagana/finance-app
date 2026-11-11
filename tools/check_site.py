@@ -1999,6 +1999,9 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.60 (boss: 'the icons for the cards in accounts are not centered'): the All numbers card tile is .nv-tile.cc (it was .nv-tile.card — the global .card panel class added padding + a border and pushed the letter off-centre)",
+          "(card ? ' cc' : '')" in js and ".nv-tile.cc{" in html and ".nv-tile.card" not in html
+          and "'74.60': [" in js)
     check("v74.59 (boss: 'scrolling thru a card in front like the add sheet or the settings, its the background page thats scrolling instead'): while the dim layer shows (a sheet or the coach) the page is pinned (syncScrollLock: body position:fixed at its offset, restored on close) — called by openSheet / closeSheets / openCoach / closeCoach; a touchmove guard (passive:false) blocks vertical drags that start on something that can't scroll or reach a list's end; overscroll-behavior:contain on the sheets + coach",
           "function syncScrollLock() {" in js
           and "b.style.position = 'fixed'; b.style.top = (-lockY) + 'px';" in js

@@ -4145,7 +4145,7 @@
       var ch = (nm || '?').charAt(0).toUpperCase();
       ah += '<button type="button" class="nv-row nv-acc" data-nv="acc" data-nvi="' + i + '">' +
         '<span class="bdrag nv-drag" data-drag="1" aria-hidden="true">\u283f</span>' + // v74.49: drag to reorder
-        '<span class="nv-tile' + (card ? ' card' : '') + '" aria-hidden="true">' + esc(ch) + '</span>' +
+        '<span class="nv-tile' + (card ? ' cc' : '') + '" aria-hidden="true">' /* v74.60: not ".card" (the panel class — its padding pushed the letter off-centre) */ + esc(ch) + '</span>' +
         '<span class="nv-l"><span class="nv-t">' + esc(nm || 'New account') + '</span><span class="nv-s">' + sub + '</span></span>' +
         (card && amt < -0.004 // v74.55 (stress test #10): an overpaid card holds a CREDIT, never a negative "owed"
           ? '<span class="nv-amt">+' + money(-amt) + '<small>credit</small></span></button>'
@@ -10753,12 +10753,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.59, live: new Date(2026, 10, 12, 3, 47) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.60, live: new Date(2026, 10, 12, 4, 12) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.60': [
+      'Fixed: the letter icons of credit cards in All numbers sat off-centre. They’re centred now, like the bank accounts’.'
+    ],
     '74.59': [
       'Fixed: scrolling on the Add sheet, Settings, All numbers or the coach sometimes scrolled the page behind instead. The page behind now stays put while anything is open on top, and comes back exactly where you left it.'
     ],
