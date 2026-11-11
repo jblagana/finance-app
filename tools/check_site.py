@@ -1999,6 +1999,12 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.52 (stress test #2 #7 #12): removing an account (or a category) that entries use asks first with the count; back-to-back ✕ removals form one burst (rmBurst, data-rmburst on the toast) whose Undo restores every one",
+          "if (rmUses && !window.confirm(rmAcc" in js
+          and "rmBurst = { id: 'rb' + Date.now(), items: [], base: state.base ? cloneObj(state.base) : null };" in js
+          and "burst.items.slice().reverse().forEach(function (it) { it.par.insertBefore(" in js
+          and "if (snEl) snEl.setAttribute('data-rmburst', burst.id);" in js
+          and "'74.52': [" in js)
     check("v74.51 (stress test #1 #3 #4): a save re-bases account by account (accountRebase: unchanged keeps its share, a corrected number drops only that account's share + stamps adj.rebaseBy + files typed − live, a rename carries share / clock / ledger entries, a type switch starts fresh, a removal parks its share); absorbedFor keeps the boot split rebuilds from re-adding an account's absorbed entries; All numbers shows live balances (computeNumLive) and each block remembers data-orig; a type switch on an account with money asks first; the Settings card shows live totals",
           "function accountRebase(prevB, newB, live) {" in js
           and "function absorbedFor(t, name) {" in js
@@ -2031,7 +2037,7 @@ def main():
           and "if (prevBase && structuralAdj(prevBase, b)) state.keepAdjOnce = true;" in js
           and "&& adjActive() && !state.keepAdjOnce)" in js
           and "A.goneBy[key(r.name)] = { kind: r.kind, pb: r2(pb), cb: r2(cb), at: Date.now() };" in js
-          and "snack('Removed ' + esc(rmLabel), function () {" in js
+          and "snack(rmMsg, function () {" in js  # v74.52 successor: one toast per removal burst
           and "function closeTop() {" in js
           and "if (scb) scb.onclick = closeTop;" in js and "if (ncb) ncb.onclick = closeTop;" in js
           and "closeCoach(); closeTop(); } });" in js

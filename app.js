@@ -4516,6 +4516,7 @@
     }
   }
   var nvDragJust = false; // v74.49: swallow the click that follows a drop on an All numbers row
+  var rmBurst = null; // v74.52: the ✕ removals still undoable from the toast (one burst)
   function baseDragEnd(ev) {
     if (!dragSt) return;
     var row = dragSt.row, moved = dragSt.moved;
@@ -10661,12 +10662,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.51, live: new Date(2026, 10, 12, 2, 30) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.52, live: new Date(2026, 10, 12, 2, 35) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.52': [
+      'Removing an account or a category that your entries use now asks first and says how many entries use it (they stay in your Ledger as history).',
+      'Removing several things in a row keeps them all undoable: the toast says \u201cRemoved X and 2 more\u201d and one Undo brings every one back.'
+    ],
     '74.51': [
       'Fixed (from the stress test): correcting ONE account\u2019s balance in All numbers reset every other account to its \u201cas of\u201d balance. Now only the account you change takes the new number (with an Adjustment row for the real difference); the rest keep their live numbers.',
       'All numbers now shows each account\u2019s live balance (what your bank app should say), not the old \u201cas of\u201d one.',
@@ -12712,21 +12717,40 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
             var rmPar = holder.parentNode, rmNext = holder.nextSibling;
             var rmName = holder.querySelector('[data-r="name"]');
             var rmLabel = rmName && String(rmName.value || '').trim() ? String(rmName.value).trim() : 'the row';
-            var rmBase = state.base ? cloneObj(state.base) : null;
             var rmAcc = holder.classList && holder.classList.contains('accblk');
+            // v74.52 (stress test #2 / #12): an account or a category that entries use asks first
+            var rmOrig = rmAcc ? (holder.getAttribute('data-orig') || rmLabel) : rmLabel;
+            var rmUses = 0;
+            if (rmAcc) rmUses = (state.txns || []).filter(function (x) { return x.account === rmOrig || x.payWith === rmOrig; }).length;
+            else if (holder.closest && holder.closest('#rowsBud')) rmUses = (state.txns || []).filter(function (x) { return x.category === rmOrig; }).length;
+            if (rmUses && !window.confirm(rmAcc
+                ? 'Remove ' + rmOrig + '? Its ' + rmUses + ' ledger entr' + (rmUses === 1 ? 'y stays' : 'ies stay') + ' in your Ledger as history, but stop counting toward an account.'
+                : 'Remove the ' + rmOrig + ' category? ' + rmUses + ' entr' + (rmUses === 1 ? 'y keeps' : 'ies keep') + ' the label ' + rmOrig + ' in your Ledger; you just can\u2019t pick it for new ones.')) return;
+            // v74.52 (stress test #7): back-to-back removals are ONE burst — the
+            // toast names them all and its Undo brings every one back (a second
+            // ✕ used to replace the first one's Undo)
+            var snEl = byId('snack');
+            if (!rmBurst || !(snEl && snEl.classList.contains('show') && snEl.getAttribute('data-rmburst') === rmBurst.id))
+              rmBurst = { id: 'rb' + Date.now(), items: [], base: state.base ? cloneObj(state.base) : null };
+            var burst = rmBurst;
+            burst.items.push({ holder: holder, par: rmPar, next: rmNext, label: rmLabel });
             rmPar.removeChild(holder);
             markBaseDirty(); // v71: removal is a change — Save button appears
             if (rmAcc && numView && numView.grp === 'acc' && numView.i != null) numGo(null); // its page is empty now
-            snack('Removed ' + esc(rmLabel), function () {
+            var rmMsg = 'Removed ' + esc(burst.items[0].label) + (burst.items.length > 1 ? ' and ' + (burst.items.length - 1) + ' more' : '');
+            snack(rmMsg, function () {
               var sh = byId('numSheet');
               var open = sh && sh.classList.contains('show');
-              if (open && !holder.parentNode && document.body.contains(rmPar)) {
-                rmPar.insertBefore(holder, rmNext && rmNext.parentNode === rmPar ? rmNext : null);
+              var allHere = burst.items.every(function (it) { return !it.holder.parentNode && document.body.contains(it.par); });
+              if (open && allHere) {
+                burst.items.slice().reverse().forEach(function (it) { it.par.insertBefore(it.holder, it.next && it.next.parentNode === it.par ? it.next : null); });
                 markBaseDirty(); applyNumView();
-              } else if (rmBase) {
-                saveBase(rmBase, { skipAdjustment: true }).then(function () { emit('snap'); renderBaseEditor(); renderBaseStatus(); });
+              } else if (burst.base) {
+                saveBase(burst.base, { skipAdjustment: true }).then(function () { emit('snap'); renderBaseEditor(); renderBaseStatus(); });
               }
+              if (rmBurst === burst) rmBurst = null;
             }, 'remove');
+            if (snEl) snEl.setAttribute('data-rmburst', burst.id);
           }
         }
       });
