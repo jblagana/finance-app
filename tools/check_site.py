@@ -1999,6 +1999,13 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.59 (boss: 'scrolling thru a card in front like the add sheet or the settings, its the background page thats scrolling instead'): while the dim layer shows (a sheet or the coach) the page is pinned (syncScrollLock: body position:fixed at its offset, restored on close) — called by openSheet / closeSheets / openCoach / closeCoach; a touchmove guard (passive:false) blocks vertical drags that start on something that can't scroll or reach a list's end; overscroll-behavior:contain on the sheets + coach",
+          "function syncScrollLock() {" in js
+          and "b.style.position = 'fixed'; b.style.top = (-lockY) + 'px';" in js
+          and js.count("syncScrollLock(); // v74.59") >= 3
+          and "document.addEventListener('touchmove', lockTouchMove, { passive: false });" in js
+          and ".sheet,.sheet-b,#coachOv,#coachOv *{overscroll-behavior:contain}" in html
+          and "'74.59': [" in js)
     check("v74.58 (boss: 'make the add expense sheet shown fully on screen, the top remains where it is currently and the bottom is the actual bottom without having to scroll' -> mockup -> build): the amount line holds ₱ + the amount + #amtEq; Date + Note share .dnrow; the keypad is an operator strip (.kops: ( ) × ÷ C) + 4 rows (.kmain) ending in = (data-k eq works the sum out); the sheet is a full-height column whose keypad stretches (grid-auto-rows minmax(40px,1fr)); the date label reads Today; every field id kept",
           '<div class="amtline">' in html and '<div class="dnrow">' in html
           and '<div class="kops">' in html and '<div class="kmain">' in html

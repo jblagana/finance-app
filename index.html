@@ -1262,6 +1262,10 @@ button.plchip{border-radius:11px;min-height:44px}
 .cbseg button{min-height:36px}
 .cbrow.cbcards,.cbrow.cbplans{min-height:40px;align-items:center}
 .mini{min-width:40px;min-height:40px}
+/* v74.59: a scroll inside a sheet / the coach never chains to the page behind */
+html.modal-open{overflow:hidden}
+.sheet,.sheet-b,#coachOv,#coachOv *{overscroll-behavior:contain}
+#scrim{touch-action:none}
 /* v74.58: the Add sheet fits ONE screen — the sheet always reaches the bottom, the form is a column and the
    keypad takes whatever height is left (keys min 40px), so Add expense is never below the fold */
 .sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;margin:0!important;padding:0!important}

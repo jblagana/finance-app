@@ -3541,6 +3541,7 @@
     // v71: closing the Add sheet leaves edit mode (title/button back to add).
     if (openSheetEl && openSheetEl.id === 'addSheet') { exitTxnEdit(); salaryChipPending = false; } // v74.53
     if (openSheetEl) { openSheetEl.classList.remove('show'); openSheetEl = null; }
+    syncScrollLock(); // v74.59
     if (wasOpen && lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
     lastFocus = null;
   }
@@ -3549,6 +3550,47 @@
   // while what i wanna do was actually go back a page only'): the top-right
   // ✕ (and Esc) closes the CURRENT layer only — a section -> All numbers ->
   // Settings -> closed; a Settings page -> Settings. The scrim still closes all.
+  // v74.59 (boss: 'there are times that scrolling thru a card in front like the add sheet or the
+  // settings, its the background page thats scrolling instead'): while anything sits on the dim layer
+  // (a sheet or the coach), the page behind is PINNED (body position:fixed at its scroll offset — the
+  // lock iOS Safari honours; overflow:hidden alone it ignores) and put back on close. The touch guard
+  // stops the swipes that would still leak: a vertical drag that starts on something that can't scroll
+  // (a header, the chip rows, the whole Add sheet now that it fits), or that reaches the end of a
+  // scrolling list. Sideways drags (the chip rows) pass.
+  var lockY = null, lockTouch = null;
+  function syncScrollLock() {
+    var sc = byId('scrim'), on = !!(sc && sc.classList && sc.classList.contains('show'));
+    var b = document.body, root = document.documentElement;
+    if (!b || !b.style) return;
+    if (on && lockY === null) {
+      lockY = window.scrollY || window.pageYOffset || 0;
+      b.style.position = 'fixed'; b.style.top = (-lockY) + 'px'; b.style.left = '0'; b.style.right = '0'; b.style.width = '100%';
+      if (root && root.classList) root.classList.add('modal-open');
+    } else if (!on && lockY !== null) {
+      var y = lockY; lockY = null;
+      b.style.position = ''; b.style.top = ''; b.style.left = ''; b.style.right = ''; b.style.width = '';
+      if (root && root.classList) root.classList.remove('modal-open');
+      try { window.scrollTo(0, y); } catch (e) {}
+    }
+  }
+  function lockTouchStart(e) {
+    if (lockY === null || !e.touches || !e.touches[0]) { lockTouch = null; return; }
+    lockTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }
+  function lockTouchMove(e) {
+    if (lockY === null || !lockTouch || !e.touches || !e.touches[0]) return;
+    var dx = e.touches[0].clientX - lockTouch.x, dy = e.touches[0].clientY - lockTouch.y;
+    if (Math.abs(dx) > Math.abs(dy)) return; // sideways: the chip rows scroll on their own
+    for (var el = e.target; el && el !== document.body && el.nodeType === 1; el = el.parentElement) {
+      var oy = getComputedStyle(el).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1) {
+        var atTop = el.scrollTop <= 0, atBot = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+        if ((dy > 0 && atTop) || (dy < 0 && atBot)) break; // past its end: it would spill into the page
+        return; // it scrolls itself
+      }
+    }
+    if (e.cancelable) e.preventDefault();
+  }
   function closeTop() {
     var el = openSheetEl;
     if (el && el.id === 'numSheet') {
@@ -3566,6 +3608,7 @@
     sc.classList.add('show');
     sh.classList.add('show');
     openSheetEl = sh;
+    syncScrollLock(); // v74.59: the page behind stays put
     if (id === 'numSheet') { numView = null; numFromSet = false; numBackLabel(); renderBaseEditor(); } // v74.42: opens on the overview
     else if (id === 'setSheet') { setPage(''); renderBaseStatus(); backupSelSync(); renderSetMeta(); } // v72.23: show the stored "what to include"; v74.44: opens on the main page
     else if (id === 'addSheet') { renderAddChips(); addAmtEq(byId('f_amount') || { value: '' }); } // v74.24 chips; v74.43: the "= ₱…" hint follows the CURRENT amount (no stale "= ₱500")
@@ -10710,12 +10753,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.58, live: new Date(2026, 10, 12, 3, 33) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.59, live: new Date(2026, 10, 12, 3, 47) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.59': [
+      'Fixed: scrolling on the Add sheet, Settings, All numbers or the coach sometimes scrolled the page behind instead. The page behind now stays put while anything is open on top, and comes back exactly where you left it.'
+    ],
     '74.58': [
       'The Add sheet fits on one screen \u2014 no scrolling to reach the keypad or Add expense. The amount and its \u201c= \u20b1\u2026\u201d sit on one line, Date and Note share a row (the date says \u201cToday\u201d), and the keypad has ( ) \u00d7 \u00f7 C on a slim strip with a new = key that works out the sum. The keys stretch to fill your screen.'
     ],
@@ -11489,6 +11535,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     ov.classList.add('show');
     var sc = byId('scrim');
     if (sc) sc.classList.add('show');
+    syncScrollLock(); // v74.59
     if (window.__financeChat && window.__financeChat.open) window.__financeChat.open();
   }
   function closeCoach() {
@@ -11496,6 +11543,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (ov) ov.classList.remove('show');
     var sc = byId('scrim');
     if (sc && !openSheetEl) sc.classList.remove('show');
+    syncScrollLock(); // v74.59
   }
   // ---------- v72.15: the floating bot is draggable AND owns the bubble ----------
   // The chat panel no longer lives at a fixed screen corner. On open it is
@@ -12861,6 +12909,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         }
       });
     }
+    document.addEventListener('touchstart', lockTouchStart, { passive: true }); // v74.59: the scroll-bleed guard
+    document.addEventListener('touchmove', lockTouchMove, { passive: false });
     var bsv = byId('baseSave'); // v71: the explicit "Your numbers" save button
     if (bsv) bsv.onclick = function () { commitBaseForm(); };
     var hob = byId('homeOpenSet');

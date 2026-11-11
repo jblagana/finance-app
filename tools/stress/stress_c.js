@@ -105,6 +105,25 @@ module.exports = async function groupC() {
     await done(pg, ctx);
   }
 
+  {
+    // v74.59: scroll bleed — swiping a sheet must never scroll the page behind
+    const { ctx, pg } = await fresh({ vp: { width: 390, height: 844 }, touch: true, mobile: true });
+    const cdp = await ctx.newCDPSession(pg);
+    const swipe = async (x, y, dy, dx) => { dx = dx || 0; await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] }); for (let i = 1; i <= 12; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + dx * i / 12, y: y + dy * i / 12 }] }); await pg.waitForTimeout(16); } await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await pg.waitForTimeout(350); };
+    const pageAt = () => pg.evaluate(() => document.body.style.position === 'fixed' ? -parseInt(document.body.style.top || '0', 10) : Math.round(window.scrollY));
+    await swipe(195, 600, -400); const y0 = await pageAt();
+    await pg.evaluate(() => document.getElementById('addBtn').click()); await pg.waitForTimeout(450);
+    await swipe(195, 180, -300); await swipe(195, 700, -300); await swipe(195, 700, 300);
+    const y1 = await pageAt(); await closeAll(pg); await pg.waitForTimeout(300); const y2 = await pageAt();
+    await pg.evaluate(() => document.getElementById('setBtn').click()); await pg.waitForTimeout(450);
+    await swipe(195, 600, -500); const own = await pg.evaluate(() => document.querySelector('#setSheet .sheet-b').scrollTop);
+    await swipe(195, 600, -2500); const y3 = await pageAt(); await closeAll(pg);
+    rec({ area: 'U', id: 'U8', title: 'Swiping on an open sheet never scrolls the page behind', sev: 'med',
+      expected: 'the page stays at ' + y0 + ' while the Add sheet / Settings are swiped, Settings scrolls itself, the page is back at ' + y0 + ' after closing',
+      observed: 'page ' + y0 + ' → ' + y1 + ' (Add swiped) → ' + y2 + ' (closed) → ' + y3 + ' (Settings swiped past its end); Settings scrolled itself to ' + own,
+      pass: y0 > 0 && y1 === y0 && y2 === y0 && y3 === y0 && own > 0 });
+    await done(pg, ctx);
+  }
   }
   // ================= M: the monkey (random real taps + typing) =================
   if (!process.env.ONLY || process.env.ONLY.includes('M')) {

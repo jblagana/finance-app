@@ -1,3 +1,7 @@
+## 2026-11-12 - "there are times that scrolling thru card in front like the add sheet or the setting, its the background page thats scrolling instead" -> "While a sheet or the coach is open the page behind is pinned (body position:fixed at its offset, restored on close) and a touch guard stops vertical drags that would leak (from a non-scrolling part, or past a list's end); sideways chip swipes and the sheets' own lists still scroll"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.59 (headless touch emulation: page at 385 stays 385 through Add-sheet header/keypad swipes and Settings past its end, back at 385 on close; Settings list, the chat log and the chip rows still scroll; stress U 8/8 incl. the new U8 + monkey 3/3)
+
 ## 2026-11-12 - "how can we make the add expense sheet shown fully on screen, the top remains where it is currently and the bottom is the actual bottom without having to scroll. show me a mockup" -> canvas board 10 · Add sheet that fits -> "do 74.57 and the add sheet build" -> "The Add sheet fits one screen: the amount line holds the = hint, Date + Note share a row (Today), the keypad is an operator strip + 4 rows with =, the keys stretch to fill what is left; same top on the boss's phone"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.58 (headless Chromium: no scroll at 390x844 / 375x667 / 430x932 in Spend, Pay card and Money in; = turns 300-125+10 into 185; a full add saves; stress A 53/53 + U 7/7)
