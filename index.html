@@ -1189,6 +1189,14 @@ button.plchip{border-radius:11px;min-height:44px}
 .grp-body .dig.bad .dg-tag{color:var(--bad)}
 .rowchip.info{background:var(--info);color:#06142B;border:0}
 .dig.next .dg-tag{color:var(--mut)}
+/* v74.34: Test a spend = the mockup box (label over an always-visible ₱ input; the ✕ shows once something is typed) */
+.testrow{cursor:default}
+.testrow .tr-label,.testrow.ts-open .tr-label{display:block;font-size:13px;font-weight:600;color:var(--ink);margin:0 0 8px;cursor:default;white-space:nowrap}
+.testrow .tr-hint{display:none}
+.testrow .tr-head{display:flex;align-items:center;gap:10px;height:48px;border-radius:11px;background:var(--card2);padding:0 6px 0 14px}
+.tr-peso{color:var(--mut);font-weight:600;flex:none}
+.testrow .tr-amt{display:block;flex:1;min-width:0;width:auto;height:100%;padding:0;background:transparent;border:0;border-radius:0;font-size:16px;font-weight:600;color:var(--ink)}
+.testrow .tr-amt::placeholder{color:var(--mut);font-weight:600;opacity:1}
 </style>
 </head>
 
@@ -1282,11 +1290,13 @@ button.plchip{border-radius:11px;min-height:44px}
      (wireTestSpend) and tsSetOpen() flips .ts-open; the math is
      testSpend() — pure, reads the snapshot's free, never writes it. -->
 <div class="testrow" id="tsRow" data-testrow="1">
+  <!-- v74.34 (boss: 'use the layout for the test spend in the img, but still in this cycle card'): the mockup box — the label on top, the ₱ input always visible (the hint is kept for the wiring, hidden) -->
+  <label class="tr-label" id="tsOpen" for="tsAmt">Test a spend</label>
   <div class="tr-head">
-    <span class="tr-label" id="tsOpen">＋ Test a spend</span>
+    <span class="tr-peso" aria-hidden="true">₱</span>
     <span class="tr-hint" id="tsHint">what if I buy something one-time?</span>
-    <input class="tr-amt" id="tsAmt" type="text" inputmode="decimal" placeholder="0.00">
-    <button type="button" class="tr-x" id="tsX">✕</button>
+    <input class="tr-amt" id="tsAmt" type="text" inputmode="decimal" autocomplete="off" placeholder="What if I buy… e.g. 2500">
+    <button type="button" class="tr-x" id="tsX" aria-label="Clear test amount">✕</button>
   </div>
   <div class="tr-line" id="tsLine"></div>
   <button type="button" class="tr-log" id="tsLog">Log it as an expense</button>

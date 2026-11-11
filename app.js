@@ -5850,6 +5850,7 @@
     if (row) row.className = 'testrow' + (open ? ' ts-open' : '');
     if (line) line.innerHTML = '';
     if (log) log.className = 'tr-log';
+    if (!open && amt) amt.value = ''; // v74.34: the input is always visible now — the ✕ empties it too
     if (open) {
       if (amt) { amt.focus && amt.focus(); amt.select && amt.select(); }
       if (testSpendAmt) { if (amt) amt.value = testSpendAmt; tsUpdate(); }
@@ -5871,7 +5872,12 @@
       if (t && (t.id === 'tsAmt' || t.id === 'tsX' || t.id === 'tsLog')) return;
       tsSetOpen(true);
     };
-    if (amt) amt.oninput = function () { testSpendAmt = String(amt.value || ''); tsUpdate(); };
+    if (amt) amt.oninput = function () {
+      testSpendAmt = String(amt.value || '');
+      // v74.34: typing straight into the always-visible input shows the ✕ (.ts-open) without re-focusing/selecting
+      if (testSpendAmt && !testSpendOpen && row) { testSpendOpen = true; row.className = 'testrow ts-open'; }
+      tsUpdate();
+    };
     if (x) x.onclick = function () { tsSetOpen(false); };
     if (log) log.onclick = function () {
       var a = Number(log.dataset.tsAmt) || 0;
@@ -9887,12 +9893,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.33, live: new Date(2026, 10, 11, 15, 49) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.34, live: new Date(2026, 10, 11, 15, 50) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.34': [
+      'Test a spend has a new look inside the This cycle card: a box with \u20b1 where you just type the amount (\u201cWhat if I buy\u2026\u201d). The new per-day number and the Log button show up as you type, same as before.'
+    ],
     '74.33': [
       'Two fewer lines of small print on the hero card: Free cash has no extra caption under it, and the footnote is just "Estimate \u2014 pace & one-offs excluded."'
     ],

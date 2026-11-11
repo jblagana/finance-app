@@ -1998,6 +1998,15 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.34 (boss: 'use the layout for the test spend in the img, but still in this cycle card'): the Test-a-spend row is the mockup box — a 'Test a spend' label over an always-visible ₱ input (placeholder 'What if I buy… e.g. 2500'), the hint hidden, the ✕ also empties the input, typing shows the ✕",
+          '<label class="tr-label" id="tsOpen" for="tsAmt">Test a spend</label>' in html
+          and 'placeholder="What if I buy… e.g. 2500"' in html
+          and '<span class="tr-peso" aria-hidden="true">₱</span>' in html
+          and ".testrow .tr-amt{display:block;flex:1;" in html
+          and ".testrow .tr-hint{display:none}" in html
+          and "if (!open && amt) amt.value = ''; // v74.34" in js
+          and "if (testSpendAmt && !testSpendOpen && row) { testSpendOpen = true; row.className = 'testrow ts-open'; }" in js
+          and "'74.34': [" in js)
     check("v74.33 (boss: 'remove same as the hero number and salary follows ... amount.'): the Free cash row has no sub-label and the cycle footnote is just 'Estimate — pace & one-offs excluded.'",
           '<div class="lab">Free cash</div>' in js
           and "Salary follows the target cycle" not in js
