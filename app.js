@@ -2146,7 +2146,10 @@
     var sig = snapSig(state.snapshot);
     // The base numbers moved (edited in Settings) -> rebase: the base is source of truth again.
     // v73.89: the rebase stamps the durable clock (saveBase → saveAdj persists it).
-    if (state.adjSig && sig !== state.adjSig && adjActive()) { state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V }; stampRebase(); }
+    // v74.48: NOT when the save only added / removed / renamed an account
+    // (structuralAdj already moved that account's own share of the overlay).
+    if (state.adjSig && sig !== state.adjSig && adjActive() && !state.keepAdjOnce) { state.adj = { cash: 0, free: 0, card: 0, prepay: 0, prepayBy: {}, cashBy: {}, mv: ADJ_MODEL_V }; stampRebase(); }
+    state.keepAdjOnce = false;
     state.adjSig = sig;
   }
   function persistSnapshot() {
@@ -2169,8 +2172,65 @@
     });
     return b;
   }
+  // v74.48 (boss: 'i accidentally x-ed maribank cc from accounts and it deleted
+  // without warning'): removing a card changed the owed total, so the save
+  // looked like a balance edit and RESET every account's live numbers to the
+  // as-of values. A save whose surviving accounts all keep their balances is
+  // structural: a removed account takes ONLY its own overlay share with it
+  // (a card: prepayBy -> card / prepay / free; a debit: cashBy -> cash / free —
+  // free = liquid − owed, so its overlay moves with both), parked in
+  // adj.goneBy so re-adding the same name (Undo, or by hand) brings it back;
+  // a rename (one out, one in, same kind + balance) carries the share over.
+  // Returns true when the save is structural (the caller skips the rebase).
+  function structuralAdj(oldB, newB) {
+    var key = function (n) { return String(n || '').trim().toLowerCase(); };
+    var olds = ((oldB && oldB.accounts) || []).filter(function (a) { return a && a.name; });
+    var news = ((newB && newB.accounts) || []).filter(function (a) { return a && a.name; });
+    var om = {}, nm = {};
+    olds.forEach(function (a) { om[key(a.name)] = a; });
+    news.forEach(function (a) { nm[key(a.name)] = a; });
+    var k;
+    for (k in nm) {
+      if (!om[k]) continue;
+      if (r2(Number(nm[k].value) || 0) !== r2(Number(om[k].value) || 0)) return false; // a real balance edit
+      if (String(nm[k].kind) !== String(om[k].kind)) return false; // a kind switch moves totals — the as-of rebase stays
+    }
+    var removed = olds.filter(function (a) { return !nm[key(a.name)]; });
+    var added = news.filter(function (a) { return !om[key(a.name)]; });
+    if (!removed.length && !added.length) return false;
+    var A = state.adj;
+    A.prepayBy = A.prepayBy || {}; A.cashBy = A.cashBy || {}; A.goneBy = A.goneBy || {};
+    var used = {};
+    removed.forEach(function (r) {
+      var pb = Number(A.prepayBy[r.name]) || 0, cb = Number(A.cashBy[r.name]) || 0;
+      var mate = null;
+      added.forEach(function (x, i) {
+        if (!mate && !used[i] && x.kind === r.kind && r2(Number(x.value) || 0) === r2(Number(r.value) || 0) && !A.goneBy[key(x.name)]) { mate = x; used[i] = true; }
+      });
+      delete A.prepayBy[r.name]; delete A.cashBy[r.name];
+      if (mate) { // a rename: the share follows the account
+        if (pb) A.prepayBy[mate.name] = r2(pb);
+        if (cb) A.cashBy[mate.name] = r2(cb);
+        return;
+      }
+      if (r.kind === 'card') { A.card = r2(A.card - pb); A.prepay = r2(A.prepay - pb); A.free = r2(A.free - pb); }
+      else { A.cash = r2(A.cash - cb); A.free = r2(A.free - cb); }
+      if (pb || cb) A.goneBy[key(r.name)] = { kind: r.kind, pb: r2(pb), cb: r2(cb), at: Date.now() };
+    });
+    added.forEach(function (x, i) {
+      if (used[i]) return;
+      var g = A.goneBy[key(x.name)];
+      if (!g || g.kind !== x.kind) return;
+      delete A.goneBy[key(x.name)];
+      if (g.pb) { A.prepayBy[x.name] = r2((Number(A.prepayBy[x.name]) || 0) + g.pb); A.card = r2(A.card + g.pb); A.prepay = r2(A.prepay + g.pb); A.free = r2(A.free + g.pb); }
+      if (g.cb) { A.cashBy[x.name] = r2((Number(A.cashBy[x.name]) || 0) + g.cb); A.cash = r2(A.cash + g.cb); A.free = r2(A.free + g.cb); }
+    });
+    if (!Object.keys(A.goneBy).length) delete A.goneBy;
+    return true;
+  }
   function saveBase(b, opts) {
     var prevBase = state.base; // v72.30: a balance override files the diff
+    if (prevBase && structuralAdj(prevBase, b)) state.keepAdjOnce = true; // v74.48: add / remove / rename keeps the live overlay
     b.edited = new Date().toISOString();
     // v74.15: a balance typed in Settings is reality as of today — stamp the
     // money accounts whose value changed (or that are new). The reconcile /
@@ -3337,6 +3397,20 @@
     if (openSheetEl) { openSheetEl.classList.remove('show'); openSheetEl = null; }
     if (wasOpen && lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
     lastFocus = null;
+  }
+  // v74.48 (boss: 'the x in settings should only be for settings, going into
+  // all numbers or other areas ... the reachable x does not x the settings
+  // while what i wanna do was actually go back a page only'): the top-right
+  // ✕ (and Esc) closes the CURRENT layer only — a section -> All numbers ->
+  // Settings -> closed; a Settings page -> Settings. The scrim still closes all.
+  function closeTop() {
+    var el = openSheetEl;
+    if (el && el.id === 'numSheet') {
+      if (numView) { numGo(null); return; }
+      if (numFromSet) { closeSheets(); openSheet('setSheet'); return; }
+    }
+    if (el && el.id === 'setSheet' && el.getAttribute('data-sp')) { setPage(''); return; }
+    closeSheets();
   }
   function openSheet(id) {
     var sh = byId(id), sc = byId('scrim');
@@ -10413,12 +10487,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.47, live: new Date(2026, 10, 12, 1, 1) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.48, live: new Date(2026, 10, 12, 1, 17) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.48': [
+      'Fixed: removing an account (like MariBank CC) reset every account\u2019s live numbers to the \u201cas of\u201d balances. Now only that account\u2019s own numbers go with it, and the \u2715 shows an Undo. Re-adding an account with the same name brings its live numbers back too.',
+      'The \u2715 at the top right now goes back one step: a section goes back to All numbers, All numbers to Settings, and a Settings page to Settings. Only Settings\u2019 own \u2715 closes it.',
+      'No more zooming in when you tap a field or double-tap the screen.'
+    ],
     '74.47': [
       'Monthly budgets are now Categories: the labels for your entries. A monthly limit is still there if you want one, but it only shows when it\u2019s set.',
       'Plans can file under a category (Files under, in the plan\u2019s add and edit sheets). Paying a plan from its chip pre-picks that category. If a category has a limit AND plans filing under it, All numbers warns you, because the coach\u2019s outlook would count it twice.'
@@ -12289,9 +12368,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var ac = byId('addClose');
     if (ac) ac.onclick = closeSheets;
     var scb = byId('setClose');
-    if (scb) scb.onclick = closeSheets;
+    if (scb) scb.onclick = closeTop; // v74.48: a Settings page -> Settings; Settings -> closed
     var ncb = byId('numClose');
-    if (ncb) ncb.onclick = closeSheets;
+    if (ncb) ncb.onclick = closeTop; // v74.48: a section -> All numbers -> Settings
     var srb = byId('setRestart'); // v74.39: Check for update & restart
     if (srb) srb.onclick = forceShellUpdate;
     var nbk = byId('numBack'); // v74.42: drill-in -> back to the Your-numbers overview
@@ -12315,7 +12394,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var scrim = byId('scrim');
     if (scrim) scrim.onclick = function () { closeCoach(); closeSheets(); };
     var chatX = byId('chatClose'); if (chatX) chatX.onclick = function () { if (window.__financeChat && window.__financeChat.closeInfo) window.__financeChat.closeInfo(); closeCoach(); }; // v74.29: the coach header's ✕
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { if (window.__financeChat && window.__financeChat.closeInfo && window.__financeChat.closeInfo()) return; closeCoach(); closeSheets(); } }); // v68 Jan add-on: Esc closes the info panel first
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { if (window.__financeChat && window.__financeChat.closeInfo && window.__financeChat.closeInfo()) return; closeCoach(); closeTop(); } }); // v68 Jan add-on: Esc closes the info panel first; v74.48: one layer at a time
     // a11y: trap Tab focus inside the open sheet
     document.addEventListener('keydown', function (e) {
       if (!openSheetEl || e.key !== 'Tab') return;
@@ -12415,8 +12494,30 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var rm = t.getAttribute('data-rm');
         if (rm) {
           var holder = rm === 'blk' ? t.closest('.bblk') : t.closest('.brow');
-          if (holder) holder.parentNode.removeChild(holder);
-          markBaseDirty(); // v71: removal is a change — Save button appears
+          if (holder) {
+            // v74.48 (boss: 'i accidentally x-ed maribank cc ... it deleted without warning'):
+            // every ✕ here offers an Undo. While the sheet is still open the row
+            // goes straight back; once the removal was saved (closing saves), the
+            // Undo restores the saved numbers from before it.
+            var rmPar = holder.parentNode, rmNext = holder.nextSibling;
+            var rmName = holder.querySelector('[data-r="name"]');
+            var rmLabel = rmName && String(rmName.value || '').trim() ? String(rmName.value).trim() : 'the row';
+            var rmBase = state.base ? cloneObj(state.base) : null;
+            var rmAcc = holder.classList && holder.classList.contains('accblk');
+            rmPar.removeChild(holder);
+            markBaseDirty(); // v71: removal is a change — Save button appears
+            if (rmAcc && numView && numView.grp === 'acc' && numView.i != null) numGo(null); // its page is empty now
+            snack('Removed ' + esc(rmLabel), function () {
+              var sh = byId('numSheet');
+              var open = sh && sh.classList.contains('show');
+              if (open && !holder.parentNode && document.body.contains(rmPar)) {
+                rmPar.insertBefore(holder, rmNext && rmNext.parentNode === rmPar ? rmNext : null);
+                markBaseDirty(); applyNumView();
+              } else if (rmBase) {
+                saveBase(rmBase, { skipAdjustment: true }).then(function () { emit('snap'); renderBaseEditor(); renderBaseStatus(); });
+              }
+            }, 'remove');
+          }
         }
       });
     }

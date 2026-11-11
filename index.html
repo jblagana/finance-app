@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Fin.AI</title>
 <meta name="theme-color" content="#0f1420">
 <script>/* v74.24 look upgrade: paint the saved theme before the first frame (no flash) */try{document.documentElement.setAttribute('data-theme',localStorage.getItem('fin.theme')==='light'?'light':'dark')}catch(e){}</script>
@@ -48,6 +48,9 @@ h2{font-size:12.5px;margin:16px 0 8px;color:var(--mut);text-transform:uppercase;
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
 label{display:block;color:var(--mut);font-size:12px;margin:10px 0 4px;font-weight:600}
 input,select{background:var(--card2);border:1px solid var(--line);color:var(--ink);padding:11px 12px;border-radius:10px;font-size:15px;width:100%;max-width:100%;min-width:0;margin:0}
+/* v74.48 (boss: 'when i tap areas in the app it zooms in, i dont want that'): no double-tap zoom anywhere
+   (maximum-scale=1 in the viewport stops the focus zoom on a field) */
+html{touch-action:manipulation}
 .dfield{position:relative}
 .dfield input[type=date]{position:relative;z-index:1;opacity:0;-webkit-appearance:none;appearance:none;background:transparent}
 .dfield .dlabel{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;padding:11px 12px;

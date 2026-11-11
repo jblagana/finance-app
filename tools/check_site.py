@@ -1999,6 +1999,17 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.48 (boss: 'i accidentally x-ed maribank cc from accounts and it deleted without warning' + 'when i tap areas in the app it zooms in' + 'the x in setting should only be for settings ... go back a page only'): an account add / remove / rename is structural (structuralAdj moves only that account's overlay share, parks it in adj.goneBy for a re-add, keepAdjOnce skips the rebase); every numbers-form ✕ offers an Undo (row re-inserted while open, the saved base restored after); the top-right ✕ and Esc step back one layer (closeTop); no zoom (maximum-scale=1 + touch-action:manipulation)",
+          "function structuralAdj(oldB, newB) {" in js
+          and "if (prevBase && structuralAdj(prevBase, b)) state.keepAdjOnce = true;" in js
+          and "&& adjActive() && !state.keepAdjOnce)" in js
+          and "A.goneBy[key(r.name)] = { kind: r.kind, pb: r2(pb), cb: r2(cb), at: Date.now() };" in js
+          and "snack('Removed ' + esc(rmLabel), function () {" in js
+          and "function closeTop() {" in js
+          and "if (scb) scb.onclick = closeTop;" in js and "if (ncb) ncb.onclick = closeTop;" in js
+          and "closeCoach(); closeTop(); } });" in js
+          and "maximum-scale=1" in html and "html{touch-action:manipulation}" in html
+          and "'74.48': [" in js)
     check("v74.47 (boss: 'i use the monthly budgets section to just add categories ... suggestion on whether to link or merge' -> 'build ... with the plans on budgets/commited'): Monthly budgets is Categories (a limit is optional and only shows when set); plans carry an optional category (p_cat / pe_cat selects, fillPlanCats; addPlan + savePlanOccurrence store it plan-wide); paying a plan from its chip pre-picks it on the Add sheet; a category with a limit that plans also file under is flagged (planCatUsers) — the coach's outlook would count both",
           "<h2 class=\"nv-lab\">Categories</h2>" in js
           and "bsec('Categories')" in js
