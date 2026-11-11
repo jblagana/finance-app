@@ -1255,6 +1255,13 @@ button.plchip{border-radius:11px;min-height:44px}
 .nv-cat{flex:none;font-size:12.5px;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--card2)}
 .nv-acc{min-height:64px;gap:12px}
 .nv-over{color:var(--bad);font-weight:700} /* v74.55: a card over its limit */
+/* v74.56 (stress test, look + feel): the hero amount stays on ONE line on small phones (it wrapped "PHP" onto
+   its own line at 320px) and the small tap targets grow (the cycle toggle was 27px tall, the hero rows 29px,
+   the ✕ buttons 30px wide) */
+#heroFree.hero-v{white-space:nowrap;font-size:min(42px,10vw)}
+.cbseg button{min-height:36px}
+.cbrow.cbcards,.cbrow.cbplans{min-height:40px;align-items:center}
+.mini{min-width:40px;min-height:40px}
 .nv-acc .nv-drag{margin:0 -4px 0 -6px;padding:12px 4px;font-size:16px} /* v74.49: the reorder handle */
 .nv-acc.dragging{position:relative;z-index:20;background:var(--card2);box-shadow:0 8px 22px rgba(0,0,0,.35);border-radius:12px}
 .nv-tile{flex:none;width:38px;height:38px;border-radius:10px;background:var(--accSoft);color:var(--acc);display:flex;align-items:center;justify-content:center;font-weight:700}

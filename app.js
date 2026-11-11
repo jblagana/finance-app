@@ -10686,12 +10686,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.55, live: new Date(2026, 10, 12, 2, 51) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.56, live: new Date(2026, 10, 12, 2, 56) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.56': [
+      'Small phones: the big Left to spend number stays on one line (it used to push \u201cPHP\u201d onto its own line), and the small buttons are easier to hit \u2014 the This cycle / Next cycle switch, the Cards owed and Plan dues rows, and the \u2715 buttons.'
+    ],
     '74.55': [
       'A card over its limit is flagged: the hero pill says \u201cMaya CC over limit\u201d, and the card is marked in Cards owed and in All numbers. Logging a charge that would push a card past its limit asks first.',
       'Paying more than a card owes now shows the extra as a credit (\u201c+\u20b15,000 credit\u201d) instead of a negative amount owed, and asks first.'

@@ -1999,6 +1999,12 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.56 (stress test, look + feel): the hero amount never wraps (nowrap, min(42px,10vw)); the cycle toggle >= 36px, the hero's expandable rows >= 40px, the .mini ✕ >= 40x40",
+          "#heroFree.hero-v{white-space:nowrap;font-size:min(42px,10vw)}" in html
+          and ".cbseg button{min-height:36px}" in html
+          and ".cbrow.cbcards,.cbrow.cbplans{min-height:40px;align-items:center}" in html
+          and ".mini{min-width:40px;min-height:40px}" in html
+          and "'74.56': [" in js)
     check("v74.55 (stress test #10 #11): an over-limit card is flagged (hero pill, the Cards owed sub-row, the All numbers row) and a charge past the limit asks first; an overpaid card shows a credit (never a negative owed) and a payment past what it owes asks first",
           "var overC = (s.cards || []).filter(function (c) {" in js
           and "overC[0].name + ' over limit'" in js

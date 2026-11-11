@@ -5,7 +5,7 @@ Status: **in progress**.
 - [x] v74.53 #5 a salary logged from the chip always counts as salary + #9 the chip pre-picks the account the salary lands in + #14 a second salary in one cycle asks first
 - [x] v74.54 #6 double-tap Add saves once + #13 "1,000" is a number + #8 a future-dated expense asks first
 - [x] v74.55 #10 an overpaid card shows a credit + #11 over-the-limit warning
-- [ ] v74.56 small-phone hero + tap targets
+- [x] v74.56 small-phone hero + tap targets
 - [ ] v74.57 speed with a big ledger + the stress suite lives in tools/stress
 
 ## 2026-11-12 - "make the accounts entries draggable so i can rearrange them, their order in the add expense sheet should also update. also for version updates, keep the whats new of old version shown below the new version's" -> "(1) a drag handle on each All numbers account row reorders the accounts (Save writes base.accounts in that order; the Add sheet follows it); (2) What's new lists the current version first and the older versions below it"
