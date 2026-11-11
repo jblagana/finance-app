@@ -1,3 +1,8 @@
+# v74.38 entry (prepended to INSTRUCTIONS.md)
+## 2026-11-11 - "in add expense sheet, make the part above the horizontal line (the one below the amount field) frozen so that i can scroll up the category to keypad without losing the amount field view" -> "The Add sheet's direction buttons + the amount field (+ its live = hint right under the line) become one sticky block at the top of the sheet's scroll area; Category, Paid with, Date, Note and the keypad scroll under it. Look only"
+Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.38, sw cache finances-pwa-v74.38 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.38 (release.ps1 v74.38 all green; check_site v74.38 pin; What's-new note; checked in headless Chromium, top + scrolled with a quick sum typed)
+
 # v74.32-v74.37 batch entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-11 - "in hero card, remve "all cards". move "2 due in window" o the rame row as "Plan dues" changed to "Plan dues · 2 due" / -remove "same as the hero number" and "salary follows ... amount." / -use the layout for the test spend in the img, but still in "this cycle" card / -combine the coach note and "hey jan" contents, currently its too verbose / -for the "your expnses card" in ledger, use the layout in mockup / -for the settings, use the layout from the mockup" (+ a screenshot of the mockup's Test-a-spend box)
 -> Six releases, fastest first (all independent; LOOK ONLY unless noted):

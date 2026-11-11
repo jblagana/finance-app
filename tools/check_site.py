@@ -1998,6 +1998,11 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.38 (boss: 'in add expense sheet, make the part above the horizontal line (the one below the amount field) frozen'): the direction buttons + the amount + its = hint are one sticky block (#addTop) at the top of the Add sheet's scroll area; Category starts the scrolling part",
+          '<div class="add-top" id="addTop">' in html
+          and "#addSheet .add-top{position:sticky;top:-4px;" in html
+          and html.index('id="addTop"') < html.index('id="addModeSpend"') < html.index('id="f_amount"') < html.index('id="amtEq"') < html.index('id="f_category"')
+          and "'74.38': [" in js)
     check("v74.37 (boss: 'for the settings, use the layout from the mockup'): Settings section labels sit above the cards (h2.set-lab), Your numbers is a row list (renderSetNumRows -> the numbers editor) + 'Update them with the coach', the coach toggles are switch rows with the Worker / own key under Advanced, Backup is three buttons in a row; every control id is kept",
           '<h2 class="set-lab">Your numbers</h2>' in html
           and '<div id="setNumRows"></div>' in html

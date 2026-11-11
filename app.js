@@ -10016,12 +10016,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.37, live: new Date(2026, 10, 11, 15, 59) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.38, live: new Date(2026, 10, 11, 16, 26) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.38': [
+      'In the Add sheet, the Spend / Pay card / Money in buttons and the amount now stay at the top while you scroll down to the category, account and keypad, so you can always see the amount you are typing.'
+    ],
     '74.37': [
       'Settings has a cleaner layout: your numbers are a list you can tap to edit, the coach options are two switches (the Worker URL and your own key are under Advanced), and Backup is three buttons in a row (what goes in the JSON is folded under them).'
     ],

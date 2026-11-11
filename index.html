@@ -1189,6 +1189,10 @@ button.plchip{border-radius:11px;min-height:44px}
 .grp-body .dig.bad .dg-tag{color:var(--bad)}
 .rowchip.info{background:var(--info);color:#06142B;border:0}
 .dig.next .dg-tag{color:var(--mut)}
+/* v74.38: the Add sheet's top (direction + amount + = hint) stays put while the rest scrolls */
+#addSheet .add-top{position:sticky;top:-4px;z-index:3;background:var(--card);margin:0 -16px;padding:6px 16px 8px}
+#addSheet .add-amt{margin-top:6px}
+#addSheet .add-top .amtEq{margin-top:6px}
 /* v74.37: Settings = the mockup layout */
 #setSheet .set-lab{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:22px 4px 8px}
 #setSheet .sheet-b>.set-lab:first-child{margin-top:4px}
@@ -1674,16 +1678,22 @@ button.plchip{border-radius:11px;min-height:44px}
   <div class="sheet-b">
     <form id="addForm" autocomplete="off">
       <!-- v72.40: the sheet's direction — Spend (a card charge / a cash out) vs Pay card (the payoff: card_payment on the card's own account, so each card can be prepaid separately) vs Money in (v73.8: the visible third direction — salary / refunds / any cash inflow; the v72.45 coach chip opened it hidden) -->
+      <!-- v74.38 (boss: 'make the part above the horizontal line (the one below the amount field) frozen'):
+           the direction buttons + the amount (+ its live = hint) are ONE sticky block at the top of the
+           sheet's scroll area — Category, Paid with, Date, Note and the keypad scroll under it. -->
+      <div class="add-top" id="addTop">
       <div class="amrow">
         <button type="button" id="addModeSpend" class="amb on">Spend</button>
         <button type="button" id="addModePrepay" class="amb">Pay card</button>
         <button type="button" id="addModeMoneyin" class="amb">Money in</button>
       </div>
-      <div class="row rowpair" style="margin-top:6px">
-        <div>
-          <label for="f_amount">Amount (₱)</label>
-          <input id="f_amount" type="text" placeholder="0.00, or a quick sum like 300-125+10">
-        </div>
+      <div class="add-amt">
+        <label for="f_amount">Amount (₱)</label>
+        <input id="f_amount" type="text" placeholder="0.00, or a quick sum like 300-125+10">
+      </div>
+      <p id="amtEq" class="amtEq" style="display:none"></p>
+      </div>
+      <div class="row rowpair">
         <!-- v73.80: in Pay card mode this cell is "Pay to" (the card being
              paid — f_payto, seeded with the cards); in Spend / Money in it
              is the Category. The labels + selects swap at runtime in
@@ -1698,7 +1708,6 @@ button.plchip{border-radius:11px;min-height:44px}
           <div class="chiprow" id="f_categoryChips" data-for="f_category,f_payto" data-dots="1"></div>
         </div>
       </div>
-      <p id="amtEq" class="amtEq" style="display:none"></p>
       <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
       <div class="row rowpair">
         <div>
