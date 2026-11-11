@@ -6297,7 +6297,7 @@
       // as the Plan dues row (v73.37/v73.56) - no button-in-button,
       // collapsed by default (cbCardsOpen, in-memory, never persisted).
       var cardsOpen = !!state.cbCardsOpen;
-      rows += '<div class="cbrow cbcards" id="cbCardsRow" role="button" tabindex="0" aria-expanded="' + (cardsOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (cardsOpen ? ' open' : '') + '">\u25b8</span>Cards owed<small>' + (p.cardOwed > 0.004 ? 'all cards' : 'no cards') + '</small></div><div class="amt minus">− ' + money(p.cardOwed) + '</div></div>';
+      rows += '<div class="cbrow cbcards" id="cbCardsRow" role="button" tabindex="0" aria-expanded="' + (cardsOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (cardsOpen ? ' open' : '') + '">\u25b8</span>Cards owed' + (p.cardOwed > 0.004 ? '' : '<small>no cards</small>') + '</div><div class="amt minus">− ' + money(p.cardOwed) + '</div></div>';
       if (cardsOpen) {
         var csubs = '';
         var ces = effectiveSnap();
@@ -6319,7 +6319,7 @@
       // hero); the sub-rows come from p.planItems (the same window walk).
       if (p.planShare > 0.004) {
         var openThis = !!state.cbPlansOpen;
-        rows += '<div class="cbrow cbplans" id="cbPlansRow" role="button" tabindex="0" aria-expanded="' + (openThis ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (openThis ? ' open' : '') + '">▸</span>Plan dues<small>' + p.planCount + ' due in window</small></div><div class="amt minus">− ' + money(p.planShare) + '</div></div>';
+        rows += '<div class="cbrow cbplans" id="cbPlansRow" role="button" tabindex="0" aria-expanded="' + (openThis ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (openThis ? ' open' : '') + '">▸</span>Plan dues · ' + p.planCount + ' due</div><div class="amt minus">− ' + money(p.planShare) + '</div></div>';
         if (openThis) {
           var itemsT = p.planItems || [];
           var moreOpenT = !!state.cbPlansMore;
@@ -9887,12 +9887,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.31, live: new Date(2026, 10, 11, 15, 24) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.32, live: new Date(2026, 10, 11, 15, 47) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.32': [
+      'The hero card’s This cycle rows are tidier: Cards owed no longer says "all cards", and the plan count sits on the same line: "Plan dues · 7 due".'
+    ],
     '74.31': [
       'The Coach Fin chat now opens a little lower, matching the extra space at the top of the app.'
     ],

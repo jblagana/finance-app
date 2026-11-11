@@ -1998,6 +1998,11 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.32 (boss: 'in hero card, remove all cards; Plan dues · N due on one row'): the This-cycle Cards owed row has no 'all cards' sub-label and the Plan dues row reads 'Plan dues · N due' (no sub-label)",
+          "Cards owed' + (p.cardOwed > 0.004 ? '' : '<small>no cards</small>') + '</div>" in js
+          and "Plan dues \u00b7 ' + p.planCount + ' due</div>" in js
+          and "'all cards' : 'no cards'" not in js
+          and "'74.32': [" in js)
     check("v74.31 (boss: 'on the app bot opened, move it down the same space length added to the top'): the coach sheet starts at 66px (40 + the 26px v74.27 added to the header)",
           "#coachOv{position:fixed!important;left:0!important;right:0!important;top:66px!important;" in html
           and "top:40px!important" not in html
