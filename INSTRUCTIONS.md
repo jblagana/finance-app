@@ -1,7 +1,7 @@
 ## 2026-11-12 - "did u remove the all numbers i like that one, can u recreate the mockup to use that one. redesign the settings entirely that fits it" -> clickable prototype (canvas: ▶ Try it) -> "lets have the card rules per card in their account entries. also, the more section, are they still needed given the commited section" -> "i use the monthly budgets section to just add categories ... suggestion on whether to link or merge" -> "build the latest mockup first, with the plans on budgets/commited" -> "Build the approved prototype in releases: v74.44 Settings redesign around All numbers; v74.45 card rules per card; v74.46 More folds into Committed (salary/budget one-month moves); v74.47 Categories + plans file under a category"
 Status: **in progress** - one release per part.
 - [x] v74.44 Settings redesign (one All numbers card -> All numbers overview with ‹ Settings; a section's back -> All numbers; Coach / Your data / App as row cards; Worker & key, backup contents, Sync, What's new as small pages; every control id kept; headless Chromium: the full round trip + all four pages, dark + light)
-- [ ] v74.45 card rules per card
+- [x] v74.45 card rules per card
 - [ ] v74.46 More -> Committed
 - [ ] v74.47 Categories + plan category
 

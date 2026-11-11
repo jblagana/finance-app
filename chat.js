@@ -251,7 +251,7 @@
         // idempotent; the balance write-back must never touch the store read.
         eff.cards = (eff.cards || []).map(function (c) {
           var bal = (Number(c.balance) || 0) + (Number(byCard[c.name]) || 0);
-          var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * utilT);
+          var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * (Number(c.util_target) > 0 ? Number(c.util_target) : utilT)); // v74.45: the card's own target first
           c.prepay = r2(Math.max(0, bal - tb));
           // v72.46: live balance + utilization — the stored util_pct/balance
           // are the sheet as-of; a prepay must move them here too, or the

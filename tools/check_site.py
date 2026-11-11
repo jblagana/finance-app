@@ -1202,9 +1202,10 @@ def main():
           and "var plain = { cash: amt, free: 0, card: -amt, prepay: -amt, acc: t.account };" in js  # v72.42 plain-payoff tuple intact (keeps free = liquid - owed live); v73.53: the cashback branch sits above it; v73.83: the funder attaches to the same object
           and "'73.12': [" in js)
     check("v73.13 (user: 'why did u change my numbers' - the v73.12 upgrade zeroed the phone's overlay, 41k free -> -6,664.88): the rebase trigger (snapSig) carried the DERIVED cash.free, so the owed-model formula change altered the sig without any base edit -> boot ran a FALSE REBASE and wiped the live overlay. The sig is now the RAW inputs only (liquid|owed|prepay slice) and old 4-component stored sigs normalize to the 3-component one at boot + import - a formula change can never trip the rebase again",
-          "return [s.cash && s.cash.total, s.card_owed, s.total_prepay].join('|');" in js  # raw inputs only, no derived free
-          and "function normalizeStoredSig(sig) {" in js  # old 4-comp -> 3-comp
-          and "return p.length === 4 ? [p[0], p[2], p[3]].join('|') : sig;" in js  # drops the derived free (comp 2)
+          "return [s.cash && s.cash.total, s.card_owed].join('|');" in js  # v74.45 successor: the balances only (the prepay total moved with a limit / % edit)
+          and "function normalizeStoredSig(sig) {" in js
+          and "if (p.length === 4) return [p[0], p[2]].join('|');" in js  # drops the derived free (comp 2) + the prepay
+          and "if (p.length === 3) return [p[0], p[1]].join('|');" in js  # v74.45: the 3-comp sig drops the prepay
           and "state.adjSig = normalizeStoredSig(m.value || '');" in js  # boot normalizes the stored sig
           and "normalizeStoredSig(data.adjSig)" in js  # import normalizes too
           and "function snapSig(s) { return F.snapSig ? F.snapSig(s) : ''; }" in chatjs  # the coach reuses the app's sig (no drift)
@@ -1491,8 +1492,8 @@ def main():
           "if (t.kind === 'card_charge') return { cash: 0, free: amt, card: amt, prepay: amt, acc: t.account };" in js
           and "state.adj.prepayBy[a.acc] = r2((state.adj.prepayBy[a.acc] || 0) + a.prepay * sign);" in js
           and "target_balance: d.target_balance" in js
-          and "var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * utilT);" in js
-          and "var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * utilT);" in chatjs
+          and "var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * (Number(c.util_target) > 0 ? Number(c.util_target) : utilT));" in js  # v74.45 successor: the card's own target first
+          and "var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * (Number(c.util_target) > 0 ? Number(c.util_target) : utilT));" in chatjs
           and "var ppCards = (e.cards || []).filter(function (c) { return mentionOf(c.name, t); });" in chatjs
           and "ppCards.forEach(function (c) { lines += kv(c.name + ' prepay', money(c.prepay || 0)); });" in chatjs
           and "quote that card" in chatjs and "never the total" in chatjs)
@@ -1990,7 +1991,7 @@ def main():
           and "'74.24': [" in js)
     check("v74.25 (boss: 'in card due rows, discriminate between prepay and actual due (prepay is to keep the current balance below the util rate before billing date)'): prepay rows are their own blue kind (cls 'info', tag 'Prepay · <card>') whose line names the target balance (limit × card_util_target) and the card's next billing date; statement rows are 'Bill · <card>' + 'Statement due …' in amber/red; the Cards header says 'N bills due'; the prepay/bill handoff (v73.23) is unchanged",
           "rows.push({ cls: 'info', group: 'cards', kind: 'prepay'" in js
-          and "' (' + pctTxt25 + '% of the limit) before it bills on ' + billLbl25" in js
+          and "'% of the limit) before it bills on ' + billLbl25" in js  # v74.45 successor: the % is the card's own target
           and "Number(bc25 && bc25.billing_day)" in js
           and "label: 'Bill · ' + c.name" in js
           and "' bills' : ' bill') + ' due'" in js
@@ -1998,6 +1999,18 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.45 (boss: 'lets have the card rules per card in their account entries'): each card stores its own prepay_day + util_target (accCcRow pday / util, saved by readBaseForm); cardUtilOf / cardPrepayDayOf fall back to the shared b.prepay_day / b.card_util_target (new-card seeds); baseCardPrepays + the snapshot cards + effectiveSnap use the card's own target; insightsData keeps prepayAt per card and follows the NEAREST card prepay (unchanged when all share a day); the coach prepay rows use each card's own target + date; the All numbers Card rules section is gone",
+          "function cardUtilOf(c, b) {" in js and "function cardPrepayDayOf(c, b) {" in js
+          and "var target = cardUtilOf(c, b); // v74.45" in js
+          and "util_target: d.util_target, prepay_day: d.prepay_day }); // v74.45" in js
+          and "var ppMixed = Object.keys(ppDays).length > 1;" in js
+          and "prepayAt: prepayAt, // v74.45" in js
+          and "payload: { amount: c.prepay, date: at25.date, day: at25.day, card: c.name }" in js
+          and "nfL('Prepay by the', '<input data-r=\"pday\"" in js
+          and "if (pdv >= 1 && pdv <= 31) acc.prepay_day = pdv;" in js
+          and "h += lab('Card rules')" not in js
+          and "return [s.cash && s.cash.total, s.card_owed].join('|');" in js  # a limit / % edit is not a balance edit (no overlay wipe)
+          and "'74.45': [" in js)
     check("v74.44 (boss: 'redesign the settings entirely that fits [All numbers]' -> prototype -> 'build'): Settings = one main page (.sp-main) + four pages (data-sp worker / bk / sync / news, each with a .sp-back); Your numbers is ONE #setNumAll card that opens All numbers (openNumFromSet); All numbers' #numSetBack (shown via .from-set) goes back to Settings; a section's back (#numBack) always goes to All numbers; the v74.40 openNumAt rows are gone; every Settings control id is kept",
           '<div class="sp-main">' in html
           and all(('<div class="sp-page" data-sp="' + p + '">') in html for p in ["worker", "bk", "sync", "news"])

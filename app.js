@@ -1051,7 +1051,11 @@
   // is the bug: the overlay must survive formula changes, not just base edits.
   function snapSig(s) {
     if (!s) return '';
-    return [s.cash && s.cash.total, s.card_owed, s.total_prepay].join('|');
+    // v74.45: the BALANCES only (liquid | owed). The prepay total moved with a
+    // card's limit or use target too, so editing either looked like a balance
+    // edit and wiped every entry logged since "as of" (found driving the
+    // per-card rules: Maya CC 900 -> 2,141.80 after changing its %).
+    return [s.cash && s.cash.total, s.card_owed].join('|');
   }
   // v73.13: a stored/imported sig from the old 4-component format (total|free|
   // owed|prepay) maps to the new 3-component one by dropping the derived free
@@ -1060,7 +1064,9 @@
   function normalizeStoredSig(sig) {
     if (typeof sig !== 'string' || !sig) return sig;
     var p = sig.split('|');
-    return p.length === 4 ? [p[0], p[2], p[3]].join('|') : sig;
+    if (p.length === 4) return [p[0], p[2]].join('|'); // v73.13 format: total|free|owed|prepay
+    if (p.length === 3) return [p[0], p[1]].join('|'); // v74.45: total|owed|prepay -> total|owed (no false rebase on upgrade)
+    return sig;
   }
   function adjActive() { return !!(state.adj.cash || state.adj.free || state.adj.card); }
   // v73.45 (the 1k-phantom root cause): is the overlay FULLY empty? A delete
@@ -1811,7 +1817,7 @@
     // idempotent; the balance write-back must never touch state.
     e.cards = (e.cards || []).map(function (c) {
       var bal = (Number(c.balance) || 0) + (Number(byCard[c.name]) || 0);
-      var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * utilT);
+      var tb = (c.target_balance != null) ? Number(c.target_balance) : r2((Number(c.limit) || 0) * (Number(c.util_target) > 0 ? Number(c.util_target) : utilT)); // v74.45: the card's own target first
       c.prepay = r2(Math.max(0, bal - tb));
       // v72.46: the effective card is LIVE end-to-end — balance + utilization
       // included. The as-of row used to carry only prepay live, so after a
@@ -1945,16 +1951,29 @@
     if (!limit || limit <= 0) return 0;
     return r2(Math.max(0, balance - limit * target));
   }
+  // v74.45 (boss: 'lets have the card rules per card in their account entries'):
+  // each card keeps its OWN prepay day + card-use target; a card without its
+  // own value falls back to the shared one (b.prepay_day / b.card_util_target),
+  // which now only seeds NEW cards — so nothing moves until a card is edited.
+  function cardUtilOf(c, b) {
+    var u = Number(c && c.util_target);
+    return u > 0 ? u : (Number(b && b.card_util_target) || 0);
+  }
+  function cardPrepayDayOf(c, b) {
+    var d = Math.round(Number(c && c.prepay_day) || 0);
+    return (d >= 1 && d <= 31) ? d : (Number(b && b.prepay_day) || 14);
+  }
   function baseCardPrepays(b) {
-    var target = Number(b.card_util_target) || 0;
     var per = {}, total = 0;
     (b.accounts || []).filter(function (a) { return a.kind === 'card'; }).forEach(function (c) {
       var balance = Number(c.value) || 0, limit = Number(c.limit) || 0;
+      var target = cardUtilOf(c, b); // v74.45: the card's own target
       var d = {
         balance: balance, limit: limit,
         util_pct: limit ? r2(balance / limit * 100) : null,
         prepay: prepayAmount(balance, limit, target),
         target_balance: r2(limit * target),
+        util_target: target, prepay_day: cardPrepayDayOf(c, b), // v74.45
         due: c.due != null ? Number(c.due) : null // v73.29: the manual "due this cycle" (null = auto from balance)
       };
       per[c.name] = d;
@@ -2047,7 +2066,8 @@
     var cards = [];
     Object.keys(pp.per).forEach(function (name) {
       var d = pp.per[name];
-      cards.push({ name: name, balance: d.balance, limit: d.limit, util_pct: d.util_pct, prepay: d.prepay, target_balance: d.target_balance, due: d.due }); // v73.29: the manual "due this cycle"
+      cards.push({ name: name, balance: d.balance, limit: d.limit, util_pct: d.util_pct, prepay: d.prepay, target_balance: d.target_balance, due: d.due, // v73.29: the manual "due this cycle"
+        util_target: d.util_target, prepay_day: d.prepay_day }); // v74.45: the card's own rules
     });
     var cashAccounts = (b.accounts || []).filter(function (a) { return a.kind === 'debit'; }) // v65
       .map(function (a) { return { name: a.name, value: Number(a.value) || 0 }; });
@@ -3557,7 +3577,13 @@
   // account to Credit in the editor can add the card row right away
   function accCcRow(a) {
     a = a || {};
+    var b0 = state.base || {};
+    var pd0 = cardPrepayDayOf(a, b0), ut0 = cardUtilOf(a, b0); // v74.45: the card's own rules (the shared ones until edited)
     return '<div class="brow acc-cc">' +
+      nfL('Prepay by the', '<input data-r="pday" type="text" inputmode="numeric" value="' + pd0 + '"' +
+        ' title="pay this card down before this day to keep the bill small (1-31)">') +
+      nfL('Keep use under <small>(%)</small>', '<input data-r="util" type="text" inputmode="decimal" value="' + (ut0 > 0 ? Math.round(ut0 * 1000) / 10 : '') + '"' +
+        ' title="the share of the limit to stay under (e.g. 9.9)">') +
       nfL('Bills on the', '<input data-r="billing" type="text" inputmode="numeric" value="' + (a.billing_day != null ? a.billing_day : '') + '"' +
         ' title="billing date (day) - the statement cut for THIS card (1-31; clamps to the month length)">') +
       nfL('Due on the', '<input data-r="dued" type="text" inputmode="numeric" value="' + (a.due_day != null ? a.due_day : '') + '"' +
@@ -3837,6 +3863,8 @@
         var dd = Math.round(numVal(bk.querySelector('[data-r="dued"]'), false));
         if (lim > 0) sub += ' · ' + money(lim) + ' limit';
         if (bd > 0) sub += ' · bills ' + ordinal(bd) + (dd > 0 ? ', due ' + ordinal(dd) : '');
+        var ut1 = numVal(bk.querySelector('[data-r="util"]'), false); // v74.45: the card's own target
+        if (ut1 > 0) sub += ' · under ' + ut1 + '%';
       }
       var ch = (nm || '?').charAt(0).toUpperCase();
       ah += '<button type="button" class="nv-row nv-acc" data-nv="acc" data-nvi="' + i + '">' +
@@ -3846,14 +3874,8 @@
     }
     h += '<div class="nv-labrow"><h2 class="nv-lab">Accounts</h2><span>' + money(r2(liq)) + ' cash · ' + money(r2(owed)) + ' owed</span></div>' +
       '<section class="nv-card">' + ah + '<button type="button" class="nv-add" data-nvadd="acc">+ Add account</button></section>';
-    // Card rules
-    var ut = Number(b.card_util_target) || 0;
-    h += lab('Card rules') + '<section class="nv-card nv-pad"><div class="nv-tiles">' +
-      '<button type="button" class="nv-tile3" data-nv="cardrules"><span>Prepay by</span><b>the ' + ordinal(b.prepay_day || 14) + '</b></button>' +
-      '<button type="button" class="nv-tile3" data-nv="cardrules"><span>Cutoff</span><b>the ' + ordinal(b.cutoff_day || 15) + '</b></button>' +
-      '<button type="button" class="nv-tile3" data-nv="cardrules"><span>Bill due</span><b>the ' + ordinal(b.due_day || 5) + '</b></button></div>' +
-      nvRow('cardrules', 'Keep card use under', ut > 0 ? Math.round(ut * 1000) / 10 + '%' : 'not set') +
-      '<p class="nv-foot">New cards start with these days — each card keeps its own (tap the card above).</p></section>';
+    // v74.45: the shared Card rules section is gone — each card's rules live
+    // in its own account page (the shared values only seed new cards)
     // Budgets
     var buds = bb.querySelectorAll('#rowsBud .brow'), bh = '', nb = 0, nset = 0;
     for (var u = 0; u < buds.length; u++) {
@@ -3966,6 +3988,13 @@
         if (bd >= 1 && bd <= 31) acc.billing_day = bd;
         if (ud >= 1 && ud <= 31) acc.due_day = ud;
         if (oi && String(oi.value || '').trim() !== '') acc.due_override = numVal(oi, true);
+        // v74.45: the card's own prepay day + use target (a % in the form, a fraction stored)
+        var pdi = cc ? cc.querySelector('[data-r="pday"]') : null;
+        var uti = cc ? cc.querySelector('[data-r="util"]') : null;
+        var pdv = Math.round(numVal(pdi, true));
+        if (pdv >= 1 && pdv <= 31) acc.prepay_day = pdv;
+        var utv = numVal(uti, true);
+        if (utv > 0 && utv <= 100) acc.util_target = r2(utv / 100 * 1000) / 1000;
       }
       b.accounts.push(acc);
     });
@@ -5163,6 +5192,24 @@
       });
     });
     var prepayDay = Number(s.prepay_day) || 14;
+    // v74.45: each card has its own prepay day. prepayAt[card] = its next
+    // prepay date; the shared prepay fields follow the NEAREST card that has
+    // something to prepay. When every card shares one day (the default) this
+    // is exactly the old single-date math.
+    var prepayAt = {}, ppDays = {}, ppNear = null;
+    (s.cards || []).forEach(function (c) {
+      var pdC = Math.round(Number(c.prepay_day) || 0) || prepayDay;
+      var dtC = dayInMonth(now.getFullYear(), now.getMonth(), pdC);
+      if (dtC < parseISO(today)) dtC = dayInMonth(now.getFullYear(), now.getMonth() + 1, pdC);
+      var inC = Math.round((dtC - parseISO(today)) / 86400000);
+      prepayAt[c.name] = { day: pdC, date: localISO(dtC), in: inC };
+      if ((Number(c.prepay) || 0) > 0) {
+        ppDays[pdC] = true;
+        if (!ppNear || inC < ppNear.in) ppNear = { day: pdC, in: inC };
+      }
+    });
+    var ppMixed = Object.keys(ppDays).length > 1;
+    if (ppNear) prepayDay = ppNear.day;
     var pDay = dayInMonth(now.getFullYear(), now.getMonth(), prepayDay); // v74.10: clamped (a 30th/31st in a short month)
     if (pDay < parseISO(today)) pDay = dayInMonth(now.getFullYear(), now.getMonth() + 1, prepayDay);
     var prepayIn = Math.round((pDay - parseISO(today)) / 86400000);
@@ -5172,6 +5219,14 @@
     var pPrev = dayInMonth(now.getFullYear(), now.getMonth() - 1, prepayDay); // v74.10: clamped
     var prepayDaysAgo = Math.round((parseISO(today) - parseISO(localISO(pPrev))) / 86400000);
     var prepayAmt = r2(s.total_prepay || 0);
+    // v74.45: cards on DIFFERENT prepay days — the amount is what is due in
+    // the nearest window (the cards whose own date is within 10 days)
+    if (ppMixed) {
+      prepayAmt = r2((s.cards || []).reduce(function (sum, c) {
+        var at = prepayAt[c.name];
+        return sum + ((at && at.in <= 10) ? (Number(c.prepay) || 0) : 0);
+      }, 0));
+    }
     if (prepayIn >= 0 && prepayIn <= 6 && prepayAmt > 0) {
       items.push({ d: prepayIn, date: localISO(pDay), label: 'Card prepay (the ' + ordinal(prepayDay) + ')', amt: prepayAmt });
     }
@@ -5302,6 +5357,7 @@
       daily: cycDays > 0 ? r2(Math.max(0, freeNetI) / cycDays) : 0, // v73.16: net of the cycle's plan share; v74.11: per CYCLE day (the strip's number)
       todaySpend: r2(todaySpend), items: items,
       prepayDay: prepayDay, prepayIn: prepayIn, prepayDaysAgo: prepayDaysAgo, prepayAmt: prepayAmt,
+      prepayAt: prepayAt, // v74.45: each card's own next prepay { day, date, in }
       prepayDate: localISO(dayInMonth(now.getFullYear(), now.getMonth(), prepayDay)), // v74.10: clamped
       weekCost: weekCost, laterCount: laterCount, laterAmt: r2(laterAmt),
       monthPlans: r2(monthPlans), monthPlanCount: monthPlanCount,
@@ -7005,7 +7061,11 @@
       // its right — tapping the chip opens the Add sheet prefilled, tapping
       // the row body jumps to Money. v73.23: the tag drops "Card" (the boss:
       // 'card prepay' -> 'prepay') and the row rides the 'cards' group.
-      var pcards = ((d.s && d.s.cards) || []).filter(function (c) { return (Number(c.prepay) || 0) > 0; });
+      var pcards = ((d.s && d.s.cards) || []).filter(function (c) {
+        if (!((Number(c.prepay) || 0) > 0)) return false;
+        var at = d.prepayAt && d.prepayAt[c.name]; // v74.45: only cards whose OWN prepay date is in the window
+        return !at || (at.in >= 0 && at.in <= 10);
+      });
       pcards.sort(function (a, b) { return (Number(b.prepay) || 0) - (Number(a.prepay) || 0); });
       // v74.22 (boss: 'why is this redundant'): the row said the card and
       // the amount twice (tag + sentence) and the amount a third time on the
@@ -7031,12 +7091,15 @@
         var bill25 = dayInMonth(tn25.getFullYear(), tn25.getMonth(), bd25);
         if (bill25 < tn25) bill25 = dayInMonth(tn25.getFullYear(), tn25.getMonth() + 1, bd25);
         var billLbl25 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][bill25.getMonth()] + ' ' + bill25.getDate();
-        var tb25 = c.target_balance != null ? Number(c.target_balance) : r2((Number(c.limit) || 0) * utilT25);
+        var ut25c = Number(c.util_target) > 0 ? Number(c.util_target) : utilT25; // v74.45: the card's own target
+        var tb25 = c.target_balance != null ? Number(c.target_balance) : r2((Number(c.limit) || 0) * ut25c);
+        var at25 = (d.prepayAt && d.prepayAt[c.name]) || { date: d.prepayDate, day: d.prepayDay, in: d.prepayIn };
+        var own25 = at25.in !== d.prepayIn ? ' · prepay ' + (at25.in === 0 ? 'today' : at25.in === 1 ? 'tomorrow' : 'in ' + at25.in + ' days') : '';
         rows.push({ cls: 'info', group: 'cards', kind: 'prepay', amt: c.prepay, when: ppWhen,
           tag: 'Prepay · ' + c.name,
-          text: 'Brings it down to ' + money(tb25) + ' (' + pctTxt25 + '% of the limit) before it bills on ' + billLbl25,
+          text: 'Brings it down to ' + money(tb25) + ' (' + String(Math.round(ut25c * 1000) / 10) + '% of the limit) before it bills on ' + billLbl25 + own25,
           r: money(c.prepay),
-          act: 'prepay', payload: { amount: c.prepay, date: d.prepayDate, day: d.prepayDay, card: c.name } });
+          act: 'prepay', payload: { amount: c.prepay, date: at25.date, day: at25.day, card: c.name } });
       });
       alerts.push('prepay'); // v72.45: the remainder is still owed, whatever was logged
     }
@@ -10232,12 +10295,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.44, live: new Date(2026, 10, 12, 0, 50) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.45, live: new Date(2026, 10, 12, 0, 55) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.45': [
+      'Card rules now live in each card. Open a card in All numbers to set its own Prepay by day and Keep use under %, next to its bill and due days. The shared Card rules section is gone (its values only fill in new cards), and the coach\u2019s prepay reminders follow each card\u2019s own date and target.',
+      'Fixed: changing a card\u2019s credit limit or its % no longer resets your live numbers to the \u201cas of\u201d balances. Only a real balance change does that now.'
+    ],
     '74.44': [
       'Settings, redesigned around All numbers. Your numbers is one card (Cash, Cards owe, Salary at a glance) that opens All numbers; a section\u2019s back goes to All numbers, and All numbers\u2019 back goes to Settings.',
       'Every Settings section now has the All numbers look: rows with a \u203a. The Worker & own-key setup, what goes in the backup, Sync and What\u2019s new each open their own small page.'
@@ -12190,7 +12257,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           var cc = blk.querySelector('.acc-cc');
           if (isCard && !cc) {
             var main = blk.querySelector('.acc-main');
-            if (main) main.insertAdjacentHTML('afterend', accCcRow({ billing_day: (state.base && state.base.cutoff_day) || 15, due_day: (state.base && state.base.due_day) || 5 }));
+            if (main) main.insertAdjacentHTML('afterend', accCcRow({ billing_day: (state.base && state.base.cutoff_day) || 15, due_day: (state.base && state.base.due_day) || 5 }) /* v74.45: prepay day + target seed from the shared values inside accCcRow */);
           } else if (!isCard && cc) cc.parentNode.removeChild(cc);
         }
       });
