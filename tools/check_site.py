@@ -800,7 +800,7 @@ def main():
           and "'73.43': [" in js)
     check("v73.44 (boss: 'add the cards owed row and plan dues in this cycle, informational only — liquid deducted by the plans due and cards owed, then finally the free cash which should display the same amount as the big hero card number'): the THIS-cycle block renders the bridge rows Liquid / Cards owed / Other outflows / Plan dues / Free cash — the Free cash row is the hero's number (net = free − planShare, planShare = cyclePlanDeduction, one source), and Other outflows is the EXACT RESIDUAL (liquid − cardOwed − free) so the rows sum to the hero by construction (the overlay shifts free and liquid differently — card_charge moves free not liquid); the separate 'Free at end of this cycle' net line renders only for the peek now",
           'class="cbrow cbfree"' in js
-          and "same as the hero number" in js
+          and "same as the hero number" not in js  # v74.33 (boss: 'remove same as the hero number'): the sub-label is gone, the row stays
           and "var otherOut = r2(liquid - cardOwed - free);" in js
           and "var planShare = r2(cyclePlanDeduction());" in js
           and "planShare: planShare," in js and "otherOut: r2(otherOut)," in js
@@ -1998,6 +1998,11 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.33 (boss: 'remove same as the hero number and salary follows ... amount.'): the Free cash row has no sub-label and the cycle footnote is just 'Estimate — pace & one-offs excluded.'",
+          '<div class="lab">Free cash</div>' in js
+          and "Salary follows the target cycle" not in js
+          and "'<p class=\"cbnote\">Estimate — pace &amp; one-offs excluded.</p>'" in js
+          and "'74.33': [" in js)
     check("v74.32 (boss: 'in hero card, remove all cards; Plan dues · N due on one row'): the This-cycle Cards owed row has no 'all cards' sub-label and the Plan dues row reads 'Plan dues · N due' (no sub-label)",
           "Cards owed' + (p.cardOwed > 0.004 ? '' : '<small>no cards</small>') + '</div>" in js
           and "Plan dues \u00b7 ' + p.planCount + ' due</div>" in js

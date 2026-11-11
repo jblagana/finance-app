@@ -3,7 +3,7 @@
 -> Six releases, fastest first (all independent; LOOK ONLY unless noted):
 Status: **in progress**
 - [x] v74.32 hero This-cycle rows: the Cards owed row drops its 'all cards' sub-label; the Plan dues row reads 'Plan dues · N due' on one line (no sub-label)
-- [ ] v74.33 hero: the Free cash row drops 'same as the hero number'; the footnote drops 'Salary follows the target cycle's amount.' (keeps 'Estimate — pace & one-offs excluded.')
+- [x] v74.33 hero: the Free cash row drops 'same as the hero number'; the footnote drops 'Salary follows the target cycle's amount.' (keeps 'Estimate — pace & one-offs excluded.')
 - [ ] v74.34 Test a spend (still inside the This cycle card): the mockup box — a 'Test a spend' label over an always-visible ₱ input ('What if I buy… e.g. 2500'), ✕ once something is typed; the live line + Log button below unchanged
 - [ ] v74.35 the coach card: ONE 'Coach's note' header (face + ↻) and ONE short paragraph — the AI note when there is one, else the rule line + its main tip; the 'On repeat …' and 'Since your last check …' add-ons are no longer shown (the Plans/Cards rows below already list them)
 - [ ] v74.36 Ledger 'Your expenses': the mockup list — rows grouped by day (day label + the day's spend total), each row = tile · title · one-line sub · amount; tap a row to see its details (time, account before → after, cycle tag) and Edit / Delete; the payment-method filter becomes a chip row (category dropdown stays)

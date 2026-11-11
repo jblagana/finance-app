@@ -6332,7 +6332,7 @@
           rows += '<div class="cbsubwrap">' + subsT + '</div>';
         }
       }
-      rows += '<div class="cbrow cbfree"><div class="lab">Free cash<small>same as the hero number</small></div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
+      rows += '<div class="cbrow cbfree"><div class="lab">Free cash</div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
     }
     if (mode === 'next') {
       // v73.36 (boss: 'that 55k should CARRY OVER to the Next-cycle peek'):
@@ -6399,7 +6399,7 @@
       '</div></div>' : '') +
       '<div class="cbrows">' + rows + '</div>' +
       (mode === 'next' ? '<div class="cbnet"><span class="nl">Free at end of next cycle</span><span class="nv ' + netCls + '">' + netTxt + '</span></div>' : '') +
-      '<p class="cbnote">Estimate — pace &amp; one-offs excluded. Salary follows the target cycle\'s amount.</p>';
+      '<p class="cbnote">Estimate — pace &amp; one-offs excluded.</p>'; // v74.33: the salary sentence is gone
     // re-wire the switches (innerHTML wiped the old listeners — the v73.20
     // chip pattern: the element is rebuilt, so the handler must be re-bound)
     var segC = byId('cbSegCycle');
@@ -9887,12 +9887,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.32, live: new Date(2026, 10, 11, 15, 47) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.33, live: new Date(2026, 10, 11, 15, 49) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.33': [
+      'Two fewer lines of small print on the hero card: Free cash has no extra caption under it, and the footnote is just "Estimate \u2014 pace & one-offs excluded."'
+    ],
     '74.32': [
       'The hero card’s This cycle rows are tidier: Cards owed no longer says "all cards", and the plan count sits on the same line: "Plan dues · 7 due".'
     ],
