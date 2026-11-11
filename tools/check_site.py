@@ -1999,6 +1999,11 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.57 (stress test: a 10,000-entry ledger): findPaidTxn reads only the plan-linked entries for that occurrence (planPaidList: an index keyed planId|date, rebuilt when the list is replaced or changes length, dropped every task, cleared by the in-place edit and unlink); the stress suite lives in tools/stress",
+          "function planPaidList(planId, date) {" in js
+          and "(kind === 'prepay' ? state.txns : planPaidList(kind.planId, kind.date)).forEach(function (t) {" in js
+          and js.count("paidIdx = null; //") >= 2
+          and "'74.57': [" in js)
     check("v74.56 (stress test, look + feel): the hero amount never wraps (nowrap, min(42px,10vw)); the cycle toggle >= 36px, the hero's expandable rows >= 40px, the .mini ✕ >= 40x40",
           "#heroFree.hero-v{white-space:nowrap;font-size:min(42px,10vw)}" in html
           and ".cbseg button{min-height:36px}" in html

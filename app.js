@@ -492,6 +492,7 @@
       (state.txns || []).forEach(function (t) {
         if (t && t.planRef && String(t.planRef.planId) === String(p.id) && map[t.planRef.date]) {
           t.planRef.date = map[t.planRef.date];
+          paidIdx = null; // v74.57: the link date changed in place
           puts.push(idbPut(STORE_TX, touchRec(t)));
           touched++;
         }
@@ -2910,6 +2911,7 @@
     if (o.recordOnly) t.recordOnly = true; // v74.15: an edit keeps it record-only
     if (o.salary && t.kind === 'cash_in') t.salary = true; // v74.53: an edit keeps it the salary
     state.txns[oIdx] = t; // in place — position preserved
+    paidIdx = null; // v74.57: the plan link may have changed in place
     // v73.45: the add+remove pair nets to the edit's delta — but on an EMPTY
     // overlay (a reset already wiped it) the pair's +new leg would create a
     // phantom (the old effect is gone, so only the new one lands). Skip both
@@ -7367,12 +7369,31 @@
     box.innerHTML = svg + '</svg>';
   }
   // ---------- Phase 5: attention rows for the unified coach card ----------
+  // v74.57 (stress test: a 10,000-entry ledger took 1.3 s per add): "is this
+  // plan occurrence paid?" scanned EVERY entry once per occurrence (entries ×
+  // occurrences). The plan-linked entries are indexed once (planId|date ->
+  // entries, in ledger order) and the index rebuilds itself whenever the list
+  // is replaced or changes length, is dropped at the end of every task, and is
+  // cleared by the two in-place link changes (an edit, an unlink).
+  var paidIdx = null, paidIdxArr = null, paidIdxLen = -1;
+  function planPaidList(planId, date) {
+    if (!paidIdx || paidIdxArr !== state.txns || paidIdxLen !== state.txns.length) {
+      paidIdx = {}; paidIdxArr = state.txns; paidIdxLen = state.txns.length;
+      state.txns.forEach(function (t) {
+        if (!t.planRef) return;
+        var k = String(t.planRef.planId) + '|' + String(t.planRef.date);
+        (paidIdx[k] = paidIdx[k] || []).push(t);
+      });
+      Promise.resolve().then(function () { paidIdx = null; });
+    }
+    return paidIdx[String(planId) + '|' + String(date)] || [];
+  }
   function findPaidTxn(d, kind) {
     var out = null, pSum = 0, pLast = null, pCount = 0;
-    state.txns.forEach(function (t) {
+    (kind === 'prepay' ? state.txns : planPaidList(kind.planId, kind.date)).forEach(function (t) { // v74.57: only the linked entries for a plan
       var amt = Number(t.amount) || 0;
-      var hay = ((t.category || '') + ' ' + (t.note || '')).toLowerCase();
       if (kind === 'prepay') {
+        var hay = ((t.category || '') + ' ' + (t.note || '')).toLowerCase();
         if (String(t.date).slice(0, 7) !== d.monthPrefix) return;
         if (!/prepay|card|amex|visa|master|credit/.test(hay)) return;
         if (amt <= 0) return;
@@ -8420,6 +8441,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     }
     if (!hit) return Promise.resolve();
     delete hit.planRef;
+    paidIdx = null; // v74.57: unlinked in place
     closeSheets();
     planEditCtx = null;
     return idbPut(STORE_TX, touchRec(hit)).then(function () {
@@ -10686,12 +10708,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.56, live: new Date(2026, 10, 12, 2, 56) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.57, live: new Date(2026, 10, 12, 3, 23) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.57': [
+      'Faster with a big ledger: checking which plans are paid no longer re-reads every entry for every plan date. With 10,000 entries, logging one was taking over a second.'
+    ],
     '74.56': [
       'Small phones: the big Left to spend number stays on one line (it used to push \u201cPHP\u201d onto its own line), and the small buttons are easier to hit \u2014 the This cycle / Next cycle switch, the Cards owed and Plan dues rows, and the \u2715 buttons.'
     ],
