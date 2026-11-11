@@ -163,6 +163,9 @@
       .replace(/[\u00d7xX]/g, '*').replace(/\u00f7/g, '/')
       .replace(/[\u2212\u2013\u2014]/g, '-');
     t = t.replace(/\s+/g, ' ');
+    // v74.54 (stress test #13): "1,000" / "12,500.50" — a comma before exactly
+    // three digits is a thousands separator ("1,5" stays invalid)
+    t = t.replace(/(\d),(?=\d{3}(?!\d))/g, '$1');
     if (!t || !/^[0-9.+\-*/() ]+$/.test(t)) return null;
     var i = 0;
     function ws() { while (i < t.length && t.charAt(i) === ' ') i++; }
@@ -10677,12 +10680,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.53, live: new Date(2026, 10, 12, 2, 39) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.54, live: new Date(2026, 10, 12, 2, 46) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.54': [
+      'Fixed: a double tap on \u201cAdd expense\u201d saved the entry twice. It saves once now.',
+      'Amounts with thousands commas work: \u201c1,000\u201d or \u201c12,500.50\u201d.',
+      'An expense dated in the future asks first \u2014 it would come out of today\u2019s cash (an upcoming payment fits better as a plan in Committed).'
+    ],
     '74.53': [
       'Fixed: a salary logged from the salary chip now always counts as your salary, even when it\u2019s less (deductions, a half month) or more (a bonus). Before, anything under 90% kept the chip up and pushed \u201cmonth spent\u201d below zero.',
       'The salary chip now picks the account your last salary landed in (not just the last bank account in your list), and logging a second salary within about three weeks asks first.'
@@ -12354,6 +12362,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     }
 
     var form = byId('addForm');
+    var addBusy = false; // v74.54: a save in flight (the second tap of a double tap is ignored)
     if (form) form.onsubmit = function (e) {
       e.preventDefault();
       var amtRaw = String(byId('f_amount').value || '').trim();
@@ -12435,7 +12444,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       // being edited, its values re-log through saveTxnEdit (same id, Undo
       // restores the ORIGINAL entry); otherwise a plain add.
       var editId = editingTxn ? editingTxn.id : null;
+      // v74.54 (stress test #8): an expense dated in the future comes out of
+      // today's cash — ask (an upcoming payment belongs in Committed)
+      if (!editId && (kind === 'cash_out' || kind === 'card_charge') && String(payload.date || '') > todayISO() &&
+          !window.confirm('This is dated ' + fmtDate(payload.date) + ' \u2014 in the future. Logged now, it comes out of your cash today. Log it anyway?\n\n(For a payment that\u2019s coming up, add it as a plan in Committed instead.)')) return;
+      // v74.54 (stress test #6): a double tap saves ONCE
+      if (addBusy) return;
+      addBusy = true;
       var done = editId ? saveTxnEdit(editId, payload) : addTxn(payload);
+      done.then(function () { addBusy = false; }, function () { addBusy = false; });
       done.then(function () {
         // v73.0: the good moments — salary in, card prepaid — Coach Fin
         // smiles for a beat (the flash reverts to the real mood on its own)

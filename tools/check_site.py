@@ -1999,6 +1999,12 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.54 (stress test #6 #8 #13): the Add submit ignores a second tap while saving (addBusy); a future-dated spend asks first; evalExpr reads a comma before exactly three digits as a thousands separator",
+          "var addBusy = false;" in js and "if (addBusy) return;" in js
+          and "done.then(function () { addBusy = false; }, function () { addBusy = false; });" in js
+          and "Logged now, it comes out of your cash today. Log it anyway?" in js
+          and "t = t.replace(/(\\d),(?=\\d{3}(?!\\d))/g, '$1');" in js
+          and "'74.54': [" in js)
     check("v74.53 (stress test #5 #9 #14): an entry logged from the salary chip carries t.salary and counts as the salary at any amount (salaryIsTxn, salaryTxnIdInMonth, cycleDataFor's three scans); the chip pre-picks the account the last salary landed in (salaryAccountGuess); a second salary within 20 days asks first",
           "if (data.salary && t.kind === 'cash_in') t.salary = true;" in js
           and "return !!t.salary || a >= 0.9 * exp;" in js

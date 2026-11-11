@@ -3,7 +3,7 @@ Status: **in progress**.
 - [x] v74.51 #1 one balance edit reset every other account (per-account rebase: accountRebase + rebaseBy + effAdj; All numbers shows live balances) + #3 rename moves entries + #4 type switch asks first and no longer resets the rest
 - [x] v74.52 #2 removing an account / #12 category with entries warns + #7 back-to-back removals keep every Undo
 - [x] v74.53 #5 a salary logged from the chip always counts as salary + #9 the chip pre-picks the account the salary lands in + #14 a second salary in one cycle asks first
-- [ ] v74.54 #6 double-tap Add saves once + #13 "1,000" is a number + #8 a future-dated expense asks first
+- [x] v74.54 #6 double-tap Add saves once + #13 "1,000" is a number + #8 a future-dated expense asks first
 - [ ] v74.55 #10 an overpaid card shows a credit + #11 over-the-limit warning
 - [ ] v74.56 small-phone hero + tap targets
 - [ ] v74.57 speed with a big ledger + the stress suite lives in tools/stress
