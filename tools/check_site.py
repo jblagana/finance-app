@@ -1998,6 +1998,14 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.43 (boss: 'click any tab like salary ... back arrow that says all numbers ... shows another view of the your numbers, thats confusing' + 'it shows the green = php 500 despite no amount added yet'): a Settings row opens its part and #numBack reads Settings and returns to the Settings sheet; the Add sheet's amtEq hint is refreshed on open and after the amount is cleared on log",
+          'id="numBackT"' in html
+          and "if (numFromSet) { closeSheets(); openSheet('setSheet'); return; }" in js
+          and "numFromSet = true; numBackLabel();" in js
+          and "nbk.onclick = numBackTap;" in js
+          and "addAmtEq(byId('f_amount') || { value: '' });" in js
+          and "addAmtEq(byId('f_amount')); // v74.43" in js
+          and "'74.43': [" in js)
     check("v74.42 (boss: 'show me a mockup of the your numbers, currently it looks so cluttered' -> 'build n ship'): Your numbers opens on an overview (renderNumOverview: Basics / Accounts / Card rules / Budgets / More / Learned) drawn from the LIVE form; each row drills into ONE .ngrp of the real form (numGo / applyNumView, back = #numBack); every account is a labelled .accblk (drag + Remove act on the whole account); flipping an account to Credit adds its card row at once; readBaseForm + the Save bar are unchanged",
           'id="numOverview"' in html and 'id="numBack"' in html and 'id="numNavT"' in html
           and "#numSheet:not(.nv-grp) #baseBody{display:none}" in html
@@ -2011,7 +2019,7 @@ def main():
           and "'<div class=\"bblk accblk\" data-sec=\"acc\">'" in js
           and "function accCcRow(a) {" in js
           and "main.insertAdjacentHTML('afterend', accCcRow(" in js
-          and "if (id === 'numSheet') { numView = null; renderBaseEditor(); }" in js
+          and "if (id === 'numSheet') { numView = null; numFromSet = false; numBackLabel(); renderBaseEditor(); }" in js  # v74.43 adds the Settings-back flag
           and "'74.42': [" in js)
     check("v74.41 (boss: 'when i click restart and update, it does update but theres a toast that says new version and when i click that toast, the shell reverts to the previous version'): the sw precache fetches every shell file with cache:'reload' (never the HTTP cache, so a new version can't be cached with old files); the New-version banner shows only when an older version controls the page (not on the first install after a restart); the footer prints the version with two decimals",
           "c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))" in sw

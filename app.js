@@ -3326,9 +3326,9 @@
     sc.classList.add('show');
     sh.classList.add('show');
     openSheetEl = sh;
-    if (id === 'numSheet') { numView = null; renderBaseEditor(); } // v74.42: opens on the overview
+    if (id === 'numSheet') { numView = null; numFromSet = false; numBackLabel(); renderBaseEditor(); } // v74.42: opens on the overview
     else if (id === 'setSheet') { renderBaseStatus(); backupSelSync(); } // v72.23: show the stored "what to include"
-    else if (id === 'addSheet') renderAddChips(); // v74.24 look upgrade: the chip rows reflect the current picks
+    else if (id === 'addSheet') { renderAddChips(); addAmtEq(byId('f_amount') || { value: '' }); } // v74.24 chips; v74.43: the "= ₱…" hint follows the CURRENT amount (no stale "= ₱500")
     // a11y: move focus into the sheet (first field, else first control).
     // The Settings and Your-numbers sheets are skipped: they hold many text
     // inputs and an auto-focus would pop the keyboard on open.
@@ -3735,6 +3735,18 @@
   // is drawn from the LIVE form (so unsaved edits show), the drill-in shows
   // one .ngrp of the real form; the Save bar + readBaseForm are unchanged.
   var numView = null; // null = overview; { grp, i } = a drill-in (i = one account)
+  // v74.43: opened from a Settings row -> the back button goes back to Settings
+  // (Settings' rows ARE the overview there; a second overview was confusing)
+  var numFromSet = false;
+  function numBackLabel() {
+    var t = byId('numBackT'), b = byId('numBack');
+    if (t) t.textContent = numFromSet ? 'Settings' : 'All numbers';
+    if (b) b.setAttribute('aria-label', numFromSet ? 'Back to Settings' : 'Back to all your numbers');
+  }
+  function numBackTap() {
+    if (numFromSet) { closeSheets(); openSheet('setSheet'); return; }
+    numGo(null);
+  }
   var NUM_GRP_T = { basics: 'Basics', cardrules: 'Card rules', acc: 'Accounts', bud: 'Monthly budgets', bov: 'A different budget one month',
     sal: 'A different salary one month', debt: 'Debts', one: 'One-offs', sink: 'Savings goals', mm: 'Learned from your notes' };
   function numGo(grp, i) {
@@ -4238,6 +4250,7 @@
   function openNumAt(go) {
     if (go === 'committed') { closeSheets(); setTab('money'); return; }
     openSheet('numSheet');
+    numFromSet = true; numBackLabel(); // v74.43: back -> Settings
     // v74.42: straight into that section's page (then the v74.40 scroll + highlight)
     numGo({ cash: 'acc', cards: 'acc', salary: 'basics', asof: 'basics', carddays: 'cardrules' }[go] || null);
     setTimeout(function () {
@@ -10240,12 +10253,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.42, live: new Date(2026, 10, 11, 18, 2) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.43, live: new Date(2026, 10, 11, 23, 58) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.43': [
+      'Tapping a row in Settings \u2192 Your numbers (like Salary) opens that part, and the back button now says \u201c\u2039 Settings\u201d and takes you straight back to Settings \u2014 no second list of your numbers in between.',
+      'Fixed: after logging an amount, opening Add again no longer shows the old green \u201c= \u20b1500\u201d before you type anything.'
+    ],
     '74.42': [
       'Your numbers is redesigned: it opens on a tidy overview (basics, accounts, card rules, budgets, and a single \u201cMore\u201d card for debts, goals and one-offs), and tapping any row opens just that part with labelled fields. Each account has its own page (name, type, balance, limit, bill days). Save works the same as before.'
     ],
@@ -11931,6 +11948,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         if (!editId && (kind === 'cash_in' || kind === 'card_payment')) happyMoodFlash(1800);
         if (editId) exitTxnEdit();
         byId('f_amount').value = '';
+        addAmtEq(byId('f_amount')); // v74.43: the cleared amount clears its "= ₱…" hint too
         byId('f_category').value = '';
         byId('f_note').value = '';
         seedCategories();
@@ -12100,7 +12118,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var srb = byId('setRestart'); // v74.39: Check for update & restart
     if (srb) srb.onclick = forceShellUpdate;
     var nbk = byId('numBack'); // v74.42: drill-in -> back to the Your-numbers overview
-    if (nbk) nbk.onclick = function () { numGo(null); };
+    if (nbk) nbk.onclick = numBackTap; // v74.43: back to Settings when opened from a Settings row
     var sno = byId('setNumOpen');
     if (sno) sno.onclick = function () { openSheet('numSheet'); };
     var snc = byId('setNumCoach');
