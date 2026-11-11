@@ -1999,6 +1999,13 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.50 (boss: 'for version updates, keep the whats new of old version shown below the new version's'): renderWhatNew lists every SHELL_NOTES version up to the current one, newest first (the current one tagged), the latest WN_SHOW at first and a Show older versions button for the rest",
+          "var WN_SHOW = 10, wnAllOpen = false;" in js
+          and ".sort(function (a, b) { return parseFloat(b) - parseFloat(a); });" in js
+          and "(i === 0 ? ' <span class=\"wn-cur\">current</span>' : '')" in js
+          and "if (mb) mb.onclick = function () { wnAllOpen = true; renderWhatNew(); };" in js
+          and "#wnList .wn-h{" in html
+          and "'74.50': [" in js)
     check("v74.49 (boss: 'make the accounts entries draggable so i can rearrange them, their order in the add expense sheet should also update'): each All numbers account row has a ⠿ handle (data-drag) inside a .nv-accs list; the overview host runs the form's drag handlers; a drop mirrors the new order onto the #rowsAcc blocks (markBaseDirty -> Save writes base.accounts in that order, which seedAccounts / seedPayTo / seedPayWith follow) and the following click is swallowed (nvDragJust)",
           "'<span class=\"bdrag nv-drag\" data-drag=\"1\" aria-hidden=\"true\">" in js
           and '<div class=\"nv-accs\">' in js

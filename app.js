@@ -10513,12 +10513,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.49, live: new Date(2026, 10, 12, 1, 21) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.50, live: new Date(2026, 10, 12, 1, 22) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.50': [
+      'What\u2019s new keeps the history: the current version is on top and the older versions\u2019 notes stay below it (the latest 10, then Show older versions).'
+    ],
     '74.49': [
       'Accounts can be rearranged: in All numbers, drag an account by its \u283f handle, then Save (or just close). The Add sheet lists your accounts in that order.'
     ],
@@ -11133,6 +11136,10 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     });
     return best ? { v: best, notes: SHELL_NOTES[best] } : null;
   }
+  // v74.50 (boss: 'for version updates, keep the whats new of old version shown below the new
+  // version's'): the page lists the CURRENT version first, then the older ones below it (newest
+  // first) — the latest WN_SHOW at first, "Show older versions" opens the rest.
+  var WN_SHOW = 10, wnAllOpen = false;
   function renderWhatNew() {
     var sec = byId('wnSec');
     if (!sec) return;
@@ -11140,9 +11147,21 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (!info) { sec.style.display = 'none'; return; }
     sec.style.display = '';
     var t = byId('wnTitle');
-    if (t) t.textContent = 'What\u2019s new in v' + info.v;
+    if (t) t.textContent = 'What\u2019s new';
+    var cur = parseFloat(info.v);
+    var keys = Object.keys(SHELL_NOTES).filter(function (k) { return parseFloat(k) <= cur; })
+      .sort(function (a, b) { return parseFloat(b) - parseFloat(a); });
+    var shown = wnAllOpen ? keys : keys.slice(0, WN_SHOW);
     var ul = byId('wnList');
-    if (ul) ul.innerHTML = info.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('');
+    if (ul) {
+      ul.innerHTML = shown.map(function (k, i) {
+        return '<li class="wn-v"><div class="wn-h">v' + esc(k) + (i === 0 ? ' <span class="wn-cur">current</span>' : '') + '</div><ul>' +
+          SHELL_NOTES[k].map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul></li>';
+      }).join('') +
+      (keys.length > shown.length ? '<li class="wn-more"><button type="button" class="set-link" id="wnMore">Show ' + (keys.length - shown.length) + ' older versions</button></li>' : '');
+      var mb = byId('wnMore');
+      if (mb) mb.onclick = function () { wnAllOpen = true; renderWhatNew(); };
+    }
   }
   function shellStamp() {
     var d = SHELL_RELEASE.live;
