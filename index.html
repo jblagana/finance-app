@@ -1166,8 +1166,9 @@ button.plchip{border-radius:11px;min-height:44px}
 .confirm-m{font-size:15px}
 .confirm-box .row button{min-height:46px}
 /* ---- the boot splash ---- */
-#boot .bface{width:112px;height:112px;border-radius:28px;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
-#boot .bface svg{width:80px;height:80px}
+/* v74.30 (boss: 'in boot screen, remove that square card around the icon'): no tile behind the face — just Coach Fin, a bit bigger */
+#boot .bface{width:112px;height:112px;border-radius:0;background:none;border:0;display:flex;align-items:center;justify-content:center}
+#boot .bface svg{width:96px;height:96px}
 #boot .bname{font-size:26px;font-weight:600;letter-spacing:-.02em}
 #bootStatus{font-size:14px}
 #boot .bbar{width:140px;background:var(--s3)}

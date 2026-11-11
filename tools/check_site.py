@@ -1998,6 +1998,11 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.30 (boss: 'in boot screen, remove that square card around the icon'): the boot face has no tile (no background, border or radius) and is drawn at 96px",
+          "#boot .bface{width:112px;height:112px;border-radius:0;background:none;border:0;" in html
+          and "#boot .bface svg{width:96px;height:96px}" in html
+          and "#boot .bface{width:112px;height:112px;border-radius:28px;background:var(--card)" not in html
+          and "'74.30': [" in js)
     check("v74.29 (boss: 'when i click to open the bot, add an x button'): the coach header has a close ✕ (#chatClose, beside the i) wired to closeCoach",
           'id="chatClose" class="sheet-x"' in html
           and '<div class="chat-hbtns">' in html
