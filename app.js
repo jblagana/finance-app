@@ -10055,12 +10055,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.40, live: new Date(2026, 10, 11, 16, 54) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.41, live: new Date(2026, 10, 11, 17, 3) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.41': [
+      'Fixed: after \u201cCheck for update & restart\u201d a \u201cNew version ready\u201d banner could pop up, and tapping it brought the old version back. The banner now only shows when there really is a newer version, and updates always download fresh files so they can\u2019t slip back. The version at the bottom of Settings also shows properly now (v74.40 instead of v74.4).'
+    ],
     '74.40': [
       'In Settings \u2192 Your numbers, each row now takes you to its own part: Cash & debit and Cards jump to those accounts, Salary to the salary fields, Card days to the card day settings, As of to the date (each briefly highlighted), and Committed opens the Committed tab.'
     ],
@@ -10657,7 +10660,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var h = d.getHours(), ap = h >= 12 ? 'PM' : 'AM';
     h = h % 12 || 12;
-    return 'Fin.AI · shell v' + SHELL_RELEASE.v + ' (' + MO[d.getMonth()] + ' ' + d.getDate() +
+    // v74.41: always two decimals — the number 74.40 printed as "v74.4"
+    return 'Fin.AI · shell v' + (Number(SHELL_RELEASE.v) || 0).toFixed(2) + ' (' + MO[d.getMonth()] + ' ' + d.getDate() +
       ', ' + d.getFullYear() + ' | ' + h + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + ap + ')';
   }
   function renderFooter() {
@@ -12024,6 +12028,11 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var swAutoReloaded = false;
       navigator.serviceWorker.addEventListener('controllerchange', function () {
         if (swAutoReloaded) return;
+        // v74.41: a page that booted with NO worker (the first load after
+        // "Check for update & restart") gets its first controller from the
+        // worker that just installed the version it is already running — no
+        // reload for that, but remember it so a LATER update still auto-reloads
+        if (!swInitialController) { swInitialController = navigator.serviceWorker.controller; return; }
         if (swInitialController && navigator.serviceWorker.controller &&
             navigator.serviceWorker.controller !== swInitialController) {
           swAutoReloaded = true;
@@ -12033,11 +12042,14 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       });
       navigator.serviceWorker.register('./sw.js').then(function (reg) {
         swReg = reg;
-        if (reg.waiting) showSwToast();
+        // v74.41: the banner only when an OLDER version is running (a controller) —
+        // the first install after "Check for update & restart" (no controller) is
+        // already the new version, so no "New version ready" there
+        if (reg.waiting && navigator.serviceWorker.controller) showSwToast();
         reg.addEventListener('updatefound', function () {
           var nw = reg.installing;
           if (!nw) return;
-          showSwToast(); // v72.34: as early as possible (the precache still runs)
+          if (navigator.serviceWorker.controller) showSwToast(); // v72.34: as early as possible (the precache still runs)
           nw.addEventListener('statechange', function () {
             // installed while this page is already controlled = a new version is ready
             if (nw.state === 'installed' && navigator.serviceWorker.controller) showSwToast();

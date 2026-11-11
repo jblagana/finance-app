@@ -5,15 +5,19 @@
  * the network. The online coach is remote-only — there is no local model to
  * cache.
  */
-const CACHE = 'finances-pwa-v74.40';
+const CACHE = 'finances-pwa-v74.41';
 const SHELL = ['./', './index.html', './app.js', './chat.js', './ai.js',
   './manifest.webmanifest', './icon-192.png', './icon-512.png', './favicon.png',
   './fonts/Inter-latin.woff2', './fonts/SpaceGrotesk-latin.woff2']; // v74.24 look upgrade: self-hosted type (offline too)
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
+    // v74.41: every shell file is fetched with cache:'reload' — straight from
+    // the network, never from the browser's HTTP cache (GitHub Pages lets it
+    // keep files ~10 min), so a new version can never be cached with the OLD
+    // app.js inside it (the "tap the banner and it reverts" bug).
     caches.open(CACHE)
-      .then((c) => c.addAll(SHELL))
+      .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
 });

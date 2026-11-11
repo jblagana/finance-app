@@ -1998,6 +1998,13 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.41 (boss: 'when i click restart and update, it does update but theres a toast that says new version and when i click that toast, the shell reverts to the previous version'): the sw precache fetches every shell file with cache:'reload' (never the HTTP cache, so a new version can't be cached with old files); the New-version banner shows only when an older version controls the page (not on the first install after a restart); the footer prints the version with two decimals",
+          "c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))" in sw
+          and "if (reg.waiting && navigator.serviceWorker.controller) showSwToast();" in js
+          and "if (navigator.serviceWorker.controller) showSwToast(); // v72.34" in js
+          and "'Fin.AI · shell v' + (Number(SHELL_RELEASE.v) || 0).toFixed(2)" in js
+          and "if (!swInitialController) { swInitialController = navigator.serviceWorker.controller; return; }" in js
+          and "'74.41': [" in js)
     check("v74.40 (boss: 'each tab in the settings in your numbers open the same page'): each Your-numbers row carries its target (data-setnum = cash / cards / salary / carddays / committed / asof) and openNumAt scrolls the editor to that part + highlights it; Committed opens the Committed tab",
           "rb[i].onclick = function () { openNumAt(this.getAttribute('data-setnum')); };" in js
           and "function openNumAt(go) {" in js
