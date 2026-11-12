@@ -1,8 +1,8 @@
 ## 2026-11-12 - "should we have a central history record for every changes made such as moving or skipping or reconciling ... (should we exclude the ledger entries ...)" -> "restore, and check what to do or change in the current toast behvior" -> boards 15 / 15b + "in add sheet why is there a wide space between date row and the keypad" -> "go for 1 and 2"
-Status: **in progress** - each release below is pushed to https://github.com/jblagana/finance-app.git (main).
+Status: **done** - each release below is pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.73 (the gap: the plan-link chip moved into the amount's hint line; headless: gap 8px, keys 32 -> 39px at 390x844, keypad unmoved when the chip shows, no scroll at 390x844 / 375x667 / 430x932)
 - [x] v74.74 (Settings -> History with Restore; headless: skip / banner Undo (marked undone) / skip / reconcile / ledger delete recorded in plain words; Restore brought back the entry, LandBank's balance and the skip; the reconcile showed 'entries logged since' until the delete was restored)
-- [ ] v74.75 (toasts: change toasts hide after 8 s with a time bar, info 4 s; 'saved in History' on the first 3; the missing Undos)
+- [x] v74.75 (toasts: with Undo 8 s + a time bar, without 4 s — replaces the v73.51 'delete toasts stay until swiped' rule now that History keeps a missed change; 'saved in History' on the first 3; Unlinked + Moved-to-Committed get Undo; headless: the skip toast reads '· saved in History' and is gone after 8 s)
 
 ## 2026-11-12 - "hunt for date field and see if their ui are aligned to the group" -> "9 date fields audited headless; fixed: Add-a-plan / Edit plan / Owed date 48px vs Amount 46px, the Add sheet date pill vs Note corners, raw native boxes on All numbers as-of / the Skip card picker / Saving-for Pick a date"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).

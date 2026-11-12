@@ -839,7 +839,7 @@ def main():
           and "'73.50': [" in js)
     check("v73.51 (boss: 'if theyre delete toast, swipe to hide. if theyre add toasts, hide after 10s (unless swiped)'): snack() takes a kind — kind === 'add' schedules exactly one 10s auto-hide (swipe/Undo still beat the clock: the pointerup path clears snackTimer, and Undo's onclick does too); the default kind (delete/nudge/error) schedules NO timer and persists until swiped. The add toasts tagged 'add': new ledger entry, new plan, new owed",
           "function snack(msg, undoFn, kind, label) {" in js  # v74.15 successor: optional button label
-          and "if (kind === 'add') snackTimer = setTimeout(hideSnack, 10000);" in js
+          and "snackTimer = setTimeout(hideSnack, ms);" in js  # v74.75 retarget (board 15b, boss-approved): 8 s with Undo, 4 s without — History keeps a missed change
           and "b.onclick = function () { clearTimeout(snackTimer); hideSnack(); undoFn(); };" in js
           and "}, 'add');" in js
           and "'73.51': [" in js)
@@ -1999,6 +1999,13 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.75 (boss: 'check what to do or change in the current toast behavior' -> board 15b -> 'go'): every toast hides itself (8 s with Undo, 4 s without — most used to stay until swiped / replaced) with a time bar; the first 3 toasts for a recorded change add 'saved in History'; Unlinked and Moved-to-Committed get an Undo",
+          "var ms = undoFn ? 8000 : 4000;" in js
+          and "snackTimer = setTimeout(hideSnack, ms);" in js
+          and "if (kind === 'add') snackTimer = setTimeout(hideSnack, 10000);" not in js
+          and "@keyframes snackBar" in html and "saved in History" in js
+          and "hit.planRef = hitRef;" in js and "var madeIds = [], baseBefore = cloneObj(b0);" in js
+          and "'74.75': [" in js)
     check("v74.74 (boss: 'a central history record for every changes made such as moving or skipping or reconciling ... restore' -> boards 15/15b -> 'go'): emit runs histCheck — plan and base changes are diffed against the last snapshot and recorded with plain titles (histPlanTitle / histBaseTitle, a reconcile names its account), a change that reverses the newest entry marks it undone; ledger deletes are recorded (deleteTxnFromLog); Restore (histRestore): plans any time (asks if changed since), numbers only the latest with no entries since, a deleted entry comes back; imports / sync pulls are muted (one 'Imported a backup' entry); Settings -> History lists it all (filters, day groups, details)",
           "try { histCheck(); } catch (e) { console.warn('history', e); }" in js
           and "function histCheck() {" in js and "function histRestore(id) {" in js and "function renderHistory() {" in js

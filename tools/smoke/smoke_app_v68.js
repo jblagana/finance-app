@@ -563,21 +563,21 @@ waitReady().then(async function (F) {
   snEl.classList.add = function (c) { snAdds.push(c); return origAdd(c); };
   var scheduled = [];
   var realSetTimeout = global.setTimeout;
-  function snackWithSpy(msg, kind) {
+  function snackWithSpy(msg, kind, undoFn) {
     scheduled = [];
     global.setTimeout = function (fn, ms) { scheduled.push({ fn: fn, ms: ms }); return realSetTimeout(function () {}, 0); };
-    F.snack(msg, null, kind);
+    F.snack(msg, undoFn || null, kind);
     global.setTimeout = realSetTimeout;
   }
-  snackWithSpy('probe: delete toast — I stay until swiped');
+  snackWithSpy('probe: delete toast — 8 s with Undo', null, function () {}); // v74.75 retarget (board 15b): a change toast hides after 8 s
   ok(snAdds.indexOf('show') >= 0, 'v73.51: snack shows');
-  ok(scheduled.length === 0, 'v73.51: default (delete) toast schedules NO auto-hide — got ' + scheduled.length + ' timer(s)');
+  ok(scheduled.length === 1 && scheduled[0].ms === 8000, 'v74.75: a toast with Undo schedules one 8 s auto-hide — got ' + JSON.stringify(scheduled.map(function (s) { return s.ms; })));
   F.hideSnack(); // the swipe-up release path
   snAdds = [];
-  snackWithSpy('probe: add toast — I hide after 10s', 'add');
+  snackWithSpy('probe: info toast — 4 s', 'add'); // v74.75 retarget: no Undo = an info toast, 4 s
   ok(snAdds.indexOf('show') >= 0, 'v73.51: an add toast shows');
-  ok(scheduled.length === 1 && scheduled[0].ms === 10000,
-    'v73.51: add toast schedules exactly one 10s auto-hide — got ' + JSON.stringify(scheduled.map(function (s) { return s.ms; })));
+  ok(scheduled.length === 1 && scheduled[0].ms === 4000,
+    'v74.75: a toast without Undo schedules one 4 s auto-hide — got ' + JSON.stringify(scheduled.map(function (s) { return s.ms; })));
   F.hideSnack();
   snEl.classList.add = origAdd;
 

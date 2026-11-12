@@ -1298,6 +1298,12 @@ button.plchip{border-radius:11px;min-height:44px}
 /* ---- toasts + dialogs ---- */
 #snack{background:var(--ink);color:var(--bg);border:0;border-radius:12px;padding:8px 8px 8px 16px;min-height:48px;font-size:14px;font-weight:500;max-width:min(92vw,420px);width:auto}
 #snack button{background:var(--bg);color:var(--ink);border-radius:9px;height:36px;padding:0 14px;font-weight:700;font-size:13.5px}
+/* v74.75: the time left (the toast hides when the bar runs out) + the first-time History hint */
+#snack{position:fixed;overflow:hidden}
+#snack .snack-bar{position:absolute;left:0;bottom:0;height:3px;width:100%;background:currentColor;opacity:.22;transform-origin:left;animation-name:snackBar;animation-timing-function:linear;animation-fill-mode:forwards}
+@keyframes snackBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+#snack .snack-h{opacity:.6;font-weight:400}
+@media (prefers-reduced-motion:reduce){#snack .snack-bar{animation:none;display:none}}
 #swToast{background:var(--ink);color:var(--bg);border:0;border-radius:12px}
 #swToast button{background:var(--acc);color:var(--accInk);border-radius:9px}
 .confirm-box{border-radius:16px;border:0;background:var(--card);padding:20px 16px 16px}

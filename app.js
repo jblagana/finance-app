@@ -3702,8 +3702,18 @@
   function snack(msg, undoFn, kind, label) {
     var el = byId('snack'); if (!el) return;
     snackDragReset(); // v72.32: a fresh show starts un-dragged
-    el.innerHTML = '<span class="snack-msg">' + msg + '</span>' +
-      (undoFn ? '<button type="button" id="snackUndo">' + esc(label || 'Undo') + '</button>' : ''); // v74.15: optional label
+    // v74.75 (boss: 'check what to do or change in the current toast behavior' -> board 15b -> 'go'): a change toast
+    // (it has Undo) hides after 8 s with a thin time bar, an info toast after 4 s (they used to stay until swiped or
+    // replaced); the first 3 toasts for a change History recorded say so
+    var ms = undoFn ? 8000 : 4000;
+    var hint = '';
+    if (undoFn && Date.now() - histLastAt < 1500) {
+      var hc = 0; try { hc = Number(localStorage.getItem('fin_histHint')) || 0; } catch (e) {}
+      if (hc < 3) { hint = ' <span class="snack-h">\u00b7 saved in History</span>'; try { localStorage.setItem('fin_histHint', String(hc + 1)); } catch (e) {} }
+    }
+    el.innerHTML = '<span class="snack-msg">' + msg + hint + '</span>' +
+      (undoFn ? '<button type="button" id="snackUndo">' + esc(label || 'Undo') + '</button>' : '') + // v74.15: optional label
+      '<i class="snack-bar" style="animation-duration:' + ms + 'ms"></i>';
     if (undoFn) {
       var b = byId('snackUndo');
       if (b) b.onclick = function () { clearTimeout(snackTimer); hideSnack(); undoFn(); };
@@ -3714,8 +3724,7 @@
     // (a swipe or Undo still beats the clock); anything else (default,
     // 'delete', nudge/error) persists until swiped — the v73.50 behavior.
     clearTimeout(snackTimer);
-    snackTimer = null;
-    if (kind === 'add') snackTimer = setTimeout(hideSnack, 10000);
+    snackTimer = setTimeout(hideSnack, ms); // v74.75: every toast hides itself (8 s with Undo, 4 s without)
   }
 
   // ---------- v34: confirm dialog (destructive deletes ask first) ----------
@@ -4537,8 +4546,10 @@
     var list = legacyPlanList(b0);
     var n = legacyCount();
     confirmAsk('Move ' + n + ' item' + (n === 1 ? '' : 's') + ' to Committed as ' + list.length + ' plan' + (list.length === 1 ? '' : 's') + '? They\u2019ll show in plan-dues and the hero from now on.', 'Move', function () {
+      var madeIds = [], baseBefore = cloneObj(b0); // v74.75: the Undo
       var made = list.map(function (d) {
         var id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        madeIds.push(id);
         var p = { id: id, name: d.name, amount: d.amount, date: d.date, repeat: d.repeat, count: d.count, overrides: {}, kind: d.kind, created: new Date().toISOString() };
         state.plans.push(p);
         return idbPut(STORE_PLANS, touchRec(p));
@@ -4547,7 +4558,12 @@
       nb.debts = {}; nb.sinking = {}; nb.one_offs = {};
       Promise.all(made).then(function () { return saveBase(nb, { skipAdjustment: true }); }).then(function () {
         emit('plan'); renderBaseEditor();
-        snack('Moved ' + list.length + ' plan' + (list.length === 1 ? '' : 's') + ' to Committed');
+        snack('Moved ' + list.length + ' plan' + (list.length === 1 ? '' : 's') + ' to Committed', function () { // v74.75: back to your numbers
+          state.plans = state.plans.filter(function (x) { return madeIds.indexOf(x.id) < 0; });
+          Promise.all(madeIds.map(function (id) { return idbDel(STORE_PLANS, id); }))
+            .then(function () { return saveBase(baseBefore, { skipAdjustment: true }); })
+            .then(function () { emit('plan'); renderBaseEditor(); });
+        });
       });
     });
   }
@@ -9308,13 +9324,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       }
     }
     if (!hit) return Promise.resolve();
+    var hitRef = cloneObj(hit.planRef); // v74.75: the Undo puts the link back
     delete hit.planRef;
     paidIdx = null; // v74.57: unlinked in place
     closeSheets();
     planEditCtx = null;
     return idbPut(STORE_TX, touchRec(hit)).then(function () {
       emit('txn');
-      snack('Unlinked — the entry stays in the ledger, it just no longer counts as this plan\'s payment');
+      snack('Unlinked — the entry stays in the ledger, it just no longer counts as this plan\'s payment', function () { // v74.75
+        hit.planRef = hitRef; paidIdx = null;
+        idbPut(STORE_TX, touchRec(hit)).then(function () { emit('txn'); });
+      });
     });
   }
   // v74.14 (logic review #4): put a plan back exactly as it was (same object —
@@ -11595,12 +11615,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.74, live: new Date(2026, 10, 12, 16, 24) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.75, live: new Date(2026, 10, 12, 16, 27) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.75': [
+      'Banners tidy themselves: a banner with Undo now hides after 8 seconds (a thin bar shows the time left) and an info banner after 4 \u2014 before, most stayed until you swiped them away. If a banner goes before you tap Undo, the change is still in Settings \u2192 History.',
+      'Two banners that had no Undo now do: unlinking a plan payment, and moving old items to Committed.'
+    ],
     '74.74': [
       'New: Settings \u2192 History. Every change to your plans (added, edited, skipped, moved, removed, pot top-ups), your numbers (reconcile, balances, accounts) and settings (salary, payday, categories) is listed in plain words, newest first \u2014 with Restore to put that one thing back. Deleted ledger entries are there too, so you can bring one back later.',
       'Undo from a banner marks the change \u201cundone\u201d in History. Your numbers can be restored while nothing has been logged since; older ones stay as a record.'
