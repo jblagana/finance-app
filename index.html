@@ -769,6 +769,7 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
 #skipChooserDlg.show .confirm-box{transform:translateY(0)}
 /* v74.62: the Skip card — a bottom card in thumb reach */
 #skipChooserDlg{align-items:flex-end;padding:0}
+.cbrow .amt.goalv{color:var(--info)} /* v74.65: the hero's Saving-for row */
 #skipChooserDlg .scbox{width:100%;max-width:520px;box-sizing:border-box;background:var(--card);border-top:1px solid var(--line);border-radius:24px 24px 0 0;padding:8px 16px calc(20px + env(safe-area-inset-bottom));transform:translateY(24px);transition:transform .18s ease;max-height:92dvh;overflow:auto;overscroll-behavior:contain}
 #skipChooserDlg.show .scbox{transform:translateY(0)}
 .scgrab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 12px}
@@ -1801,6 +1802,12 @@ html.modal-open{overflow:hidden}
         <div id="p_kind_expense" class="pltab on">Expense</div>
         <div id="p_kind_goal" class="pltab">Saving for</div>
       </div>
+      <!-- v74.65: a recurring Saving-for is a pot — its optional goal (the asks stop once it is full) -->
+      <div id="p_goalWrap" style="display:none;margin-top:10px">
+        <label for="p_goal">Goal (optional) <span class="note" style="margin-left:6px">stop adding once the pot reaches it</span></label>
+        <input id="p_goal" type="text" placeholder="no goal">
+      </div>
+      <p class="note" id="p_kindNote" style="display:none;margin:8px 2px 0"></p>
       <!-- v74.47: the category a payment of this plan is filed under (the Add sheet pre-picks it) -->
       <label for="p_cat" style="margin-top:12px;display:block">Files under</label>
       <select id="p_cat"><option value="">No category</option></select>

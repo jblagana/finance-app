@@ -3,7 +3,9 @@ Status: **done** - commit (this one) pushed to https://github.com/jblagana/finan
 - [x] v74.64 (headless mobile emulation: nothing focused on open, keypad taps type the tapped key on the first open)
 
 ## 2026-11-12 - "ship the committed redesign, also show how does it look in the home tab without the clutter of growing list" -> canvas board 13 (Home, Next up = 3 rows max) -> building Committed (boards 12/12b/12c) with Saving-for
-Status: **in progress**
+Status: **in progress** - each release below is pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.65 (Saving-for money math: one-offs held in full until Lock, pots added − used with asks per date up to the goal; headless: +30,000 laptop drops free 30,000 not liquid; Lock at 28,500 moves liquid 28,500 and frees 1,500; pot capped at its 1,200 goal; Use 700 moves liquid, free unchanged)
+- [ ] v74.66 (the Committed redesign: top card, This cycle, Saving for, All plans, plan / pot detail sheets)
 
 ## 2026-11-12 - "for 'saving for' commits ... one offs appear separate from the actual dues, deducted from free cash for display, only deduct from liquid when i lock them (already bought) ... propose for the recurring 'saving for'" + "redesign the card that appears when i click the skip chip" -> boards 11/11b -> "ask to confirm, and ship all of it, including the new skip card" -> "Skip card redesigned (coach chip + the plan sheet's Skip); Saving-for one-offs are set aside in full right away (shown apart from dues), Lock = log the purchase; recurring Saving-for are pots that grow by confirmed top-ups (optional goal), Use = log a spend from the pot"
 Status: **in progress** - the Skip card shipped; Saving-for waits for the Committed redesign mockup (boards 12/12b/12c, "also redesign the commited tab ... mockup first") so it is built into the approved layout.
@@ -188,19 +190,28 @@ Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.1
 # v74.17 entry (prepended to INSTRUCTIONS.md)
 ## 2026-11-10 - "check why the app has different liquid record in hero card vs the ledger entries 'liquid x -> y'" -> (cause: the v74.02 "liquid" line read e.f, the FREE cash — it sat exactly the cards owed, P7,764, below the hero's Liquid) -> "fix it, but make sure the changes shown are only for liquid and card, no free (acceptable for old entries but should not show ever in new ones)"
 Status: **done** - commit (this one, one-commit release) with SHELL_RELEASE 74.17, sw cache finances-pwa-v74.17 pushed to https://github.com/jblagana/finance-app.git (main).
-- [x] v74.17 every new ledger row stores q = the REAL liquid total after (cash.total, the hero's Liquid); the line shows liquid + card moves only, never free; old rows (no q) keep their free line, labelled "free" — DONE. Smoke PART 44 retargeted to the real liquid + PART 57 (6) + check_site pin. Flagged, not changed: a payoff funded by ANOTHER card drops the raw liquid total in the app's model (pre-existing v72.42 rule) — the ledger now mirrors the hero exactly, so it shows that drop too
+- [x] v74.17 every new ledger row stores q = the REAL liquid total after (cash.total, the hero's Liquid); the line shows liquid + card moves only, never free; old rows (no q) keep their free line, labelled "free"
+ — DONE. Smoke PART 44 retargeted to the real liquid + PART 57 (6) + check_site pin. Flagged, not changed: a payoff funded by ANOTHER card drops the raw liquid total in the app's model (pre-existing v72.42 rule) — the ledger now mirrors the hero exactly, so it shows that drop too
 
 # v74.09+ batch (prepended to INSTRUCTIONS.md)
 ## 2026-11-10 - "hunt for bugs and redflags in the apps logic" -> (10 findings reported) -> "do all" -> "Fix all 10, one dot release each (related day-of-month fixes share one)"
 Status: **done** — v74.09..v74.16 pushed to https://github.com/jblagana/finance-app.git (main), each gated by release.ps1 (all green). Subtasks (foundational first):
-- [x] v74.09 recurring plans on the 29th-31st drift to the 28th after a short month and then lose their payment links (anchor every occurrence to the plan's own day; migrate drifted links/overrides) — DONE: anchored grid + migratePlanDrift (boot / import / pull). Smoke PART 49 (8) + check_site pin
-- [x] v74.10 paydays 29-31 silently became the 15th; card prepay days 29-31 overflow into the next month (clamp to the month's last day) — DONE (+ found on the way: the projection chart read the card's manual due AMOUNT as its due DAY, so every card dropped on the 15th; now the card's due_day). Smoke PART 50 (7), v73.57 chart expectations retargeted, check_site pin
-- [x] v74.11 the coach headline's per-day number uses the calendar month while the strip uses the pay cycle (one number: the cycle) — DONE: daily / pace / freeAfterPace all on the cycle. Smoke PART 51 (5) + check_site pin
-- [x] v74.12 the "end of month in the red" pace counts plan payments that are already deducted as plans — DONE: pace excludes planRef spends; the cycle projection counts the cycle's plans once (paid + due). Smoke PART 52 (5) + check_site pin
-- [x] v74.13 no salary set: plans stop being deducted, and any refund reads as an early salary — DONE: plans always deducted; the salary scans require a salary. Smoke PART 53 (4) + check_site pin
-- [x] v74.14 three Undo buttons do nothing (reconcile, plan edit, card clamp) + the clamp warning is overwritten — DONE: real Undo for reconcile + plan edits; the clamp note rides the Reconciled toast. Smoke PART 54 (7) + check_site pin
-- [x] v74.15 entries dated before the last reconcile are counted twice (record-only by default, "count it" on demand) — DONE, refined: PER ACCOUNT (a reconcile absorbs only the reconciled account; a Settings balance edit absorbs the changed accounts) — a first draft keyed off the global rebase clock would have wrongly frozen backdated entries on accounts that were never reconciled. Smoke PART 55 (8) + check_site pin
-- [x] v74.16 a budget double-counts the spends logged in its category — DONE: budgetCredit in effectiveSnap (+ a finished budget month is released). Smoke PART 56 (5) + check_site pin
+- [x] v74.09 recurring plans on the 29th-31st drift to the 28th after a short month and then lose their payment links (anchor every occurrence to the plan's own day; migrate drifted links/overrides)
+ — DONE: anchored grid + migratePlanDrift (boot / import / pull). Smoke PART 49 (8) + check_site pin
+- [x] v74.10 paydays 29-31 silently became the 15th; card prepay days 29-31 overflow into the next month (clamp to the month's last day)
+ — DONE (+ found on the way: the projection chart read the card's manual due AMOUNT as its due DAY, so every card dropped on the 15th; now the card's due_day). Smoke PART 50 (7), v73.57 chart expectations retargeted, check_site pin
+- [x] v74.11 the coach headline's per-day number uses the calendar month while the strip uses the pay cycle (one number: the cycle)
+ — DONE: daily / pace / freeAfterPace all on the cycle. Smoke PART 51 (5) + check_site pin
+- [x] v74.12 the "end of month in the red" pace counts plan payments that are already deducted as plans
+ — DONE: pace excludes planRef spends; the cycle projection counts the cycle's plans once (paid + due). Smoke PART 52 (5) + check_site pin
+- [x] v74.13 no salary set: plans stop being deducted, and any refund reads as an early salary
+ — DONE: plans always deducted; the salary scans require a salary. Smoke PART 53 (4) + check_site pin
+- [x] v74.14 three Undo buttons do nothing (reconcile, plan edit, card clamp) + the clamp warning is overwritten
+ — DONE: real Undo for reconcile + plan edits; the clamp note rides the Reconciled toast. Smoke PART 54 (7) + check_site pin
+- [x] v74.15 entries dated before the last reconcile are counted twice (record-only by default, "count it" on demand)
+ — DONE, refined: PER ACCOUNT (a reconcile absorbs only the reconciled account; a Settings balance edit absorbs the changed accounts) — a first draft keyed off the global rebase clock would have wrongly frozen backdated entries on accounts that were never reconciled. Smoke PART 55 (8) + check_site pin
+- [x] v74.16 a budget double-counts the spends logged in its category
+ — DONE: budgetCredit in effectiveSnap (+ a finished budget month is released). Smoke PART 56 (5) + check_site pin
 
 # v74.05+ batch (prepended to INSTRUCTIONS.md)
 ## 2026-11-10 - "do all" -> "Fix every open item from the bug hunt, one dot release each"

@@ -623,6 +623,7 @@
   // skipped) is still dead: none of those dates appear in planAllDates.
   function planRefAlive(ref) {
     if (!ref || !ref.planId) return false;
+    if (String(ref.date) === 'pot') { var pp0 = planById(ref.planId); return !!(pp0 && isGoalPlan(pp0) && pp0.repeat); } // v74.65: a spend from a pot
     for (var i = 0; i < state.plans.length; i++) {
       var p = state.plans[i];
       if (String(p.id) !== String(ref.planId)) continue;
@@ -4958,6 +4959,7 @@
   function planWindowTotal(cd) {
     var total = 0, count = 0, items = [];
     (state.plans || []).forEach(function (p) {
+      if (isGoalPlan(p)) return; // v74.65: Saving-for is set aside (savingData), never a due
       planAllDates(p).forEach(function (od) {
         if (od < cd.start || od > cd.end) return;
         var ro = resolveOccurrence(p, od); // v73.63: one-offs resolve too — a skipped one-off leaves the window total (free moves on skip/undo)
@@ -5042,7 +5044,8 @@
     // deducted twice), computed with the SAME helper as the window being
     // projected (one source, no drift between the two windows).
     var thisCd = cycleDataFor(currentCycleMonth(b, todayISO()), b);
-    var thisNet = r2(free - planWindowTotal(thisCd).total);
+    var heldS = savingData().total; // v74.65: the set-aside comes off this cycle's free and carries into the next
+    var thisNet = r2(free - planWindowTotal(thisCd).total - heldS);
     var carry = (mode === 'next') ? thisNet : 0;
     var salAdded = (mode === 'next') ? (withSal ? salExpected : 0) : 0;
     var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal);
@@ -5063,6 +5066,7 @@
       carry: r2(carry),
       liquid: r2(liquid), cardOwed: r2(cardOwed), otherOut: r2(otherOut),
       planShare: planShare,
+      savingHeld: r2(heldS), // v74.65
       salary: r2(salExpected), salaryReceived: salReceived, salaryInFree: salInFree,
       withSalary: withSal, salaryAdded: r2(salAdded),
       plans: r2(planTotal), planCount: planCount,
@@ -5085,6 +5089,112 @@
   // the snapshot's cash.free is NEVER mutated, so the overlay/rebase sig
   // (which reads cash.free) is untouched. Gated on a real salary: no
   // salary = no cycle = no deduction.
+  // v74.65 (boss: 'for one offs, they appear separate from the actual dues. they are deducted from free cash for
+  // display, and only deduct from liquid when i actually lock them (that means i already bought it)' + the recurring
+  // proposal 'a pot that grows on each date' + 'ask to confirm'): Saving-for plans are SET ASIDE, never due.
+  //   one-off: the full amount is held from free cash (display only) from the day it is added until it is bought —
+  //            Lock logs the purchase (an entry linked to the plan), which moves liquid / owed and releases the hold;
+  //            a skipped one-off holds nothing. Deleting the purchase brings the hold back.
+  //   pot (recurring): each date ASKS to add its amount (p.potAdds[date] once confirmed; Skip = the usual skip
+  //            override); "Use" logs a spend linked to the pot (planRef.date 'pot'); held = added − used. An optional
+  //            goal (p.goal) stops the asks once the pot is full. Extra top-ups ride potAdds under an 'x…' key.
+  // Display only, like the plan dues: the snapshot's free / the overlay are never touched.
+  function isGoalPlan(p) { return !!(p && p.kind === 'goal'); }
+  function planLinkedTxns(pid, potOnly) {
+    return (state.txns || []).filter(function (t) {
+      return t && t.planRef && String(t.planRef.planId) === String(pid) && (!potOnly || String(t.planRef.date) === 'pot');
+    });
+  }
+  function savingData() {
+    var today = todayISO(), out = { total: 0, items: [], pending: 0 };
+    (state.plans || []).forEach(function (p) {
+      if (!isGoalPlan(p)) return;
+      if (!p.repeat) {
+        var od = (planAllDates(p)[0]) || String(p.date);
+        var ro = resolveOccurrence(p, od);
+        var am = Number(ro && ro.amount != null ? ro.amount : p.amount) || 0;
+        var buys = planLinkedTxns(p.id);
+        var spent = 0; buys.forEach(function (t) { spent += Number(t.amount) || 0; });
+        var skip = !!(ro && ro.skip), bought = buys.length > 0;
+        var held = (skip || bought) ? 0 : r2(am);
+        out.items.push({ p: p, type: 'one', date: od, amount: r2(am), held: held, bought: bought, spent: r2(spent), skip: skip, buy: buys[buys.length - 1] || null });
+        out.total += held;
+        return;
+      }
+      var adds = 0; Object.keys(p.potAdds || {}).forEach(function (k) { adds += Number(p.potAdds[k]) || 0; });
+      var uses = 0; planLinkedTxns(p.id).forEach(function (t) { uses += Number(t.amount) || 0; });
+      var bal = r2(adds - uses), goal = Number(p.goal) || 0;
+      var full = goal > 0 && bal >= goal - 0.005;
+      var pending = [];
+      if (!full) {
+        planAllDates(p).forEach(function (d) {
+          if (d > today || (p.potAdds && p.potAdds[d] != null)) return;
+          var rd = resolveOccurrence(p, d);
+          if (rd && rd.skip) return;
+          var a = Number(rd && rd.amount != null ? rd.amount : p.amount) || 0;
+          if (goal > 0) a = Math.min(a, r2(goal - bal));
+          if (a > 0.004) pending.push({ date: d, amount: r2(a) });
+        });
+      }
+      var heldP = bal > 0 ? bal : 0;
+      out.items.push({ p: p, type: 'pot', added: r2(adds), used: r2(uses), held: heldP, goal: goal, full: full, pending: pending });
+      out.total += heldP; out.pending += pending.length;
+    });
+    out.total = r2(out.total);
+    return out;
+  }
+  function planById(pid) {
+    for (var i = 0; i < (state.plans || []).length; i++) if (String(state.plans[i].id) === String(pid)) return state.plans[i];
+    return null;
+  }
+  // a pot's top-up (confirmed ask, or an extra) — undoable
+  function potAdd(pid, key, amount) {
+    var p = planById(pid); if (!p || !(amount > 0)) return Promise.resolve();
+    p.potAdds = p.potAdds || {};
+    var prev = p.potAdds[key];
+    p.potAdds[key] = r2(amount);
+    return idbPut(STORE_PLANS, touchRec(p)).then(function () {
+      emit('plan');
+      snack('Added ' + money(amount) + ' to ' + esc(p.name || 'the pot'), function () {
+        if (prev != null) p.potAdds[key] = prev; else delete p.potAdds[key];
+        idbPut(STORE_PLANS, touchRec(p)).then(function () { emit('plan'); });
+      });
+    });
+  }
+  function potConfirm(pid, dateISO) {
+    var sd = savingData(), it = null;
+    sd.items.forEach(function (x) { if (String(x.p.id) === String(pid)) it = x; });
+    if (!it || it.type !== 'pot') return Promise.resolve();
+    var pd = null; it.pending.forEach(function (q) { if (q.date === dateISO) pd = q; });
+    if (!pd) return Promise.resolve();
+    return potAdd(pid, dateISO, pd.amount);
+  }
+  function potSkip(pid, dateISO) { return skipPlanChip(pid + '|' + dateISO); }
+  function potExtra(pid) {
+    var p = planById(pid); if (!p) return;
+    var v = window.prompt('Add how much to ' + (p.name || 'the pot') + '?', '');
+    if (v == null) return;
+    var a = evalExpr(String(v));
+    if (!(a > 0)) { alert('Enter an amount greater than 0.'); return; }
+    return potAdd(pid, 'x' + Date.now().toString(36), a);
+  }
+  // Lock (a one-off: "I bought it") / Use (a pot): the Add sheet opens linked to the plan — the entry IS the purchase
+  function goalLock(pid) {
+    var p = planById(pid); if (!p) return;
+    var od = (planAllDates(p)[0]) || String(p.date), ro = resolveOccurrence(p, od);
+    var am = Number(ro && ro.amount != null ? ro.amount : p.amount) || 0;
+    prefillAdd(am, todayISO(), p.name || 'Saving for');
+    var fc = byId('f_category'); if (p.category && fc) { fc.value = p.category; renderAddChips(); }
+    state.planLinkRef = { planId: p.id, date: od, name: (ro && ro.name) || p.name, amount: am };
+    updatePlanLinkChip();
+  }
+  function potUse(pid) {
+    var p = planById(pid); if (!p) return;
+    prefillAdd(null, todayISO(), p.name || 'From the pot');
+    var fc = byId('f_category'); if (p.category && fc) { fc.value = p.category; renderAddChips(); }
+    state.planLinkRef = { planId: p.id, date: 'pot', name: p.name, amount: 0 };
+    updatePlanLinkChip();
+  }
   function cyclePlanDeduction() {
     var cd = cycleData();
     // v74.13 (logic review #5): plans are deducted whether or not a salary is set —
@@ -5093,6 +5203,7 @@
     if (!cd) return 0;
     var total = 0;
     state.plans.forEach(function (p) {
+      if (isGoalPlan(p)) return; // v74.65: Saving-for is set aside, not due
       // v73.27: planAllDates (the WHOLE series), not planOccurrences (the
       // forward window) — an OVERDUE occurrence (past its due date, unpaid)
       // that falls in the current cycle still has to be deducted: the
@@ -5123,6 +5234,7 @@
     if (!cd) return 0;
     var total = 0;
     state.plans.forEach(function (p) {
+      if (isGoalPlan(p)) return; // v74.65
       planAllDates(p).forEach(function (od) {
         if (od < cd.start || od > cd.end) return;
         var ro = resolveOccurrence(p, od);
@@ -5581,6 +5693,7 @@
     var items = [];
     var laterCount = 0, laterAmt = 0;
     state.plans.forEach(function (p) {
+      if (isGoalPlan(p)) return; // v74.65: not a due
       var countedLater = false;
       planOccurrences(p).forEach(function (od) {
         // v73.14: the coach sees RESOLVED occurrences (forks + skips)
@@ -5636,6 +5749,7 @@
     var weekCost = r2(items.reduce(function (sum, it) { return sum + it.amt; }, 0));
     var monthPlans = 0, monthPlanCount = 0;
     state.plans.forEach(function (p) {
+      if (isGoalPlan(p)) return; // v74.65: not a due
       var occ = planOccurrences(p);
       for (var i = 0; i < occ.length; i++) {
         if (String(occ[i]).slice(0, 7) === monthPrefix) {
@@ -5751,11 +5865,12 @@
     })();
     var cycI = cycleData();
     var paceC = cycI ? cycI.pace : pace; // the cycle's spend per elapsed day (calendar pace when there is no cycle)
-    var freeNetI = r2(free - planDeduct);
+    var savingI = savingData(); // v74.65: what Saving-for holds back (one-offs in full, pots as filled)
+    var freeNetI = r2(free - planDeduct - savingI.total);
     return {
       s: s, now: now, today: today, monthPrefix: monthPrefix, daysLeft: daysLeft,
       meal: meal, free: free,
-      planDeduct: planDeduct, freeNet: r2(free - planDeduct),
+      planDeduct: planDeduct, savingHeld: savingI.total, saving: savingI, freeNet: freeNetI, // v74.65: net of the dues AND the set-aside
       daily: cycDays > 0 ? r2(Math.max(0, freeNetI) / cycDays) : 0, // v73.16: net of the cycle's plan share; v74.11: per CYCLE day (the strip's number)
       todaySpend: r2(todaySpend), items: items,
       prepayDay: prepayDay, prepayIn: prepayIn, prepayDaysAgo: prepayDaysAgo, prepayAmt: prepayAmt,
@@ -5927,7 +6042,9 @@
     el.setAttribute('aria-pressed', linked ? 'true' : 'false');
     if (linked) {
       el.className = 'plchip linked';
-      el.textContent = '✓ Linked to ' + esc(state.planLinkRef.name) + ' · ' + fmtDate(state.planLinkRef.date) + ' — tap to unlink';
+      el.textContent = String(state.planLinkRef.date) === 'pot'
+        ? '✓ From the ' + state.planLinkRef.name + ' pot — tap to unlink' // v74.65
+        : '✓ Linked to ' + esc(state.planLinkRef.name) + ' · ' + fmtDate(state.planLinkRef.date) + ' — tap to unlink';
     } else {
       el.className = 'plchip';
       el.textContent = 'Looks like ' + esc(planLinkSug.name) + ' · ' + fmtDate(planLinkSug.date) + ' — tap to link this payment';
@@ -6363,7 +6480,7 @@
     if (cyc && cyc.expected > 0) {
       var recNames = [], recAmt = 0;
       state.plans.forEach(function (p) {
-        if (!p.repeat) return;
+        if (!p.repeat || isGoalPlan(p)) return; // v74.65: a pot is not "on repeat" owed
         // v73.27: planAllDates (the whole series) — the same window +
         // paid-exclusion as cyclePlanDeduction, so an overdue occurrence in
         // the cycle counts here too (the line and the deduction agree).
@@ -7281,6 +7398,7 @@
           rows += '<div class="cbsubwrap">' + subsT + '</div>';
         }
       }
+      if (p.savingHeld > 0.004) rows += '<div class="cbrow"><div class="lab">Saving for<small>set aside</small></div><div class="amt goalv">− ' + money(p.savingHeld) + '</div></div>'; // v74.65
       rows += '<div class="cbrow cbfree"><div class="lab">Free cash</div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
     }
     if (mode === 'next') {
@@ -7425,6 +7543,7 @@
     // (a) plan dues — every occurrence in the window, live remainder (the
     // chip link is the only "paid" truth — v73.56), skips removed.
     (state.plans || []).forEach(function (p) {
+      if (isGoalPlan(p)) return; // v74.65: set aside already (inside the starting free), not a drop
       planAllDates(p).forEach(function (od) {
         if (od < today || od > end) return;
         var ro = resolveOccurrence(p, od); // v73.63: one-offs too — a skipped one-off's drop leaves the graph
@@ -7855,6 +7974,7 @@
     var cycEnd = (d.cycle && d.cycle.end) || null;
     var urgent = [];
     state.plans.forEach(function (p) {
+      if (isGoalPlan(p)) return; // v74.65: Saving-for rows live in Committed's Saving for (and the pot asks), not the due rows
       // v73.27: the OVERDUE occurrences (past their due date, unpaid) are
       // reachable only through planAllDates — planOccurrences() is a forward
       // window (first >= today). An unpaid past occurrence stays visible:
@@ -8529,6 +8649,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       kind: kind,
       created: new Date().toISOString() };
     if (data.category) p.category = String(data.category); // v74.47: files under
+    if (kind === 'goal' && rep && Number(data.goal) > 0) p.goal = r2(Number(data.goal)); // v74.65: a pot's goal
+    if (kind === 'goal' && rep) p.potAdds = {}; // v74.65: a pot starts empty (each date asks)
     state.plans.push(p);
     return idbPut(STORE_PLANS, touchRec(p)).then(function () {
       emit('plan');
@@ -10895,12 +11017,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.64, live: new Date(2026, 10, 12, 14, 24) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.65, live: new Date(2026, 10, 12, 14, 30) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.65': [
+      'Saving for works differently now. A one-off Saving-for (like a laptop) is set aside from your free cash in full the day you add it, shown on its own line \u2014 not as a due. When you buy it, Lock it: that logs the purchase, your money moves, and the set-aside is released.',
+      'A recurring Saving-for is a pot. On each date the app asks you to add the amount; what\u2019s in the pot is held back from free cash until you use it. You can give it a goal and it stops asking once it\u2019s full.',
+      'Your existing Saving-for plans follow these rules too, so your free cash may change a little.'
+    ],
     '74.64': [
       'Fixed: the first time you opened the Add sheet, the keypad could press the key above the one you tapped (until you closed and reopened it). The sheet no longer puts the cursor in the amount box on a phone — the keypad types into it as before.'
     ],
@@ -12330,6 +12457,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     skipPlanChip: skipPlanChip, // v73.28: the coach row's Skip chip (one-off skip-override; smoke drives it without a DOM)
     skipPlanOccurrence: skipPlanOccurrence, // v73.41: the edit sheet's skip button (smoke drives it; v73.63: grid-date keying + `was` carry)
     planGridDateFor: planGridDateFor, // v73.63: resolved -> grid date map (the smoke asserts the orphaned-key fix)
+  savingData: savingData, potAdd: potAdd, potConfirm: potConfirm, potSkip: potSkip, goalLock: goalLock, potUse: potUse, isGoalPlan: isGoalPlan, // v74.65
   openSkipChooser: openSkipChooser, // v73.58: the skip/move chooser (the chip now opens this; smoke drives it without a DOM)
   closeSkipChooser: closeSkipChooser, // v73.58: the chooser's cancel/scrim path
   skipChooserSkip: skipChooserSkip, // v73.58: the chooser's Skip button (skipPlanChip verbatim)
@@ -12746,6 +12874,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var repEl0 = byId('p_repeat'), cntWrap = byId('p_countWrap');
       if (repEl0 && cntWrap) repEl0.onchange = function () {
         cntWrap.style.display = repEl0.value === 'once' ? 'none' : '';
+        if (typeof kindPaint === 'function') kindPaint(); // v74.65: the pot goal follows the repeat
       };
       // v73.96: the kind toggle (Expense / Saving for) — in-memory view
       // state like planTab, default Expense. The two chips share the
@@ -12755,6 +12884,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       function kindPaint() {
         if (kindE) kindE.className = 'pltab' + (kindSel === 'expense' ? ' on' : '');
         if (kindG) kindG.className = 'pltab' + (kindSel === 'goal' ? ' on' : '');
+        // v74.65: what Saving-for means, and a pot's goal
+        var rp = byId('p_repeat'), isRep = rp && rp.value !== 'once';
+        var gw = byId('p_goalWrap'); if (gw) gw.style.display = (kindSel === 'goal' && isRep) ? '' : 'none';
+        var kn = byId('p_kindNote');
+        if (kn) {
+          kn.style.display = kindSel === 'goal' ? '' : 'none';
+          kn.textContent = isRep ? 'A pot: each date asks you to add the amount. What\u2019s in it is held back from free cash until you use it.'
+            : 'Set aside in full from free cash now. Lock it when you buy it \u2014 that logs the purchase.';
+        }
       }
       if (kindE) kindE.onclick = function () { kindSel = 'expense'; kindPaint(); };
       if (kindG) kindG.onclick = function () { kindSel = 'goal'; kindPaint(); };
@@ -12774,11 +12912,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         if (!(cntVal >= 1)) cntVal = null;
         addPlan({ name: name, amount: amount, date: byId('p_date').value || todayISO(),
           repeat: repVal === 'once' ? null : repVal, count: cntVal, kind: kindSel,
+          goal: (kindSel === 'goal' && repVal !== 'once' && byId('p_goal')) ? evalExpr(byId('p_goal').value) : null, // v74.65
           category: byId('p_cat') ? byId('p_cat').value : '' }).then(function () { // v74.47: files under
           byId('p_name').value = '';
           byId('p_amount').value = '';
           if (cntEl) cntEl.value = '';
           if (repEl) { repEl.value = 'once'; if (cntWrap) cntWrap.style.display = 'none'; }
+          if (byId('p_goal')) byId('p_goal').value = ''; // v74.65
           kindSel = 'expense'; kindPaint(); // v73.96: the toggle resets to its default
           closeSheets(); // v73.15: the sheet is done — the "Planned …" snack confirms
         });

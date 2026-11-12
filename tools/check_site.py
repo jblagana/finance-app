@@ -716,7 +716,7 @@ def main():
           # the v73.36 carry-over math: carry = this cycle's net (free − this
           # window's plans); this net = carry; next net = carry + salary
           # (with/without) − next window's plans
-          and "var thisNet = r2(free - planWindowTotal(thisCd).total);" in js
+          and "var thisNet = r2(free - planWindowTotal(thisCd).total - heldS);" in js  # v74.65 retarget: the Saving-for set-aside comes off too
           and "var carry = (mode === 'next') ? thisNet : 0;" in js
           and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal);" in js
           # ONE helper computes both windows' plan totals + the breakdown
@@ -1999,6 +1999,15 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.65 (boss: 'saving for' one-offs set aside from free for display, liquid only on lock + recurring pots that ask to confirm): isGoalPlan plans leave every due computation (planWindowTotal / cyclePlanDeduction / cyclePlanPaid / coming-up / month plans / On repeat / graph / due rows); savingData holds one-offs in full until a linked purchase (Lock) and pots at added − used (potAdds, planRef date 'pot'), asks per date until the goal; freeNet and the cycle bridge subtract it (the Saving for row)",
+          "function savingData() {" in js and "function isGoalPlan(p) { return !!(p && p.kind === 'goal'); }" in js
+          and js.count("if (isGoalPlan(p)) return;") >= 7
+          and "var freeNetI = r2(free - planDeduct - savingI.total);" in js
+          and "var thisNet = r2(free - planWindowTotal(thisCd).total - heldS);" in js
+          and "if (String(ref.date) === 'pot')" in js
+          and "function goalLock(pid) {" in js and "function potUse(pid) {" in js and "function potConfirm(pid, dateISO) {" in js
+          and 'id="p_goal"' in html
+          and "'74.65': [" in js)
     check("v74.64 (boss: 'when i first open the add sheet, the keypad is clicking the button above what im actually clicking. when i x it and reopen, its now clicking right'): openSheet no longer focuses the Add sheet's amount on a touch screen (pointer: coarse) — the focus made Safari pan the page so taps landed a key high; other devices focus with preventScroll",
           "if (id === 'addSheet' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return;" in js
           and "f[0].focus({ preventScroll: true });" in js
