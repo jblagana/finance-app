@@ -1,3 +1,7 @@
+## 2026-11-12 - "add back the quick sum placehold in the amount field, show me a mock first so were not repeating" -> canvas board 14 (A / B / C) -> "C" -> "A small 'Quick sums work: 300-125+10' line under the empty amount; hidden once you type, its space kept so the keypad stays put"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.67 (headless: hint shows on open, hides on typing, keypad top unchanged; no scroll at 390x844 / 375x667)
+
 ## 2026-11-12 - "when i first open the add sheet, the keypad is clicking the button above what im actually clicking. when i x it and reopen, its now clicking right, fix" -> "The Add sheet no longer focuses the amount on a touch screen (the focus made Safari pan the page, so taps landed a key high)"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.64 (headless mobile emulation: nothing focused on open, keypad taps type the tapped key on the first open)

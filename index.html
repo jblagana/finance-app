@@ -1399,19 +1399,21 @@ html.modal-open{overflow:hidden}
 #addSheet textarea#f_amount.long{font-size:19px;overflow-y:auto}
 /* v74.63 (boss: 'the amount placeholder, make it a lil less visible and not floating on top as a small number'):
    the placeholder is a dim 0.00 at the amount's own size, on the amount's own line */
+#addSheet .amthint{margin:3px 2px 0;font-size:11.5px;line-height:14px;height:14px;color:var(--mut);opacity:.75;white-space:nowrap;overflow:hidden}
+#addSheet .amthint.off{visibility:hidden}
 #addSheet textarea#f_amount::placeholder{font-size:inherit;font-weight:inherit;letter-spacing:inherit;color:var(--mut);opacity:.35}
 #addSheet .amtline .amtEq{align-self:flex-end;padding-bottom:4px}
 /* v74.61: the plan-link chip's slot is always there (empty when there is no match) */
-#addForm .plslot{height:38px;margin-top:8px;flex:none}
-#addForm .plslot button.plchip{margin:0;min-height:0;height:38px;padding:0 12px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#addForm .plslot{height:36px;margin-top:6px;flex:none}
+#addForm .plslot button.plchip{margin:0;min-height:0;height:36px;padding:0 12px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* v74.61: the slot's room comes out of the spacing and the keys (they still stretch on taller screens) */
 #addForm label{margin:8px 2px 4px}
 #addForm .dnrow{margin-top:10px}
 #addKeypad{margin-top:8px;gap:5px}
 #addKeypad .kops{gap:5px}
 #addKeypad .kops button{height:31px}
-#addKeypad .kmain{grid-auto-rows:minmax(34px,1fr);gap:5px}
-#addKeypad .kmain button{min-height:34px}
+#addKeypad .kmain{grid-auto-rows:minmax(32px,1fr);gap:5px}
+#addKeypad .kmain button{min-height:32px}
 #addForm .addgo{margin-top:8px}
 @media (max-height:720px){ /* short phones (iPhone SE size): the sheet takes the screen, everything a notch tighter */
 #addSheet .sheet-h{padding-top:18px;padding-bottom:6px}
@@ -1422,14 +1424,17 @@ html.modal-open{overflow:hidden}
 #addKeypad .kmain{grid-auto-rows:minmax(34px,1fr);gap:4px}
 #addKeypad .kmain button{min-height:34px}
 #addForm .addgo{margin-top:2px}
-#addForm .plslot{height:32px;margin-top:3px}
-#addForm .plslot button.plchip{height:32px;font-size:12.5px}
+#addForm .plslot{height:30px;margin-top:3px}
+#addForm .plslot button.plchip{height:30px;font-size:12.5px}
 #addForm label{margin:5px 2px 3px}
 #addForm .dnrow{margin-top:4px}
 #addKeypad{margin-top:5px}
 #addKeypad .kops button{height:28px}
-#addKeypad .kmain{grid-auto-rows:minmax(30px,1fr)}
-#addKeypad .kmain button{min-height:30px}
+#addKeypad .kmain{grid-auto-rows:minmax(27px,1fr)}
+#addKeypad .kmain button{min-height:27px}
+#addKeypad .kmain button{font-size:18px;line-height:1}
+#addKeypad .kops button{height:26px;line-height:1}
+#addSheet .amthint{margin-top:1px}
 #addSheet textarea#f_amount{height:44px}
 #addSheet textarea#f_amount.long{font-size:18px}
 #addKeypad .kmain button,#addKeypad .kops button{padding-top:0;padding-bottom:0}
@@ -2040,6 +2045,9 @@ html.modal-open{overflow:hidden}
           <textarea id="f_amount" rows="1" placeholder="0.00" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
           <p id="amtEq" class="amtEq" style="display:none"></p>
         </div>
+        <!-- v74.67 (boss: 'add back the quick sum placeholder in the amount field' -> board 14 -> 'C'): a small hint under
+             the amount while it is empty; its line is always kept (hidden, not removed) so the keypad never moves -->
+        <p id="amtHint" class="amthint">Quick sums work: 300-125+10</p>
       </div>
       </div>
       <div class="row rowpair">

@@ -1999,6 +1999,11 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.67 (boss: 'add back the quick sum placehold in the amount field, show me a mock first' -> board 14 -> 'C'): #amtHint under the amount line ('Quick sums work: 300-125+10'), hidden with visibility (.off) once the amount has text so its fixed-height line keeps the keypad still",
+          'id="amtHint" class="amthint">Quick sums work: 300-125+10</p>' in html
+          and "#addSheet .amthint.off{visibility:hidden}" in html
+          and "ah.classList.toggle('off', !!String(input.value || '').trim());" in js
+          and "'74.67': [" in js)
     check("v74.66 (boss: 'redesign the commited tab, especially the recurring ones ... texts that make it look cluttered or resize the card awkwardly' -> boards 12/12b/12c -> 'ship the committed redesign'): the top card = still to pay this cycle + a plain over-free warning; #plans = This cycle (cmCycleItems, by date, paid ticked, +N more) / Saving for (Lock, pot asks) / All plans (tabs, tidy cmRow rows with no buttons); a tap opens #planDetSheet (renderPlanDetail: Mark paid / Skip or move / dates / Edit / Delete; pot: Use / Add extra / asks / history)",
           "function cmRow(o) {" in js and "function cmCycleItems() {" in js and "function renderPlanDetail() {" in js
           and "function renderCommittedTop(cyc) {" in js and "function openPlanDetail(pid) {" in js
@@ -2033,8 +2038,8 @@ def main():
     check("v74.61 (boss: 'in add expense sheet, remove the note like \"backed - about... after this.\" and such as to keep the keypad stationary. also, if the amount is long, overflow it to another line, make sure the \"= php...\" does not cover it'): updateChargeHint always hides the line, the payoff funder note is off, the plan-link chip lives in an always-reserved .plslot; f_amount is a 1-row textarea fitted by fitAmt (19px .long on two lines, then scrolls) with Enter still submitting; the = hint is its flex sibling",
           "el.style.display = 'none'; el.innerHTML = ''; return;" in js
           and '<div class="plslot"><button type="button" id="planLinkChip"' in html
-          and "#addForm .plslot{height:38px" in html
-          and "function fitAmt(el) {" in js and "if (input && input.id === 'f_amount') fitAmt(input);" in js
+          and "#addForm .plslot{height:36px" in html
+          and "function fitAmt(el) {" in js and "if (input && input.id === 'f_amount') {" in js and "fitAmt(input);" in js  # v74.67 retarget: the block also toggles the hint
           and "#addSheet textarea#f_amount.long{font-size:19px" in html
           and "fm.requestSubmit()" in js
           and "'74.61': [" in js)

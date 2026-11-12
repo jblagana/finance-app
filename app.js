@@ -9079,7 +9079,11 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     el.scrollTop = el.scrollHeight;
   }
   function addAmtEq(input) {
-    if (input && input.id === 'f_amount') fitAmt(input);
+    if (input && input.id === 'f_amount') {
+      fitAmt(input);
+      var ah = byId('amtHint'); // v74.67: the quick-sum hint shows only while the amount is empty (its line stays)
+      if (ah && ah.classList) ah.classList.toggle('off', !!String(input.value || '').trim());
+    }
     var eq = byId('amtEq'); if (!eq) return;
     var raw = String(input.value || '').trim();
     if (!raw) { eq.style.display = 'none'; eq.className = 'amtEq'; return; }
@@ -11180,12 +11184,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.66, live: new Date(2026, 10, 12, 14, 40) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.67, live: new Date(2026, 10, 12, 14, 46) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.67': [
+      'Add sheet: a small hint under the empty amount — “Quick sums work: 300-125+10”. It hides as soon as you type, and its space stays so the keypad doesn’t move.'
+    ],
     '74.66': [
       'Committed is redesigned. The top card shows what\u2019s still to pay this cycle (and warns you plainly if it\u2019s more than your free cash). Under it: This cycle \u2014 every bill due before payday in date order, paid ones ticked; Saving for \u2014 your one-offs (Lock when you buy) and pots (Add or Skip each top-up); and All plans.',
       'Rows are tidy: no more little buttons squeezing the text. Tap any plan to open its sheet \u2014 Mark paid, Skip or move, its dates, Edit and Delete are all there. A pot\u2019s sheet has Use from pot, Add extra and its history.'
