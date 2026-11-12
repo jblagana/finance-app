@@ -1,3 +1,7 @@
+## 2026-11-12 - "hunt for date field and see if their ui are aligned to the group" -> "9 date fields audited headless; fixed: Add-a-plan / Edit plan / Owed date 48px vs Amount 46px, the Add sheet date pill vs Note corners, raw native boxes on All numbers as-of / the Skip card picker / Saving-for Pick a date"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.72 (headless re-measure: every date field matches its row's height and corners — p_date / pe_date / owed 46 = Amount 46, f_date 11px = Note 11px, as-of 46 = the other basics; as-of / skip picker / Saving-for pick show friendly dates)
+
 ## 2026-11-12 - "for the saving for one-offs, does it have option to skip/move" -> "should i instead link them to a cycle" -> "my rationale is that the cycle or date i link it to, it only subtracts starting that cycle ... im tight so im freeing up this cycle and move that deduction instead to a cycle i pick" -> "ok ship it" -> "A Saving-for one-off is set aside from its date's cycle on (until paid / dropped); Move (next cycle / in 2 cycles / a date, undoable) and Not paying for it (-> Done); the plan form picks the cycle; the next-cycle peek counts items starting then"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.71 (headless: a ₱30,000 laptop dated next cycle holds 0 now and 30,000 in the peek; Move -> This cycle holds 30,000 now; Move -> next cycle frees it; Not paying drops it and it shows under Done)

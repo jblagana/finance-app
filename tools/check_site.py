@@ -1999,6 +1999,14 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.72 (boss: 'hunt for date field and see if their ui are aligned to the group'): every .dfield date input is the text-field height (46px — was 48, taller than its Amount neighbour); the Add sheet date has 11px corners like Note (was a 999px pill); All numbers as-of, the Skip card's picker and the Saving-for Pick a date use the labelled date field / a card like their neighbours; a document change listener keeps id+'Label' labels in step",
+          ".dfield input[type=date]{height:46px;box-sizing:border-box;margin:0}" in html
+          and "#addForm .dfield .dlabel{border-radius:11px;" in html
+          and 'id="scDateWrap"' in html and 'id="scDateLabel"' in html
+          and 'id="b_asofLabel"' in js
+          and "label.scd.pdpick input{position:absolute;inset:0;" in html
+          and "if (t && t.type === 'date' && t.id && byId(t.id + 'Label')) syncDateLabel(t);" in js
+          and "'74.72': [" in js)
     check("v74.71 (boss: 'the cycle or date i link it to, it only subtracts starting that cycle ... move that deduction instead to a cycle i pick like next cycle' -> 'ok ship it'): a Saving-for one-off is held only once its date's cycle has started (goalWhen) and stays held until paid / dropped; the sheet gets Move (cycleChoices: next cycle / in 2 cycles / a date -> goalMove, undoable) and Not paying for it (the skip override -> Done); the plan form picks the cycle (p_cycChips); the next-cycle peek counts the items starting then",
           "function goalWhen(od) {" in js and "function goalMove(pid, iso) {" in js and "function cycleChoices() {" in js
           and "var held = (skip || bought || !gw.started) ? 0 : r2(am);" in js

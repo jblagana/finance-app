@@ -3927,7 +3927,8 @@
     // id / data-r, so readBaseForm and the save path are unchanged.
     h += '<div class="ngrp" data-grp="basics">';
     h += brow('<span class="bnote">your name</span><input class="grow" id="b_name" type="text" placeholder="e.g. Jan" value="' + esc(b.name || '') + '" autocomplete="off">');
-    h += brow('<span class="bnote">as of</span><input class="grow" id="b_asof" type="date" value="' + esc(b.as_of || '') + '">');
+    h += brow('<span class="bnote">as of</span><div class="dfield grow"><input id="b_asof" type="date" value="' + esc(b.as_of || '') + '">' + // v74.72: the app's date label, not the raw box
+      '<span class="dlabel' + (b.as_of ? '' : ' empty') + '" id="b_asofLabel" aria-hidden="true">' + (b.as_of ? (b.as_of === todayISO() ? 'Today' : fmtDate(b.as_of)) : 'Pick a date') + '</span></div>');
     // v71: amount fields are text inputs (full keyboard, operators typeable)
     // and numVal() evaluates quick sums like 300-125+10 on save.
     h += brow('<span class="bnote">salary / month</span><input class="grow" id="b_salary" type="text" placeholder="0.00, or a quick sum like 300-125+10" value="' + (b.salary || '') + '">');
@@ -6347,21 +6348,22 @@
         var b = ev.target && ev.target.closest ? ev.target.closest('[data-scd]') : null; if (!b) return;
         var v = b.getAttribute('data-scd'), di = byId('scDate');
         if (v === 'pick') {
-          if (di && di.style) { di.style.display = ''; try { di.focus(); if (di.showPicker) di.showPicker(); } catch (e) {} }
+          var dw = byId('scDateWrap'); if (dw && dw.style) dw.style.display = ''; // v74.72: the labelled date field
+          if (di) { syncDateLabel(di); try { di.focus(); if (di.showPicker) di.showPicker(); } catch (e) {} }
           var bs = ch.querySelectorAll('[data-scd]');
           for (var q = 0; q < bs.length; q++) bs[q].classList.toggle('on', bs[q] === b);
           scPickDate(di ? di.value : '');
           b.classList.add('on');
           return;
         }
-        if (di && di.style) di.style.display = 'none';
+        var dw2 = byId('scDateWrap'); if (dw2 && dw2.style) dw2.style.display = 'none';
         scPickDate(v);
       };
     }
     var di0 = byId('scDate');
     if (di0) {
-      if (di0.style) di0.style.display = 'none';
-      di0.onchange = function () { scPickDate(di0.value); var pk = ch && ch.querySelector ? ch.querySelector('[data-scd="pick"]') : null; if (pk) { pk.classList.add('on'); var pv = pk.querySelector('.v'); if (pv && di0.value) pv.textContent = fmtDate(di0.value); } };
+      var dw0 = byId('scDateWrap'); if (dw0 && dw0.style) dw0.style.display = 'none';
+      di0.onchange = function () { syncDateLabel(di0); scPickDate(di0.value); var pk = ch && ch.querySelector ? ch.querySelector('[data-scd="pick"]') : null; if (pk) { pk.classList.add('on'); var pv = pk.querySelector('.v'); if (pv && di0.value) pv.textContent = fmtDate(di0.value); } };
     }
     // nothing is picked until a date is tapped (scDate keeps its next-same-day default for the picker)
     var go0 = byId('scMove'); if (go0) { go0.textContent = 'Pick a date'; go0.disabled = true; }
@@ -8841,7 +8843,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
             else if (fN != null && !gw1.started && ns) eff = 'takes ' + pesoShort(am) + ' now';
             mv += '<button type="button" class="scd" data-gmoveto="' + o.iso + '"><span class="k">' + o.k + '</span><span class="v">' + cycleRange(o.c) + '</span>' + (eff ? '<span class="k">' + eff + '</span>' : '') + '</button>';
           });
-          mv += '<label class="scd pdpick"><span class="k">Pick a date</span><input type="date" data-gmovedate="1" value="' + od + '"></label>';
+          mv += '<label class="scd pdpick"><span class="k">Pick a date</span><span class="v">Other\u2026</span><input type="date" data-gmovedate="1" value="' + od + '" aria-label="Pick a date"></label>'; // v74.72
           h += '<div class="pdmove" style="display:none"><div class="pdlab">Move it to</div><div class="scdates">' + mv + '</div>' +
             (fN != null ? '<div class="pdnote">Free cash now: ' + pesoFull(fN) + '. ' + (gw1.started ? 'Moving it past this cycle frees ' + pesoFull(am) + '.' : 'Moving it into this cycle takes ' + pesoFull(am) + '.') + '</div>' : '') + '</div>';
           h += '<div class="pdnote">' + (gw1.started ? 'Held back from your free cash until you mark it paid \u2014 that logs the payment and releases it.' : 'Nothing comes off your free cash until its cycle starts; then it stays set aside until you mark it paid.') + '</div>' +
@@ -11341,12 +11343,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.71, live: new Date(2026, 10, 12, 15, 37) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.72, live: new Date(2026, 10, 12, 15, 53) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.72': [
+      'Date fields line up: Add a plan, Edit plan and Owed dates are now the same height as the Amount beside them; the Add sheet\u2019s date has the same corners as Note; and All numbers \u201cas of\u201d, the Skip card\u2019s and Saving for\u2019s \u201cPick a date\u201d show the app\u2019s friendly dates (\u201cToday\u201d, \u201cNov 12, 2026\u201d) instead of the phone\u2019s raw date box.'
+    ],
     '74.71': [
       'Saving for one-offs now start in the cycle you pick. Add one for This cycle and it comes off free cash now; pick Next cycle (or a later date) and nothing comes off until that cycle starts. Once it starts, it stays set aside until you mark it paid.',
       'Tight this cycle? Open the item and tap Move \u2014 push it to next cycle (or any date) and this cycle\u2019s free cash goes back up right away. \u201cNot paying for it\u201d drops it (with Undo) and files it under Done.',
@@ -13586,6 +13591,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         }
       });
     }
+    document.addEventListener('change', function (e) { // v74.72: a labelled date field (id + 'Label') keeps its label in step
+      var t = e && e.target; if (t && t.type === 'date' && t.id && byId(t.id + 'Label')) syncDateLabel(t);
+    });
     document.addEventListener('touchstart', lockTouchStart, { passive: true }); // v74.59: the scroll-bleed guard
     document.addEventListener('touchmove', lockTouchMove, { passive: false });
     var bsv = byId('baseSave'); // v71: the explicit "Your numbers" save button

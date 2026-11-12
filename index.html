@@ -800,7 +800,7 @@ button.scd{display:flex;flex-direction:column;align-items:flex-start;padding:11p
 button.scd .k{font-size:12px;color:var(--mut)}
 button.scd .v{font-size:15px;font-weight:600;margin-top:1px}
 button.scd.on{border-color:var(--info);background:var(--infoSoft)}
-#scDate{margin-top:8px;height:44px}
+/* v74.72: #scDate now sits in #scDateWrap (the labelled field) */
 button.act.scgo{width:100%;margin-top:12px;min-height:50px;background:var(--info);border-color:var(--info);color:#0b1430}
 button.act.scgo:disabled{opacity:.45}
 .ai-model{flex:1;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 10px;font-weight:600;font-size:12.5px}
@@ -905,6 +905,9 @@ input,select{background:var(--card2);border:1px solid transparent;border-radius:
 input:focus,select:focus{border-color:var(--accLine);box-shadow:0 0 0 3px var(--accSoft)}
 .dfield .dlabel{background:var(--card2);border:1px solid transparent;border-radius:11px;padding:12px 14px}
 .dfield:focus-within .dlabel{border-color:var(--accLine)}
+/* v74.72 (boss: 'hunt for date field and see if their ui are aligned to the group'): the hidden native date box set the
+   field's height (48px) — 2px taller than the Amount beside it. Every date field is now the text-field height. */
+.dfield input[type=date]{height:46px;box-sizing:border-box;margin:0}
 label{font-size:12px;font-weight:600;margin:12px 0 6px}
 select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239AA8B8' viewBox='0 0 16 16'><path d='M8 11L3 6h10z'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
 button.act{border-radius:11px;background:var(--acc);border-color:var(--acc);color:var(--accInk);min-height:48px;padding:12px 16px;font-size:14px;font-weight:700;font-family:inherit}
@@ -1142,8 +1145,12 @@ button.cmpill{border:0;min-height:0;width:auto;font:inherit;font-size:11px;font-
 button.cmpill.sk{background:var(--infoSoft);color:var(--info)}
 .pdmove .scdates{margin-top:2px}
 .pdmove button.scd{min-height:0}
-label.scd.pdpick{display:flex;flex-direction:column;gap:4px;padding:11px 12px;border-radius:12px;background:var(--card2);cursor:pointer}
-label.scd.pdpick input{height:34px;padding:4px 8px;font-size:13px}
+label.scd.pdpick{position:relative;display:flex;flex-direction:column;align-items:flex-start;padding:11px 12px;border-radius:12px;background:var(--card2);cursor:pointer;margin:0}
+label.scd.pdpick .k{font-size:12px;color:var(--mut)}
+label.scd.pdpick .v{font-size:15px;font-weight:600;margin-top:1px;color:var(--ink)}
+label.scd.pdpick input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;padding:0;border:0;cursor:pointer} /* v74.72: the native picker lies over the card */
+#scDateWrap{margin-top:8px}
+#baseBody .dfield .dlabel{padding:9px 10px;font-size:14px} /* v74.72: as-of matches the other All numbers fields */
 button.cmlink.pdnotpay{display:block;margin:10px auto 0;color:var(--bad);font-size:13px}
 .pcyc{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
 .pcyc .pcl{width:100%;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}
@@ -1239,8 +1246,8 @@ button.cmlink.pdnotpay{display:block;margin:10px auto 0;color:var(--bad);font-si
 #f_amount:focus{box-shadow:none;border-bottom-color:var(--accLine)}
 .amtEq{text-align:center;font-size:13px}
 #addForm select{border-radius:999px;padding:11px 32px 11px 16px;font-weight:600}
-#addForm .dfield .dlabel{border-radius:999px;padding:11px 16px;font-weight:600}
-#addForm .dfield input[type=date]{border-radius:999px}
+#addForm .dfield .dlabel{border-radius:11px;padding:11px 16px;font-weight:600} /* v74.72: same corners as the Note beside it (was a full pill) */
+#addForm .dfield input[type=date]{border-radius:11px}
 #addForm label{margin:12px 2px 6px}
 button.plchip{border-radius:11px;min-height:44px}
 /* the chip rows (renderAddChips) stand in for the selects; the keypad */
@@ -2350,7 +2357,7 @@ html.modal-open{overflow:hidden}
       <button type="button" id="scBack" class="scback">‹ Back</button>
       <div class="scq">Move it to</div>
       <div class="scdates" id="scChips"></div>
-      <input type="date" id="scDate" aria-label="Move to a later date" style="display:none">
+      <div class="dfield scdf" id="scDateWrap" style="display:none"><input type="date" id="scDate" aria-label="Move to a later date"><span class="dlabel empty" id="scDateLabel" aria-hidden="true">Pick a date</span></div>
       <div class="sceff" id="scMoveEff" style="display:none"></div>
       <button type="button" id="scMove" class="act scgo">Move</button>
       <div class="scnote" id="scMoveNote" style="display:none"></div>
