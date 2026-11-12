@@ -1,3 +1,7 @@
+## 2026-11-12 - "have u shipped everything from the latest mockup, such as in the img, or the done tab for sommited" (screenshot of board 12b) -> "Not all: the plan sheet now has the board-12b header, the ₱ due card, Coming up (changed / skipped · undo, tap to edit a date) and Before chips; All plans is Recurring | One-offs | Done (the Paid bar became Done)"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.68 (headless: Rent's sheet matches board 12b — header, Overdue ₱12,030.00 card, Coming up with skipped · undo + changed, Before chips; tabs Recurring 8 / One-offs 1 / Done 0; smoke retargeted)
+
 ## 2026-11-12 - "add back the quick sum placehold in the amount field, show me a mock first so were not repeating" -> canvas board 14 (A / B / C) -> "C" -> "A small 'Quick sums work: 300-125+10' line under the empty amount; hidden once you type, its space kept so the keypad stays put"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.67 (headless: hint shows on open, hides on typing, keypad top unchanged; no scroll at 390x844 / 375x667)

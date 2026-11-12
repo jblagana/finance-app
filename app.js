@@ -8263,7 +8263,7 @@
   // keep their ✕ (it's a single date — nothing to nuke by accident).
   var OCC_CAP = 5;
   var planOpen = {}; // planId -> true while the series is expanded
-var planTab = 'one'; // v73.60: the plans list's tab — 'one' (one-offs, DEFAULT) | 'rec' (recurring)
+var planTab = 'rec'; // v73.60: the plans list's tab; v74.68 (board 12): 'rec' (Recurring, DEFAULT) | 'one' (One-offs) | 'done' (Done)
 var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N older" second level is open (in-memory, like cbPlansMore)
 var paidOpen = false; // v73.99: the Committed tab's Paid bar — collapsed by default, in-memory (resets on reload, like the hero's Cards row)
 var testSpendOpen = false; // v74.00: the "Test a spend" row's expanded state (resting = the quiet dashed line) — in-memory, resets on reload
@@ -8635,28 +8635,39 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     }
     // ---- ALL PLANS ----
     html += '<div class="cmsec"><span class="l">All plans</span><span class="r">' + all.length + '</span></div><div class="cmcard cmall">';
+    // v74.68 (board 12): Recurring | One-offs | Done — Done collects fully paid one-offs, bought Saving-for one-offs and
+    // recurring plans with nothing left (all paid); the old Paid bar became this tab
+    var recDone = function (p) {
+      if (isGoalPlan(p) || planOccurrences(p).length) return false;
+      return !planAllDates(p).some(function (d) {
+        var r = resolveOccurrence(p, d); if (r && r.skip) return false;
+        var a = Number(r && r.amount != null ? r.amount : p.amount) || 0;
+        var pp = findPaidTxn({}, { planId: p.id, date: d, name: r ? r.name : p.name, amount: a });
+        return (Number(pp && pp.amount) || 0) < a - 0.005;
+      });
+    };
+    var oneBought = function (p) { return isGoalPlan(p) && planLinkedTxns(p.id).length > 0; };
+    var recLive = recs.filter(function (p) { return !recDone(p); });
+    var oneLive = liveOneoffs.filter(function (p) { return !oneBought(p); });
+    var doneList = paidOneoffs.concat(liveOneoffs.filter(oneBought)).concat(recs.filter(recDone));
     html += '<div class="pltabs">' +
-      '<div class="pltab' + (planTab === 'one' ? ' on' : '') + '" data-pltab="one">One-offs<span class="plcnt">' + oneoffs.length + '</span></div>' +
-      '<div class="pltab' + (planTab === 'rec' ? ' on' : '') + '" data-pltab="rec">Recurring<span class="plcnt">' + recs.length + '</span></div>' +
+      '<div class="pltab' + (planTab === 'rec' ? ' on' : '') + '" data-pltab="rec">Recurring<span class="plcnt">' + recLive.length + '</span></div>' +
+      '<div class="pltab' + (planTab === 'one' ? ' on' : '') + '" data-pltab="one">One-offs<span class="plcnt">' + oneLive.length + '</span></div>' +
+      '<div class="pltab' + (planTab === 'done' ? ' on' : '') + '" data-pltab="done">Done<span class="plcnt">' + doneList.length + '</span></div>' +
       '</div>';
-    html += listHTML(planTab === 'one' ? liveOneoffs : recs);
-    if (planTab === 'one' && paidOneoffs.length) {
-      var paidTotal = 0;
-      paidOneoffs.forEach(function (p) { paidTotal += Number(p.amount) || 0; });
-      html += '<div class="paidbar' + (paidOpen ? ' open' : '') + '" data-paidbar="1">' +
-        '<span class="lab">Paid</span>' +
-        '<span><span class="tot">' + paidOneoffs.length + ' · ₱ ' + (Math.round(paidTotal * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span><span class="chev">▸</span></span>' +
-        '</div><div class="paidrows' + (paidOpen ? ' open' : '') + '">';
-      paidOneoffs.forEach(function (p) { html += planHTML(p, {}); });
-      html += '</div>';
+    if (planTab === 'done') {
+      doneList.forEach(function (p) { html += planHTML(p, {}); });
+      if (!doneList.length) html += '<p class="note" style="margin:8px 2px">Nothing done yet — paid one-offs and finished plans land here.</p>';
+    } else {
+      var paneL = planTab === 'one' ? oneLive : recLive;
+      html += listHTML(paneL);
+      if (!paneL.length) html += '<p class="note" style="margin:8px 2px">' + (planTab === 'one' ? 'No one-offs.' : 'No recurring plans.') + '</p>';
     }
-    if (planTab === 'one' && !oneoffs.length) html += '<p class="note" style="margin:8px 2px">No one-offs.</p>';
     html += '</div>';
     el.innerHTML = html;
     // ---- taps ----
     var q1 = function (sel, fn) { var ns = el.querySelectorAll(sel); for (var i = 0; i < ns.length; i++) ns[i].onclick = fn; };
     q1('[data-pltab]', function () { planTab = this.getAttribute('data-pltab'); renderPlans(); });
-    q1('[data-paidbar]', function () { paidOpen = !paidOpen; renderPlans(); });
     q1('[data-cmmore]', function () { cmCycleAll = !cmCycleAll; renderPlans(); });
     q1('[data-cmplan]', function () { openPlanDetail(this.getAttribute('data-cmplan')); });
     q1('[data-grp]', function () { openPlanDetail(this.getAttribute('data-grp')); });
@@ -8671,6 +8682,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     renderPlanDetail();
     openSheet('planDetSheet');
   }
+  // v74.68 (boss: 'have u shipped everything from the latest mockup, such as in the img, or the done tab'): the sheet
+  // now matches board 12b — a header (tile · name · one line), the due card in ₱, COMING UP (the next dates: changed /
+  // skipped · undo, tap one to edit it) and BEFORE (paid ✓ / partial ◐ / unpaid / skipped chips)
+  function pesoFull(v) { return money(Number(v) || 0).replace('PHP ', '₱'); }
+  function pesoShort(v) { var n = Number(v) || 0; return '₱' + (Math.abs(n - Math.round(n)) < 0.005 ? Math.round(n).toLocaleString('en-US') : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })); }
+  function mdShort(iso) { var d = parseISO(String(iso)); return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()] + ' ' + d.getDate(); }
+  function wdShort(iso) { return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][parseISO(String(iso)).getDay()] + ', ' + mdShort(iso); }
+  function pdHead(p, sub, tile) {
+    return '<div class="pdhead" data-grp="' + esc(p.id) + '"><span class="cmtile ' + (tile || 't-a') + '" aria-hidden="true">' + cmInitial(p.name) + '</span>' +
+      '<div class="pdht"><div class="pdn">' + esc(p.name || 'Plan') + '</div><div class="pdmeta">' + sub + '</div></div></div>';
+  }
   function pdCard(k, amtTxt, side, sideCls, btns) {
     return '<div class="pdnext"><div class="k">' + k + '</div><div class="v"><b>' + amtTxt + '</b><span class="' + (sideCls || '') + '">' + side + '</span></div>' +
       (btns ? '<div class="pdacts">' + btns + '</div>' : '') + '</div>';
@@ -8681,13 +8703,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (!p) { body.innerHTML = ''; return; }
     var tEl = byId('pdTitle'); if (tEl) tEl.textContent = p.name || 'Plan';
     var today = todayISO(), h = '', editD = String(p.date);
-    var amtOf = function (v) { return money(Number(v) || 0); };
+    var amtOf = function (v) { return pesoFull(v); };
     if (isGoalPlan(p) && p.repeat) {
       // a pot
       var it = null; savingData().items.forEach(function (x) { if (String(x.p.id) === String(p.id)) it = x; });
       it = it || { held: 0, goal: 0, pending: [], added: 0, used: 0 };
       var per = { daily: 'daily', weekly: 'weekly', annual: 'yearly' }[p.repeat] || 'monthly';
-      h += '<div class="pdmeta" data-grp="' + esc(p.id) + '">Saving for · ' + amtOf(p.amount) + ' ' + per + (p.category ? ' · ' + esc(p.category) : '') + '</div>';
+      h += pdHead(p, 'Saving for · ' + pesoShort(p.amount) + ' ' + cmPer(p) + (p.category ? ' · ' + esc(p.category) : ''), 't-b');
       var side = it.goal > 0 ? 'of ' + amtOf(it.goal) + ' goal' : 'no goal';
       var est = '';
       if (it.goal > 0 && !it.full && p.repeat === 'monthly' && Number(p.amount) > 0) {
@@ -8722,30 +8744,31 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var od = (planAllDates(p)[0]) || String(p.date), ro = resolveOccurrence(p, od);
       var am = Number(ro && ro.amount != null ? ro.amount : p.amount) || 0;
       editD = String(p.date);
-      h += '<div class="pdmeta" data-grp="' + esc(p.id) + '">' + (isGoalPlan(p) ? 'Saving for · ' : '') + 'one-off · ' + fmtDate(od) + (p.category ? ' · ' + esc(p.category) : '') + '</div>';
+      h += pdHead(p, (isGoalPlan(p) ? 'Saving for · ' : '') + pesoShort(am) + ' one-off · ' + wdShort(od) + (p.category ? ' · ' + esc(p.category) : ''), isGoalPlan(p) ? 't-b' : 't-a');
       if (ro && ro.skip) {
-        h += pdCard('Skipped', amtOf(am), fmtDate(od), 'mut', '<button type="button" class="act ghost" data-unskip="' + esc(p.id) + '|' + od + '">Unskip</button>');
+        h += pdCard('Skipped', amtOf(am), wdShort(od), 'mut', '<button type="button" class="act ghost" data-unskip="' + esc(p.id) + '|' + od + '">Unskip</button>');
       } else if (isGoalPlan(p)) {
         var it1 = null; savingData().items.forEach(function (x) { if (String(x.p.id) === String(p.id)) it1 = x; });
-        if (it1 && it1.bought) h += pdCard('Bought', amtOf(it1.spent), it1.buy ? 'on ' + fmtDate(it1.buy.date) : '', 'ok', '');
-        else h += pdCard('Set aside', amtOf(am), 'planned ' + dayMonth(od), 'goalv', '<button type="button" class="act pdgo b" data-cmlock="' + esc(p.id) + '">Lock · I bought it</button>') +
+        if (it1 && it1.bought) h += pdCard('Bought', amtOf(it1.spent), it1.buy ? 'on ' + wdShort(it1.buy.date) : '', 'ok', '');
+        else h += pdCard('Set aside', amtOf(am), 'planned ' + wdShort(od), 'goalv', '<button type="button" class="act pdgo b" data-cmlock="' + esc(p.id) + '">Lock · I bought it</button>') +
           '<div class="pdnote">Held back from your free cash until you lock it. Locking logs the purchase.</div>';
       } else {
         var pp1 = findPaidTxn({}, { planId: p.id, date: od, name: p.name, amount: am });
         var paid1 = Math.min(am, Number(pp1 && pp1.amount) || 0), rem1 = r2(am - paid1);
-        if (rem1 <= 0.004) h += pdCard('Paid', amtOf(am), fmtDate(od), 'ok', '');
+        if (rem1 <= 0.004) h += pdCard('Paid', amtOf(am), wdShort(od), 'ok', '');
         else {
           var w1 = cmWhen(od, today);
-          h += pdCard(paid1 > 0.004 ? 'Still to pay' : (w1.c === 'late' ? 'Overdue' : 'Due'), amtOf(rem1), dayMonth(od) + ' · ' + w1.t, w1.c,
+          h += pdCard(paid1 > 0.004 ? 'Still to pay' : (w1.c === 'late' ? 'Overdue' : 'Due'), amtOf(rem1), wdShort(od) + ' · ' + w1.t, w1.c,
             '<button type="button" class="act pdgo" data-pdpay="' + esc(p.id) + '|' + od + '|' + esc(p.name) + '|' + rem1 + '">Mark paid</button>' +
             '<button type="button" class="act ghost" data-pdskip="' + esc(p.id) + '|' + od + '">Skip or move</button>');
         }
       }
     } else {
       // a recurring expense
-      var parts = planHTML(p, { open: true, parts: true });
-      editD = parts.editD;
-      h += parts.meta;
+      var occA = planOccurrences(p);
+      var unsk = occA.filter(function (d) { var r = resolveOccurrence(p, d); return !(r && r.skip); });
+      editD = unsk[0] || occA[0] || String(p.date);
+      h += pdHead(p, pesoShort(p.amount) + ' ' + cmPer(p) + (p.count ? ' · ' + unsk.length + ' of ' + p.count + ' left' : '') + (p.category ? ' · ' + esc(p.category) : ''), 't-a');
       var tgt = null;
       planAllDates(p).forEach(function (d) {
         if (tgt) return;
@@ -8753,15 +8776,49 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var a = Number(r && r.amount != null ? r.amount : p.amount) || 0;
         var pp = findPaidTxn({}, { planId: p.id, date: d, name: r ? r.name : p.name, amount: a });
         var rem = r2(a - Math.min(a, Number(pp && pp.amount) || 0));
-        if (rem > 0.004 && (d < today || d >= today)) tgt = { d: d, rem: rem, nm: r ? r.name : p.name, part: rem < a - 0.004 };
+        if (rem > 0.004) tgt = { d: d, rem: rem, nm: r ? r.name : p.name, part: rem < a - 0.004 };
       });
       if (tgt) {
         var w2 = cmWhen(tgt.d, today);
-        h += pdCard(tgt.part ? 'Still to pay' : (w2.c === 'late' ? 'Overdue' : 'Next due'), amtOf(tgt.rem), dayMonth(tgt.d) + ' · ' + w2.t, w2.c,
+        h += pdCard(tgt.part ? 'Still to pay' : (w2.c === 'late' ? 'Overdue' : 'Next due'), amtOf(tgt.rem), wdShort(tgt.d) + ' · ' + w2.t, w2.c,
           '<button type="button" class="act pdgo" data-pdpay="' + esc(p.id) + '|' + tgt.d + '|' + esc(tgt.nm) + '|' + tgt.rem + '">Mark paid</button>' +
           '<button type="button" class="act ghost" data-pdskip="' + esc(p.id) + '|' + tgt.d + '">Skip or move</button>');
       } else h += pdCard('Nothing due', '—', 'all paid or skipped', 'ok', '');
-      h += '<div class="pdlab">Dates</div>' + parts.sub;
+      // COMING UP — the next dates after the card's (skipped ones stay, with undo; tap one to edit just that date)
+      var up = occA.filter(function (d) { return !tgt || d !== tgt.d; }).slice(0, 4);
+      if (up.length) {
+        h += '<div class="pdlab">Coming up</div>';
+        up.forEach(function (d) {
+          var r = resolveOccurrence(p, d), a = Number(r && r.amount != null ? r.amount : p.amount) || 0;
+          if (r && r.skip) {
+            h += '<div class="pdocc"><span>' + mdShort(d) + '</span><span class="pdr"><button type="button" class="cmpill sk" data-unskip="' + esc(p.id) + '|' + d + '">skipped · ↺ undo</button><s class="mut">' + pesoShort(a) + '</s></span></div>';
+          } else {
+            h += '<div class="pdocc tap" data-editp="' + esc(p.id) + '" data-editd="' + d + '" role="button" tabindex="0"><span>' + mdShort(d) + (r && r.edited ? ' <span class="cmedit">changed</span>' : '') + '</span><span>' + pesoShort(a) + '</span></div>';
+          }
+        });
+      }
+      // BEFORE — past dates, newest first (paid ✓ / partly ◐ / unpaid / skipped; tap a skipped one to undo)
+      var before = [];
+      planAllDates(p).forEach(function (d) {
+        if (d >= today || (tgt && d === tgt.d)) return;
+        var r = resolveOccurrence(p, d), a = Number(r && r.amount != null ? r.amount : p.amount) || 0;
+        if (r && r.skip) { before.push({ d: d, cls: 'skip', txt: mdShort(d) }); return; }
+        var pp = findPaidTxn({}, { planId: p.id, date: d, name: r ? r.name : p.name, amount: a });
+        var got = Number(pp && pp.amount) || 0;
+        if (got >= a - 0.005) before.push({ d: d, cls: 'paid', txt: '✓ ' + mdShort(d) + ' · ' + pesoShort(a) });
+        else if (got > 0.004) before.push({ d: d, cls: 'partial', txt: '◐ ' + mdShort(d) + ' · ' + pesoShort(got) + '/' + pesoShort(a) });
+        else before.push({ d: d, cls: 'late', txt: mdShort(d) + ' · ' + pesoShort(a) + ' unpaid' });
+      });
+      before.sort(function (x, y) { return x.d < y.d ? 1 : -1; });
+      if (before.length) {
+        var capB = histMoreOpen[p.id] ? before.length : 6;
+        h += '<div class="pdlab">Before</div><div class="hist-chips">';
+        before.slice(0, capB).forEach(function (x) {
+          h += '<span class="hchip ' + x.cls + '"' + (x.cls === 'skip' ? ' data-unskip="' + esc(p.id) + '|' + x.d + '" role="button" title="Tap to unskip"' : '') + '>' + x.txt + '</span>';
+        });
+        if (before.length > capB) h += '<button type="button" class="hist-more" data-histmore="' + esc(p.id) + '">+' + (before.length - capB) + ' older</button>';
+        h += '</div>';
+      }
     }
     h += '<div class="pdfoot"><button type="button" class="act ghost" data-editp="' + esc(p.id) + '" data-editd="' + editD + '">Edit plan</button>' +
       '<button type="button" class="act ghost pddel" data-delp="' + esc(p.id) + '">Delete plan</button></div>';
@@ -11184,12 +11241,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.67, live: new Date(2026, 10, 12, 14, 46) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.68, live: new Date(2026, 10, 12, 14, 53) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.68': [
+      'Committed now matches the design fully. All plans has three tabs — Recurring, One-offs and Done (paid one-offs, bought Saving-for items and finished plans).',
+      'A plan’s sheet has a proper header, the next due in ₱, a Coming up list of the next dates (changed ones tagged, skipped ones with an undo — tap a date to edit just that one) and Before chips for past dates (paid ✓, part-paid ◐, unpaid, skipped).'
+    ],
     '74.67': [
       'Add sheet: a small hint under the empty amount — “Quick sums work: 300-125+10”. It hides as soon as you type, and its space stays so the keypad doesn’t move.'
     ],
@@ -12642,7 +12703,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     planSortKey: planSortKey, // v73.59: the sort key (recurring = next occurrence, one-off = its date)
     setPlanOpen: function (id, open) { planOpen[id] = open ? true : undefined; if (open) planDetId = id; else if (planDetId === id) planDetId = null; }, // v73.59; v74.66: 'open' = the plan's sheet (#pdBody)
     openPlanDetail: openPlanDetail, renderPlanDetail: renderPlanDetail, // v74.66
-    setPlanTab: function (t) { planTab = (t === 'rec') ? 'rec' : 'one'; }, // v73.60: the smoke switches the tab (the harness can't click)
+    setPlanTab: function (t) { planTab = (t === 'one' || t === 'done') ? t : 'rec'; }, // v74.68: + done // v73.60: the smoke switches the tab (the harness can't click)
     setPaidOpen: function (o) { paidOpen = !!o; }, // v73.99: the smoke toggles the Paid bar (the harness can't click)
     testSpend: testSpend, // v74.00: the one-time-purchase affordability math (smoke drives it)
     tsSetOpen: tsSetOpen, // v74.00: the row's expand/collapse (the harness can't click)

@@ -973,7 +973,7 @@ def main():
           and "'73.59': [" in js)
     check("v73.60 (boss: 'lets separate them thru a tab, left tab is oneoffs, right is recurring' + 'Ship it as v73.60 (one-offs default default)'): the v73.59 stacked sections become a TAB BAR - One-offs LEFT, Recurring RIGHT, counts ride the tabs, ONE-OFFS is the default tab (planTab='one'); pure layout over the v73.59 renderer - both lists always exist, nothing hidden or filtered, the tab is in-memory view state",
           # the tab bar markup + the default tab
-          "var planTab = 'one'" in js
+          "var planTab = 'rec'" in js
           and 'data-pltab="one"' in js and 'data-pltab="rec"' in js
           and "planTab === 'one' ? ' on' : ''" in js
           # the tab click handler + the pane switch
@@ -982,7 +982,7 @@ def main():
           # the CSS
           and ".pltabs{" in html and ".pltab.on{" in html and ".plcnt{" in html
           # the export (the smoke drives the tab without a DOM)
-          and "setPlanTab: function (t) { planTab = (t === 'rec') ? 'rec' : 'one'; }," in js
+          and "setPlanTab: function (t) { planTab = (t === 'one' || t === 'done') ? t : 'rec'; },"  in js
           and "'73.60': [" in js)
     check("v73.61 (boss: 'the recurring Rent stops showing as a plan due row once it is a day PAST its due date' + 'should we only fast forward when i actually skipped (not moved) or have already fully paid the current due?' + 'what if the move is on a date before the next occurence, why should the series fast forward if the count is still the same'): the blind fast-forward in planGridDates (advance a count-less series past EVERY date below today) is GONE - it dropped a past-due occurrence off the grid the day after its due, so the v73.27 overdue row, the hero deduction, the graph, and the peek all went blind (the boss's recurring Rent vanishing). The advance is now STATE-AWARE, one occurrence at a time: skipped -> advance; fully planRef-paid -> advance (a PARTIAL payment does NOT advance); moved to the future -> advance BUT the moved date is pushed into the window (a move is a relocation, not a resolution - the grid slot must not orphan the override); moved to the past or unpaid -> STAY (the overdue row keeps it)",
           # the state-aware advance (the blind loop is gone) — the inline
@@ -1999,6 +1999,13 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.68 (boss: 'have u shipped everything from the latest mockup, such as in the img, or the done tab for committed'): All plans = Recurring (default) | One-offs | Done (paid one-offs + bought Saving-for one-offs + recurring with nothing left; the Paid bar is gone); the plan's sheet = pdHead (tile · name · line), the ₱ due card, Coming up (next 4 dates: changed / skipped · undo, tap = edit that date) and Before chips (paid / partial / unpaid / skipped)",
+          "data-pltab=\"done\">Done" in js and "var planTab = 'rec';" in js
+          and "function pdHead(p, sub, tile) {" in js and "h += '<div class=\"pdlab\">Coming up</div>';" in js
+          and "h += '<div class=\"pdlab\">Before</div><div class=\"hist-chips\">';" in js
+          and "skipped · ↺ undo" in js and "' <span class=\"cmedit\">changed</span>'" in js
+          and "data-paidbar" not in js
+          and "'74.68': [" in js)
     check("v74.67 (boss: 'add back the quick sum placehold in the amount field, show me a mock first' -> board 14 -> 'C'): #amtHint under the amount line ('Quick sums work: 300-125+10'), hidden with visibility (.off) once the amount has text so its fixed-height line keeps the keypad still",
           'id="amtHint" class="amthint">Quick sums work: 300-125+10</p>' in html
           and "#addSheet .amthint.off{visibility:hidden}" in html
@@ -2523,9 +2530,9 @@ def main():
           and "function oneOffPaid(p) {" in js
           and "var liveOneoffs = oneoffs.filter(function (p) { return !oneOffPaid(p); });" in js
           and "var paidOneoffs = oneoffs.filter(function (p) { return oneOffPaid(p); }).reverse();" in js
-          and 'data-paidbar="1"' in js
+          and 'data-pltab="done">Done' in js
           and "var rowClsO = paidFullO ? 'prow' : 'plrow oneoff';" in js
-          and "q1('[data-paidbar]', function () { paidOpen = !paidOpen; renderPlans(); });" in js
+          and "var doneList = paidOneoffs.concat("  in js
           and "setPaidOpen: function (o) { paidOpen = !!o; }" in js
           and ".paidbar{display:flex" in html
           and ".paidrows.open{display:block}" in html

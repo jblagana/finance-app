@@ -1128,6 +1128,20 @@ button.cmlink{background:transparent;border:0;color:var(--info);font:inherit;fon
 .pdfoot button.act{min-height:46px}
 button.act.pddel{color:var(--bad);border-color:rgba(255,107,122,.4)}
 #pdBody .plrow.next{margin-top:2px}
+/* v74.68: the sheet's header (board 12b) — tile · name · one line; the sheet title row keeps only the ✕ */
+#planDetSheet .sheet-h{position:absolute;right:16px;top:14px;padding:0;border:0;background:transparent;z-index:2}
+#planDetSheet .sheet-h .t{display:none}
+.pdhead{display:flex;align-items:flex-start;gap:12px;padding:4px 52px 0 0}
+.pdhead .cmtile{width:44px;height:44px;border-radius:12px;font-size:17px}
+.pdht{flex:1;min-width:0}
+.pdn{font-size:19px;font-weight:600}
+.pdhead .pdmeta{margin:2px 0 0;font-size:13px;color:var(--mut);line-height:1.35}
+.pdocc.tap{cursor:pointer}
+.pdocc .pdr{display:flex;align-items:center;gap:8px}
+button.cmpill{border:0;min-height:0;width:auto;font:inherit;font-size:11px;font-weight:700;border-radius:6px;padding:3px 7px;cursor:pointer}
+button.cmpill.sk{background:var(--infoSoft);color:var(--info)}
+#pdBody .hist-chips{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0}
+#pdBody .hchip{height:30px;display:inline-flex;align-items:center;padding:0 11px;border-radius:999px;font-size:12px;font-weight:600}
 /* ---- Ledger ---- */
 #donut.card{border-radius:20px;padding:18px}
 #donut h2{font-size:13px;text-transform:none;letter-spacing:0;font-weight:500;margin:0}

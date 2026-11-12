@@ -784,7 +784,7 @@ waitReady().then(async function (F) {
   ok(plansHtml.indexOf('data-unskip="' + skipT.pid + '|' + skipT.date + '"') >= 0,
     'v73.54: the plans list renders the skipped occurrence as a record row (data-unskip present)');
   ok(plansHtml.indexOf('skipped') >= 0, 'v73.54: the record row wears the "skipped" label');
-  ok(plansHtml.indexOf('1 skipped') >= 0, 'v73.54: the series header counts its skips ("1 skipped")');
+  ok(plansHtml.indexOf('skipped · ↺ undo') >= 0 || plansHtml.indexOf('hchip skip') >= 0, 'v73.54: the sheet shows the skip (Coming up pill or Before chip)'); // v74.68 retarget (board 12b sheet)
   // the unskip path: the due returns to the cycle deduction and the override
   // (and its stamp) is gone
   await F.unskipPlanOccurrence(skipT.pid, skipT.date);
@@ -1233,7 +1233,7 @@ waitReady().then(async function (F) {
   F.setPlanOpen('pmuk0wjffffx', true);
   F.renderPlans();
   listHtml = String(byIdStub('pdBody').innerHTML || '') /* v74.66: the plan's sheet */;
-  ok(listHtml.indexOf('NEXT DUE') >= 0, 'v73.59: the expanded series renders the NEXT DUE emphasis row');
+  ok(/>(Next due|Overdue|Still to pay)</.test(listHtml), 'v73.59: the sheet renders the due card (Next due / Overdue / Still to pay)'); // v74.68 retarget (board 12b sheet)
   // a LINKED payment on Rent's past due (2026-09-15) makes it a green paid
   // chip. The SEED skips that occurrence (Rent's overrides carry a
   // 2026-09-15 skip), so clear it for this test and restore it after —
@@ -1250,8 +1250,8 @@ waitReady().then(async function (F) {
   // also carry "1 paid", so the whole-list match would be a fluke
   var rentHead = listHtml.slice(listHtml.indexOf('data-grp="pmuk0wjffffx"'));
   rentHead = rentHead.slice(0, rentHead.indexOf('<div class="plrow'));
-  ok(rentHead.indexOf('1 paid') >= 0, 'v73.59: Rent\'s collapsed sub-line counts its paid history ("1 paid")');
-  ok(listHtml.indexOf('hchip paid') >= 0 && listHtml.indexOf('Sep 15, 2026') >= 0,
+  ok(listHtml.indexOf('hchip paid') >= 0, 'v73.59: Rent\'s sheet shows its paid history (a ✓ chip in Before)'); // v74.68 retarget (board 12b sheet)
+  ok(listHtml.indexOf('hchip paid') >= 0 && listHtml.indexOf('✓ Sep 15') >= 0, // v74.68 retarget (board 12b sheet)
     'v73.59: the paid past occurrence stays in the list as a green chip (hchip paid + its fmtDate date)');
   F.state.txns = baseTxns2; // restore
   rent.overrides = JSON.parse(rentOvBackup);
@@ -1266,9 +1266,9 @@ waitReady().then(async function (F) {
   await sleep(40);
   F.renderPlans();
   listHtml = String(byIdStub('pdBody').innerHTML || ''); /* v74.66: the plan's sheet */
-  ok(listHtml.indexOf('hchip skip') >= 0 && listHtml.indexOf('data-unskip="pmuimaif9irt|' + gymSNext + '"') >= 0,
+  ok(listHtml.indexOf('skipped · ↺ undo') >= 0 && listHtml.indexOf('data-unskip="pmuimaif9irt|' + gymSNext + '"') >= 0, // v74.68 retarget (board 12b sheet)
     'v73.59: a skipped due stays visible as a strikethrough chip carrying the unskip path');
-  ok(listHtml.indexOf('1 skipped') >= 0, 'v73.59: the header still counts its skips ("1 skipped")');
+  ok(listHtml.indexOf('<s class="mut">') >= 0, 'v73.59: the skipped date keeps its struck-through amount'); // v74.68 retarget (board 12b sheet)
   await F.unskipPlanOccurrence('pmuimaif9irt', gymSNext);
   await sleep(40);
   F.setPlanOpen('pmuimaif9irt', false);
@@ -1338,10 +1338,10 @@ waitReady().then(async function (F) {
     'v73.60: both tabs render (One-offs + Recurring)');
   var iTabOne = listHtml.indexOf('data-pltab="one"');
   var iTabRec = listHtml.indexOf('data-pltab="rec"');
-  ok(iTabOne >= 0 && iTabRec >= 0 && iTabOne < iTabRec,
-    'v73.60: One-offs is the LEFT tab, Recurring the RIGHT (tab order)');
-  ok(listHtml.indexOf('class="pltab on"') >= 0 && listHtml.indexOf('class="pltab on"') < iTabRec,
-    'v73.60: the active (on) tab is One-offs by default');
+  ok(iTabOne >= 0 && iTabRec >= 0 && iTabRec < iTabOne && iTabOne < listHtml.indexOf('data-pltab="done"'),
+    'v74.68: the tabs read Recurring | One-offs | Done'); // v74.68 retarget (board 12: Recurring | One-offs | Done)
+  ok(listHtml.indexOf('class="pltab on" data-pltab="one"') >= 0,
+    'v73.60: setPlanTab(one) makes One-offs the active tab'); // v74.68 retarget (board 12: Recurring | One-offs | Done)
   // counts ride the tabs: seed = 1 one-off (Calculator), 8 recurring
   var cntOne = listHtml.slice(iTabOne, listHtml.indexOf('</div>', iTabOne));
   var cntRec = listHtml.slice(iTabRec, listHtml.indexOf('</div>', iTabRec));
@@ -1362,8 +1362,7 @@ waitReady().then(async function (F) {
     'v73.60: the one-off leaves the pane on the Recurring tab (view state only — nothing deleted)');
   // the on class precedes its own data-pltab attr — the active tab's class
   // must sit AFTER the one tab and BEFORE the rec tab's data attr
-  ok(listHtml.indexOf('data-pltab="one"') < listHtml.indexOf('pltab on') &&
-     listHtml.indexOf('pltab on') < listHtml.indexOf('data-pltab="rec"'),
+  ok(listHtml.indexOf('class="pltab on" data-pltab="rec"') >= 0, // v74.68 retarget (board 12: Recurring | One-offs | Done)
     'v73.60: after switching, the active (on) tab is Recurring');
   // back to the default
   F.setPlanTab('one');
@@ -1466,7 +1465,7 @@ waitReady().then(async function (F) {
     return e >= 0 ? rest.slice(0, e) : rest;
   };
   var rent18Head = block18('p18rent');
-  ok(rent18Head.indexOf('hchip partial') >= 0 && rent18Head.indexOf('7,364.00/13,394.00') >= 0,
+  ok(rent18Head.indexOf('>Still to pay<') >= 0 && rent18Head.indexOf('₱6,030.00') >= 0, // v74.68 retarget (board 12b sheet): the oldest part-paid due is the card — 13,394 − 7,364 still to pay
     'v73.62: a partial pay renders the AMBER chip with the paid sum over the due (◐ 7,364.00/13,394.00 — amt() keeps cents)');
   ok(rent18Head.indexOf('hchip paid') < 0,
     'v73.62: a partial pay is NEVER a green tick — the v73.59 truthiness is gone');
@@ -1504,7 +1503,7 @@ waitReady().then(async function (F) {
   F.renderPlans();
   listHtml = String(byIdStub('pdBody').innerHTML || '') /* v74.66: the plan's sheet */;
   var rent18nRow = block18('p18next');
-  ok(rent18nRow.indexOf('occ-paid partial') >= 0 && rent18nRow.indexOf('1,500.00/3,000.00') >= 0,
+  ok(rent18nRow.indexOf('>Still to pay<') >= 0 && rent18nRow.indexOf('₱1,500.00') >= 0, // v74.68 retarget (board 12b sheet)
     'v73.62: the next-due pill is a comparison too — a partial pay shows 1,500.00/3,000.00 (amt() keeps cents), never "✓ paid"');
   ok(rent18nRow.indexOf('✓ paid') < 0, 'v73.62: the next-due pill never ticks a partial pay as paid');
   F.setPlanOpen('p18next', false);
@@ -1640,7 +1639,7 @@ waitReady().then(async function (F) {
   var rent20Html = String(byIdStub('pdBody').innerHTML || '') /* v74.66: the plan's sheet */;
   ok(rent20Html.indexOf('data-unskip="p20rent|' + anchor20 + '"') >= 0,
     'v73.64: the plans list renders the skipped past due as a tappable unskip chip (the persistent access)');
-  ok(rent20Html.indexOf('1 skipped') >= 0,
+  ok(rent20Html.indexOf('hchip skip') >= 0 || rent20Html.indexOf('skipped · ↺ undo') >= 0, // v74.68 retarget (board 12b sheet): the past skip shows (Before chip, or Coming up when the window keeps it)
     'v73.64: the header counts the PAST skip (skipTotal spans past + future)');
   // unskip via the persistent path — the fork must come back exactly
   await F.unskipPlanOccurrence('p20rent', anchor20);
@@ -3106,19 +3105,22 @@ waitReady().then(async function (F) {
       F.setPaidOpen(false);
       F.renderPlans();
       var plans42 = String(byIdStub('plans').innerHTML || '');
-      ok(plans42.indexOf('data-paidbar') < 0, 'v73.99: baseline — no paid one-offs, the Paid bar does not render');
+      F.setPlanTab('done'); F.renderPlans();
+      ok(String(byIdStub('plans').innerHTML || '').indexOf('data-grp="pmup5dq4iunh"') < 0, 'v74.68: baseline — the unpaid one-off is not in Done'); // v74.68 retarget (board 12: Recurring | One-offs | Done)
+      F.setPlanTab('one');
       // log a FULL payment for the seed's one-off (Calculator, 2000) — the
       // explicit planRef link is the only paid proof (v73.56).
       var idTxn42 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'cash_out', category: 'Misc', account: 'Cash', amount: 2000, note: 'probe paid calc', date: '2026-10-09', planRef: { planId: 'pmup5dq4iunh', date: '2026-10-09', name: 'Calculator', amount: 2000 } }, { quiet: true });
       await sleep(60);
       F.renderPlans();
       plans42 = String(byIdStub('plans').innerHTML || '');
-      ok(plans42.indexOf('data-paidbar="1"') >= 0, 'v73.99: a fully-paid one-off brings the Paid bar up');
-      ok(plans42.indexOf('>1 · ₱ 2,000.00<') >= 0, 'v73.99: the bar reads count · total (1 · ₱ 2,000.00)');
-      ok(plans42.indexOf('class="prow ') >= 0 && plans42.indexOf('data-grp="pmup5dq4iunh"') >= 0, // v74.66: tidy row (✎/✕ on its sheet)
+      F.setPlanTab('done'); F.renderPlans(); var done42 = String(byIdStub('plans').innerHTML || ''); F.setPlanTab('one');
+      ok(done42.indexOf('data-grp="pmup5dq4iunh"') >= 0 && plans42.indexOf('data-grp="pmup5dq4iunh"') < 0, 'v74.68: a fully-paid one-off moves from One-offs to Done'); // v74.68 retarget (board 12: Recurring | One-offs | Done)
+      ok(/data-pltab="done">Done<span class="plcnt">1</.test(plans42), 'v74.68: the Done tab counts it (1)'); // v74.68 retarget (board 12: Recurring | One-offs | Done)
+      ok(done42.indexOf('class="prow ') >= 0, // v74.68 retarget (board 12: Recurring | One-offs | Done)
         'v73.99: the paid row renders as the muted .prow variant (✎/✕ still bind)');
-      ok(plans42.indexOf('class="prow ') > plans42.indexOf('data-paidbar="1"'),
-        'v73.99: the paid row sits UNDER the bar, not in the live list');
+      ok(plans42.indexOf('class="prow ') < 0,
+        'v74.68: the paid row is not in the One-offs pane'); // v74.68 retarget (board 12: Recurring | One-offs | Done)
       // the row is still actionable from the Paid section: ✎ opens the edit sheet
       F.openPlanEdit('pmup5dq4iunh', '2026-10-09');
       ok(byIdStub('pe_name').value === 'Calculator', 'v73.99: the Paid row\'s ✎ opens the edit sheet (Calculator)');
@@ -3126,8 +3128,8 @@ waitReady().then(async function (F) {
       F.setPaidOpen(true);
       F.renderPlans();
       plans42 = String(byIdStub('plans').innerHTML || '');
-      ok(plans42.indexOf('paidbar open') >= 0 && plans42.indexOf('paidrows open') >= 0,
-        'v73.99: expand — the bar and its rows carry .open (chevron flips)');
+      ok(done42.indexOf('cmrow') >= 0 && done42.indexOf(' done cmrow') >= 0,
+        'v74.68: the Done row is the muted (done) tidy row'); // v74.68 retarget (board 12: Recurring | One-offs | Done)
       // a PARTIALLY paid one-off stays in the LIVE list (the ◐ pill)
       await F.addPlan({ name: 'Probe partial', amount: 1000, date: '2026-12-20', repeat: null, kind: 'expense' });
       var partId42 = F.state.plans[F.state.plans.length - 1].id; // addPlan resolves the idb put; the plan is in state
@@ -3137,11 +3139,11 @@ waitReady().then(async function (F) {
       F.renderPlans();
       plans42 = String(byIdStub('plans').innerHTML || '');
       var iPart42 = plans42.indexOf('Probe partial');
-      ok(iPart42 >= 0 && plans42.indexOf('class="prow ') > iPart42,
+      ok(iPart42 >= 0 && plans42.indexOf('class="prow ') < 0, // v74.68 retarget (board 12: Recurring | One-offs | Done)
         'v73.99: the partly-paid one-off stays in the live list (above the bar)');
       ok(plans42.indexOf('occ-paid partial') >= 0, 'v73.99: the partial wears the ◐ pill (400/1,000)');
       // the bar total is unchanged (the partial is not filed under Paid)
-      ok(plans42.indexOf('>1 · ₱ 2,000.00<') >= 0, 'v73.99: the bar total counts only the fully-paid one-off');
+      ok(/data-pltab="done">Done<span class="plcnt">1</.test(plans42), 'v74.68: Done still counts only the fully-paid one-off'); // v74.68 retarget (board 12: Recurring | One-offs | Done)
       // the Recurring tab: no Paid bar (recurring records stay the per-plan chips)
       F.setPlanTab('rec');
       F.renderPlans();
