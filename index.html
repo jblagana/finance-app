@@ -1059,6 +1059,75 @@ button.gear:active{border-color:var(--accLine);color:var(--acc)}
 .cmbar i{display:block;height:100%;border-radius:99px;background:var(--acc);width:0;transition:width .5s ease}
 .cmfoot{display:flex;justify-content:space-between;font-size:12.5px;margin-top:8px;color:var(--mut)}
 .cmfoot b{color:var(--acc);font-weight:600}
+/* v74.66: the Committed redesign — one row shape everywhere, no buttons on rows */
+#plans{order:2}
+.cmwarn{margin-top:12px;font-size:12.5px;color:var(--warn);background:rgba(255,196,92,.1);border-radius:10px;padding:8px 10px}
+.cmwarn b{color:var(--warn)}
+.cmsec{display:flex;justify-content:space-between;align-items:baseline;margin:20px 4px 8px}
+.cmsec .l{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.cmsec .r{font-size:12.5px;color:var(--mut)}
+.cmsec .r b{color:var(--ink)}
+#plans>.cmsec:first-child{margin-top:4px}
+.cmcard{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:2px 14px}
+.cmcard.cmall{padding:6px 14px 8px}
+.cmrow,.plrow.cmrow,.prow.cmrow{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer;background:transparent;border-radius:0}
+.cmcard>.cmrow:last-child,.cmcard>.cmpot:last-child,.cmcard>.cmpot:last-child .cmrow{border-bottom:0}
+.cmpot>.cmrow{border-bottom:0}
+.cmpot{border-bottom:1px solid var(--line);padding-bottom:12px}
+.cmtile{flex:none;width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px}
+.cmtile.t-a{background:rgba(255,196,92,.14);color:#ffc45c}
+.cmtile.t-b{background:var(--infoSoft);color:var(--info)}
+.cmtile.t-g{background:rgba(55,211,155,.14);color:var(--ok)}
+.cmtile.t-m{background:var(--card2);color:var(--mut)}
+.cmmid{flex:1;min-width:0}
+.cmn{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cms{font-size:12.5px;color:var(--mut);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmrep{font-size:11px;color:var(--mut);margin-left:5px;font-weight:500}
+.cmedit{font-size:10px;font-weight:700;color:#ffc45c;background:rgba(255,196,92,.14);border-radius:5px;padding:1px 5px;margin-left:5px;vertical-align:1px}
+.cmrt{flex:none;text-align:right}
+.cmrt .pl-amt{font-size:15px;font-weight:700;white-space:nowrap}
+.cmst{font-size:11.5px;font-weight:600;margin-top:2px;white-space:nowrap;color:var(--mut)}
+.cmst.soon{color:var(--warn)}.cmst.late{color:var(--bad)}.cmst.ok{color:var(--ok)}.cmst.info{color:var(--info)}
+.cmrow.done .cmn,.cmrow.done .pl-amt{color:var(--mut)}
+.cmrow.done .pl-amt{text-decoration:line-through}
+.cmmore{display:block;width:100%;background:transparent;border:0;border-top:1px solid var(--line);color:var(--mut);font:inherit;font-size:13px;padding:12px 0;cursor:pointer;min-height:0}
+.cmpbar{height:6px;border-radius:3px;background:var(--s3);margin:0 0 0 50px;overflow:hidden}
+.cmpbar.wide{margin:10px 0 0;height:8px}
+.cmpbar i{display:block;height:100%;background:var(--info);border-radius:3px}
+.cmask{display:flex;align-items:center;gap:8px;margin:10px 0 0 50px;padding:8px 10px;border-radius:11px;background:var(--infoSoft);font-size:13px}
+.cmask.plain{background:transparent;padding:0;margin-top:2px}
+.cmask .q{flex:1;min-width:0;color:var(--ink)}
+.cmask.plain .q{color:var(--mut);font-size:12px}
+.cmask small{color:var(--mut)}
+button.cmbtn{flex:none;height:32px;min-height:0;padding:0 12px;border-radius:9px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;width:auto;border:0}
+button.cmbtn.p{background:var(--info);color:#0b1430}
+button.cmbtn.g{background:var(--s3);color:var(--ink)}
+button.cmbtn.o{background:transparent;border:1px solid var(--line);color:var(--ink)}
+#planAddBtn{order:9}
+/* the plan's sheet */
+.pdmeta{font-size:13px;color:var(--mut);margin:-4px 2px 0}
+.pdnext{margin-top:14px;border-radius:16px;background:var(--card2);padding:14px}
+.pdnext .k{font-size:12px;color:var(--mut)}
+.pdnext .v{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:2px}
+.pdnext .v b{font-size:24px;font-weight:700;white-space:nowrap}
+.pdnext .v span{font-size:13px;font-weight:600;text-align:right;color:var(--mut)}
+.pdnext .v span.late{color:var(--bad)}.pdnext .v span.soon{color:var(--warn)}.pdnext .v span.ok{color:var(--ok)}
+.goalv{color:var(--info)!important}
+.pdacts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.pdacts button.act{min-height:46px;width:100%}
+.pdacts button.act:only-child{grid-column:1 / -1}
+button.act.pdgo{background:var(--acc);border-color:var(--acc);color:var(--accInk)}
+button.act.pdgo.b{background:var(--info);border-color:var(--info);color:#0b1430}
+.pdnote{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.4}
+.pdlab{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin:18px 2px 6px}
+.pdocc{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--line);font-size:14px}
+.pdocc .minus{color:var(--bad)}.pdocc .mut{color:var(--mut)}
+.pdbtns{display:flex;gap:6px}
+button.cmlink{background:transparent;border:0;color:var(--info);font:inherit;font-size:12.5px;padding:0 4px;min-height:0;cursor:pointer;width:auto}
+.pdfoot{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:20px}
+.pdfoot button.act{min-height:46px}
+button.act.pddel{color:var(--bad);border-color:rgba(255,107,122,.4)}
+#pdBody .plrow.next{margin-top:2px}
 /* ---- Ledger ---- */
 #donut.card{border-radius:20px;padding:18px}
 #donut h2{font-size:13px;text-transform:none;letter-spacing:0;font-weight:500;margin:0}
@@ -1649,12 +1718,15 @@ html.modal-open{overflow:hidden}
          Expenses (amber) / Saving for (blue) inside the One-offs/Recurring
          tabs. -->
     <h2>Committed</h2>
-    <div class="sumrow" id="committedSum" style="display:none"><div class="sum"><div class="sumlab">This cycle · committed</div><div class="sumv" id="committedSumV"></div></div><div class="sub" id="committedSumSub"></div>
-      <!-- v74.24 look upgrade: the paid progress (cyclePlanPaid vs the live remainder) -->
+    <!-- v74.66 (boss: 'redesign the commited tab' -> boards 12/12b/12c -> 'ship the committed redesign'): the top card says
+         what is still to pay this cycle (+ a plain warning when it is more than the free cash); #plans holds This cycle /
+         Saving for / All plans; a row tap opens the plan's sheet (#planDetSheet) -->
+    <div class="sumrow" id="committedSum" style="display:none"><div class="sum"><div class="sumlab">Still to pay this cycle</div><div class="sumv" id="committedSumV"></div></div>
       <div class="cmbar"><i id="committedBar"></i></div>
-      <div class="cmfoot"><span><b id="committedPaid">—</b> done</span><span id="committedOf"></span></div></div>
-    <button class="act ghost" id="planAddBtn" type="button" style="margin:0 0 10px">＋ Add a plan</button>
-    <div id="plans" class="card"></div>
+      <div class="cmfoot"><span><b id="committedPaid">—</b> <span id="committedCnt"></span></span><span id="committedOf"></span></div>
+      <div class="cmwarn" id="committedSumSub" style="display:none"></div></div>
+    <button class="act ghost" id="planAddBtn" type="button" style="margin:0 0 10px">＋ New plan</button>
+    <div id="plans"></div>
   </div>
 
   <div id="tab-ledger" style="display:none">
@@ -1753,6 +1825,14 @@ html.modal-open{overflow:hidden}
     </div>
     <p id="recapPinned" class="note" style="margin:10px 0 0"></p>
   </div>
+</div>
+<!-- v74.66: the plan's sheet — opened by a tap on any Committed row (Mark paid / Skip or move / dates / Edit / Delete; a pot: Use / Add extra / its asks / history) -->
+<div id="planDetSheet" class="sheet" role="dialog" aria-labelledby="pdTitle">
+  <div class="sheet-h">
+    <div class="t" id="pdTitle">Plan</div>
+    <button id="pdClose" class="sheet-x" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-b"><div id="pdBody"></div></div>
 </div>
 <!-- v73.15: the add-plan form lives in a bottom sheet now (the Money tab's
      inline form card collapsed to the one-line "＋ Add a plan" trigger) -->

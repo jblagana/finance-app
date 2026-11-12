@@ -2,16 +2,15 @@
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.64 (headless mobile emulation: nothing focused on open, keypad taps type the tapped key on the first open)
 
-## 2026-11-12 - "ship the committed redesign, also show how does it look in the home tab without the clutter of growing list" -> canvas board 13 (Home, Next up = 3 rows max) -> building Committed (boards 12/12b/12c) with Saving-for
-Status: **in progress** - each release below is pushed to https://github.com/jblagana/finance-app.git (main).
+## 2026-11-12 - "ship the committed redesign, also show how does it look in the home tab without the clutter of growing list" -> canvas board 13 (Home, Next up = 3 rows max) -> built Committed (boards 12/12b/12c) with Saving-for
+Status: **done** - each release below is pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.65 (Saving-for money math: one-offs held in full until Lock, pots added − used with asks per date up to the goal; headless: +30,000 laptop drops free 30,000 not liquid; Lock at 28,500 moves liquid 28,500 and frees 1,500; pot capped at its 1,200 goal; Use 700 moves liquid, free unchanged)
-- [ ] v74.66 (the Committed redesign: top card, This cycle, Saving for, All plans, plan / pot detail sheets)
+- [x] v74.66 (the Committed redesign: top card, This cycle, Saving for, All plans, plan / pot detail sheets; headless: renders with no errors, Rent sheet shows Mark paid / Skip or move / dates / Edit / Delete, the pot sheet shows Use / Add extra / its asks; smoke retargeted to the sheet)
 
 ## 2026-11-12 - "for 'saving for' commits ... one offs appear separate from the actual dues, deducted from free cash for display, only deduct from liquid when i lock them (already bought) ... propose for the recurring 'saving for'" + "redesign the card that appears when i click the skip chip" -> boards 11/11b -> "ask to confirm, and ship all of it, including the new skip card" -> "Skip card redesigned (coach chip + the plan sheet's Skip); Saving-for one-offs are set aside in full right away (shown apart from dues), Lock = log the purchase; recurring Saving-for are pots that grow by confirmed top-ups (optional goal), Use = log a spend from the pot"
-Status: **in progress** - the Skip card shipped; Saving-for waits for the Committed redesign mockup (boards 12/12b/12c, "also redesign the commited tab ... mockup first") so it is built into the approved layout.
+Status: **done** - the Skip card in v74.62; Saving-for in v74.65 (money) + v74.66 (Committed screen).
 - [x] v74.62 (the Skip card)
-- [ ] Saving-for one-offs: set aside now, Lock (with the Committed redesign)
-- [ ] Saving-for recurring: pots with confirmed top-ups, goal, Use (with the Committed redesign)
+- [x] Saving-for one-offs + pots (v74.65 / v74.66)
 
 ## 2026-11-12 - "the "amunt" placeholder in add sheet, make it a lill less visible and not floating on top as small number" -> "The placeholder is a faint 0.00 at the amount's own size, on the amount's line"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).

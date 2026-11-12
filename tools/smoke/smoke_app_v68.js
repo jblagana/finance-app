@@ -102,6 +102,8 @@ elMap['pe_date'].id = 'pe_date';
 // must hit one object). The pre-v73.49 version created a fresh stub per
 // call, so the app wrote to a throwaway element and the "renders in the
 // ledger" assertion tested an empty string — green gates, broken UI.
+// v74.66: a plan's sheet (the Committed redesign moved ✎ / ✕ / ↺ / the dates off the list rows onto it)
+function planSheetHtml(F, id) { F.setPlanOpen(id, true); F.renderPlans(); var h = String(byIdStub('pdBody').innerHTML || ''); F.setPlanOpen(id, false); return h; }
 function byIdStub(id) {
   // v73.86: #reconcile is a REAL shim tree (see shimEl above) — the
   // per-keystroke surgical update + the stable-input identity assert need
@@ -778,7 +780,7 @@ waitReady().then(async function (F) {
   // v73.60: recurring series live on the Recurring tab — switch to it.
   F.setPlanTab('rec');
   F.renderPlans();
-  var plansHtml = String(byIdStub('plans').innerHTML || '');
+  var plansHtml = planSheetHtml(F, skipT.pid); // v74.66: the record lives on the plan's sheet
   ok(plansHtml.indexOf('data-unskip="' + skipT.pid + '|' + skipT.date + '"') >= 0,
     'v73.54: the plans list renders the skipped occurrence as a record row (data-unskip present)');
   ok(plansHtml.indexOf('skipped') >= 0, 'v73.54: the record row wears the "skipped" label');
@@ -829,7 +831,7 @@ waitReady().then(async function (F) {
   await sleep(60);
   F.setPlanTab('rec'); // v73.60: the series lives on the Recurring tab
   F.renderPlans();
-  var plansHtml2 = String(byIdStub('plans').innerHTML || '');
+  var plansHtml2 = planSheetHtml(F, 'pmuimaif9irt'); // v74.66: ✎ / ✕ live on the plan's sheet
   ok(plansHtml2.indexOf('data-editp="pmuimaif9irt"') >= 0 &&
      plansHtml2.indexOf('data-editd="' + occ2[0] + '"') >= 0,
     'v73.55: the ✎ stays on a fully-skipped plan (targeting the skipped occurrence)');
@@ -1230,7 +1232,7 @@ waitReady().then(async function (F) {
   // (the harness can't click — setPlanOpen is the exported toggle)
   F.setPlanOpen('pmuk0wjffffx', true);
   F.renderPlans();
-  listHtml = String(byIdStub('plans').innerHTML || '');
+  listHtml = String(byIdStub('pdBody').innerHTML || '') /* v74.66: the plan's sheet */;
   ok(listHtml.indexOf('NEXT DUE') >= 0, 'v73.59: the expanded series renders the NEXT DUE emphasis row');
   // a LINKED payment on Rent's past due (2026-09-15) makes it a green paid
   // chip. The SEED skips that occurrence (Rent's overrides carry a
@@ -1242,7 +1244,7 @@ waitReady().then(async function (F) {
   F.state.txns = baseTxns2.concat([{ kind: 'cash_out', category: 'Housing', note: 'Rent', amount: 3000, date: '2026-09-15',
     planRef: { planId: 'pmuk0wjffffx', date: '2026-09-15', name: 'Rent', amount: 3000 } }]);
   F.renderPlans();
-  listHtml = String(byIdStub('plans').innerHTML || '');
+  listHtml = String(byIdStub('pdBody').innerHTML || '') /* v74.66: the plan's sheet */;
   // scope to Rent's HEAD row (the sub-line carries the "N paid" chip) —
   // other series (Spaylater/AC, their past dues chip-linked in the seed)
   // also carry "1 paid", so the whole-list match would be a fluke
@@ -1263,7 +1265,7 @@ waitReady().then(async function (F) {
   F.skipPlanChip('pmuimaif9irt|' + gymSNext);
   await sleep(40);
   F.renderPlans();
-  listHtml = String(byIdStub('plans').innerHTML || '');
+  listHtml = String(byIdStub('pdBody').innerHTML || ''); /* v74.66: the plan's sheet */
   ok(listHtml.indexOf('hchip skip') >= 0 && listHtml.indexOf('data-unskip="pmuimaif9irt|' + gymSNext + '"') >= 0,
     'v73.59: a skipped due stays visible as a strikethrough chip carrying the unskip path');
   ok(listHtml.indexOf('1 skipped') >= 0, 'v73.59: the header still counts its skips ("1 skipped")');
@@ -1302,7 +1304,7 @@ waitReady().then(async function (F) {
   // (this part opened on the Recurring tab for the sort assertions).
   F.setPlanTab('one');
   F.renderPlans();
-  listHtml = String(byIdStub('plans').innerHTML || '');
+  listHtml = planSheetHtml(F, 'pmup5dq4iunh'); // v74.66: the one-off's ✎ lives on its sheet
   ok(listHtml.indexOf('data-editp="pmup5dq4iunh" data-editd="2026-10-09"') >= 0,
     'v73.59: the one-off row carries a ✎ targeting its own date');
   F.openPlanEdit('pmup5dq4iunh', '2026-10-09');
@@ -1346,8 +1348,8 @@ waitReady().then(async function (F) {
   ok(/plcnt">1</.test(cntOne), 'v73.60: the One-offs tab carries its count (1)');
   ok(/plcnt">8</.test(cntRec), 'v73.60: the Recurring tab carries its count (8)');
   // the DEFAULT pane shows the one-off, NOT a recurring series
-  ok(listHtml.indexOf('data-editp="pmup5dq4iunh"') >= 0,
-    'v73.60: the default (One-offs) pane shows the one-off row');
+  ok(listHtml.indexOf('data-grp="pmup5dq4iunh"') >= 0,
+    'v73.60: the default (One-offs) pane shows the one-off row'); // v74.66: rows carry data-grp (tap = the plan's sheet)
   ok(listHtml.indexOf('data-grp="pmuk0wjffffx"') < 0,
     'v73.60: the default pane does NOT show a recurring series (Rent) — that lives on the Recurring tab');
   // switch to Recurring: the series appear, the one-off leaves the pane
@@ -1356,7 +1358,7 @@ waitReady().then(async function (F) {
   listHtml = String(byIdStub('plans').innerHTML || '');
   ok(listHtml.indexOf('data-grp="pmuk0wjffffx"') >= 0 && listHtml.indexOf('data-grp="pmuimaif9irt"') >= 0,
     'v73.60: switching to Recurring shows the recurring series (Rent, Gym)');
-  ok(listHtml.indexOf('data-editp="pmup5dq4iunh"') < 0,
+  ok(listHtml.indexOf('data-grp="pmup5dq4iunh"') < 0, // v74.66
     'v73.60: the one-off leaves the pane on the Recurring tab (view state only — nothing deleted)');
   // the on class precedes its own data-pltab attr — the active tab's class
   // must sit AFTER the one tab and BEFORE the rec tab's data attr
@@ -1446,7 +1448,7 @@ waitReady().then(async function (F) {
   F.renderPlans();
   F.setPlanOpen('p18rent', true);
   F.renderPlans();
-  listHtml = String(byIdStub('plans').innerHTML || '');
+  listHtml = String(byIdStub('pdBody').innerHTML || '') /* v74.66: the plan's sheet */;
   // the WHOLE series block: from this series' data-grp to the NEXT series'
   // HEAD row (the only `plrow grp` / `plrow oneoff` divs are series heads —
   // the NEXT DUE row is `plrow next`, the strip is spans). A data-grp
@@ -1484,7 +1486,7 @@ waitReady().then(async function (F) {
   F.renderPlans(); // planSig wipe (the push) — see (a)
   F.setPlanOpen('p18full', true);
   F.renderPlans();
-  listHtml = String(byIdStub('plans').innerHTML || '');
+  listHtml = String(byIdStub('pdBody').innerHTML || '') /* v74.66: the plan's sheet */;
   var rent18fHead = block18('p18full');
   ok(rent18fHead.indexOf('hchip paid') >= 0 && rent18fHead.indexOf('✓') >= 0 && rent18fHead.indexOf('hchip partial') < 0,
     'v73.62: a full pay still renders the green tick (the comparison passes at 100%)');
@@ -1500,7 +1502,7 @@ waitReady().then(async function (F) {
   F.renderPlans(); // planSig wipe (the push) — see (a)
   F.setPlanOpen('p18next', true);
   F.renderPlans();
-  listHtml = String(byIdStub('plans').innerHTML || '');
+  listHtml = String(byIdStub('pdBody').innerHTML || '') /* v74.66: the plan's sheet */;
   var rent18nRow = block18('p18next');
   ok(rent18nRow.indexOf('occ-paid partial') >= 0 && rent18nRow.indexOf('1,500.00/3,000.00') >= 0,
     'v73.62: the next-due pill is a comparison too — a partial pay shows 1,500.00/3,000.00 (amt() keeps cents), never "✓ paid"');
@@ -1590,7 +1592,7 @@ waitReady().then(async function (F) {
   F.setPlanTab('one');
   F.renderPlans();
   var one19Html = String(byIdStub('plans').innerHTML || '');
-  ok(one19Html.indexOf('data-unskip="p19one|' + one19.date + '"') >= 0,
+  ok(planSheetHtml(F, 'p19one').indexOf('data-unskip="p19one|' + one19.date + '"') >= 0, // v74.66: Unskip lives on the one-off's sheet
     'v73.63: a skipped one-off renders the ↺ unskip path in the plans list (the access the boss lost)');
   ok(/skipped/.test(one19Html.slice(one19Html.indexOf('p19one') - 400, one19Html.indexOf('p19one') + 400)),
     'v73.63: the skipped one-off row wears the "skipped" pill');
@@ -1635,7 +1637,7 @@ waitReady().then(async function (F) {
   F.setPlanTab('rec');
   F.setPlanOpen('p20rent', true);
   F.renderPlans();
-  var rent20Html = String(byIdStub('plans').innerHTML || '');
+  var rent20Html = String(byIdStub('pdBody').innerHTML || '') /* v74.66: the plan's sheet */;
   ok(rent20Html.indexOf('data-unskip="p20rent|' + anchor20 + '"') >= 0,
     'v73.64: the plans list renders the skipped past due as a tappable unskip chip (the persistent access)');
   ok(rent20Html.indexOf('1 skipped') >= 0,
@@ -2987,6 +2989,7 @@ waitReady().then(async function (F) {
       F.state.plans = F.state.plans.filter(function (p) { return p.id !== 'p39one'; });
       F.renderPlans();
       var plans39e = String(byIdStub('plans').innerHTML || '');
+      plans39e = plans39e.slice(plans39e.indexOf('cmcard cmall')); // v74.66: the sections live in All plans (the Saving for block above is separate)
       var sectCount39 = (plans39e.match(/class="sect/g) || []).length;
       ok(sectCount39 === 1 && plans39e.indexOf('>Saving for<') < 0 && plans39e.indexOf('>Expenses<') >= 0,
         'v73.96: the empty Saving-for section is hidden (1 section left: ' + sectCount39 + ')');
@@ -3000,8 +3003,8 @@ waitReady().then(async function (F) {
       var pct39 = freeN39s > 0 ? Math.round(committed39 / freeN39s * 1000) / 10 : 0;
       ok(sumV39.indexOf(money22(committed39)) >= 0,
         'v73.96: the summary quotes this cycle\u2019s committed total (' + money22(committed39) + ' = cyclePlanDeduction)');
-      ok(sumS39.indexOf(String(pct39) + '% of your free') >= 0,
-        'v73.96: the summary quotes the % of free cash spoken for (' + pct39 + '% of ' + money22(freeN39s) + ')');
+      ok(freeN39s < 0 ? sumS39.indexOf('more than your free cash') >= 0 : sumS39 === '',
+        'v74.66 retarget: the warning shows only when the dues are more than the free cash (free ' + money22(freeN39s) + ')');
       // the kind round-trips through addPlan (the add sheet's toggle feeds it)
       var beforeKinds39 = F.state.plans.length;
       await F.addPlan({ name: 'Trip fund — Cebu', amount: 3000, date: F.todayISO(), repeat: null, count: null, kind: 'goal' });
@@ -3112,9 +3115,9 @@ waitReady().then(async function (F) {
       plans42 = String(byIdStub('plans').innerHTML || '');
       ok(plans42.indexOf('data-paidbar="1"') >= 0, 'v73.99: a fully-paid one-off brings the Paid bar up');
       ok(plans42.indexOf('>1 · ₱ 2,000.00<') >= 0, 'v73.99: the bar reads count · total (1 · ₱ 2,000.00)');
-      ok(plans42.indexOf('class="prow"') >= 0 && plans42.indexOf('data-delp="pmup5dq4iunh"') >= 0,
+      ok(plans42.indexOf('class="prow ') >= 0 && plans42.indexOf('data-grp="pmup5dq4iunh"') >= 0, // v74.66: tidy row (✎/✕ on its sheet)
         'v73.99: the paid row renders as the muted .prow variant (✎/✕ still bind)');
-      ok(plans42.indexOf('class="prow"') > plans42.indexOf('data-paidbar="1"'),
+      ok(plans42.indexOf('class="prow ') > plans42.indexOf('data-paidbar="1"'),
         'v73.99: the paid row sits UNDER the bar, not in the live list');
       // the row is still actionable from the Paid section: ✎ opens the edit sheet
       F.openPlanEdit('pmup5dq4iunh', '2026-10-09');
@@ -3134,7 +3137,7 @@ waitReady().then(async function (F) {
       F.renderPlans();
       plans42 = String(byIdStub('plans').innerHTML || '');
       var iPart42 = plans42.indexOf('Probe partial');
-      ok(iPart42 >= 0 && plans42.indexOf('class="prow"') > iPart42,
+      ok(iPart42 >= 0 && plans42.indexOf('class="prow ') > iPart42,
         'v73.99: the partly-paid one-off stays in the live list (above the bar)');
       ok(plans42.indexOf('occ-paid partial') >= 0, 'v73.99: the partial wears the ◐ pill (400/1,000)');
       // the bar total is unchanged (the partial is not filed under Paid)

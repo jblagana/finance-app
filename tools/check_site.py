@@ -475,14 +475,14 @@ def main():
           and "'73.14': [" in js)
     check("v73.15 (user: 'the ui for coming up and the entries is so cluttered' — the mockup he approved): the Coming-up list renders SERIES, not projections — a recurring plan is ONE tappable row (name · 'Every <cadence> · next <date>' · count badge · amount 'each') that expands into occurrence sub-rows capped at 5 with '+N more…'; one-offs are plain rows with their own ✕; the 'recurring' pill is gone (the row IS the series), 'edited' survives on the head (any fork) and on the specific sub-row; the ✕ foot-gun left the list for series (delete-whole-plan lives in the edit sheet); the add form collapsed to the one-line '＋ Add a plan' trigger and now lives in #planSheet (bottom-sheet family); the v73.14 rows' unstyled .txn classes are replaced by the .plrow/.occ styles (the v18 ledger rework had deleted the old .txn CSS); the form's Amount label drops the '— number or quick sum' tail",
           'id="planSheet"' in html and 'id="planAddBtn"' in html and 'id="planAddClose"' in html
-          and '＋ Add a plan' in html and '<h2>Committed</h2>' in html  # v73.96: the tab heading is "Committed" (was "Coming up")
+          and '＋ New plan' in html and '<h2>Committed</h2>' in html  # v74.66 retarget: the button reads New plan  # v73.96: the tab heading is "Committed" (was "Coming up")
           and 'id="planForm"' in html and 'id="p_amount"' in html
           and "number or quick sum" not in html
           and ".plrow{" in html and ".occwrap{" in html and ".chev{" in html
           and "function planHTML(p, opts) {" in js
           and "var OCC_CAP = 5;" in js and "'+N more'" not in js
           and "data-grp=" in js and "planOpen[" in js
-          and "class=\"plrow grp" in js and "'plrow oneoff'" in js  # v73.99: the one-off class is now the rowClsO ternary (paid → 'prow')
+          and "cls: 'plrow grp'" in js and "'plrow oneoff'" in js  # v74.66 retarget: the tidy row (cmRow) carries the plrow grp class  # v73.99: the one-off class is now the rowClsO ternary (paid → 'prow')
           and "data-delp" in js and "data-editp" in js
           and "openSheet('planSheet')" in js
           and "planHTML: planHTML" in js
@@ -886,9 +886,9 @@ def main():
           and "x.skip ? ' data-unskip=\"' + p.id + '|' + x.d +" in js
           # v73.64: the header ↺ targets `firstSkip` (the earliest future
           # skip, or the most recent past one — the boss's Rent case)
-          and "data-unskip=\"' + p.id + '|' + firstSkip +" in js
+          and "q2('[data-unskip]'" in js  # v74.66 retarget: the unskip path lives on the plan's sheet
           and "skipTotal + ' skipped</span>'" in js
-          and "if (this.tagName === 'SPAN') {" in js.split("function renderPlans")[1].split("function addPlan")[0]
+          and "q1('[data-grp]', function () { openPlanDetail(" in js.split("function renderPlans")[1].split("function addPlan")[0]
           and "unskipPlanOccurrence: unskipPlanOccurrence, // v73.54" in js
           and "renderPlans: renderPlans, // v73.54" in js
           and "'73.54': [" in js)
@@ -896,8 +896,8 @@ def main():
           # v73.64: the ✎ renders on `skipTotal` (past + future skips) and
           # targets `firstSkip` (the v73.55 `skipped.length`/`skipped[0]`
           # shape retargeted — past-only skips now keep the button too)
-          "(shown.length || skipTotal ? '<button class=\"mini\" data-editp=\"' + p.id + '\" data-editd=\"' + (shown.length ? shown[0].d : firstSkip) + '\" title=\"Edit this occurrence\">✎</button>' : '')" in js
-          and "'<button class=\"mini\" data-delp=\"' + p.id + '\" title=\"Delete plan\">✕</button>' + '</div>';" in js
+          "Edit plan</button>" in js  # v74.66 retarget: the ✎ moved off the row onto the plan's sheet (editD targets the skipped occurrence when nothing else is left)
+          and "Delete plan</button>" in js  # v74.66 retarget: the ✕ moved onto the plan's sheet
           and "var r = planDateAt(p, g);" in js.split("collision: another occurrence")[1].split("if (others[newDate])")[0]
           and "'73.55': [" in js)
     check("v73.56 (boss: 'do 1' — kill the fuzzy match window, plus 'make the hero card this-cycle plan dues expandable just like next cycle'): (1) a plan occurrence is PAID ONLY by an explicit planRef link (the chip's tap) — the v73.26 name-word ±2-day branch and the v73.27 overdue [due-2, +inf) widening are GONE (the unbounded window had no floor, so previous months' payments or a logged matching amount summed toward the current occurrence and zeroed it — the due row vanished and the hero's free jumped back up by the full amount, the boss's 12k-rent incident); a payment logged without the chip simply doesn't count, the due row stays until the chip is tapped or the entry is edited and linked (the v73.17 design truth, now the ONLY truth); (2) the hero's THIS-cycle 'Plan dues' row is expandable exactly like the peek's — the v73.37/v73.39 machinery (cbPlansRow / cbPlansOpen / cbPlansMore) is shared: same id, same sub-rows from p.planItems, same '+N more…' second level, and the peek's expansion state follows the this-cycle row",
@@ -1042,7 +1042,7 @@ def main():
           # the old gate is GONE from the deduction
           and "var ro = p.repeat ? resolveOccurrence(p, od) : null;" not in js
           # the skipped one-off's record pill + unskip path in the plans list
-          and 'data-unskip="' + "' + p.id + '|' + String(p.date)" in js
+          and "Unskip</button>" in js  # v74.66 retarget: a skipped one-off's unskip lives on its sheet
           # the notes
           and "'73.63': [" in js)
     check("v73.64 (boss: 'the amber partial chip disappeared with no trace, i no longer have access to unskip'): a skip is a RELOCATION, not a deletion — the grid's advance loop keeps the skipped occurrence's resolved date in the window (same semantics as a moved-to-future due), so the history strip renders its 'skipped' chip with data-unskip and the header's ↺ + 'N skipped' count cover PAST skips too (they only saw future ones before — the boss's Rent was a past skip: count 0, no button, no chip). unskipPlanOccurrence's was-restore is untouched (never deletes a fork).",
@@ -1999,6 +1999,13 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.66 (boss: 'redesign the commited tab, especially the recurring ones ... texts that make it look cluttered or resize the card awkwardly' -> boards 12/12b/12c -> 'ship the committed redesign'): the top card = still to pay this cycle + a plain over-free warning; #plans = This cycle (cmCycleItems, by date, paid ticked, +N more) / Saving for (Lock, pot asks) / All plans (tabs, tidy cmRow rows with no buttons); a tap opens #planDetSheet (renderPlanDetail: Mark paid / Skip or move / dates / Edit / Delete; pot: Use / Add extra / asks / history)",
+          "function cmRow(o) {" in js and "function cmCycleItems() {" in js and "function renderPlanDetail() {" in js
+          and "function renderCommittedTop(cyc) {" in js and "function openPlanDetail(pid) {" in js
+          and 'id="planDetSheet"' in html and 'id="pdBody"' in html and 'id="committedCnt"' in html
+          and "Still to pay this cycle" in html
+          and "q1('[data-grp]', function () { openPlanDetail(this.getAttribute('data-grp')); });" in js
+          and "'74.66': [" in js)
     check("v74.65 (boss: 'saving for' one-offs set aside from free for display, liquid only on lock + recurring pots that ask to confirm): isGoalPlan plans leave every due computation (planWindowTotal / cyclePlanDeduction / cyclePlanPaid / coming-up / month plans / On repeat / graph / due rows); savingData holds one-offs in full until a linked purchase (Lock) and pots at added − used (potAdds, planRef date 'pot'), asks per date until the goal; freeNet and the cycle bridge subtract it (the Saving for row)",
           "function savingData() {" in js and "function isGoalPlan(p) { return !!(p && p.kind === 'goal'); }" in js
           and js.count("if (isGoalPlan(p)) return;") >= 7
@@ -2513,7 +2520,7 @@ def main():
           and "var paidOneoffs = oneoffs.filter(function (p) { return oneOffPaid(p); }).reverse();" in js
           and 'data-paidbar="1"' in js
           and "var rowClsO = paidFullO ? 'prow' : 'plrow oneoff';" in js
-          and "pbar.onclick = function () { paidOpen = !paidOpen; renderPlans(); };" in js
+          and "q1('[data-paidbar]', function () { paidOpen = !paidOpen; renderPlans(); });" in js
           and "setPaidOpen: function (o) { paidOpen = !!o; }" in js
           and ".paidbar{display:flex" in html
           and ".paidrows.open{display:block}" in html

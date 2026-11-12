@@ -8324,22 +8324,23 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       // ◐ pill (the remainder is still owed).
       var paidO = findPaidTxn({}, { planId: p.id, date: String(p.date), name: p.name, amount: p.amount });
       var paidFullO = !!(paidO && (Number(paidO.amount) || 0) >= (Number(p.amount) || 0) - 0.005);
-      if (roO && roO.skip) {
-        return '<div class="plrow oneoff skipped"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') +
-          ' <span class="pill" style="font-size:10px;background:rgba(143,176,255,.14);color:#8fb0ff">skipped</span></div>' +
-          '<div class="pl-sub">' + esc(subTxt) + '</div></div>' +
-          '<div class="pl-r"><div class="pl-amt' + gclsO + '" style="text-decoration:line-through;opacity:.6">₱ ' + amt(p.amount) + '</div></div>' +
-          '<button class="mini" data-unskip="' + p.id + '|' + String(p.date) + '" title="Tap to unskip — the due returns to the coach card">↺</button>' +
-          '<button class="mini" data-delp="' + p.id + '" title="Delete plan">✕</button></div>';
+      if (roO && roO.skip) { // v74.66: the tidy row (Unskip lives on the plan's sheet)
+        return cmRow({ cls: 'plrow oneoff skipped', attr: ' data-grp="' + esc(p.id) + '"', tile: 't-m', tileTxt: cmInitial(p.name), name: esc(p.name || 'Plan'),
+          sub: dayMonth(String(p.date)) + ' · one-off', amt: '<s>₱ ' + amt(p.amount) + '</s>', goal: p.kind === 'goal', st: 'skipped', stCls: 'info' });
       }
       // v73.99: the fully-paid row — same anatomy, muted + strikethrough
       // (.prow), filed under the Paid bar by renderPlans.
       var rowClsO = paidFullO ? 'prow' : 'plrow oneoff';
-      return '<div class="' + rowClsO + '"><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') + planPaidPill(p.id, String(p.date), p.name, p.amount) + '</div>' +
-        '<div class="pl-sub">' + esc(subTxt) + '</div></div>' +
-        '<div class="pl-r"><div class="pl-amt' + gclsO + '">₱ ' + amt(p.amount) + '</div></div>' +
-        '<button class="mini" data-editp="' + p.id + '" data-editd="' + String(p.date) + '" title="Edit this one-off">✎</button>' +
-        '<button class="mini" data-delp="' + p.id + '" title="Delete plan">✕</button></div>';
+      // v74.66: the tidy row — tile · name · date | amount · status; the ✎ / ✕ live on the plan's sheet
+      var stO = '', stcO = 'mut';
+      var pillO = planPaidPill(p.id, String(p.date), p.name, p.amount);
+      if (p.kind === 'goal') { var boughtO = planLinkedTxns(p.id).length > 0; stO = boughtO ? 'bought' : 'set aside'; stcO = boughtO ? 'ok' : 'info'; }
+      else if (paidFullO) { stO = 'paid'; stcO = 'ok'; }
+      else if (pillO.indexOf('partial') >= 0) { stO = pillO; stcO = ''; }
+      else { var wO = cmWhen(String(p.date), todayISO()); stO = wO.t; stcO = wO.c; }
+      return cmRow({ cls: rowClsO + (paidFullO ? ' done' : ''), attr: ' data-grp="' + esc(p.id) + '"', tile: p.kind === 'goal' ? 't-b' : (paidFullO ? 't-g' : 't-a'),
+        tileTxt: paidFullO ? '✓' : cmInitial(p.name), name: esc(p.name || 'Plan'), sub: dayMonth(String(p.date)) + ' · one-off',
+        amt: '₱ ' + amt(p.amount), goal: p.kind === 'goal', st: stO, stCls: stcO });
     }
     var occ = planOccurrences(p);
     var shown = [];
@@ -8398,20 +8399,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     // so a past-only skip left the header with no button at all.
     var pastSkips = past.filter(function (x) { return x.skip; });
     var firstSkip = skipped.length ? skipped[0].d : (pastSkips[0] || {}).d;
-    var head = '<div class="plrow grp' + (opts.open ? ' open' : '') + '" data-grp="' + p.id + '">' +
-      '<div class="chev">▸</div><div class="pl-l"><div class="pl-name">' + esc(p.name || 'Plan') +
-      (anyEdited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') +
-      '</div><div class="pl-sub">' + headSub + '</div></div>' +
-      '<div class="pl-r"><div class="pl-amt' + (p.kind === 'goal' ? ' goal' : '') + '">₱ ' + amt(p.amount) + '</div><div class="pl-per">each</div></div>' +
-      (firstSkip ? '<button class="mini" data-unskip="' + p.id + '|' + firstSkip + '" title="Unskip ' + fmtDate(firstSkip) + ' (and see the rest expanded)">↺</button>' : '') +
-      // v73.55: a plan whose dues are ALL skipped is exactly the plan you
-      // most want to edit/unskip — the ✎ must not vanish with `shown`.
-      (shown.length || skipTotal ? '<button class="mini" data-editp="' + p.id + '" data-editd="' + (shown.length ? shown[0].d : firstSkip) + '" title="Edit this occurrence">✎</button>' : '') +
-      // v73.55: recurring plans get the plans-list delete (one-offs already
-      // had it) — previously a recurring plan could only be removed via the
-      // coach card's skip-and-delete flow.
-      '<button class="mini" data-delp="' + p.id + '" title="Delete plan">✕</button>' + '</div>';
-    if (!opts.open) return head;
+    // v74.66: the old head row (with its ↺ / ✎ / ✕) is gone — the tidy row below + the plan's sheet replace it
+    // v74.66: the collapsed row is the tidy row (no ↺ / ✎ / ✕ — they live on the plan's sheet)
+    var overdueN = past.filter(function (x) { return !x.skip && !x.paid; }).length;
+    var subR = cmPer(p) + (p.count ? ' · ' + shown.length + ' of ' + p.count + ' left' : '') + (skipTotal ? ' · ' + skipTotal + ' skipped' : '');
+    var stR, stcR;
+    if (p.kind === 'goal') { var itR = null; savingData().items.forEach(function (x) { if (String(x.p.id) === String(p.id)) itR = x; }); stR = money(itR ? itR.held : 0).replace('PHP ', '₱') + ' in pot'; stcR = 'info'; }
+    else if (overdueN) { stR = overdueN + ' overdue'; stcR = 'late'; }
+    else if (shown.length) { stR = 'next ' + dayMonth(shown[0].d); stcR = 'mut'; }
+    else { stR = paidCount ? 'all paid' : 'nothing left'; stcR = paidCount ? 'ok' : 'mut'; }
+    if (!opts.open) return cmRow({ cls: 'plrow grp', attr: ' data-grp="' + esc(p.id) + '"', tile: p.kind === 'goal' ? 't-b' : 't-a', tileTxt: cmInitial(p.name),
+      name: esc(p.name || 'Plan') + (anyEdited ? ' <span class="cmedit">edited</span>' : ''), sub: subR, amt: '₱ ' + amt(p.amount), goal: p.kind === 'goal', st: stR, stCls: stcR });
     // v73.59: the expanded state is the mockup's shape — the NEXT due gets
     // one emphasized row (the ✎ target, the skip/move chooser lives on the
     // coach card), and everything before today compresses into the history
@@ -8453,7 +8451,12 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       sub += '</div>';
     }
     if (!shown.length && !records.length) sub += '<div class="occwrap"><div class="occ"><span class="oc-d">nothing left</span></div></div>';
-    return head + sub;
+    // v74.66: the plan's sheet — the meta line (cadence · left · N paid · N skipped) + the dates
+    var meta = '<div class="pdmeta" data-grp="' + esc(p.id) + '">₱ ' + amt(p.amount) + ' ' + cmPer(p) + (p.count ? ' · ' + shown.length + ' of ' + p.count + ' left' : '') +
+      (paidCount ? ' · ' + paidCount + ' paid' : '') + (skipTotal ? ' · ' + skipTotal + ' skipped' : '') + (p.category ? ' · ' + esc(p.category) : '') + '</div>';
+    var editD = shown.length ? shown[0].d : (firstSkip || (occ[0] || String(p.date)));
+    if (opts.parts) return { meta: meta, sub: sub, editD: editD };
+    return meta + sub;
   }
   // v73.59: the sort key — a recurring series sorts by its NEXT occurrence
   // (the resolved, post-move date — a moved due re-orders the list), a
@@ -8466,19 +8469,89 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     }
     return String(p.date);
   }
+  // v74.66 (boss: 'redesign the commited tab, especially the recurring ones ... consider the texts that make it look
+  // cluttered or resize the card awkwardly' -> canvas boards 12 / 12b / 12c -> 'ship the committed redesign'):
+  // Committed is three blocks — THIS CYCLE (every due before payday, by date, paid ones ticked), SAVING FOR (one-offs
+  // with Lock, pots with their asks) and ALL PLANS (the One-offs / Recurring tabs, tidy rows). Every row is the same
+  // shape — tile · name · one short line | amount · status — with NO buttons on it: a tap opens the plan's sheet
+  // (renderPlanDetail), where Mark paid / Skip or move / the dates / Edit / Delete live.
+  var cmCycleAll = false; // the This-cycle list's "+N more" (in-memory)
+  var planDetId = null;   // the plan whose sheet is open
+  function cmRow(o) {
+    return '<div class="' + o.cls + ' cmrow"' + (o.attr || '') + ' role="button" tabindex="0">' +
+      '<span class="cmtile ' + (o.tile || 't-a') + '" aria-hidden="true">' + o.tileTxt + '</span>' +
+      '<div class="pl-l cmmid"><div class="pl-name cmn">' + o.name + (o.rec ? '<span class="cmrep" aria-label="repeats">↻</span>' : '') + '</div>' +
+      '<div class="pl-sub cms">' + o.sub + '</div></div>' +
+      '<div class="pl-r cmrt"><div class="pl-amt' + (o.goal ? ' goal' : '') + '">' + o.amt + '</div>' +
+      (o.st ? '<div class="cmst ' + (o.stCls || '') + '">' + o.st + '</div>' : '') + '</div></div>';
+  }
+  function cmInitial(n) { var c = String(n || '').trim().charAt(0).toUpperCase(); return c ? esc(c) : '·'; }
+  function cmPer(p) {
+    var d = parseISO(String(p.date));
+    if (p.repeat === 'daily') return 'daily';
+    if (p.repeat === 'weekly') return 'weekly on ' + ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
+    if (p.repeat === 'annual') return 'yearly on ' + dayMonth(String(p.date));
+    return 'monthly on the ' + ordinal(d.getDate());
+  }
+  function cmWhen(d, today) {
+    var n = diffDays(today, d);
+    if (n < 0) return { t: 'overdue', c: 'late' };
+    if (n === 0) return { t: 'today', c: 'soon' };
+    if (n === 1) return { t: 'tomorrow', c: 'soon' };
+    return { t: 'in ' + n + ' days', c: n <= 3 ? 'soon' : 'mut' };
+  }
+  function cmAmt(v) { return '₱ ' + money(v).replace('PHP ', ''); }
+  // this cycle's dues (paid ones included, ticked) — the same window + resolver + paid proof as cyclePlanDeduction
+  function cmCycleItems() {
+    var cd = cycleData(); if (!cd) return null;
+    var today = todayISO(), items = [];
+    (state.plans || []).forEach(function (p) {
+      if (isGoalPlan(p)) return;
+      planAllDates(p).forEach(function (od) {
+        if (od < cd.start || od > cd.end) return;
+        var ro = resolveOccurrence(p, od);
+        if (ro && ro.skip) return;
+        var nm = ro ? ro.name : p.name, am = Number(ro ? ro.amount : p.amount) || 0;
+        var pp = findPaidTxn({ monthPrefix: today.slice(0, 7), today: today }, { planId: p.id, date: od, name: nm, amount: am });
+        items.push({ p: p, d: od, nm: nm, am: am, paid: Math.min(am, Number(pp && pp.amount) || 0) });
+      });
+    });
+    items.sort(function (a, b) { return a.d < b.d ? -1 : (a.d > b.d ? 1 : String(a.nm).localeCompare(String(b.nm))); });
+    return { cd: cd, items: items };
+  }
+  function renderCommittedTop(cyc) {
+    var sumEl = byId('committedSum'); if (!sumEl) return;
+    var committed = cyclePlanDeduction(), paid = cyclePlanPaid();
+    var d = insightsData();
+    var freeN = d && d.freeNet != null ? d.freeNet : (d ? d.free : null);
+    if (!(committed > 0.004 || paid > 0) || freeN == null) { sumEl.style.display = 'none'; return; }
+    sumEl.style.display = '';
+    var items = (cyc && cyc.items) || [];
+    var nPaid = items.filter(function (x) { return x.paid >= x.am - 0.005; }).length;
+    var tot = r2(committed + paid);
+    var set = function (id, v, html) { var e = byId(id); if (e) { if (html) e.innerHTML = v; else e.textContent = v; } };
+    set('committedSumV', money(committed), true);
+    var bEl = byId('committedBar'); if (bEl) bEl.style.width = (tot > 0 ? Math.round(paid / tot * 100) : 0) + '%';
+    set('committedPaid', money(paid) + ' paid');
+    set('committedCnt', items.length ? '· ' + nPaid + ' of ' + items.length : '');
+    set('committedOf', (items.length - nPaid) + ' left' + (cyc && cyc.cd ? ' · ends ' + dayMonth(cyc.cd.end) : ''));
+    var w = byId('committedSumSub');
+    if (w) {
+      if (freeN < -0.004) { w.style.display = ''; w.innerHTML = 'That’s <b>' + money(-freeN) + '</b> more than your free cash right now.'; }
+      else { w.style.display = 'none'; w.innerHTML = ''; }
+    }
+  }
   function renderPlans() {
     var el = byId('plans'); if (!el) return;
     var all = state.plans.slice();
+    var cyc = cmCycleItems();
+    renderCommittedTop(cyc);
     if (!all.length) {
-      el.innerHTML = '<p class="note" style="margin:2px 0">No plans yet — add one below to see what\'s coming and whether you can afford it.</p>';
+      el.innerHTML = '<div class="cmcard"><p class="note" style="margin:6px 0">No plans yet — add one below to see what\'s coming and whether you can afford it.</p></div>';
+      renderPlanDetail();
       return;
     }
-    // v73.60 (boss: 'lets separate them thru a tab, left tab is oneoffs,
-    // right is recurring' + 'Ship it as v73.60 (one-offs default default)'):
-    // the v73.59 stacked sections become a TAB BAR — One-offs LEFT,
-    // Recurring RIGHT, counts ride the tabs, and ONE-OFFS is the default
-    // tab. Pure layout over the v73.59 renderer: both lists always exist,
-    // nothing is hidden or filtered, the tab is in-memory view state.
+    var today = todayISO();
     var byKey = function (a, b) {
       var ka = planSortKey(a), kb = planSortKey(b);
       if (ka !== kb) return ka < kb ? -1 : 1;
@@ -8486,16 +8559,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     };
     var recs = all.filter(function (p) { return p.repeat; }).sort(byKey);
     var oneoffs = all.filter(function (p) { return !p.repeat; }).sort(byKey);
-    // expand/collapse state survives re-renders until the plan SET changes
     var sig = all.map(function (p) { return p.id; }).join('|');
     if (sig !== planSig) { planOpen = {}; planSig = sig; }
-    // v73.96 (boss-approved mockup_committed_sections.html): the list is
-    // SECTIONED by kind — Expenses (amber) / Saving for (blue) — inside the
-    // One-offs/Recurring tabs. p.kind is 'goal' for saving-for rows;
-    // anything else (incl. old plans with no field) is an expense, so the
-    // migration is implicit and the sections never surprise. Empty sections
-    // are hidden — a section appears the moment its first row exists. The
-    // section label carries the count + subtotal (the mockup's "2 · ₱3,299").
     function planKind(p) { return p.kind === 'goal' ? 'goal' : 'expense'; }
     function sectionHTML(list, kind) {
       if (!list.length) return '';
@@ -8505,36 +8570,76 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var tot = list.length + ' · <b>₱ ' + (Math.round(total * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</b>';
       return '<div class="sect' + (kind === 'goal' ? ' goal' : '') + '"><span class="lab">' + lab + '</span><span class="tot">' + tot + '</span></div>';
     }
-    // v73.99 (boss-approved mockup_committed_paid.html): fully-paid one-offs
-    // LEAVE the live list — they collect under the collapsed Paid bar at the
-    // bottom of the tab (count · total, muted strikethrough rows, tap to
-    // expand; in-memory state, resets on reload, like the hero's Cards row).
-    // Partly-paid one-offs STAY live (the ◐ pill — the remainder is still
-    // owed). Recurring plans STAY too: their next due is still live, and
-    // their payment record is the existing "N paid" chip on the header.
-    // Empty Paid state → the bar doesn't render at all.
     function oneOffPaid(p) {
       var pd = findPaidTxn({}, { planId: p.id, date: String(p.date), name: p.name, amount: p.amount });
       return !!(pd && (Number(pd.amount) || 0) >= (Number(p.amount) || 0) - 0.005);
     }
     var liveOneoffs = oneoffs.filter(function (p) { return !oneOffPaid(p); });
-    var paidOneoffs = oneoffs.filter(function (p) { return oneOffPaid(p); }).reverse(); // newest first under the bar
+    var paidOneoffs = oneoffs.filter(function (p) { return oneOffPaid(p); }).reverse();
     function listHTML(list) {
       var exp = list.filter(function (p) { return planKind(p) === 'expense'; });
       var goal = list.filter(function (p) { return planKind(p) === 'goal'; });
       var h = sectionHTML(exp, 'expense');
-      exp.forEach(function (p) { h += planHTML(p, { open: !!planOpen[p.id] }); });
+      exp.forEach(function (p) { h += planHTML(p, {}); });
       h += sectionHTML(goal, 'goal');
-      goal.forEach(function (p) { h += planHTML(p, { open: !!planOpen[p.id] }); });
+      goal.forEach(function (p) { h += planHTML(p, {}); });
       return h;
     }
-    var html = '<div class="pltabs">' +
+    var html = '';
+    // ---- THIS CYCLE ----
+    if (cyc && cyc.items.length) {
+      var CAP = 6, shownI = cmCycleAll ? cyc.items : cyc.items.slice(0, CAP);
+      html += '<div class="cmsec"><span class="l">This cycle</span><span class="r">by due date</span></div><div class="cmcard">';
+      shownI.forEach(function (x) {
+        var done = x.paid >= x.am - 0.005;
+        var w = cmWhen(x.d, today);
+        var st = done ? 'paid' : (x.paid > 0.004 ? money(x.paid).replace('PHP ', '₱') + ' of ' + money(x.am).replace('PHP ', '₱') : w.t);
+        var left = '';
+        if (x.p.repeat && x.p.count) { var occL = planOccurrences(x.p).filter(function (o) { return o >= x.d; }).length; left = ' · ' + occL + ' of ' + x.p.count + ' left'; }
+        html += cmRow({ cls: 'cmcyc' + (done ? ' done' : ''), attr: ' data-cmplan="' + esc(x.p.id) + '"',
+          tile: done ? 't-g' : 't-a', tileTxt: done ? '✓' : cmInitial(x.nm), name: esc(x.nm || 'Plan'), rec: !!x.p.repeat,
+          sub: dayMonth(x.d) + ' · ' + (x.p.repeat ? (left ? left.slice(3) : ({ daily: 'daily', weekly: 'weekly', annual: 'yearly' }[x.p.repeat] || 'monthly')) : 'one-off'),
+          amt: cmAmt(x.am), st: st, stCls: done ? 'ok' : (x.paid > 0.004 ? 'soon' : w.c) });
+      });
+      if (cyc.items.length > CAP) html += '<button type="button" class="cmmore" data-cmmore="1">' + (cmCycleAll ? 'Show less' : '+' + (cyc.items.length - CAP) + ' more this cycle') + '</button>';
+      html += '</div>';
+    }
+    // ---- SAVING FOR ----
+    var sd = savingData();
+    var sv = sd.items.filter(function (it) { return it.type === 'pot' || (!it.bought && !it.skip); });
+    if (sv.length) {
+      html += '<div class="cmsec"><span class="l">Saving for</span><span class="r">set aside <b>' + money(sd.total) + '</b></span></div><div class="cmcard">';
+      sv.forEach(function (it) {
+        var p = it.p;
+        if (it.type === 'one') {
+          html += '<div class="cmpot">' + cmRow({ cls: 'cmsv', attr: ' data-cmplan="' + esc(p.id) + '"', tile: 't-b', tileTxt: cmInitial(p.name), name: esc(p.name || 'Saving for'),
+            sub: 'one-off · planned ' + dayMonth(it.date), amt: cmAmt(it.held), goal: true, st: 'set aside', stCls: 'mut' }) +
+            '<div class="cmask plain"><span class="q">Bought it? Lock it to log the purchase.</span><button type="button" class="cmbtn o" data-cmlock="' + esc(p.id) + '">Lock</button></div></div>';
+          return;
+        }
+        var per = { daily: 'daily', weekly: 'weekly', annual: 'yearly' }[p.repeat] || 'monthly';
+        var sub = money(Number(p.amount) || 0).replace('PHP ', '₱') + ' ' + per + (it.goal ? ' · goal ' + money(it.goal).replace('PHP ', '₱') : '');
+        html += '<div class="cmpot">' + cmRow({ cls: 'cmsv', attr: ' data-cmplan="' + esc(p.id) + '"', tile: 't-b', tileTxt: cmInitial(p.name), name: esc(p.name || 'Pot'), rec: true,
+          sub: sub, amt: cmAmt(it.held), goal: true, st: it.full ? 'full' : 'in the pot', stCls: it.full ? 'ok' : 'mut' });
+        if (it.goal > 0) html += '<div class="cmpbar"><i style="width:' + Math.min(100, Math.round(it.held / it.goal * 100)) + '%"></i></div>';
+        if (it.pending.length) {
+          var q = it.pending[0];
+          html += '<div class="cmask"><span class="q">' + dayMonth(q.date) + ' · add ' + money(q.amount).replace('PHP ', '₱') + ' to ' + esc(p.name || 'the pot') + '?' +
+            (it.pending.length > 1 ? ' <small>+' + (it.pending.length - 1) + ' more</small>' : '') + '</span>' +
+            '<button type="button" class="cmbtn g" data-potskip="' + esc(p.id) + '|' + q.date + '">Skip</button>' +
+            '<button type="button" class="cmbtn p" data-potadd="' + esc(p.id) + '|' + q.date + '">Add</button></div>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    // ---- ALL PLANS ----
+    html += '<div class="cmsec"><span class="l">All plans</span><span class="r">' + all.length + '</span></div><div class="cmcard cmall">';
+    html += '<div class="pltabs">' +
       '<div class="pltab' + (planTab === 'one' ? ' on' : '') + '" data-pltab="one">One-offs<span class="plcnt">' + oneoffs.length + '</span></div>' +
       '<div class="pltab' + (planTab === 'rec' ? ' on' : '') + '" data-pltab="rec">Recurring<span class="plcnt">' + recs.length + '</span></div>' +
       '</div>';
     html += listHTML(planTab === 'one' ? liveOneoffs : recs);
-    // the Paid bar — only on the One-offs tab (recurring paid records stay
-    // the per-plan chips), and only when something is actually paid.
     if (planTab === 'one' && paidOneoffs.length) {
       var paidTotal = 0;
       paidOneoffs.forEach(function (p) { paidTotal += Number(p.amount) || 0; });
@@ -8542,79 +8647,137 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         '<span class="lab">Paid</span>' +
         '<span><span class="tot">' + paidOneoffs.length + ' · ₱ ' + (Math.round(paidTotal * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span><span class="chev">▸</span></span>' +
         '</div><div class="paidrows' + (paidOpen ? ' open' : '') + '">';
-      paidOneoffs.forEach(function (p) { html += planHTML(p, { open: false }); });
+      paidOneoffs.forEach(function (p) { html += planHTML(p, {}); });
       html += '</div>';
     }
+    if (planTab === 'one' && !oneoffs.length) html += '<p class="note" style="margin:8px 2px">No one-offs.</p>';
+    html += '</div>';
     el.innerHTML = html;
-    // v73.96: the summary line — this cycle's committed total (the SAME
-    // cyclePlanDeduction math the hero's Plan dues row uses, so the tab
-    // proves the hero's number) + how much of the free cash it speaks for.
-    var sumEl = byId('committedSum');
-    if (sumEl) {
-      var committed = cyclePlanDeduction();
-      var d39 = insightsData();
-      var freeN39 = d39 && d39.freeNet != null ? d39.freeNet : (d39 ? d39.free : null);
-      var paid39 = cyclePlanPaid(); // v74.24 look upgrade: the progress bar (paid of paid + still to pay)
-      if ((committed > 0.004 || paid39 > 0) && freeN39 != null) {
-        sumEl.style.display = '';
-        var vEl = byId('committedSumV'); if (vEl) vEl.innerHTML = '− ' + money(committed);
-        var tot39 = r2(committed + paid39);
-        var bEl = byId('committedBar'); if (bEl) bEl.style.width = (tot39 > 0 ? Math.round(paid39 / tot39 * 100) : 0) + '%';
-        var pEl = byId('committedPaid'); if (pEl) pEl.textContent = money(paid39);
-        var oEl = byId('committedOf'); if (oEl) oEl.textContent = 'of ' + money(tot39) + ' this cycle';
-        var sEl = byId('committedSumSub');
-        if (sEl) {
-          var pct = freeN39 > 0 ? Math.round(committed / freeN39 * 1000) / 10 : 0;
-          sEl.innerHTML = pct + '% of your free<br>is spoken for';
+    // ---- taps ----
+    var q1 = function (sel, fn) { var ns = el.querySelectorAll(sel); for (var i = 0; i < ns.length; i++) ns[i].onclick = fn; };
+    q1('[data-pltab]', function () { planTab = this.getAttribute('data-pltab'); renderPlans(); });
+    q1('[data-paidbar]', function () { paidOpen = !paidOpen; renderPlans(); });
+    q1('[data-cmmore]', function () { cmCycleAll = !cmCycleAll; renderPlans(); });
+    q1('[data-cmplan]', function () { openPlanDetail(this.getAttribute('data-cmplan')); });
+    q1('[data-grp]', function () { openPlanDetail(this.getAttribute('data-grp')); });
+    q1('[data-cmlock]', function (e) { if (e && e.stopPropagation) e.stopPropagation(); goalLock(this.getAttribute('data-cmlock')); });
+    q1('[data-potadd]', function (e) { if (e && e.stopPropagation) e.stopPropagation(); var a = this.getAttribute('data-potadd').split('|'); potConfirm(a[0], a[1]); });
+    q1('[data-potskip]', function (e) { if (e && e.stopPropagation) e.stopPropagation(); var a = this.getAttribute('data-potskip').split('|'); potSkip(a[0], a[1]); });
+    renderPlanDetail();
+  }
+  // ---- the plan's sheet ----
+  function openPlanDetail(pid) {
+    planDetId = pid;
+    renderPlanDetail();
+    openSheet('planDetSheet');
+  }
+  function pdCard(k, amtTxt, side, sideCls, btns) {
+    return '<div class="pdnext"><div class="k">' + k + '</div><div class="v"><b>' + amtTxt + '</b><span class="' + (sideCls || '') + '">' + side + '</span></div>' +
+      (btns ? '<div class="pdacts">' + btns + '</div>' : '') + '</div>';
+  }
+  function renderPlanDetail() {
+    var body = byId('pdBody'); if (!body) return;
+    var p = planDetId ? planById(planDetId) : null;
+    if (!p) { body.innerHTML = ''; return; }
+    var tEl = byId('pdTitle'); if (tEl) tEl.textContent = p.name || 'Plan';
+    var today = todayISO(), h = '', editD = String(p.date);
+    var amtOf = function (v) { return money(Number(v) || 0); };
+    if (isGoalPlan(p) && p.repeat) {
+      // a pot
+      var it = null; savingData().items.forEach(function (x) { if (String(x.p.id) === String(p.id)) it = x; });
+      it = it || { held: 0, goal: 0, pending: [], added: 0, used: 0 };
+      var per = { daily: 'daily', weekly: 'weekly', annual: 'yearly' }[p.repeat] || 'monthly';
+      h += '<div class="pdmeta" data-grp="' + esc(p.id) + '">Saving for · ' + amtOf(p.amount) + ' ' + per + (p.category ? ' · ' + esc(p.category) : '') + '</div>';
+      var side = it.goal > 0 ? 'of ' + amtOf(it.goal) + ' goal' : 'no goal';
+      var est = '';
+      if (it.goal > 0 && !it.full && p.repeat === 'monthly' && Number(p.amount) > 0) {
+        var mo = Math.ceil((it.goal - it.held) / Number(p.amount)), dd = new Date(); dd.setMonth(dd.getMonth() + mo);
+        est = ' Full by about ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dd.getMonth()] + ' ' + dd.getFullYear() + ' at ' + amtOf(p.amount) + ' a month.';
+      }
+      h += '<div class="pdnext"><div class="k">In the pot</div><div class="v"><b>' + amtOf(it.held) + '</b><span class="goalv">' + side + '</span></div>' +
+        (it.goal > 0 ? '<div class="cmpbar wide"><i style="width:' + Math.min(100, Math.round(it.held / it.goal * 100)) + '%"></i></div>' : '') +
+        '<div class="pdnote">Held back from your free cash.' + est + '</div>' +
+        '<div class="pdacts"><button type="button" class="act pdgo b" data-potuse="' + esc(p.id) + '">Use from pot</button><button type="button" class="act ghost" data-potextra="' + esc(p.id) + '">Add extra</button></div></div>';
+      if (it.pending.length) {
+        h += '<div class="pdlab">Waiting for you</div>';
+        it.pending.forEach(function (q) {
+          h += '<div class="pdocc"><span>' + dayMonth(q.date) + ' · add ' + amtOf(q.amount) + '?</span><span class="pdbtns"><button type="button" class="cmbtn g" data-potskip="' + esc(p.id) + '|' + q.date + '">Skip</button><button type="button" class="cmbtn p" data-potadd="' + esc(p.id) + '|' + q.date + '">Add</button></span></div>';
+        });
+      }
+      var hist = [];
+      Object.keys(p.potAdds || {}).forEach(function (k) { hist.push({ d: /^\d{4}-/.test(k) ? k : '', k: k, t: /^\d{4}-/.test(k) ? 'added' : 'extra added', a: Number(p.potAdds[k]) || 0, s: 1 }); });
+      planLinkedTxns(p.id).forEach(function (t) { hist.push({ d: t.date, t: 'used' + (t.note ? ' · ' + esc(t.note) : ''), a: Number(t.amount) || 0, s: -1 }); });
+      planAllDates(p).forEach(function (d) { if (d > today) return; var r = resolveOccurrence(p, d); if (r && r.skip) hist.push({ d: d, t: 'skipped', a: 0, s: 0, un: true }); });
+      hist.sort(function (a, b) { return (a.d || '9') < (b.d || '9') ? 1 : -1; });
+      if (hist.length) {
+        h += '<div class="pdlab">History</div>';
+        hist.slice(0, 12).forEach(function (x) {
+          h += '<div class="pdocc"><span>' + (x.d ? dayMonth(x.d) + ' · ' : '') + x.t + (x.un ? ' <button type="button" class="cmlink" data-unskip="' + esc(p.id) + '|' + x.d + '">undo</button>' : '') + '</span>' +
+            '<span class="' + (x.s > 0 ? 'goalv' : (x.s < 0 ? 'minus' : 'mut')) + '">' + (x.s > 0 ? '+ ' + amtOf(x.a) : (x.s < 0 ? '− ' + amtOf(x.a) : '—')) + '</span></div>';
+        });
+      }
+      var occP = planOccurrences(p); editD = occP[0] || String(p.date);
+    } else if (!p.repeat) {
+      // a one-off
+      var od = (planAllDates(p)[0]) || String(p.date), ro = resolveOccurrence(p, od);
+      var am = Number(ro && ro.amount != null ? ro.amount : p.amount) || 0;
+      editD = String(p.date);
+      h += '<div class="pdmeta" data-grp="' + esc(p.id) + '">' + (isGoalPlan(p) ? 'Saving for · ' : '') + 'one-off · ' + fmtDate(od) + (p.category ? ' · ' + esc(p.category) : '') + '</div>';
+      if (ro && ro.skip) {
+        h += pdCard('Skipped', amtOf(am), fmtDate(od), 'mut', '<button type="button" class="act ghost" data-unskip="' + esc(p.id) + '|' + od + '">Unskip</button>');
+      } else if (isGoalPlan(p)) {
+        var it1 = null; savingData().items.forEach(function (x) { if (String(x.p.id) === String(p.id)) it1 = x; });
+        if (it1 && it1.bought) h += pdCard('Bought', amtOf(it1.spent), it1.buy ? 'on ' + fmtDate(it1.buy.date) : '', 'ok', '');
+        else h += pdCard('Set aside', amtOf(am), 'planned ' + dayMonth(od), 'goalv', '<button type="button" class="act pdgo b" data-cmlock="' + esc(p.id) + '">Lock · I bought it</button>') +
+          '<div class="pdnote">Held back from your free cash until you lock it. Locking logs the purchase.</div>';
+      } else {
+        var pp1 = findPaidTxn({}, { planId: p.id, date: od, name: p.name, amount: am });
+        var paid1 = Math.min(am, Number(pp1 && pp1.amount) || 0), rem1 = r2(am - paid1);
+        if (rem1 <= 0.004) h += pdCard('Paid', amtOf(am), fmtDate(od), 'ok', '');
+        else {
+          var w1 = cmWhen(od, today);
+          h += pdCard(paid1 > 0.004 ? 'Still to pay' : (w1.c === 'late' ? 'Overdue' : 'Due'), amtOf(rem1), dayMonth(od) + ' · ' + w1.t, w1.c,
+            '<button type="button" class="act pdgo" data-pdpay="' + esc(p.id) + '|' + od + '|' + esc(p.name) + '|' + rem1 + '">Mark paid</button>' +
+            '<button type="button" class="act ghost" data-pdskip="' + esc(p.id) + '|' + od + '">Skip or move</button>');
         }
-      } else { sumEl.style.display = 'none'; }
+      }
+    } else {
+      // a recurring expense
+      var parts = planHTML(p, { open: true, parts: true });
+      editD = parts.editD;
+      h += parts.meta;
+      var tgt = null;
+      planAllDates(p).forEach(function (d) {
+        if (tgt) return;
+        var r = resolveOccurrence(p, d); if (r && r.skip) return;
+        var a = Number(r && r.amount != null ? r.amount : p.amount) || 0;
+        var pp = findPaidTxn({}, { planId: p.id, date: d, name: r ? r.name : p.name, amount: a });
+        var rem = r2(a - Math.min(a, Number(pp && pp.amount) || 0));
+        if (rem > 0.004 && (d < today || d >= today)) tgt = { d: d, rem: rem, nm: r ? r.name : p.name, part: rem < a - 0.004 };
+      });
+      if (tgt) {
+        var w2 = cmWhen(tgt.d, today);
+        h += pdCard(tgt.part ? 'Still to pay' : (w2.c === 'late' ? 'Overdue' : 'Next due'), amtOf(tgt.rem), dayMonth(tgt.d) + ' · ' + w2.t, w2.c,
+          '<button type="button" class="act pdgo" data-pdpay="' + esc(p.id) + '|' + tgt.d + '|' + esc(tgt.nm) + '|' + tgt.rem + '">Mark paid</button>' +
+          '<button type="button" class="act ghost" data-pdskip="' + esc(p.id) + '|' + tgt.d + '">Skip or move</button>');
+      } else h += pdCard('Nothing due', '—', 'all paid or skipped', 'ok', '');
+      h += '<div class="pdlab">Dates</div>' + parts.sub;
     }
-    var tabs = el.querySelectorAll('[data-pltab]');
-    for (var t = 0; t < tabs.length; t++) tabs[t].onclick = function () {
-      planTab = this.getAttribute('data-pltab');
-      renderPlans();
-    };
-    // v73.99: the Paid bar's tap — expand/collapse (in-memory, like the
-    // hero's Cards row). The rows are the .prow one-off rows themselves,
-    // so their ✎/✕ handlers below bind through the same [data-…] walk.
-    var pbar = el.querySelector('[data-paidbar]');
-    if (pbar) pbar.onclick = function () { paidOpen = !paidOpen; renderPlans(); };
-    var grps = el.querySelectorAll('[data-grp]');
-    for (var g = 0; g < grps.length; g++) grps[g].onclick = function (e) {
-      var id = this.getAttribute('data-grp');
-      // v73.54: the "N skipped" chip is a NESTED [data-grp] inside the row —
-      // tapping it ALWAYS opens the series (its job: reveal the record rows)
-      // and stops the bubble so the row's handler doesn't toggle it right
-      // back closed.
-      if (this.tagName === 'SPAN') {
-        if (e && e.stopPropagation) e.stopPropagation();
-        planOpen[id] = true;
-      } else { planOpen[id] = !planOpen[id]; }
-      renderPlans();
-    };
-    var btns = el.querySelectorAll('[data-delp]');
-    for (var i = 0; i < btns.length; i++) btns[i].onclick = function () { deletePlan(this.getAttribute('data-delp')); };
-    var ebtns = el.querySelectorAll('[data-editp]');
-    for (var j = 0; j < ebtns.length; j++) ebtns[j].onclick = function (e) {
-      if (e && e.stopPropagation) e.stopPropagation(); // don't toggle the series
-      openPlanEdit(this.getAttribute('data-editp'), this.getAttribute('data-editd'));
-    };
-    // v73.54: the unskip path — the "skipped" pill label and the ↺ button
-    // both carry data-unskip; tapping either removes the skip-override.
-    var ubtns = el.querySelectorAll('[data-unskip]');
-    for (var u = 0; u < ubtns.length; u++) ubtns[u].onclick = function (e) {
-      if (e && e.stopPropagation) e.stopPropagation(); // don't toggle the series
-      var parts = this.getAttribute('data-unskip').split('|');
-      unskipPlanOccurrence(parts[0], parts[1]);
-    };
-    // v73.59: the history strip's "+N older" reveal — the second level of
-    // the same strip (in-memory, like the peek's cbPlansMore).
-    var hms = el.querySelectorAll('[data-histmore]');
-    for (var m = 0; m < hms.length; m++) hms[m].onclick = function (e) {
-      if (e && e.stopPropagation) e.stopPropagation();
-      histMoreOpen[this.getAttribute('data-histmore')] = !histMoreOpen[this.getAttribute('data-histmore')];
-      renderPlans();
-    };
+    h += '<div class="pdfoot"><button type="button" class="act ghost" data-editp="' + esc(p.id) + '" data-editd="' + editD + '">Edit plan</button>' +
+      '<button type="button" class="act ghost pddel" data-delp="' + esc(p.id) + '">Delete plan</button></div>';
+    body.innerHTML = h;
+    var q2 = function (sel, fn) { var ns = body.querySelectorAll ? body.querySelectorAll(sel) : []; for (var i = 0; i < ns.length; i++) ns[i].onclick = fn; };
+    q2('[data-pdpay]', function () { payPlanChip(this.getAttribute('data-pdpay')); });
+    q2('[data-pdskip]', function () { var a = this.getAttribute('data-pdskip').split('|'); closeSheets(); openSkipChooser(a[0], a[1]); });
+    q2('[data-editp]', function () { var id = this.getAttribute('data-editp'), d = this.getAttribute('data-editd'); closeSheets(); openPlanEdit(id, d); });
+    q2('[data-delp]', function () { var id = this.getAttribute('data-delp'); closeSheets(); planDetId = null; deletePlan(id); });
+    q2('[data-unskip]', function () { var a = this.getAttribute('data-unskip').split('|'); unskipPlanOccurrence(a[0], a[1]); });
+    q2('[data-histmore]', function () { var k = this.getAttribute('data-histmore'); histMoreOpen[k] = !histMoreOpen[k]; renderPlanDetail(); });
+    q2('[data-cmlock]', function () { goalLock(this.getAttribute('data-cmlock')); });
+    q2('[data-potuse]', function () { potUse(this.getAttribute('data-potuse')); });
+    q2('[data-potextra]', function () { potExtra(this.getAttribute('data-potextra')); });
+    q2('[data-potadd]', function () { var a = this.getAttribute('data-potadd').split('|'); potConfirm(a[0], a[1]); });
+    q2('[data-potskip]', function () { var a = this.getAttribute('data-potskip').split('|'); potSkip(a[0], a[1]); });
   }
   // v74.47: plans file under a category — the select options are the
   // categories (base.budgets keys); planCatUsers lists the plans filing
@@ -11017,12 +11180,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.65, live: new Date(2026, 10, 12, 14, 30) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.66, live: new Date(2026, 10, 12, 14, 40) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.66': [
+      'Committed is redesigned. The top card shows what\u2019s still to pay this cycle (and warns you plainly if it\u2019s more than your free cash). Under it: This cycle \u2014 every bill due before payday in date order, paid ones ticked; Saving for \u2014 your one-offs (Lock when you buy) and pots (Add or Skip each top-up); and All plans.',
+      'Rows are tidy: no more little buttons squeezing the text. Tap any plan to open its sheet \u2014 Mark paid, Skip or move, its dates, Edit and Delete are all there. A pot\u2019s sheet has Use from pot, Add extra and its history.'
+    ],
     '74.65': [
       'Saving for works differently now. A one-off Saving-for (like a laptop) is set aside from your free cash in full the day you add it, shown on its own line \u2014 not as a due. When you buy it, Lock it: that logs the purchase, your money moves, and the set-aside is released.',
       'A recurring Saving-for is a pot. On each date the app asks you to add the amount; what\u2019s in the pot is held back from free cash until you use it. You can give it a goal and it stops asking once it\u2019s full.',
@@ -12466,7 +12633,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   unskipPlanOccurrence: unskipPlanOccurrence, // v73.54: the unskip path (the plans-list record row; smoke drives it without a DOM)
   renderPlans: renderPlans, // v73.54: the plans-list renderer (the smoke asserts the record row's HTML)
     planSortKey: planSortKey, // v73.59: the sort key (recurring = next occurrence, one-off = its date)
-    setPlanOpen: function (id, open) { planOpen[id] = open ? true : undefined; }, // v73.59: the smoke expands a series (the harness can't click)
+    setPlanOpen: function (id, open) { planOpen[id] = open ? true : undefined; if (open) planDetId = id; else if (planDetId === id) planDetId = null; }, // v73.59; v74.66: 'open' = the plan's sheet (#pdBody)
+    openPlanDetail: openPlanDetail, renderPlanDetail: renderPlanDetail, // v74.66
     setPlanTab: function (t) { planTab = (t === 'rec') ? 'rec' : 'one'; }, // v73.60: the smoke switches the tab (the harness can't click)
     setPaidOpen: function (o) { paidOpen = !!o; }, // v73.99: the smoke toggles the Paid bar (the harness can't click)
     testSpend: testSpend, // v74.00: the one-time-purchase affordability math (smoke drives it)
@@ -12866,6 +13034,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     // sheet. The Money tab is just heading + trigger + list now.
     var pAddBtn = byId('planAddBtn');
     if (pAddBtn) pAddBtn.onclick = function () { openSheet('planSheet'); fillPlanCats('p_cat', ''); }; // v74.47: the category list is fresh
+    var pdClose = byId('pdClose'); // v74.66: the plan's sheet
+    if (pdClose) pdClose.onclick = function () { closeSheets(); planDetId = null; };
     var pAddClose = byId('planAddClose');
     if (pAddClose) pAddClose.onclick = function () { closeSheets(); };
     var pform = byId('planForm');
