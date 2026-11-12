@@ -73,6 +73,7 @@
         try { fn(); } catch (e) { console.warn('render', e); }
       });
     });
+    try { histCheck(); } catch (e) { console.warn('history', e); } // v74.74: record what changed
   }
 
   // ---------- IndexedDB ----------
@@ -2742,8 +2743,8 @@
     var t = null;
     for (var i = 0; i < state.txns.length; i++) if (state.txns[i].id === tid) t = state.txns[i];
     var what = t ? money(t.amount) + ' · ' + esc(t.category || t.account || 'entry') : 'this entry';
-    confirmAsk('Delete <b>' + what + '</b> from the ledger? Free cash goes back up and you can undo right after.',
-      'Delete', function () { deleteTxnFromLog(tid); });
+    confirmAsk('Delete <b>' + what + '</b> from the ledger? Free cash goes back up. You can undo right after, or restore it later from Settings \u2192 History.',
+      'Delete', function () { deleteTxnFromLog(tid); });  // v74.74: History keeps it (Settings -> History)
   }
   // v71: the delete + edit paths share one remove/restore pair, so an edit is
   // "delete the row, re-log it with the new values, keep the same id".
@@ -2801,9 +2802,14 @@
   function deleteTxnFromLog(tid) {
     var r = removeTxnRow(tid);
     if (!r) return;
+    // v74.74: a deleted entry leaves no trace in the money log — History keeps it so it can be restored later
+    var hr = {}; Object.keys(r).forEach(function (k) { if (k !== 'persist') hr[k] = r[k]; });
+    var he = r.t ? histAdd({ k: 'led', t: 'Deleted ' + pesoFull(r.t.amount) + ' · ' + esc(r.t.category || r.t.account || 'entry'), s: (r.t.note ? esc(r.t.note) + ' · ' : '') + mdShort(r.t.date), r: cloneObj(hr) }) : null;
+    if (he) histSave();
     r.persist.then(function () {
       emit('txn');
       snack('Deleted ' + (r.t ? money(r.t.amount) + ' · ' + esc(r.t.category || r.t.account) : 'entry'), function () {
+        if (he) histMarkUndone(he.id); // v74.74
         syncTombRemove('t', tid); // the row is back — the tombstone goes
         restoreTxnRow(r);
       });
@@ -3713,6 +3719,245 @@
   }
 
   // ---------- v34: confirm dialog (destructive deletes ask first) ----------
+  // ---------- v74.74: History (Settings -> History) ----------
+  // boss: 'should we have a central history record for every changes made such as moving or skipping or reconciling etc
+  // which currently have no way of restoring except the temporary undo button (exclude the ledger entries)' -> 'restore'
+  // -> boards 15 / 15b -> 'go'. Every PLAN change and every change to YOUR NUMBERS / SETTINGS (the base) is recorded by
+  // comparing what changed after each update (one hook in emit — so coach / chat / sheet changes all land here), plus
+  // ledger DELETES (the money log drops a deleted entry entirely, so this is the only way back for one). Each entry
+  // keeps the record as it was before; Restore puts that one record back. A change that exactly reverses the newest
+  // entry for the same record (a toast Undo, or a Restore) marks that entry "undone" instead of adding a new row.
+  // Numbers / settings restore only while nothing was logged since (the overlay moves with every entry).
+  var HIST_MAX = 300, HIST_BASE_SNAPS = 25;
+  var histList = [];     // newest first
+  var histSnap = null;   // the state after the last check
+  var histReady = false; // armed a moment after boot (startup migrations are not changes)
+  var histMuteUntil = 0; // imports / sync pulls replace everything — not recorded change by change
+  var histLastAt = 0;    // the last entry's time (the toast's "saved in History" hint)
+  var histOpen = {};     // entry id -> details shown
+  var histFilter = 'all';
+  function histPlanJ(p) { if (!p) return ''; var c = cloneObj(p); delete c.updated; delete c.syncAt; return JSON.stringify(c); }
+  function histBaseJ(b) { if (!b) return ''; var c = cloneObj(b); delete c.edited; delete c.absorbedBy; (c.accounts || []).forEach(function (a) { if (a) delete a.was; }); return JSON.stringify(c); }
+  function histTakeSnap() {
+    var pj = {}, pr = {};
+    (state.plans || []).forEach(function (p) { if (p && p.id) { pj[p.id] = histPlanJ(p); pr[p.id] = cloneObj(p); } });
+    histSnap = { pj: pj, pr: pr, bj: histBaseJ(state.base), bfull: { base: cloneObj(state.base || null), adj: cloneObj(state.adj || {}), adjSig: state.adjSig, mlLen: (state.moneyLog || []).length } };
+  }
+  function histSave() { idbPut(STORE_META, { key: 'hist', value: histList }).catch(function () {}); }
+  function histAdd(e) {
+    e.id = 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    e.at = Date.now();
+    histList.unshift(e);
+    if (histList.length > HIST_MAX) histList.length = HIST_MAX;
+    var nb = 0; // only the newest numbers snapshots are kept whole (older ones stay as a record)
+    histList.forEach(function (x) { if ((x.k === 'num' || x.k === 'set') && x.before) { nb++; if (nb > HIST_BASE_SNAPS) { x.before = null; x.rec = true; } } });
+    histLastAt = Date.now();
+    return e;
+  }
+  function histFind(id) { for (var i = 0; i < histList.length; i++) if (histList[i].id === id) return histList[i]; return null; }
+  function histMarkUndone(id) { var e = histFind(id); if (e && !e.undone) { e.undone = Date.now(); histSave(); } }
+  var hN = function (n) { return '<b>' + esc(n || 'plan') + '</b>'; };
+  function histPlanTitle(b, a) {
+    var p = a || b, nm = hN(p.name);
+    if (!b) return { t: 'Added plan ' + nm, s: pesoShort(a.amount) + ' ' + (a.repeat ? cmPer(a) : 'one-off · ' + mdShort(a.date)) + (isGoalPlan(a) ? ' · Saving for' : '') };
+    if (!a) return { t: 'Removed plan ' + nm, s: pesoShort(b.amount) + ' ' + (b.repeat ? cmPer(b) : 'one-off · ' + mdShort(b.date)) };
+    var ob = b.overrides || {}, oa = a.overrides || {}, keys = {};
+    Object.keys(ob).concat(Object.keys(oa)).forEach(function (k) { keys[k] = true; });
+    var ks = Object.keys(keys).sort();
+    for (var i = 0; i < ks.length; i++) {
+      var k = ks[i], x = ob[k] || null, y = oa[k] || null;
+      if (JSON.stringify(x) === JSON.stringify(y)) continue;
+      if (y && y.skip && !(x && x.skip)) return { t: 'Skipped ' + nm + ' · ' + mdShort(k), s: pesoShort((x && x.amount != null) ? x.amount : a.amount) };
+      if (x && x.skip && !(y && y.skip)) return { t: 'Unskipped ' + nm + ' · ' + mdShort(k), s: '' };
+      if (y && y.move && (!x || x.move !== y.move)) return { t: 'Moved ' + nm + ' · ' + mdShort(k) + ' → ' + mdShort(y.move), s: '' };
+      if (x && x.move && !(y && y.move)) return { t: 'Moved ' + nm + ' back to ' + mdShort(k), s: '' };
+      if (y && y.amount != null && (!x || x.amount !== y.amount)) return { t: 'Changed ' + nm + ' · ' + mdShort(k), s: pesoShort(x && x.amount != null ? x.amount : b.amount) + ' → ' + pesoShort(y.amount) };
+      return { t: 'Changed ' + nm + ' · ' + mdShort(k), s: '' };
+    }
+    if (String(b.date) !== String(a.date)) {
+      if (isGoalPlan(a) && !a.repeat) { var gw = goalWhen(a.date); return { t: 'Moved ' + nm + ' to ' + (gw.started ? 'this cycle' : gw.label), s: mdShort(b.date) + ' → ' + mdShort(a.date) }; }
+      return { t: 'Moved ' + nm, s: mdShort(b.date) + ' → ' + mdShort(a.date) };
+    }
+    var pb = b.potAdds || {}, pa = a.potAdds || {};
+    var addK = Object.keys(pa).filter(function (k) { return pb[k] == null; }), remK = Object.keys(pb).filter(function (k) { return pa[k] == null; });
+    if (addK.length) return { t: 'Added ' + pesoShort(pa[addK[0]]) + ' to ' + nm, s: /^\d{4}-/.test(addK[0]) ? 'the ' + mdShort(addK[0]) + ' top-up' : 'extra' };
+    if (remK.length) return { t: 'Took back a top-up from ' + nm, s: pesoShort(pb[remK[0]]) };
+    var ch = [];
+    if (b.name !== a.name) ch.push('name ' + esc(b.name) + ' → ' + esc(a.name));
+    if (Number(b.amount) !== Number(a.amount)) ch.push(pesoShort(b.amount) + ' → ' + pesoShort(a.amount));
+    if (b.repeat !== a.repeat || b.count !== a.count) ch.push('repeat');
+    if ((b.category || '') !== (a.category || '')) ch.push('files under ' + esc(a.category || 'nothing'));
+    if ((b.goal || 0) !== (a.goal || 0)) ch.push('goal ' + pesoShort(a.goal || 0));
+    return { t: 'Changed ' + nm, s: ch.join(' · ') };
+  }
+  function histBaseTitle(b0, b1, newRows) {
+    b0 = b0 || {}; b1 = b1 || {};
+    var A = {}, B = {}, parts = [], kind = 'set';
+    (b0.accounts || []).forEach(function (a) { if (a && a.name) A[a.name] = a; });
+    (b1.accounts || []).forEach(function (a) { if (a && a.name) B[a.name] = a; });
+    var recon = (newRows || []).filter(function (r) { return r && /^Reconcile/.test(String(r.c || r.l || '')); });
+    if (recon.length) { // a reconcile re-anchors every account to its live value — name the one you matched to the bank
+      var r0 = recon[0], dn = Number(r0.n) || 0;
+      return { k: 'num', t: 'Reconciled ' + hN(r0.m || 'an account') + (recon.length > 1 ? ' (+' + (recon.length - 1) + ' more)' : ''), s: (dn < 0 ? '−' : '+') + pesoFull(Math.abs(dn)) + ' to match the bank' };
+    }
+    var vals = [];
+    Object.keys(B).forEach(function (n) {
+      if (!A[n]) { var ren = (b1.accounts || []).filter(function (x) { return x && x.name === n; })[0]; parts.push('Added account ' + hN(n)); kind = 'num'; return; }
+      if (r2(Number(A[n].value) || 0) !== r2(Number(B[n].value) || 0)) vals.push({ n: n, a: A[n].value, b: B[n].value });
+      if ((Number(A[n].limit) || 0) !== (Number(B[n].limit) || 0)) { parts.push(hN(n) + ' limit ' + pesoShort(B[n].limit)); kind = 'num'; }
+    });
+    Object.keys(A).forEach(function (n) { if (!B[n]) { parts.unshift('Removed account ' + hN(n) + ' (' + pesoShort(A[n].value) + ')'); kind = 'num'; } });
+    if (vals.length) {
+      kind = 'num';
+      var v0 = vals[0], lead = recon.length ? 'Reconciled ' : 'Set ';
+      parts.unshift(lead + hN(v0.n) + ' ' + pesoFull(v0.a) + ' → ' + pesoFull(v0.b) + (vals.length > 1 ? ' (+' + (vals.length - 1) + ' more)' : ''));
+    }
+    if (!parts.length && JSON.stringify(Object.keys(A)) !== JSON.stringify(Object.keys(B))) { parts.push('Reordered accounts'); kind = 'num'; }
+    if ((Number(b0.salary) || 0) !== (Number(b1.salary) || 0)) parts.push('Salary ' + pesoShort(b0.salary) + ' → ' + pesoShort(b1.salary));
+    if ((b0.salary_day || 0) !== (b1.salary_day || 0)) parts.push('Payday the ' + ordinal(Number(b1.salary_day) || 15));
+    var cA = Object.keys(b0.budgets || {}), cB = Object.keys(b1.budgets || {});
+    cB.filter(function (c) { return cA.indexOf(c) < 0; }).forEach(function (c) { parts.push('Added category ' + hN(c)); });
+    cA.filter(function (c) { return cB.indexOf(c) < 0; }).forEach(function (c) { parts.push('Removed category ' + hN(c)); });
+    cB.forEach(function (c) { if (cA.indexOf(c) >= 0 && (Number((b0.budgets || {})[c]) || 0) !== (Number((b1.budgets || {})[c]) || 0)) parts.push(hN(c) + ' budget ' + pesoShort((b1.budgets || {})[c])); });
+    if ((b0.name || '') !== (b1.name || '')) parts.push('Your name');
+    if (!parts.length) parts.push('Changed your numbers');
+    return { k: kind, t: parts[0], s: parts.slice(1, 3).join(' · ') + (parts.length > 3 ? ' · +' + (parts.length - 3) + ' more' : '') };
+  }
+  // the hook: runs after every emit
+  function histCheck() {
+    if (!histReady || !state) return;
+    if (Date.now() < histMuteUntil || !histSnap) { histTakeSnap(); return; }
+    var changed = false, cur = {};
+    (state.plans || []).forEach(function (p) { if (p && p.id) cur[p.id] = p; });
+    var ids = Object.keys(cur).concat(Object.keys(histSnap.pj).filter(function (id) { return !cur[id]; }));
+    ids.forEach(function (id) {
+      var nowJ = cur[id] ? histPlanJ(cur[id]) : '';
+      var wasJ = histSnap.pj[id] || '';
+      if (nowJ === wasJ) return;
+      changed = true;
+      // a change that undoes the newest entry for this plan marks it undone
+      for (var i = 0; i < histList.length && i < 40; i++) {
+        var e = histList[i];
+        if (e.k !== 'plan' || e.pid !== id) continue;
+        if (!e.undone && histPlanJ(e.after) === wasJ && histPlanJ(e.before) === nowJ) { e.undone = Date.now(); histLastAt = Date.now(); return; }
+        break;
+      }
+      var b = histSnap.pr[id] || null, a = cur[id] ? cloneObj(cur[id]) : null;
+      var tt = histPlanTitle(b, a);
+      histAdd({ k: 'plan', pid: id, name: (a || b).name, t: tt.t, s: tt.s, before: b, after: a });
+    });
+    var bj = histBaseJ(state.base);
+    if (bj !== histSnap.bj) {
+      changed = true;
+      var undid = false;
+      for (var j = 0; j < histList.length && j < 40; j++) {
+        var e2 = histList[j];
+        if (e2.k !== 'num' && e2.k !== 'set') continue;
+        if (!e2.undone && e2.afterJ === histSnap.bj && e2.before && histBaseJ(e2.before.base) === bj) { e2.undone = Date.now(); histLastAt = Date.now(); undid = true; }
+        break;
+      }
+      if (!undid) {
+        var ml = state.moneyLog || [];
+        var tb = histBaseTitle(histSnap.bfull.base, state.base, ml.slice(histSnap.bfull.mlLen));
+        histAdd({ k: tb.k, t: tb.t, s: tb.s, before: histSnap.bfull, afterJ: bj, afterMl: ml.length });
+      }
+    }
+    histTakeSnap();
+    if (changed) { histSave(); if (byId('setSheet') && byId('setSheet').getAttribute('data-sp') === 'hist') renderHistory(); }
+  }
+  function histLatestBase() { for (var i = 0; i < histList.length; i++) if (histList[i].k === 'num' || histList[i].k === 'set') return histList[i]; return null; }
+  function histCanRestore(e) {
+    if (!e || e.undone) return { ok: false, why: e && e.undone ? 'undone' : '' };
+    if (e.k === 'plan') return { ok: true };
+    if (e.k === 'led') return { ok: !!(e.r && e.r.t), why: '' };
+    if (e.k === 'num' || e.k === 'set') {
+      if (!e.before || e.rec) return { ok: false, why: 'record only' };
+      if (histLatestBase() !== e) return { ok: false, why: 'newer change since' };
+      if ((state.moneyLog || []).length !== e.afterMl) return { ok: false, why: 'entries logged since' };
+      return { ok: true };
+    }
+    return { ok: false, why: 'record only' };
+  }
+  function histRestore(id) {
+    var e = histFind(id), can = histCanRestore(e);
+    if (!can.ok) return Promise.resolve();
+    if (e.k === 'plan') {
+      var cur = planById(e.pid);
+      var go = function () {
+        if (!e.before) { // it was added -> restoring removes it
+          state.plans = state.plans.filter(function (x) { return String(x.id) !== String(e.pid); });
+          syncTombAdd('p', e.pid);
+          return idbDel(STORE_PLANS, e.pid).then(function () { emit('plan'); snack('Restored: removed ' + hN(e.name)); });
+        }
+        var rec = cloneObj(e.before);
+        state.plans = state.plans.filter(function (x) { return String(x.id) !== String(e.pid); });
+        state.plans.push(rec);
+        syncTombRemove('p', e.pid);
+        return idbPut(STORE_PLANS, touchRec(rec)).then(function () { emit('plan'); snack('Restored ' + hN(rec.name) + ' to how it was'); });
+      };
+      if (histPlanJ(cur) !== histPlanJ(e.after)) { confirmAsk(hN(e.name) + ' was changed again after this. Put it back to how it was before this change anyway?', 'Restore', go); return Promise.resolve(); }
+      return go();
+    }
+    if (e.k === 'led') {
+      var r = cloneObj(e.r);
+      syncTombRemove('t', r.t.id);
+      restoreTxnRow(r);
+      e.undone = Date.now(); histSave();
+      snack('Restored ' + pesoFull(r.t.amount) + ' · ' + esc(r.t.category || r.t.account || 'entry'));
+      if (byId('setSheet') && byId('setSheet').getAttribute('data-sp') === 'hist') renderHistory();
+      return Promise.resolve();
+    }
+    var snap = e.before;
+    return restoreReconSnapshot({ base: cloneObj(snap.base), adj: cloneObj(snap.adj), adjSig: snap.adjSig, moneyLog: (state.moneyLog || []).slice(0, snap.mlLen) })
+      .then(function () { snack('Restored your numbers to before: ' + e.t); });
+  }
+  function histDayLabel(at) {
+    var d = new Date(at), t = parseISO(todayISO());
+    var dd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    var n = Math.round((t - dd) / 86400000);
+    if (n === 0) return 'Today'; if (n === 1) return 'Yesterday';
+    return wdShort(localISO(dd));
+  }
+  function histTime(at) { var d = new Date(at), h = d.getHours(), m = d.getMinutes(); return ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m + (h < 12 ? ' AM' : ' PM'); }
+  function renderHistory() {
+    var el = byId('histBody'); if (!el) return;
+    var F = { all: 'All', plan: 'Plans', num: 'Numbers', set: 'Settings', led: 'Ledger' };
+    var h = '<div class="hchips">' + Object.keys(F).map(function (k) { return '<button type="button" class="hchipf' + (histFilter === k ? ' on' : '') + '" data-hf="' + k + '">' + F[k] + '</button>'; }).join('') + '</div>';
+    var list = histList.filter(function (e) { return histFilter === 'all' || e.k === histFilter; });
+    if (!list.length) h += '<p class="note" style="margin:14px 2px">Nothing yet — changes to your plans, numbers and settings will show up here.</p>';
+    var day = '';
+    list.forEach(function (e) {
+      var dl = histDayLabel(e.at);
+      if (dl !== day) { if (day) h += '</div>'; day = dl; h += '<div class="hday">' + dl + '</div><div class="hcard">'; }
+      var can = histCanRestore(e);
+      var tile = { plan: ['tp', '↻'], num: ['tn', '≈'], set: ['ts', '⚙'], led: ['td', '✕'], data: ['ts', '⇅'] }[e.k] || ['ts', '·'];
+      var right = can.ok ? '<button type="button" class="hrest" data-hr="' + e.id + '">Restore</button>'
+        : (e.undone ? '<span class="htag">undone</span>' : (can.why ? '<span class="htag l">' + can.why + '</span>' : ''));
+      h += '<div class="hrow' + (e.undone ? ' undone' : '') + '" data-ho="' + e.id + '"><span class="htile ' + tile[0] + '">' + tile[1] + '</span>' +
+        '<div class="hmid"><div class="ht">' + e.t + '</div><div class="hs">' + histTime(e.at) + (e.s ? ' · ' + e.s : '') + '</div></div>' + right + '</div>';
+      if (histOpen[e.id]) {
+        var det = '';
+        if (e.k === 'plan') det = '<span class="k">Before:</span> ' + (e.before ? histPlanSummary(e.before) : 'not there') + '<br><span class="k">After:</span> ' + (e.after ? histPlanSummary(e.after) : 'removed');
+        else if (e.k === 'led') det = '<span class="k">Entry:</span> ' + esc((e.r && e.r.t && (e.r.t.category || e.r.t.account)) || '') + ' · ' + pesoFull(e.r && e.r.t ? e.r.t.amount : 0) + ' · ' + (e.r && e.r.t ? mdShort(e.r.t.date) : '');
+        else if (e.k === 'num' || e.k === 'set') det = (e.before ? 'Restoring puts your numbers back to just before this change.' : 'Kept as a record (too old to restore).') + (can.why === 'entries logged since' ? '<br>Entries were logged after it, so it can’t be rolled back safely.' : '');
+        else det = 'Kept as a record.';
+        h += '<div class="hdet">' + det + (e.undone ? '<br><span class="k">Undone ' + histTime(e.undone) + '</span>' : '') + '</div>';
+      }
+    });
+    if (day) h += '</div>';
+    el.innerHTML = h;
+    var q = function (sel, fn) { var ns = el.querySelectorAll(sel); for (var i = 0; i < ns.length; i++) ns[i].onclick = fn; };
+    q('[data-hf]', function () { histFilter = this.getAttribute('data-hf'); renderHistory(); });
+    q('[data-ho]', function (ev) { if (ev && ev.target && ev.target.closest && ev.target.closest('[data-hr]')) return; var k = this.getAttribute('data-ho'); histOpen[k] = !histOpen[k]; renderHistory(); });
+    q('[data-hr]', function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); histRestore(this.getAttribute('data-hr')); });
+  }
+  function histPlanSummary(p) {
+    var bits = [pesoShort(p.amount) + ' ' + (p.repeat ? cmPer(p) : 'one-off · ' + mdShort(p.date))];
+    var sk = Object.keys(p.overrides || {}).filter(function (k) { return p.overrides[k] && p.overrides[k].skip; });
+    if (sk.length) bits.push(sk.length + ' skipped');
+    if (p.potAdds && Object.keys(p.potAdds).length) { var s = 0; Object.keys(p.potAdds).forEach(function (k) { s += Number(p.potAdds[k]) || 0; }); bits.push(pesoShort(s) + ' added'); }
+    return esc(p.name || '') + ' · ' + bits.join(' · ');
+  }
   var confirmCb = null;
   function confirmAsk(msg, yesLabel, onYes) {
     var dlg = byId('confirmDlg');
@@ -4684,6 +4929,7 @@
     var sb = sh.querySelector ? sh.querySelector('.sheet-b') : null;
     if (sb) sb.scrollTop = 0;
     if (p === 'news') renderWhatNew();
+    if (p === 'hist') renderHistory(); // v74.74
     if (!p) renderSetMeta();
   }
   function renderSetMeta() {
@@ -11192,6 +11438,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         } else {
           syncApplyAdj(state.txns, merged.txns || []);
         }
+        histMuteUntil = Date.now() + 20000; // v74.74: a sync pull is not a list of your changes
         var prev = { base: cloneObj(state.base || defaultBase()), txns: cloneObj(state.txns || []),
           plans: cloneObj(state.plans || []), owed: cloneObj(state.owed || { people: [], sort: 'recent' }),
           moneyLog: cloneObj(state.moneyLog || []) };
@@ -11252,6 +11499,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         // v71: fold any unsaved "Your numbers" edits into state before the
         // import replaces it (readBaseForm is synchronous; no save race).
         if (baseDirty) { var _nb = readBaseForm(); if (_nb) state.base = migrateCardDays(migrateBaseKinds(_nb)); baseDirty = false; }
+        histMuteUntil = Date.now() + 20000; // v74.74: an import is one History entry, not hundreds
         var nb = defaultBase();
         if (hasSec('base') && data.base && (data.base.accounts || data.base.salary)) {
           Object.keys(nb).forEach(function (k) { if (data.base[k] !== undefined) nb[k] = data.base[k]; });
@@ -11330,6 +11578,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
             if (hasSec('plans')) parts.push(state.plans.length + ' plans');
             if (hasSec('owed')) parts.push(state.owed.people.length + ' owed people');
             if (hasSec('base') && (state.base.migrated_from_snapshot || (data.base && data.base.accounts))) parts.push('numbers restored');
+            histMuteUntil = 0; histTakeSnap(); // v74.74
+            if (parts.length) { histAdd({ k: 'data', t: 'Imported a backup', s: esc(parts.join(' \u00b7 ')) }); histSave(); }
             snack('Imported ' + (parts.length ? parts.join(' \u00b7 ') : 'nothing \u2014 this backup had no sections selected'),
               parts.length ? function () { restoreImportSnapshot(impPrev); } : null);
           });
@@ -11345,12 +11595,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.73, live: new Date(2026, 10, 12, 16, 17) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.74, live: new Date(2026, 10, 12, 16, 24) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.74': [
+      'New: Settings \u2192 History. Every change to your plans (added, edited, skipped, moved, removed, pot top-ups), your numbers (reconcile, balances, accounts) and settings (salary, payday, categories) is listed in plain words, newest first \u2014 with Restore to put that one thing back. Deleted ledger entries are there too, so you can bring one back later.',
+      'Undo from a banner marks the change \u201cundone\u201d in History. Your numbers can be restored while nothing has been logged since; older ones stay as a record.'
+    ],
     '74.73': [
       'Add sheet: no more empty gap above the keypad. The \u201cLooks like Rent \u2014 tap to link\u201d chip now appears on the line under the amount (where the quick-sum hint sits while it\u2019s empty), so the keys got that room and still never move while you type.'
     ],
@@ -12814,6 +13068,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     skipPlanOccurrence: skipPlanOccurrence, // v73.41: the edit sheet's skip button (smoke drives it; v73.63: grid-date keying + `was` carry)
     planGridDateFor: planGridDateFor, // v73.63: resolved -> grid date map (the smoke asserts the orphaned-key fix)
   savingData: savingData, potAdd: potAdd, potConfirm: potConfirm, potSkip: potSkip, goalLock: goalLock, potUse: potUse, isGoalPlan: isGoalPlan, // v74.65
+  histList: function () { return histList; }, deleteTxnFromLog: deleteTxnFromLog, histRestore: histRestore, histCheck: histCheck, renderHistory: renderHistory, // v74.74
   openSkipChooser: openSkipChooser, // v73.58: the skip/move chooser (the chip now opens this; smoke drives it without a DOM)
   closeSkipChooser: closeSkipChooser, // v73.58: the chooser's cancel/scrim path
   skipChooserSkip: skipChooserSkip, // v73.58: the chooser's Skip button (skipPlanChip verbatim)
@@ -13666,6 +13921,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         else if (m.key === MERCHANT_MAP_KEY) { state.merchantMap = (m.value && typeof m.value === 'object') ? m.value : {}; } // v68 item 1
         else if (m.key === SHADOW_KEY) { state.shadowLog = (m.value && m.value.length) ? m.value.slice(-SHADOW_CAP) : []; } // v68 item 11
         else if (m.key === 'moneyLog') { state.moneyLog = m.value || []; }
+        else if (m.key === 'hist') { histList = Array.isArray(m.value) ? m.value : []; } // v74.74
         else if (m.key === 'owed') {
           state.owed = (m.value && Array.isArray(m.value.people)) ? m.value : { people: [] };
           owedSeedSigs(); // v74.06: the baseline the first edit is compared against
@@ -13683,6 +13939,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       migrateCashBy(); // v73.83: rebuild the per-funder cash split (lastReconAt-gated; self-heals smeared phones)
       migratePlanDrift(); // v74.09: move payment links / edits off the pre-v74.09 drifted plan dates (idempotent)
       migrateIpfTheirs(); // v73.72: one-shot backfill — past ipf-on-card entries file their theirs pair (stamp-gated, idempotent)
+      setTimeout(function () { histTakeSnap(); histReady = true; }, 2500); // v74.74: History arms after the startup migrations
       if (!state.adjSig) state.adjSig = snapSig(state.snapshot);
       state.adjLoaded = true;
       persistSnapshot();

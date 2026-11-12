@@ -1999,6 +1999,14 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.74 (boss: 'a central history record for every changes made such as moving or skipping or reconciling ... restore' -> boards 15/15b -> 'go'): emit runs histCheck — plan and base changes are diffed against the last snapshot and recorded with plain titles (histPlanTitle / histBaseTitle, a reconcile names its account), a change that reverses the newest entry marks it undone; ledger deletes are recorded (deleteTxnFromLog); Restore (histRestore): plans any time (asks if changed since), numbers only the latest with no entries since, a deleted entry comes back; imports / sync pulls are muted (one 'Imported a backup' entry); Settings -> History lists it all (filters, day groups, details)",
+          "try { histCheck(); } catch (e) { console.warn('history', e); }" in js
+          and "function histCheck() {" in js and "function histRestore(id) {" in js and "function renderHistory() {" in js
+          and "function histPlanTitle(b, a) {" in js and "function histBaseTitle(b0, b1, newRows) {" in js
+          and "else if (m.key === 'hist') { histList = Array.isArray(m.value) ? m.value : []; }" in js
+          and "histAdd({ k: 'led'," in js
+          and 'data-spgo="hist"' in html and 'id="histBody"' in html
+          and "'74.74': [" in js)
     check("v74.73 (boss: 'in add sheet why is there a wide space between date row and the keypad' -> 'go for 2'): the plan-link chip lives in the amount's hint line (.amtsub, fixed height — the hint while empty, the chip once a plan matches, never both); the reserved .plslot above the keypad is gone",
           '<div class="amtsub"><p id="amtHint" class="amthint">Quick sums work: 300-125+10</p><button type="button" id="planLinkChip"' in html
           and 'class="plslot"' not in html

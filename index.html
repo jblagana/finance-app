@@ -1533,8 +1533,26 @@ html.modal-open{overflow:hidden}
 .set-bk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 /* v74.44: Settings = one main page of row cards + small pages (data-sp), the All numbers look */
 #setSheet .sp-page{display:none}
-#setSheet[data-sp="worker"] .sp-page[data-sp="worker"],#setSheet[data-sp="bk"] .sp-page[data-sp="bk"],#setSheet[data-sp="sync"] .sp-page[data-sp="sync"],#setSheet[data-sp="news"] .sp-page[data-sp="news"]{display:block}
-#setSheet[data-sp="worker"] .sp-main,#setSheet[data-sp="bk"] .sp-main,#setSheet[data-sp="sync"] .sp-main,#setSheet[data-sp="news"] .sp-main{display:none}
+#setSheet[data-sp="worker"] .sp-page[data-sp="worker"],#setSheet[data-sp="bk"] .sp-page[data-sp="bk"],#setSheet[data-sp="sync"] .sp-page[data-sp="sync"],#setSheet[data-sp="news"] .sp-page[data-sp="news"],#setSheet[data-sp="hist"] .sp-page[data-sp="hist"]{display:block}
+#setSheet[data-sp="worker"] .sp-main,#setSheet[data-sp="bk"] .sp-main,#setSheet[data-sp="sync"] .sp-main,#setSheet[data-sp="news"] .sp-main,#setSheet[data-sp="hist"] .sp-main{display:none}
+/* v74.74: Settings -> History */
+.hchips{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 4px}
+button.hchipf{height:32px;min-height:0;width:auto;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+button.hchipf.on{background:var(--acc);border-color:var(--acc);color:var(--accInk)}
+.hday{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:16px 2px 6px}
+.hcard{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:2px 12px}
+.hrow{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.hcard>.hrow:last-child,.hcard>.hdet:last-child{border-bottom:0}
+.htile{flex:none;width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px}
+.htile.tp{background:rgba(255,196,92,.14);color:#ffc45c}.htile.tn{background:var(--infoSoft);color:var(--info)}.htile.ts{background:rgba(55,211,155,.14);color:var(--ok)}.htile.td{background:rgba(255,107,122,.14);color:var(--bad)}
+.hmid{flex:1;min-width:0}
+.ht{font-size:14px;font-weight:600;line-height:1.3}
+.hs{font-size:12px;color:var(--mut);margin-top:2px}
+button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+.htag{flex:none;font-size:11px;font-weight:700;border-radius:6px;padding:3px 7px;background:var(--card2);color:var(--mut);white-space:nowrap}
+.hrow.undone .ht{color:var(--mut);text-decoration:line-through}
+.hdet{background:var(--card2);border-radius:11px;padding:9px 10px;margin:0 0 11px 45px;font-size:12.5px;line-height:1.5}
+.hdet .k{color:var(--mut)}
 #wnList{list-style:none;padding-left:0!important}
 #wnList .wn-v{margin:0 0 14px}
 #wnList .wn-v:last-child{margin-bottom:0}
@@ -2242,6 +2260,7 @@ html.modal-open{overflow:hidden}
     <!-- v74.39: forceShellUpdate — checks the server first, then clears only the app's cached files and reloads. -->
     <h2 class="set-lab">App</h2>
     <section class="card set-list">
+      <button class="set-row" type="button" data-spgo="hist"><span class="k grow">History<small>every change, with Restore</small></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
       <button class="set-row" type="button" data-spgo="news"><span class="k grow">What's new<small id="setNewsV"></small></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
       <button class="set-row set-acc" id="setRestart" type="button"><span class="k grow">Check for update &amp; restart</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></button>
     </section>
@@ -2308,6 +2327,13 @@ html.modal-open{overflow:hidden}
     </div>
 
     <!-- ===== page: What's new ===== -->
+    <!-- v74.74: History — every change to plans / numbers / settings (+ ledger deletes), with Restore -->
+    <div class="sp-page" data-sp="hist">
+      <button type="button" class="numback sp-back"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Settings</button>
+      <h2 class="numnav-t sp-t">History</h2>
+      <p class="note" style="margin:6px 2px 0">Every change to your plans, numbers and settings. Restore puts that one thing back the way it was. New ledger entries are in the money log; deleted ones are here.</p>
+      <div id="histBody"></div>
+    </div>
     <div class="sp-page" data-sp="news">
       <button type="button" class="numback sp-back"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Settings</button>
       <h2 class="numnav-t sp-t" id="wnTitle">What's new</h2>
