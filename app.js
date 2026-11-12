@@ -5110,6 +5110,45 @@
       return t && t.planRef && String(t.planRef.planId) === String(pid) && (!potOnly || String(t.planRef.date) === 'pot');
     });
   }
+  // v74.71 (boss: 'the cycle or date i link it to, it only subtracts starting that cycle ... im tight so im freeing up
+  // this cycle and move that deduction instead to a cycle i pick like next cycle' -> 'ok ship it'): a Saving-for one-off
+  // is set aside from the cycle its date falls in (this cycle or earlier = now; a later cycle = nothing until then),
+  // and stays set aside until it is paid or dropped. Move re-dates it (a cycle pick or any date).
+  function isoAdd(iso, n) { var d = parseISO(String(iso)); d.setDate(d.getDate() + n); return localISO(d); }
+  function cycleOf(iso) { var b = state.base; if (!b) return null; return cycleDataFor(currentCycleMonth(b, iso), b); }
+  function cycleRange(c) { return c ? dayMonth(c.start) + ' – ' + dayMonth(c.end) : ''; }
+  function cycleChoices() {
+    var cd = cycleData(); if (!cd) return [];
+    var out = [{ k: 'This cycle', iso: todayISO(), c: cd }];
+    var c1 = cycleOf(isoAdd(cd.end, 1));
+    if (c1) { out.push({ k: 'Next cycle', iso: c1.start, c: c1 }); var c2 = cycleOf(isoAdd(c1.end, 1)); if (c2) out.push({ k: 'In 2 cycles', iso: c2.start, c: c2 }); }
+    return out;
+  }
+  function goalWhen(od) {
+    var cd = cycleData();
+    if (!cd || String(od) <= cd.end) return { started: true, label: 'this cycle', range: cd ? cycleRange(cd) : '' };
+    var c = cycleOf(od), c1 = cycleOf(isoAdd(cd.end, 1));
+    var nm = (c && c1 && c.start === c1.start) ? 'next cycle' : (c ? 'the ' + dayMonth(c.start) + ' cycle' : 'later');
+    return { started: false, label: nm, range: cycleRange(c) };
+  }
+  function goalMove(pid, iso) {
+    var p = planById(pid); if (!p || !iso) return Promise.resolve();
+    var old = String(p.date); if (iso === old) return Promise.resolve();
+    var prevOv = cloneObj(p.overrides || {}), ov = p.overrides || {}, nov = {};
+    Object.keys(ov).forEach(function (k) {
+      if (k !== old && !(ov[k] && ov[k].move)) { nov[k] = ov[k]; return; }
+      var v = Object.assign({}, ov[k]); delete v.move; if (Object.keys(v).length) nov[iso] = v;
+    });
+    p.overrides = nov; p.date = iso;
+    return idbPut(STORE_PLANS, touchRec(p)).then(function () {
+      emit('plan');
+      var gw = goalWhen(iso);
+      snack('Moved ' + esc(p.name || 'plan') + ' to ' + (gw.started ? 'this cycle' : gw.label), function () {
+        p.date = old; p.overrides = prevOv;
+        idbPut(STORE_PLANS, touchRec(p)).then(function () { emit('plan'); });
+      });
+    });
+  }
   function savingData() {
     var today = todayISO(), out = { total: 0, items: [], pending: 0 };
     (state.plans || []).forEach(function (p) {
@@ -5121,8 +5160,9 @@
         var buys = planLinkedTxns(p.id);
         var spent = 0; buys.forEach(function (t) { spent += Number(t.amount) || 0; });
         var skip = !!(ro && ro.skip), bought = buys.length > 0;
-        var held = (skip || bought) ? 0 : r2(am);
-        out.items.push({ p: p, type: 'one', date: od, amount: r2(am), held: held, bought: bought, spent: r2(spent), skip: skip, buy: buys[buys.length - 1] || null });
+        var gw = goalWhen(od); // v74.71: set aside only from its cycle on
+        var held = (skip || bought || !gw.started) ? 0 : r2(am);
+        out.items.push({ p: p, type: 'one', date: od, amount: r2(am), held: held, bought: bought, spent: r2(spent), skip: skip, buy: buys[buys.length - 1] || null, started: gw.started, when: gw });
         out.total += held;
         return;
       }
@@ -5205,6 +5245,10 @@
     var out = { total: 0, items: [] };
     if (!cd) return out;
     savingData().items.forEach(function (it) {
+      if (it.type === 'one') { // v74.71: a Saving-for one-off whose cycle is this window starts coming off here
+        if (!it.started && !it.bought && !it.skip && it.date >= cd.start && it.date <= cd.end) { out.total += it.amount; out.items.push({ name: it.p.name, date: it.date, amount: it.amount, starts: true }); }
+        return;
+      }
       if (it.type !== 'pot') return;
       var p = it.p, room = it.goal > 0 ? r2(it.goal - it.held) : Infinity;
       planAllDates(p).forEach(function (d) {
@@ -7458,7 +7502,7 @@
       }
       // v74.69: the pots' top-ups due in the window (as if you tap Add)
       if (p.potTotal > 0.004) {
-        rows += '<div class="cbrow"><div class="lab">Saving for<small>top-ups due · ' + (p.potItems || []).map(function (it) { return esc(it.name) + ' ' + dayMonth(it.date); }).join(', ') + '</small></div><div class="amt goalv">− ' + money(p.potTotal) + '</div></div>';
+        rows += '<div class="cbrow"><div class="lab">Saving for<small>starting / top-ups · ' + (p.potItems || []).map(function (it) { return esc(it.name) + (it.starts ? ' (starts)' : ' ' + dayMonth(it.date)); }).join(', ') + '</small></div><div class="amt goalv">− ' + money(p.potTotal) + '</div></div>';
       }
       if (p.salary > 0) {
         if (p.withSalary) {
@@ -8641,7 +8685,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var p = it.p;
         if (it.type === 'one') {
           html += '<div class="cmpot">' + cmRow({ cls: 'cmsv', attr: ' data-cmplan="' + esc(p.id) + '"', tile: 't-b', tileTxt: cmInitial(p.name), name: esc(p.name || 'Saving for'),
-            sub: 'one-off · planned ' + dayMonth(it.date), amt: cmAmt(it.held), goal: true, st: 'set aside', stCls: 'mut' }) +
+            sub: 'one-off · ' + (it.started ? 'set aside from this cycle' : 'starts ' + it.when.label), amt: cmAmt(it.amount), goal: true,
+            st: it.started ? 'set aside' : 'not yet', stCls: it.started ? 'info' : 'mut' }) + // v74.71
             '<div class="cmask plain"><span class="q">Paid for it?</span><button type="button" class="cmbtn o" data-cmlock="' + esc(p.id) + '">Mark paid</button></div></div>'; // v74.70 (boss: 'lock' -> 'mark paid' — fits a gym membership or a trip, not just things)
           return;
         }
@@ -8674,7 +8719,11 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         return (Number(pp && pp.amount) || 0) < a - 0.005;
       });
     };
-    var oneBought = function (p) { return isGoalPlan(p) && planLinkedTxns(p.id).length > 0; };
+    var oneBought = function (p) { // bought, or dropped ("Not paying for it" — v74.71)
+      if (!isGoalPlan(p)) return false;
+      if (planLinkedTxns(p.id).length > 0) return true;
+      var r0 = resolveOccurrence(p, planAllDates(p)[0] || String(p.date)); return !!(r0 && r0.skip);
+    };
     var recLive = recs.filter(function (p) { return !recDone(p); });
     var oneLive = liveOneoffs.filter(function (p) { return !oneBought(p); });
     var doneList = paidOneoffs.concat(liveOneoffs.filter(oneBought)).concat(recs.filter(recDone));
@@ -8778,8 +8827,26 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       } else if (isGoalPlan(p)) {
         var it1 = null; savingData().items.forEach(function (x) { if (String(x.p.id) === String(p.id)) it1 = x; });
         if (it1 && it1.bought) h += pdCard('Paid', amtOf(it1.spent), it1.buy ? 'on ' + wdShort(it1.buy.date) : '', 'ok', '');
-        else h += pdCard('Set aside', amtOf(am), 'planned ' + wdShort(od), 'goalv', '<button type="button" class="act pdgo b" data-cmlock="' + esc(p.id) + '">Mark paid</button>') +
-          '<div class="pdnote">Held back from your free cash until you mark it paid \u2014 that logs the payment and releases it.</div>';
+        else {
+          // v74.71: set aside from its cycle on; Move re-dates it (frees / takes this cycle's free cash); Not paying drops it
+          var gw1 = goalWhen(od), dN = insightsData(), fN = dN ? (dN.freeNet != null ? dN.freeNet : dN.free) : null;
+          h += pdCard(gw1.started ? 'Set aside' : 'Starts ' + gw1.label, amtOf(am), gw1.range || wdShort(od), gw1.started ? 'goalv' : 'mut',
+            '<button type="button" class="act pdgo b" data-cmlock="' + esc(p.id) + '">Mark paid</button><button type="button" class="act ghost" data-gmove="1">Move</button>');
+          var mv = '';
+          cycleChoices().forEach(function (o) {
+            if (goalWhen(o.iso).range === gw1.range && gw1.started === goalWhen(o.iso).started && o.k !== 'This cycle') return;
+            if (gw1.started && o.k === 'This cycle') return;
+            var ns = goalWhen(o.iso).started, eff = '';
+            if (fN != null && gw1.started && !ns) eff = 'frees ' + pesoShort(am) + ' now';
+            else if (fN != null && !gw1.started && ns) eff = 'takes ' + pesoShort(am) + ' now';
+            mv += '<button type="button" class="scd" data-gmoveto="' + o.iso + '"><span class="k">' + o.k + '</span><span class="v">' + cycleRange(o.c) + '</span>' + (eff ? '<span class="k">' + eff + '</span>' : '') + '</button>';
+          });
+          mv += '<label class="scd pdpick"><span class="k">Pick a date</span><input type="date" data-gmovedate="1" value="' + od + '"></label>';
+          h += '<div class="pdmove" style="display:none"><div class="pdlab">Move it to</div><div class="scdates">' + mv + '</div>' +
+            (fN != null ? '<div class="pdnote">Free cash now: ' + pesoFull(fN) + '. ' + (gw1.started ? 'Moving it past this cycle frees ' + pesoFull(am) + '.' : 'Moving it into this cycle takes ' + pesoFull(am) + '.') + '</div>' : '') + '</div>';
+          h += '<div class="pdnote">' + (gw1.started ? 'Held back from your free cash until you mark it paid \u2014 that logs the payment and releases it.' : 'Nothing comes off your free cash until its cycle starts; then it stays set aside until you mark it paid.') + '</div>' +
+            '<button type="button" class="cmlink pdnotpay" data-gskip="' + esc(p.id) + '|' + od + '">Not paying for it</button>';
+        }
       } else {
         var pp1 = findPaidTxn({}, { planId: p.id, date: od, name: p.name, amount: am });
         var paid1 = Math.min(am, Number(pp1 && pp1.amount) || 0), rem1 = r2(am - paid1);
@@ -8859,6 +8926,11 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     q2('[data-unskip]', function () { var a = this.getAttribute('data-unskip').split('|'); unskipPlanOccurrence(a[0], a[1]); });
     q2('[data-histmore]', function () { var k = this.getAttribute('data-histmore'); histMoreOpen[k] = !histMoreOpen[k]; renderPlanDetail(); });
     q2('[data-cmlock]', function () { goalLock(this.getAttribute('data-cmlock')); });
+    q2('[data-gmove]', function () { var m = body.querySelector('.pdmove'); if (m) m.style.display = m.style.display === 'none' ? '' : 'none'; }); // v74.71
+    q2('[data-gmoveto]', function () { goalMove(p.id, this.getAttribute('data-gmoveto')); });
+    q2('[data-gskip]', function () { var a = this.getAttribute('data-gskip').split('|'); skipPlanChip(a[0] + '|' + a[1]); });
+    var gmd = body.querySelector ? body.querySelector('[data-gmovedate]') : null;
+    if (gmd) gmd.onchange = function () { if (gmd.value) goalMove(p.id, gmd.value); };
     q2('[data-potuse]', function () { potUse(this.getAttribute('data-potuse')); });
     q2('[data-potextra]', function () { potExtra(this.getAttribute('data-potextra')); });
     q2('[data-potadd]', function () { var a = this.getAttribute('data-potadd').split('|'); potConfirm(a[0], a[1]); });
@@ -11269,12 +11341,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.70, live: new Date(2026, 10, 12, 15, 14) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.71, live: new Date(2026, 10, 12, 15, 37) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.71': [
+      'Saving for one-offs now start in the cycle you pick. Add one for This cycle and it comes off free cash now; pick Next cycle (or a later date) and nothing comes off until that cycle starts. Once it starts, it stays set aside until you mark it paid.',
+      'Tight this cycle? Open the item and tap Move \u2014 push it to next cycle (or any date) and this cycle\u2019s free cash goes back up right away. \u201cNot paying for it\u201d drops it (with Undo) and files it under Done.',
+      'The Next cycle peek counts the items starting then, next to the pot top-ups.'
+    ],
     '74.70': [
       'Saving for: \u201cLock\u201d is now \u201cMark paid\u201d (it fits a gym membership or a trip as well as a gadget), and a pot\u2019s \u201cUse from pot\u201d is now \u201cPay from pot\u201d. Same buttons, same behaviour.'
     ],
@@ -13159,11 +13236,26 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         // v74.65: what Saving-for means, and a pot's goal
         var rp = byId('p_repeat'), isRep = rp && rp.value !== 'once';
         var gw = byId('p_goalWrap'); if (gw) gw.style.display = (kindSel === 'goal' && isRep) ? '' : 'none';
+        var cc = byId('p_cycChips'); // v74.71: the cycle picks (they set the date to the cycle's first day; This cycle = today)
+        if (cc) {
+          var onCyc = kindSel === 'goal' && !isRep;
+          cc.style.display = onCyc ? '' : 'none';
+          if (onCyc) {
+            var pd = byId('p_date');
+            cc.innerHTML = '<span class="pcl">Starts coming off free cash</span>' + cycleChoices().map(function (o) {
+              return '<button type="button" class="cmbtn g' + (pd && pd.value && goalWhen(pd.value).range === goalWhen(o.iso).range ? ' on' : '') + '" data-pcyc="' + o.iso + '">' + o.k + '</button>';
+            }).join('');
+            cc.onclick = function (ev) {
+              var b = ev.target && ev.target.closest ? ev.target.closest('[data-pcyc]') : null; if (!b || !pd) return;
+              pd.value = b.getAttribute('data-pcyc'); syncDateLabel(pd); kindPaint();
+            };
+          }
+        }
         var kn = byId('p_kindNote');
         if (kn) {
           kn.style.display = kindSel === 'goal' ? '' : 'none';
           kn.textContent = isRep ? 'A pot: each date asks you to add the amount. What\u2019s in it is held back from free cash until you use it.'
-            : 'Set aside in full from free cash now. Mark it paid when you pay for it \u2014 that logs the payment.';
+            : 'Comes off free cash from the cycle you pick (or the one its date falls in) until you mark it paid.';
         }
       }
       if (kindE) kindE.onclick = function () { kindSel = 'expense'; kindPaint(); };

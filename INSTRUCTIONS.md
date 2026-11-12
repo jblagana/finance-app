@@ -1,3 +1,7 @@
+## 2026-11-12 - "for the saving for one-offs, does it have option to skip/move" -> "should i instead link them to a cycle" -> "my rationale is that the cycle or date i link it to, it only subtracts starting that cycle ... im tight so im freeing up this cycle and move that deduction instead to a cycle i pick" -> "ok ship it" -> "A Saving-for one-off is set aside from its date's cycle on (until paid / dropped); Move (next cycle / in 2 cycles / a date, undoable) and Not paying for it (-> Done); the plan form picks the cycle; the next-cycle peek counts items starting then"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.71 (headless: a ₱30,000 laptop dated next cycle holds 0 now and 30,000 in the peek; Move -> This cycle holds 30,000 now; Move -> next cycle frees it; Not paying drops it and it shows under Done)
+
 ## 2026-11-12 - "should it be lock or "lock in"" -> "how about saving for things like gym, it doesnt do well as mark bought" -> "ok" -> "Lock -> Mark paid (row + sheet + notes), Use from pot -> Pay from pot"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.70 (headless: the Saving-for row and sheet read Mark paid, the pot sheet Pay from pot; tapping still opens the linked Add sheet)

@@ -1999,6 +1999,13 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.71 (boss: 'the cycle or date i link it to, it only subtracts starting that cycle ... move that deduction instead to a cycle i pick like next cycle' -> 'ok ship it'): a Saving-for one-off is held only once its date's cycle has started (goalWhen) and stays held until paid / dropped; the sheet gets Move (cycleChoices: next cycle / in 2 cycles / a date -> goalMove, undoable) and Not paying for it (the skip override -> Done); the plan form picks the cycle (p_cycChips); the next-cycle peek counts the items starting then",
+          "function goalWhen(od) {" in js and "function goalMove(pid, iso) {" in js and "function cycleChoices() {" in js
+          and "var held = (skip || bought || !gw.started) ? 0 : r2(am);" in js
+          and "data-gmoveto=" in js and "Not paying for it</button>" in js
+          and 'id="p_cycChips"' in html
+          and "out.items.push({ name: it.p.name, date: it.date, amount: it.amount, starts: true });" in js
+          and "'74.71': [" in js)
     check("v74.70 (boss: 'should it be lock or lock in' -> 'how about saving for things like gym, it doesnt do well as mark bought' -> 'ok'): the Saving-for one-off button reads Mark paid (row + sheet), a pot's reads Pay from pot; no user-facing Lock left",
           ">Mark paid</button></div></div>'; // v74.70" in js
           and ">Pay from pot</button>" in js and ">Use from pot<" not in js
@@ -2008,7 +2015,7 @@ def main():
           "function potWindowTotal(cd) {" in js
           and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total);" in js
           and "dues, Saving for &amp; prepayments already netted" in js
-          and "top-ups due · " in js
+          and "starting / top-ups · " in js  # v74.71 retarget: the row also names the one-offs starting then
           and "'74.69': [" in js)
     check("v74.68 (boss: 'have u shipped everything from the latest mockup, such as in the img, or the done tab for committed'): All plans = Recurring (default) | One-offs | Done (paid one-offs + bought Saving-for one-offs + recurring with nothing left; the Paid bar is gone); the plan's sheet = pdHead (tile · name · line), the ₱ due card, Coming up (next 4 dates: changed / skipped · undo, tap = edit that date) and Before chips (paid / partial / unpaid / skipped)",
           "data-pltab=\"done\">Done" in js and "var planTab = 'rec';" in js

@@ -1140,6 +1140,14 @@ button.act.pddel{color:var(--bad);border-color:rgba(255,107,122,.4)}
 .pdocc .pdr{display:flex;align-items:center;gap:8px}
 button.cmpill{border:0;min-height:0;width:auto;font:inherit;font-size:11px;font-weight:700;border-radius:6px;padding:3px 7px;cursor:pointer}
 button.cmpill.sk{background:var(--infoSoft);color:var(--info)}
+.pdmove .scdates{margin-top:2px}
+.pdmove button.scd{min-height:0}
+label.scd.pdpick{display:flex;flex-direction:column;gap:4px;padding:11px 12px;border-radius:12px;background:var(--card2);cursor:pointer}
+label.scd.pdpick input{height:34px;padding:4px 8px;font-size:13px}
+button.cmlink.pdnotpay{display:block;margin:10px auto 0;color:var(--bad);font-size:13px}
+.pcyc{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+.pcyc .pcl{width:100%;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}
+.pcyc button.cmbtn.on{background:var(--info);color:#0b1430}
 #pdBody .hist-chips{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0}
 #pdBody .hchip{height:30px;display:inline-flex;align-items:center;padding:0 11px;border-radius:999px;font-size:12px;font-weight:600}
 /* ---- Ledger ---- */
@@ -1901,6 +1909,8 @@ html.modal-open{overflow:hidden}
         <div id="p_kind_expense" class="pltab on">Expense</div>
         <div id="p_kind_goal" class="pltab">Saving for</div>
       </div>
+      <!-- v74.71: a Saving-for one-off picks the cycle it starts coming off free cash (or any date) -->
+      <div class="pcyc" id="p_cycChips" style="display:none"></div>
       <!-- v74.65: a recurring Saving-for is a pot — its optional goal (the asks stop once it is full) -->
       <div id="p_goalWrap" style="display:none;margin-top:10px">
         <label for="p_goal">Goal (optional) <span class="note" style="margin-left:6px">stop adding once the pot reaches it</span></label>
