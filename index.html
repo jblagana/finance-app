@@ -1428,13 +1428,14 @@ html.modal-open{overflow:hidden}
 #addSheet textarea#f_amount.long{font-size:19px;overflow-y:auto}
 /* v74.63 (boss: 'the amount placeholder, make it a lil less visible and not floating on top as a small number'):
    the placeholder is a dim 0.00 at the amount's own size, on the amount's own line */
-#addSheet .amthint{margin:3px 2px 0;font-size:11.5px;line-height:14px;height:14px;color:var(--mut);opacity:.75;white-space:nowrap;overflow:hidden}
+#addSheet .amtsub{position:relative;height:30px;margin-top:4px}
+#addSheet .amthint{margin:0 2px;font-size:11.5px;line-height:30px;height:30px;color:var(--mut);opacity:.75;white-space:nowrap;overflow:hidden}
+#addSheet .amtsub button.plchip{position:absolute;inset:0;margin:0;width:100%;min-height:0;height:30px;padding:0 12px;font-size:12.5px;border-radius:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #addSheet .amthint.off{visibility:hidden}
 #addSheet textarea#f_amount::placeholder{font-size:inherit;font-weight:inherit;letter-spacing:inherit;color:var(--mut);opacity:.35}
 #addSheet .amtline .amtEq{align-self:flex-end;padding-bottom:4px}
 /* v74.61: the plan-link chip's slot is always there (empty when there is no match) */
-#addForm .plslot{height:36px;margin-top:6px;flex:none}
-#addForm .plslot button.plchip{margin:0;min-height:0;height:36px;padding:0 12px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
 /* v74.61: the slot's room comes out of the spacing and the keys (they still stretch on taller screens) */
 #addForm label{margin:8px 2px 4px}
 #addForm .dnrow{margin-top:10px}
@@ -1453,8 +1454,7 @@ html.modal-open{overflow:hidden}
 #addKeypad .kmain{grid-auto-rows:minmax(34px,1fr);gap:4px}
 #addKeypad .kmain button{min-height:34px}
 #addForm .addgo{margin-top:2px}
-#addForm .plslot{height:30px;margin-top:3px}
-#addForm .plslot button.plchip{height:30px;font-size:12.5px}
+#addSheet .amtsub,#addSheet .amthint,#addSheet .amtsub button.plchip{height:28px;line-height:28px}
 #addForm label{margin:5px 2px 3px}
 #addForm .dnrow{margin-top:4px}
 #addKeypad{margin-top:5px}
@@ -1463,7 +1463,7 @@ html.modal-open{overflow:hidden}
 #addKeypad .kmain button{min-height:27px}
 #addKeypad .kmain button{font-size:18px;line-height:1}
 #addKeypad .kops button{height:26px;line-height:1}
-#addSheet .amthint{margin-top:1px}
+
 #addSheet textarea#f_amount{height:44px}
 #addSheet textarea#f_amount.long{font-size:18px}
 #addKeypad .kmain button,#addKeypad .kops button{padding-top:0;padding-bottom:0}
@@ -2078,7 +2078,10 @@ html.modal-open{overflow:hidden}
         </div>
         <!-- v74.67 (boss: 'add back the quick sum placeholder in the amount field' -> board 14 -> 'C'): a small hint under
              the amount while it is empty; its line is always kept (hidden, not removed) so the keypad never moves -->
-        <p id="amtHint" class="amthint">Quick sums work: 300-125+10</p>
+        <!-- v74.73 (boss: 'in add sheet why is there a wide space between date row and the keypad' -> move the chip): the line
+             under the amount holds the quick-sum hint while it is empty, and the plan-link chip once an amount matches a plan —
+             never both — so the old reserved chip slot above the keypad (the gap) is gone and the keys get its room -->
+        <div class="amtsub"><p id="amtHint" class="amthint">Quick sums work: 300-125+10</p><button type="button" id="planLinkChip" class="plchip" style="display:none" aria-pressed="false"></button></div>
       </div>
       </div>
       <div class="row rowpair">
@@ -2137,8 +2140,7 @@ html.modal-open{overflow:hidden}
            (planLinkSuggestion) offers "this looks like a plan payment";
            the boss's tap is the only thing that links (txn.planRef).
            Hidden unless there is a suggestion or an existing link. -->
-      <!-- v74.61 (boss: 'keep the keypad stationary'): the chip's slot is always reserved -->
-      <div class="plslot"><button type="button" id="planLinkChip" class="plchip" style="display:none" aria-pressed="false"></button></div>
+      <!-- v74.73: the plan-link chip moved up into the amount's hint line (.amtsub) -->
       <!-- v74.24 look upgrade: the keypad feeds #f_amount (digits, . + − and the quick-sum operators; ⌫ / C) -->
       <!-- v74.28 (boss: add multiply, divide, and parenthesis): a top row of ( ) × ÷ — evalExpr already reads them -->
       <!-- v74.58: ( ) × ÷ C on a slim strip; 4 rows of digits with = (it turns the quick sum into its result);

@@ -1999,6 +1999,12 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.73 (boss: 'in add sheet why is there a wide space between date row and the keypad' -> 'go for 2'): the plan-link chip lives in the amount's hint line (.amtsub, fixed height — the hint while empty, the chip once a plan matches, never both); the reserved .plslot above the keypad is gone",
+          '<div class="amtsub"><p id="amtHint" class="amthint">Quick sums work: 300-125+10</p><button type="button" id="planLinkChip"' in html
+          and 'class="plslot"' not in html
+          and "#addSheet .amtsub{position:relative;height:30px;margin-top:4px}" in html
+          and "if (ahint && ahint.style) ahint.style.display = 'none';" in js
+          and "'74.73': [" in js)
     check("v74.72 (boss: 'hunt for date field and see if their ui are aligned to the group'): every .dfield date input is the text-field height (46px — was 48, taller than its Amount neighbour); the Add sheet date has 11px corners like Note (was a 999px pill); All numbers as-of, the Skip card's picker and the Saving-for Pick a date use the labelled date field / a card like their neighbours; a document change listener keeps id+'Label' labels in step",
           ".dfield input[type=date]{height:46px;box-sizing:border-box;margin:0}" in html
           and "#addForm .dfield .dlabel{border-radius:11px;" in html
@@ -2070,8 +2076,8 @@ def main():
           and "'74.62': [" in js)
     check("v74.61 (boss: 'in add expense sheet, remove the note like \"backed - about... after this.\" and such as to keep the keypad stationary. also, if the amount is long, overflow it to another line, make sure the \"= php...\" does not cover it'): updateChargeHint always hides the line, the payoff funder note is off, the plan-link chip lives in an always-reserved .plslot; f_amount is a 1-row textarea fitted by fitAmt (19px .long on two lines, then scrolls) with Enter still submitting; the = hint is its flex sibling",
           "el.style.display = 'none'; el.innerHTML = ''; return;" in js
-          and '<div class="plslot"><button type="button" id="planLinkChip"' in html
-          and "#addForm .plslot{height:36px" in html
+          and '<div class="amtsub">' in html  # v74.73 retarget: the chip moved into the amount's hint line (still a fixed slot — the keypad never moves)
+          and "#addSheet .amtsub{position:relative;height:30px" in html  # v74.73 retarget
           and "function fitAmt(el) {" in js and "if (input && input.id === 'f_amount') {" in js and "fitAmt(input);" in js  # v74.67 retarget: the block also toggles the hint
           and "#addSheet textarea#f_amount.long{font-size:19px" in html
           and "fm.requestSubmit()" in js

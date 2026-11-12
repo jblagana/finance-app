@@ -6106,8 +6106,10 @@
     // editing the amount off-range must not silently break a saved link).
     if (state.planLinkRef && !planRefAlive(state.planLinkRef)) state.planLinkRef = null;
     var linked = !!state.planLinkRef;
-    if (!planLinkSug && !linked) { el.style.display = 'none'; return; }
+    var ahint = byId('amtHint'); // v74.73: the chip and the quick-sum hint share one line
+    if (!planLinkSug && !linked) { el.style.display = 'none'; if (ahint && ahint.style) ahint.style.display = ''; return; }
     el.style.display = '';
+    if (ahint && ahint.style) ahint.style.display = 'none';
     el.setAttribute('aria-pressed', linked ? 'true' : 'false');
     if (linked) {
       el.className = 'plchip linked';
@@ -11343,12 +11345,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.72, live: new Date(2026, 10, 12, 15, 53) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.73, live: new Date(2026, 10, 12, 16, 17) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.73': [
+      'Add sheet: no more empty gap above the keypad. The \u201cLooks like Rent \u2014 tap to link\u201d chip now appears on the line under the amount (where the quick-sum hint sits while it\u2019s empty), so the keys got that room and still never move while you type.'
+    ],
     '74.72': [
       'Date fields line up: Add a plan, Edit plan and Owed dates are now the same height as the Amount beside them; the Add sheet\u2019s date has the same corners as Note; and All numbers \u201cas of\u201d, the Skip card\u2019s and Saving for\u2019s \u201cPick a date\u201d show the app\u2019s friendly dates (\u201cToday\u201d, \u201cNov 12, 2026\u201d) instead of the phone\u2019s raw date box.'
     ],
