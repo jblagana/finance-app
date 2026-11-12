@@ -246,7 +246,7 @@ def main():
           and "addAmtEq(amtEl); updateChargeHint()" in js
           and 'id="amtEq" class="amtEq"' in html and ".amtEq{" in html)
     check("v54: amount keyboards are full (operators typeable) on the quick-sum inputs",
-          'id="f_amount" type="text" placeholder="0.00 or 300-125+10"' in html  # v74.58 successor: the shorter placeholder (the amount line holds ₱ + the = hint)
+          '<textarea id="f_amount" rows="1" placeholder="0.00 or 300-125+10"' in html  # v74.61 successor: a 1-row textarea so a long sum wraps; v74.58 successor: the shorter placeholder (the amount line holds ₱ + the = hint)
           and '<input type="text" class="oent-amt" maxlength="40" autocomplete="off">' in js
           and 'id="p_amount" type="text"' in html
           and "evalExpr(raw)" in js)
@@ -1999,6 +1999,14 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.61 (boss: 'in add expense sheet, remove the note like \"backed - about... after this.\" and such as to keep the keypad stationary. also, if the amount is long, overflow it to another line, make sure the \"= php...\" does not cover it'): updateChargeHint always hides the line, the payoff funder note is off, the plan-link chip lives in an always-reserved .plslot; f_amount is a 1-row textarea fitted by fitAmt (19px .long on two lines, then scrolls) with Enter still submitting; the = hint is its flex sibling",
+          "el.style.display = 'none'; el.innerHTML = ''; return;" in js
+          and '<div class="plslot"><button type="button" id="planLinkChip"' in html
+          and "#addForm .plslot{height:38px" in html
+          and "function fitAmt(el) {" in js and "if (input && input.id === 'f_amount') fitAmt(input);" in js
+          and "#addSheet textarea#f_amount.long{font-size:19px" in html
+          and "fm.requestSubmit()" in js
+          and "'74.61': [" in js)
     check("v74.60 (boss: 'the icons for the cards in accounts are not centered'): the All numbers card tile is .nv-tile.cc (it was .nv-tile.card — the global .card panel class added padding + a border and pushed the letter off-centre)",
           "(card ? ' cc' : '')" in js and ".nv-tile.cc{" in html and ".nv-tile.card" not in html
           and "'74.60': [" in js)

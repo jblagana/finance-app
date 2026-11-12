@@ -1,3 +1,7 @@
+## 2026-11-12 - "in add expense sheet, remove teh note like "backed - sbout... after this." and such as to keep the keypad stationary . also, if the amount is long, overflow it appropraitely to another line, make sure the "= php..." does not cover it" -> "The Backed/Deficit line and the payoff funder note are gone from the sheet; the plan-link chip has an always-reserved slot so the keypad never moves; the amount is a one-row box that wraps a long sum onto two smaller lines beside the = hint"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.61 (headless Chromium: keypad position identical before/after typing and with the plan chip shown; long sums wrap without overlapping the = hint; no scroll at 390x844 / 375x667)
+
 ## 2026-11-12 - "the icons for the cards in accounts are not centered" -> "The All numbers card tiles were .nv-tile.card — the global .card panel class added its padding + border and pushed the letter off-centre; the tile class is .cc now"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.60 (headless Chromium: every account tile 38x38 with its letter centred, cards and banks alike)

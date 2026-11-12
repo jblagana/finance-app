@@ -3044,7 +3044,7 @@
     var pwNote = byId('paywithNote');
     if (pwNote) {
       var pw = payWithOf(t);
-      if (t.kind === 'card_payment' && pw) {
+      if (false && t.kind === 'card_payment' && pw) { // v74.61: no notes on the Add sheet (the funder is still kept on a re-save)
         pwNote.style.display = '';
         pwNote.textContent = 'Paid with ' + pw + ' — pays the card ' + (t.account || '') + ' down.';
       } else {
@@ -8655,7 +8655,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     });
   }
   // v23: quick-sums in the Add sheet (the prepay path) - live = total hint
+  // v74.61: big on one line while it fits; smaller on two lines when long; past that it scrolls inside (the end stays in view)
+  function fitAmt(el) {
+    if (!el || !el.classList || el.tagName !== 'TEXTAREA') return;
+    el.classList.remove('long');
+    if (el.value && el.scrollHeight > el.clientHeight + 1) el.classList.add('long');
+    el.scrollTop = el.scrollHeight;
+  }
   function addAmtEq(input) {
+    if (input && input.id === 'f_amount') fitAmt(input);
     var eq = byId('amtEq'); if (!eq) return;
     var raw = String(input.value || '').trim();
     if (!raw) { eq.style.display = 'none'; eq.className = 'amtEq'; return; }
@@ -8684,6 +8692,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   }
   function updateChargeHint() {
     var el = byId('chargeHint'); if (!el) return;
+    // v74.61 (boss: 'remove the note like "Backed - about ... after this." and such, to keep the keypad stationary'):
+    // the line popped in and out while typing and shoved the keypad down. It is gone from the sheet.
+    el.style.display = 'none'; el.innerHTML = ''; return;
     // v72.41: the deficit hint is for spends — in Pay-card mode the prepay was
     // already priced into the projection (free − amt would double-count it)
     if (addMode === 'prepay') { el.style.display = 'none'; return; }
@@ -10753,12 +10764,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.60, live: new Date(2026, 10, 12, 4, 12) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.61, live: new Date(2026, 10, 12, 13, 50) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.61': [
+      'Add sheet: the keypad stays put. The \u201cBacked \u2014 about \u20b1\u2026 stays free\u201d line is gone, and the \u201cLooks like \u2026 tap to link\u201d chip has a fixed spot, so nothing pops in and pushes the keys while you type.',
+      'A long amount or quick sum now wraps onto a second line (in a smaller size) instead of hiding off the edge, and the \u201c= \u20b1\u2026\u201d sits beside it without covering it.'
+    ],
     '74.60': [
       'Fixed: the letter icons of credit cards in All numbers sat off-centre. They’re centred now, like the bank accounts’.'
     ],
@@ -12650,7 +12665,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
 
     // v73.94: the treat input is gone with the Insights detail blocks (its boot binding + the card-header control were deleted here).
     var amtEl = byId('f_amount');
-    if (amtEl) amtEl.addEventListener('input', function () { addAmtEq(amtEl); updateChargeHint(); updatePlanLinkChip(); });
+    if (amtEl) amtEl.addEventListener('input', function () {
+      if (/[\r\n]/.test(amtEl.value)) amtEl.value = amtEl.value.replace(/\s*[\r\n]+\s*/g, ''); // v74.61: a pasted line break
+      addAmtEq(amtEl); updateChargeHint(); updatePlanLinkChip();
+    });
+    if (amtEl) amtEl.addEventListener('keydown', function (ev) { // v74.61: Enter still adds (the amount is a textarea now)
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      var fm = byId('addForm');
+      if (fm && fm.requestSubmit) fm.requestSubmit(); else { var sb = byId('addSubmit'); if (sb) sb.click(); }
+    });
     var noteEl = byId('f_note'); // v68 item 1: learned merchant→category prefill
     if (noteEl) noteEl.addEventListener('input', function () { autoCatFromNote(noteEl); updatePlanLinkChip(); });
     // v73.53: the cashback row follows the Paid-with pick (a card in Money in
