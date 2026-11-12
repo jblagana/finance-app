@@ -1,3 +1,7 @@
+## 2026-11-12 - "does the "saving for" accounted in the "next cycle" peek from the hero" -> "Partly (the set-aside rides the carry); pot top-ups due next cycle weren't" -> "ok" -> "The peek subtracts the pots' top-ups due in the next window on a 'Saving for · top-ups due' row; Carried over names dues, Saving for & prepayments"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.69 (headless: a ₱500 monthly pot dated Nov 20 drops the next-cycle net 49,423.04 -> 48,923.04 with the carry unchanged; window Nov 15 - Dec 14)
+
 ## 2026-11-12 - "have u shipped everything from the latest mockup, such as in the img, or the done tab for sommited" (screenshot of board 12b) -> "Not all: the plan sheet now has the board-12b header, the ₱ due card, Coming up (changed / skipped · undo, tap to edit a date) and Before chips; All plans is Recurring | One-offs | Done (the Paid bar became Done)"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.68 (headless: Rent's sheet matches board 12b — header, Overdue ₱12,030.00 card, Coming up with skipped · undo + changed, Before chips; tabs Recurring 8 / One-offs 1 / Done 0; smoke retargeted)

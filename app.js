@@ -5048,7 +5048,11 @@
     var thisNet = r2(free - planWindowTotal(thisCd).total - heldS);
     var carry = (mode === 'next') ? thisNet : 0;
     var salAdded = (mode === 'next') ? (withSal ? salExpected : 0) : 0;
-    var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal);
+    // v74.69 (boss: 'does the saving for accounted in the next cycle peek' -> ok): the pots' top-ups that fall in the
+    // NEXT window come off the peek as if you tap Add (the dues are counted before they're paid the same way); the
+    // set-aside so far is already inside the carry
+    var potW = (mode === 'next') ? potWindowTotal(cd) : { total: 0, items: [] };
+    var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total);
     // v73.44: the THIS-cycle informational rows (liquid / cards owed / other
     // outflows / plan dues) must SUM EXACTLY to the hero. The hero =
     // effectiveFree − planShare (planShare = cyclePlanDeduction = the hero's
@@ -5072,6 +5076,7 @@
       plans: r2(planTotal), planCount: planCount,
       // v73.37: the peek's expandable breakdown (the specific plan dues)
       planItems: pw.items,
+      potTotal: r2(potW.total), potItems: potW.items, // v74.69
       net: net
     };
   }
@@ -5194,6 +5199,25 @@
     var fc = byId('f_category'); if (p.category && fc) { fc.value = p.category; renderAddChips(); }
     state.planLinkRef = { planId: p.id, date: 'pot', name: p.name, amount: 0 };
     updatePlanLinkChip();
+  }
+  // v74.69: the top-ups the pots will ask for inside a window (not yet added, not skipped), capped at each goal
+  function potWindowTotal(cd) {
+    var out = { total: 0, items: [] };
+    if (!cd) return out;
+    savingData().items.forEach(function (it) {
+      if (it.type !== 'pot') return;
+      var p = it.p, room = it.goal > 0 ? r2(it.goal - it.held) : Infinity;
+      planAllDates(p).forEach(function (d) {
+        if (d < cd.start || d > cd.end || (p.potAdds && p.potAdds[d] != null) || !(room > 0.004)) return;
+        var r = resolveOccurrence(p, d); if (r && r.skip) return;
+        var a = Math.min(Number(r && r.amount != null ? r.amount : p.amount) || 0, room);
+        if (!(a > 0.004)) return;
+        room = r2(room - a);
+        out.total += a; out.items.push({ name: p.name, date: d, amount: r2(a) });
+      });
+    });
+    out.total = r2(out.total);
+    return out;
   }
   function cyclePlanDeduction() {
     var cd = cycleData();
@@ -7408,7 +7432,7 @@
       // shown as a row so the starting number is auditable. NO salary row
       // in the this-cycle block (the boss's Oct-11 point: the salary is
       // already inside the displayed free cash, so the row was misleading).
-      rows += '<div class="cbrow"><div class="lab">Carried over<small>from this cycle — plans &amp; prepayments already netted</small></div><div class="amt' + (p.carry < 0 ? ' minus' : '') + '">' + money(p.carry) + '</div></div>';
+      rows += '<div class="cbrow"><div class="lab">Carried over<small>from this cycle — dues, Saving for &amp; prepayments already netted</small></div><div class="amt' + (p.carry < 0 ? ' minus' : '') + '">' + money(p.carry) + '</div></div>';
       // v73.37 (boss: 'keep it for the next cycle peek, and expandable to
       // the specific plan dues'): the Plans row is a tap target — the
       // specific dues drop in as sub-rows (resolved amounts: a fork shows
@@ -7431,6 +7455,10 @@
           if (!moreOpen && items.length > 5) subs += '<div class="cbsub mut" id="cbPlansMoreRow" role="button" tabindex="0"><span class="sl">+' + (items.length - 5) + ' more…</span></div>';
           rows += '<div class="cbsubwrap">' + subs + '</div>';
         }
+      }
+      // v74.69: the pots' top-ups due in the window (as if you tap Add)
+      if (p.potTotal > 0.004) {
+        rows += '<div class="cbrow"><div class="lab">Saving for<small>top-ups due · ' + (p.potItems || []).map(function (it) { return esc(it.name) + ' ' + dayMonth(it.date); }).join(', ') + '</small></div><div class="amt goalv">− ' + money(p.potTotal) + '</div></div>';
       }
       if (p.salary > 0) {
         if (p.withSalary) {
@@ -11241,12 +11269,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.68, live: new Date(2026, 10, 12, 14, 53) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.69, live: new Date(2026, 10, 12, 14, 59) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.69': [
+      'The hero\u2019s Next cycle peek now counts Saving for: pot top-ups due in that cycle come off (as if you tap Add), shown on their own line, and the Carried over note says what\u2019s already taken out \u2014 dues, Saving for and prepayments.'
+    ],
     '74.68': [
       'Committed now matches the design fully. All plans has three tabs — Recurring, One-offs and Done (paid one-offs, bought Saving-for items and finished plans).',
       'A plan’s sheet has a proper header, the next due in ₱, a Coming up list of the next dates (changed ones tagged, skipped ones with an undo — tap a date to edit just that one) and Before chips for past dates (paid ✓, part-paid ◐, unpaid, skipped).'

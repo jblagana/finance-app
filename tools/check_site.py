@@ -718,7 +718,7 @@ def main():
           # (with/without) − next window's plans
           and "var thisNet = r2(free - planWindowTotal(thisCd).total - heldS);" in js  # v74.65 retarget: the Saving-for set-aside comes off too
           and "var carry = (mode === 'next') ? thisNet : 0;" in js
-          and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal);" in js
+          and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total);" in js  # v74.69 retarget: the pots' top-ups due next cycle come off too
           # ONE helper computes both windows' plan totals + the breakdown
           # (the carry, the peek's deduction, and the expanded sub-rows all
           # come from the same items — no drift)
@@ -1999,6 +1999,12 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.69 (boss: 'does the saving for accounted in the next cycle peek from the hero' -> 'ok'): the peek subtracts the pots' top-ups due in the next window (potWindowTotal: not yet added, not skipped, capped at the goal) on a 'Saving for · top-ups due' row; Carried over says dues, Saving for & prepayments are already netted",
+          "function potWindowTotal(cd) {" in js
+          and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total);" in js
+          and "dues, Saving for &amp; prepayments already netted" in js
+          and "top-ups due · " in js
+          and "'74.69': [" in js)
     check("v74.68 (boss: 'have u shipped everything from the latest mockup, such as in the img, or the done tab for committed'): All plans = Recurring (default) | One-offs | Done (paid one-offs + bought Saving-for one-offs + recurring with nothing left; the Paid bar is gone); the plan's sheet = pdHead (tile · name · line), the ₱ due card, Coming up (next 4 dates: changed / skipped · undo, tap = edit that date) and Before chips (paid / partial / unpaid / skipped)",
           "data-pltab=\"done\">Done" in js and "var planTab = 'rec';" in js
           and "function pdHead(p, sub, tile) {" in js and "h += '<div class=\"pdlab\">Coming up</div>';" in js
