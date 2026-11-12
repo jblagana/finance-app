@@ -1999,6 +1999,13 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.62 (boss: 'redesign the card that appears when i click the skip chip' -> boards 11/11b -> 'ship all of it, including the new skip card'): the skip chooser is a bottom card (.scbox): header (name, due, repeat, amount), two choices (scSkip / scToMove) with the free-cash effect, a Move page with quick dates (#scChips: in a week / after payday / start of next month / pick a date) that skips dates another occurrence holds (planTakenDates); the plan sheet's Skip opens the same card; scDate / scMove / skipChooserMove kept",
+          'class="scbox"' in html and 'id="scToMove"' in html and 'id="scChips"' in html and 'id="scSkip"' in html
+          and 'id="scDate"' in html and 'id="scMove"' in html
+          and "function planTakenDates(p, dateISO) {" in js and "function scPickDate(iso) {" in js
+          and "offer('After payday'," in js
+          and "openSkipChooser(pid, pd);" in js
+          and "'74.62': [" in js)
     check("v74.61 (boss: 'in add expense sheet, remove the note like \"backed - about... after this.\" and such as to keep the keypad stationary. also, if the amount is long, overflow it to another line, make sure the \"= php...\" does not cover it'): updateChargeHint always hides the line, the payoff funder note is off, the plan-link chip lives in an always-reserved .plslot; f_amount is a 1-row textarea fitted by fitAmt (19px .long on two lines, then scrolls) with Enter still submitting; the = hint is its flex sibling",
           "el.style.display = 'none'; el.innerHTML = ''; return;" in js
           and '<div class="plslot"><button type="button" id="planLinkChip"' in html

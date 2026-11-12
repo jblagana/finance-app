@@ -6042,6 +6042,39 @@
   // dedupe, the hero deduction, the peek, and the v73.57 graph drop all
   // pick the new date up for free. Undo restores the exact prior override.
   var skipChooserCtx = null; // { planId, dateISO } — the open chooser's target
+  // v74.62: the dates another occurrence of this plan already holds (a move can't land there) —
+  // the same rule movePlanChip enforces (skipped dates occupy their slot too)
+  function planTakenDates(p, dateISO) {
+    var gridDate = planGridDateFor(p, dateISO), others = {};
+    planGridDates(p).forEach(function (g) { if (g !== gridDate) others[planDateAt(p, g)] = true; });
+    return others;
+  }
+  function scPage(pg) { // v74.62: 'pick' (the two choices) or 'move' (the dates)
+    var a = byId('scPick'), b = byId('scMovePg');
+    if (a && a.style) a.style.display = pg === 'move' ? 'none' : '';
+    if (b && b.style) b.style.display = pg === 'move' ? '' : 'none';
+  }
+  function scPickDate(iso) { // v74.62: a date chip (or the picker) chose the move target
+    var c = skipChooserCtx; if (!c) return;
+    var inp = byId('scDate'); if (inp) inp.value = iso || '';
+    var chips = byId('scChips');
+    if (chips && chips.querySelectorAll) {
+      var bs = chips.querySelectorAll('[data-scd]');
+      for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', !!iso && bs[i].getAttribute('data-scd') === iso && !(inp && inp.style && inp.style.display !== 'none' && bs[i].getAttribute('data-scd') === 'pick'));
+    }
+    var go = byId('scMove');
+    if (go) { go.textContent = iso ? 'Move to ' + dayMonth(iso) : 'Pick a date'; go.disabled = !iso; }
+    var eff = byId('scMoveEff');
+    if (eff && eff.style) {
+      if (iso && c.rem > 0.004 && c.cycEnd && c.dateISO <= c.cycEnd && iso > c.cycEnd && c.freeNet != null) {
+        eff.style.display = '';
+        eff.innerHTML = '<span>Leaves this cycle, so free cash</span><span>' + money(c.freeNet) + ' → <b>' + money(r2(c.freeNet + c.rem)) + '</b></span>';
+      } else if (iso && c.rem > 0.004 && c.cycEnd && c.dateISO > c.cycEnd && iso <= c.cycEnd) {
+        eff.style.display = '';
+        eff.innerHTML = '<span>Lands in this cycle, so free cash</span><span>' + money(c.freeNet) + ' → <b>' + money(r2(c.freeNet - c.rem)) + '</b></span>';
+      } else { eff.style.display = 'none'; eff.innerHTML = ''; }
+    }
+  }
   function openSkipChooser(planId, dateISO) {
     var dlg = byId('skipChooserDlg');
     if (!dlg) return;
@@ -6049,9 +6082,12 @@
     for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === planId) p = state.plans[i];
     if (!p || !dateISO) return;
     skipChooserCtx = { planId: planId, dateISO: dateISO };
+    var ro = null; try { ro = resolveOccurrence(p, dateISO); } catch (e) {}
+    var nm = (ro && ro.name) || p.name || 'plan', am = Number(ro && ro.amount != null ? ro.amount : p.amount) || 0;
     var msg = byId('scMsg');
-    if (msg) msg.textContent = (p.name || 'plan') + ' · ' + fmtDate(dateISO);
+    if (msg) msg.textContent = nm;
     var inp = byId('scDate');
+    var defISO = '';
     if (inp) {
       var d = parseISO(dateISO);
       var min = new Date(d); min.setDate(min.getDate() + 1);
@@ -6059,7 +6095,92 @@
       for (var m = 1; m <= 3; m++) { def = new Date(def.getFullYear(), def.getMonth() + 1, def.getDate()); if (def > min) break; }
       inp.min = localISO(min);
       inp.value = localISO(def);
+      defISO = inp.value;
     }
+    // v74.62: the card's header + what each choice does to free cash
+    var rem = 0, freeNet = null, cycEnd = null;
+    try {
+      var pp = findPaidTxn({ monthPrefix: todayISO().slice(0, 7), today: todayISO() }, { planId: p.id, date: dateISO, name: nm, amount: am });
+      rem = r2(am - (Number(pp && pp.amount) || 0));
+      var cdS = cycleData(); cycEnd = cdS ? cdS.end : null;
+      var dS = insightsData(); freeNet = dS ? (dS.freeNet != null ? dS.freeNet : dS.free) : null;
+    } catch (e) {}
+    skipChooserCtx.rem = rem; skipChooserCtx.cycEnd = cycEnd; skipChooserCtx.freeNet = freeNet;
+    var rep = { daily: 'repeats daily', weekly: 'repeats weekly', monthly: 'repeats monthly', annual: 'repeats yearly' }[p.repeat] || 'one-off';
+    var setT = function (id, t) { var e = byId(id); if (e) e.textContent = t; };
+    setT('scTile', String(nm).trim().charAt(0).toUpperCase() || '·');
+    setT('scSub', 'Due ' + fmtDate(dateISO) + ' · ' + rep);
+    setT('scAmt', money(rem > 0.004 && rem < am - 0.004 ? rem : am));
+    var nextISO = null;
+    if (p.repeat) {
+      try {
+        var all = planAllDates(p);
+        for (var k = 0; k < all.length; k++) {
+          if (all[k] <= dateISO) continue;
+          var rk = resolveOccurrence(p, all[k]);
+          if (rk && rk.skip) continue;
+          nextISO = all[k]; break;
+        }
+      } catch (e) {}
+    }
+    setT('scSkipSub', p.repeat ? (nextISO ? "Won't be paid. The next one still comes on " + fmtDate(nextISO) + '.' : "Won't be paid. The rest of the series stays.") : "Won't be paid — it drops off your plans.");
+    var se = byId('scSkipEff');
+    if (se && se.style) {
+      if (rem > 0.004 && cycEnd && dateISO <= cycEnd && freeNet != null) {
+        se.style.display = '';
+        se.innerHTML = '<span>If you skip, free cash</span><span>' + money(freeNet) + ' → <b>' + money(r2(freeNet + rem)) + '</b></span>';
+      } else { se.style.display = 'none'; se.innerHTML = ''; }
+    }
+    // v74.62: the quick dates — in a week / after payday / start of next month / pick a date
+    var taken = {}; try { taken = planTakenDates(p, dateISO); } catch (e) {}
+    var addD = function (iso, n) { var x = parseISO(iso); x.setDate(x.getDate() + n); return localISO(x); };
+    var opts = [], seen = {}, blocked = [];
+    var tdy = todayISO(), base = dateISO < tdy ? tdy : dateISO; // an overdue due: the quick dates start from today
+    var offer = function (k, iso) {
+      if (!iso || iso <= dateISO || iso < tdy || seen[iso]) return;
+      if (taken[iso]) { blocked.push(iso); return; }
+      seen[iso] = true; opts.push({ k: k, iso: iso });
+    };
+    offer('In a week', addD(base, 7));
+    if (cycEnd) offer('After payday', addD(cycEnd >= base ? cycEnd : base, 1));
+    var dd0 = parseISO(base); offer('Start of next month', localISO(new Date(dd0.getFullYear(), dd0.getMonth() + 1, 1)));
+    if (opts.length < 3 && defISO) offer('Same day next month', defISO);
+    opts.sort(function (a, b) { return a.iso < b.iso ? -1 : 1; });
+    var ch = byId('scChips');
+    if (ch) {
+      var hc = '';
+      opts.slice(0, 3).forEach(function (o) { hc += '<button type="button" class="scd" data-scd="' + o.iso + '"><span class="k">' + o.k + '</span><span class="v">' + dayMonth(o.iso) + '</span></button>'; });
+      hc += '<button type="button" class="scd" data-scd="pick"><span class="k">Pick a date</span><span class="v">Other…</span></button>';
+      ch.innerHTML = hc;
+      ch.onclick = function (ev) {
+        var b = ev.target && ev.target.closest ? ev.target.closest('[data-scd]') : null; if (!b) return;
+        var v = b.getAttribute('data-scd'), di = byId('scDate');
+        if (v === 'pick') {
+          if (di && di.style) { di.style.display = ''; try { di.focus(); if (di.showPicker) di.showPicker(); } catch (e) {} }
+          var bs = ch.querySelectorAll('[data-scd]');
+          for (var q = 0; q < bs.length; q++) bs[q].classList.toggle('on', bs[q] === b);
+          scPickDate(di ? di.value : '');
+          b.classList.add('on');
+          return;
+        }
+        if (di && di.style) di.style.display = 'none';
+        scPickDate(v);
+      };
+    }
+    var di0 = byId('scDate');
+    if (di0) {
+      if (di0.style) di0.style.display = 'none';
+      di0.onchange = function () { scPickDate(di0.value); var pk = ch && ch.querySelector ? ch.querySelector('[data-scd="pick"]') : null; if (pk) { pk.classList.add('on'); var pv = pk.querySelector('.v'); if (pv && di0.value) pv.textContent = fmtDate(di0.value); } };
+    }
+    // nothing is picked until a date is tapped (scDate keeps its next-same-day default for the picker)
+    var go0 = byId('scMove'); if (go0) { go0.textContent = 'Pick a date'; go0.disabled = true; }
+    var me0 = byId('scMoveEff'); if (me0 && me0.style) { me0.style.display = 'none'; me0.innerHTML = ''; }
+    var mn = byId('scMoveNote');
+    if (mn && mn.style) {
+      if (blocked.length) { mn.style.display = ''; mn.textContent = fmtDate(blocked[0]) + ' is not offered — the next ' + nm + ' is already on that day.'; }
+      else { mn.style.display = 'none'; mn.textContent = ''; }
+    }
+    scPage('pick');
     dlg.classList.add('show');
   }
   function closeSkipChooser() {
@@ -6508,6 +6629,10 @@
         if (scSkip) scSkip.onclick = skipChooserSkip;
         var scMove = byId('scMove');
         if (scMove) scMove.onclick = skipChooserMove;
+        var scToMove = byId('scToMove'); // v74.62: the card's second page
+        if (scToMove) scToMove.onclick = function () { scPage('move'); };
+        var scBack = byId('scBack');
+        if (scBack) scBack.onclick = function () { scPage('pick'); };
         // scrim tap closes (onclick, not addEventListener — renderCoach
         // re-runs on every emit, so a listener here would accumulate)
         scDlg.onclick = function (e) {
@@ -10764,12 +10889,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.61, live: new Date(2026, 10, 12, 13, 50) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.62, live: new Date(2026, 10, 12, 14, 14) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.62': [
+      'A new Skip card. Tapping Skip on a due (on the coach card, or "Skip this occurrence" on a plan) now slides up a card from the bottom: the plan, when it\u2019s due and how much, then two big choices \u2014 Skip it this time (it tells you when the next one still comes) or Move it to another day. Each shows what it does to your free cash.',
+      'Moving offers quick dates \u2014 in a week, after payday, start of next month \u2014 or pick any date. Dates that already have the same bill are left out.'
+    ],
     '74.61': [
       'Add sheet: the keypad stays put. The \u201cBacked \u2014 about \u20b1\u2026 stays free\u201d line is gone, and the \u201cLooks like \u2026 tap to link\u201d chip has a fixed spot, so nothing pops in and pushes the keys while you type.',
       'A long amount or quick sum now wraps onto a second line (in a smaller size) instead of hiding off the edge, and the \u201c= \u20b1\u2026\u201d sits beside it without covering it.'
@@ -12652,7 +12781,12 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var peSave = byId('peSave');
     if (peSave) peSave.onclick = function () { savePlanOccurrence(); };
     var peSkip = byId('peSkip');
-    if (peSkip) peSkip.onclick = function () { skipPlanOccurrence(); };
+    if (peSkip) peSkip.onclick = function () { // v74.62 (boss: yes): the plan sheet's Skip opens the same Skip card (skip or move)
+      if (!planEditCtx) return;
+      var pid = planEditCtx.plan && planEditCtx.plan.id, pd = planEditCtx.dateISO;
+      closeSheets(); planEditCtx = null;
+      openSkipChooser(pid, pd);
+    };
     var peDel = byId('peDeleteAll');
     if (peDel) peDel.onclick = function () {
       var id = planEditCtx ? planEditCtx.plan.id : null;

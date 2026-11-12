@@ -1,3 +1,9 @@
+## 2026-11-12 - "for 'saving for' commits ... one offs appear separate from the actual dues, deducted from free cash for display, only deduct from liquid when i lock them (already bought) ... propose for the recurring 'saving for'" + "redesign the card that appears when i click the skip chip" -> boards 11/11b -> "ask to confirm, and ship all of it, including the new skip card" -> "Skip card redesigned (coach chip + the plan sheet's Skip); Saving-for one-offs are set aside in full right away (shown apart from dues), Lock = log the purchase; recurring Saving-for are pots that grow by confirmed top-ups (optional goal), Use = log a spend from the pot"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.62 (the Skip card)
+- [ ] v74.63 (Saving-for one-offs: set aside now, Lock)
+- [ ] v74.64 (Saving-for recurring: pots with confirmed top-ups, goal, Use)
+
 ## 2026-11-12 - "in add expense sheet, remove teh note like "backed - sbout... after this." and such as to keep the keypad stationary . also, if the amount is long, overflow it appropraitely to another line, make sure the "= php..." does not cover it" -> "The Backed/Deficit line and the payoff funder note are gone from the sheet; the plan-link chip has an always-reserved slot so the keypad never moves; the amount is a one-row box that wraps a long sum onto two smaller lines beside the = hint"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.61 (headless Chromium: keypad position identical before/after typing and with the plan chip shown; long sums wrap without overlapping the = hint; no scroll at 390x844 / 375x667)

@@ -767,6 +767,41 @@ button.act.danger{background:var(--bad);border-color:var(--bad)}
   background:rgba(5,8,14,.66);padding:24px 18px;opacity:0;pointer-events:none;transition:opacity .16s ease}
 #skipChooserDlg.show{opacity:1;pointer-events:auto}
 #skipChooserDlg.show .confirm-box{transform:translateY(0)}
+/* v74.62: the Skip card — a bottom card in thumb reach */
+#skipChooserDlg{align-items:flex-end;padding:0}
+#skipChooserDlg .scbox{width:100%;max-width:520px;box-sizing:border-box;background:var(--card);border-top:1px solid var(--line);border-radius:24px 24px 0 0;padding:8px 16px calc(20px + env(safe-area-inset-bottom));transform:translateY(24px);transition:transform .18s ease;max-height:92dvh;overflow:auto;overscroll-behavior:contain}
+#skipChooserDlg.show .scbox{transform:translateY(0)}
+.scgrab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 12px}
+.schd{display:flex;align-items:flex-start;gap:12px}
+.sctile{flex:none;width:42px;height:42px;border-radius:12px;background:rgba(255,196,92,.14);color:#ffc45c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px}
+.sct{flex:1;min-width:0}
+.scn{font-size:18px;font-weight:600;overflow-wrap:anywhere}
+.scs{font-size:13px;color:var(--mut);margin-top:2px}
+.sca{flex:none;font-size:18px;font-weight:700;white-space:nowrap;padding-top:1px}
+button.scx{flex:none;width:40px;height:40px;min-height:0;padding:0;border-radius:10px;background:var(--card2);border:0;color:var(--ink);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.scq{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin:18px 2px 8px}
+button.scopt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:14px;border-radius:14px;background:var(--card2);border:1px solid transparent;color:var(--ink);margin:0 0 8px;cursor:pointer;font:inherit}
+button.scopt:active{filter:brightness(1.15)}
+.scic{flex:none;width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center}
+.scic.bad{background:rgba(255,107,122,.14);color:var(--bad)}
+.scic.info{background:var(--infoSoft);color:var(--info)}
+.scb{flex:1;min-width:0;display:flex;flex-direction:column}
+.scl{font-size:15px;font-weight:600}
+.scm{font-size:12.5px;color:var(--mut);margin-top:2px}
+.scchev{color:var(--mut);font-size:20px}
+.sceff{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;padding:10px 12px;border-radius:11px;background:var(--accSoft);font-size:12.5px;color:var(--mut)}
+.sceff b{color:var(--acc);font-weight:700;white-space:nowrap}
+.scnote{font-size:11.5px;color:var(--mut);text-align:center;margin-top:12px}
+button.scback{background:transparent;border:0;color:var(--mut);font:inherit;font-size:13px;font-weight:600;padding:8px 0;margin-top:8px;min-height:0;cursor:pointer;width:auto}
+#scMovePg .scq{margin-top:4px}
+.scdates{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button.scd{display:flex;flex-direction:column;align-items:flex-start;padding:11px 12px;border-radius:12px;background:var(--card2);border:1px solid transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer;min-height:0;width:100%}
+button.scd .k{font-size:12px;color:var(--mut)}
+button.scd .v{font-size:15px;font-weight:600;margin-top:1px}
+button.scd.on{border-color:var(--info);background:var(--infoSoft)}
+#scDate{margin-top:8px;height:44px}
+button.act.scgo{width:100%;margin-top:12px;min-height:50px;background:var(--info);border-color:var(--info);color:#0b1430}
+button.act.scgo:disabled{opacity:.45}
 .ai-model{flex:1;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 10px;font-weight:600;font-size:12.5px}
 .ai-model.on{border-color:var(--acc);color:#fff;background:var(--acc)}
 .lex-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
@@ -2164,16 +2199,39 @@ html.modal-open{overflow:hidden}
 <!-- v73.58: the skip/move chooser — the coach's Skip chip opens this (skip
      entirely = the v73.28 path; move = a later date via the v73.41
      move-override). Fixed overlay, same surface as #confirmDlg. -->
+<!-- v74.62 (boss: 'redesign the card that appears when i click the skip chip' -> canvas boards 11 / 11b): a bottom card —
+     the plan + its due + amount on top, two big choices (Skip it this time / Move it to another day) with what each
+     does to free cash; Move opens quick dates (in a week / after payday / start of next month / pick a date). -->
 <div id="skipChooserDlg" class="confirm" role="dialog" aria-modal="true" aria-labelledby="scMsg">
-  <div class="confirm-box">
-    <p id="scMsg" class="confirm-m"></p>
-    <div class="row">
-      <button type="button" id="scCancel" class="act ghost">Cancel</button>
-      <button type="button" id="scSkip" class="act danger">Skip</button>
+  <div class="scbox">
+    <div class="scgrab" aria-hidden="true"></div>
+    <div class="schd">
+      <span class="sctile" id="scTile" aria-hidden="true">·</span>
+      <div class="sct"><div class="scn" id="scMsg"></div><div class="scs" id="scSub"></div></div>
+      <div class="sca" id="scAmt"></div>
+      <button type="button" id="scCancel" class="scx" aria-label="Close"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
-    <div class="row" style="margin-top:8px">
-      <input type="date" id="scDate" aria-label="Move to a later date" style="flex:1;font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:transparent;color:inherit">
-      <button type="button" id="scMove" class="act">Move</button>
+    <div id="scPick">
+      <div class="scq">What do you want to do with this one?</div>
+      <button type="button" id="scSkip" class="scopt">
+        <span class="scic bad" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+        <span class="scb"><span class="scl">Skip it this time</span><span class="scm" id="scSkipSub">Won't be paid.</span></span><span class="scchev" aria-hidden="true">›</span>
+      </button>
+      <button type="button" id="scToMove" class="scopt">
+        <span class="scic info" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span>
+        <span class="scb"><span class="scl">Move it to another day</span><span class="scm">Pay it later — pick a new date next.</span></span><span class="scchev" aria-hidden="true">›</span>
+      </button>
+      <div class="sceff" id="scSkipEff" style="display:none"></div>
+      <div class="scnote">Either one can be undone from the banner.</div>
+    </div>
+    <div id="scMovePg" style="display:none">
+      <button type="button" id="scBack" class="scback">‹ Back</button>
+      <div class="scq">Move it to</div>
+      <div class="scdates" id="scChips"></div>
+      <input type="date" id="scDate" aria-label="Move to a later date" style="display:none">
+      <div class="sceff" id="scMoveEff" style="display:none"></div>
+      <button type="button" id="scMove" class="act scgo">Move</button>
+      <div class="scnote" id="scMoveNote" style="display:none"></div>
     </div>
   </div>
 </div>
