@@ -1999,6 +1999,11 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.70 (boss: 'should it be lock or lock in' -> 'how about saving for things like gym, it doesnt do well as mark bought' -> 'ok'): the Saving-for one-off button reads Mark paid (row + sheet), a pot's reads Pay from pot; no user-facing Lock left",
+          ">Mark paid</button></div></div>'; // v74.70" in js
+          and ">Pay from pot</button>" in js and ">Use from pot<" not in js
+          and ">Lock</button>" not in js and "Lock · I bought it" not in js
+          and "'74.70': [" in js)
     check("v74.69 (boss: 'does the saving for accounted in the next cycle peek from the hero' -> 'ok'): the peek subtracts the pots' top-ups due in the next window (potWindowTotal: not yet added, not skipped, capped at the goal) on a 'Saving for · top-ups due' row; Carried over says dues, Saving for & prepayments are already netted",
           "function potWindowTotal(cd) {" in js
           and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total);" in js

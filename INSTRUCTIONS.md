@@ -1,3 +1,7 @@
+## 2026-11-12 - "should it be lock or "lock in"" -> "how about saving for things like gym, it doesnt do well as mark bought" -> "ok" -> "Lock -> Mark paid (row + sheet + notes), Use from pot -> Pay from pot"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.70 (headless: the Saving-for row and sheet read Mark paid, the pot sheet Pay from pot; tapping still opens the linked Add sheet)
+
 ## 2026-11-12 - "does the "saving for" accounted in the "next cycle" peek from the hero" -> "Partly (the set-aside rides the carry); pot top-ups due next cycle weren't" -> "ok" -> "The peek subtracts the pots' top-ups due in the next window on a 'Saving for · top-ups due' row; Carried over names dues, Saving for & prepayments"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.69 (headless: a ₱500 monthly pot dated Nov 20 drops the next-cycle net 49,423.04 -> 48,923.04 with the carry unchanged; window Nov 15 - Dec 14)

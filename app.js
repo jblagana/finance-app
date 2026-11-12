@@ -8362,7 +8362,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       // v74.66: the tidy row — tile · name · date | amount · status; the ✎ / ✕ live on the plan's sheet
       var stO = '', stcO = 'mut';
       var pillO = planPaidPill(p.id, String(p.date), p.name, p.amount);
-      if (p.kind === 'goal') { var boughtO = planLinkedTxns(p.id).length > 0; stO = boughtO ? 'bought' : 'set aside'; stcO = boughtO ? 'ok' : 'info'; }
+      if (p.kind === 'goal') { var boughtO = planLinkedTxns(p.id).length > 0; stO = boughtO ? 'paid' : 'set aside'; stcO = boughtO ? 'ok' : 'info'; }
       else if (paidFullO) { stO = 'paid'; stcO = 'ok'; }
       else if (pillO.indexOf('partial') >= 0) { stO = pillO; stcO = ''; }
       else { var wO = cmWhen(String(p.date), todayISO()); stO = wO.t; stcO = wO.c; }
@@ -8642,7 +8642,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         if (it.type === 'one') {
           html += '<div class="cmpot">' + cmRow({ cls: 'cmsv', attr: ' data-cmplan="' + esc(p.id) + '"', tile: 't-b', tileTxt: cmInitial(p.name), name: esc(p.name || 'Saving for'),
             sub: 'one-off · planned ' + dayMonth(it.date), amt: cmAmt(it.held), goal: true, st: 'set aside', stCls: 'mut' }) +
-            '<div class="cmask plain"><span class="q">Bought it? Lock it to log the purchase.</span><button type="button" class="cmbtn o" data-cmlock="' + esc(p.id) + '">Lock</button></div></div>';
+            '<div class="cmask plain"><span class="q">Paid for it?</span><button type="button" class="cmbtn o" data-cmlock="' + esc(p.id) + '">Mark paid</button></div></div>'; // v74.70 (boss: 'lock' -> 'mark paid' — fits a gym membership or a trip, not just things)
           return;
         }
         var per = { daily: 'daily', weekly: 'weekly', annual: 'yearly' }[p.repeat] || 'monthly';
@@ -8747,7 +8747,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       h += '<div class="pdnext"><div class="k">In the pot</div><div class="v"><b>' + amtOf(it.held) + '</b><span class="goalv">' + side + '</span></div>' +
         (it.goal > 0 ? '<div class="cmpbar wide"><i style="width:' + Math.min(100, Math.round(it.held / it.goal * 100)) + '%"></i></div>' : '') +
         '<div class="pdnote">Held back from your free cash.' + est + '</div>' +
-        '<div class="pdacts"><button type="button" class="act pdgo b" data-potuse="' + esc(p.id) + '">Use from pot</button><button type="button" class="act ghost" data-potextra="' + esc(p.id) + '">Add extra</button></div></div>';
+        '<div class="pdacts"><button type="button" class="act pdgo b" data-potuse="' + esc(p.id) + '">Pay from pot</button><button type="button" class="act ghost" data-potextra="' + esc(p.id) + '">Add extra</button></div></div>';
       if (it.pending.length) {
         h += '<div class="pdlab">Waiting for you</div>';
         it.pending.forEach(function (q) {
@@ -8777,9 +8777,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         h += pdCard('Skipped', amtOf(am), wdShort(od), 'mut', '<button type="button" class="act ghost" data-unskip="' + esc(p.id) + '|' + od + '">Unskip</button>');
       } else if (isGoalPlan(p)) {
         var it1 = null; savingData().items.forEach(function (x) { if (String(x.p.id) === String(p.id)) it1 = x; });
-        if (it1 && it1.bought) h += pdCard('Bought', amtOf(it1.spent), it1.buy ? 'on ' + wdShort(it1.buy.date) : '', 'ok', '');
-        else h += pdCard('Set aside', amtOf(am), 'planned ' + wdShort(od), 'goalv', '<button type="button" class="act pdgo b" data-cmlock="' + esc(p.id) + '">Lock · I bought it</button>') +
-          '<div class="pdnote">Held back from your free cash until you lock it. Locking logs the purchase.</div>';
+        if (it1 && it1.bought) h += pdCard('Paid', amtOf(it1.spent), it1.buy ? 'on ' + wdShort(it1.buy.date) : '', 'ok', '');
+        else h += pdCard('Set aside', amtOf(am), 'planned ' + wdShort(od), 'goalv', '<button type="button" class="act pdgo b" data-cmlock="' + esc(p.id) + '">Mark paid</button>') +
+          '<div class="pdnote">Held back from your free cash until you mark it paid \u2014 that logs the payment and releases it.</div>';
       } else {
         var pp1 = findPaidTxn({}, { planId: p.id, date: od, name: p.name, amount: am });
         var paid1 = Math.min(am, Number(pp1 && pp1.amount) || 0), rem1 = r2(am - paid1);
@@ -11269,12 +11269,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.69, live: new Date(2026, 10, 12, 14, 59) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.70, live: new Date(2026, 10, 12, 15, 14) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.70': [
+      'Saving for: \u201cLock\u201d is now \u201cMark paid\u201d (it fits a gym membership or a trip as well as a gadget), and a pot\u2019s \u201cUse from pot\u201d is now \u201cPay from pot\u201d. Same buttons, same behaviour.'
+    ],
     '74.69': [
       'The hero\u2019s Next cycle peek now counts Saving for: pot top-ups due in that cycle come off (as if you tap Add), shown on their own line, and the Carried over note says what\u2019s already taken out \u2014 dues, Saving for and prepayments.'
     ],
@@ -13160,7 +13163,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         if (kn) {
           kn.style.display = kindSel === 'goal' ? '' : 'none';
           kn.textContent = isRep ? 'A pot: each date asks you to add the amount. What\u2019s in it is held back from free cash until you use it.'
-            : 'Set aside in full from free cash now. Lock it when you buy it \u2014 that logs the purchase.';
+            : 'Set aside in full from free cash now. Mark it paid when you pay for it \u2014 that logs the payment.';
         }
       }
       if (kindE) kindE.onclick = function () { kindSel = 'expense'; kindPaint(); };
