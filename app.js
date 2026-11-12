@@ -10889,12 +10889,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.62, live: new Date(2026, 10, 12, 14, 14) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.63, live: new Date(2026, 10, 12, 14, 20) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.63': [
+      'Add sheet: the empty amount now shows a faint 0.00 at full size, on the same line as what you type, instead of small grey text near the top.'
+    ],
     '74.62': [
       'A new Skip card. Tapping Skip on a due (on the coach card, or "Skip this occurrence" on a plan) now slides up a card from the bottom: the plan, when it\u2019s due and how much, then two big choices \u2014 Skip it this time (it tells you when the next one still comes) or Move it to another day. Each shows what it does to your free cash.',
       'Moving offers quick dates \u2014 in a week, after payday, start of next month \u2014 or pick any date. Dates that already have the same bill are left out.'

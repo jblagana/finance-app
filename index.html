@@ -1327,6 +1327,9 @@ html.modal-open{overflow:hidden}
 #addSheet .amtline{align-items:flex-end}
 #addSheet textarea#f_amount{display:block;width:auto;flex:1 1 auto;min-width:0;height:46px;box-sizing:border-box;margin:0;padding:2px 0;color:var(--ink);background:transparent;border:0;outline:none;resize:none;overflow:hidden;line-height:1.1;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all}
 #addSheet textarea#f_amount.long{font-size:19px;overflow-y:auto}
+/* v74.63 (boss: 'the amount placeholder, make it a lil less visible and not floating on top as a small number'):
+   the placeholder is a dim 0.00 at the amount's own size, on the amount's own line */
+#addSheet textarea#f_amount::placeholder{font-size:inherit;font-weight:inherit;letter-spacing:inherit;color:var(--mut);opacity:.35}
 #addSheet .amtline .amtEq{align-self:flex-end;padding-bottom:4px}
 /* v74.61: the plan-link chip's slot is always there (empty when there is no match) */
 #addForm .plslot{height:38px;margin-top:8px;flex:none}
@@ -1947,7 +1950,7 @@ html.modal-open{overflow:hidden}
           <span class="amtcur" aria-hidden="true">₱</span>
           <!-- v74.61 (boss: 'if the amount is long, overflow it to another line, make sure the "= php..." does not cover it'):
                a one-row textarea (an input can't wrap): big while it fits, then smaller on two lines -->
-          <textarea id="f_amount" rows="1" placeholder="0.00 or 300-125+10" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+          <textarea id="f_amount" rows="1" placeholder="0.00" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
           <p id="amtEq" class="amtEq" style="display:none"></p>
         </div>
       </div>

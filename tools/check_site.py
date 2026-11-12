@@ -246,7 +246,7 @@ def main():
           and "addAmtEq(amtEl); updateChargeHint()" in js
           and 'id="amtEq" class="amtEq"' in html and ".amtEq{" in html)
     check("v54: amount keyboards are full (operators typeable) on the quick-sum inputs",
-          '<textarea id="f_amount" rows="1" placeholder="0.00 or 300-125+10"' in html  # v74.61 successor: a 1-row textarea so a long sum wraps; v74.58 successor: the shorter placeholder (the amount line holds ₱ + the = hint)
+          '<textarea id="f_amount" rows="1" placeholder="0.00"' in html  # v74.63 successor: a dim full-size 0.00; v74.61 successor: a 1-row textarea so a long sum wraps; v74.58 successor: the shorter placeholder (the amount line holds ₱ + the = hint)
           and '<input type="text" class="oent-amt" maxlength="40" autocomplete="off">' in js
           and 'id="p_amount" type="text"' in html
           and "evalExpr(raw)" in js)
@@ -1999,6 +1999,10 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.63 (boss: 'the amount placeholder in add sheet, make it a lil less visible and not floating on top as small number'): the placeholder is just 0.00 at the amount's own size (font-size:inherit), dimmed (var(--mut), opacity .35)",
+          '<textarea id="f_amount" rows="1" placeholder="0.00"' in html
+          and "#addSheet textarea#f_amount::placeholder{font-size:inherit;font-weight:inherit;letter-spacing:inherit;color:var(--mut);opacity:.35}" in html
+          and "'74.63': [" in js)
     check("v74.62 (boss: 'redesign the card that appears when i click the skip chip' -> boards 11/11b -> 'ship all of it, including the new skip card'): the skip chooser is a bottom card (.scbox): header (name, due, repeat, amount), two choices (scSkip / scToMove) with the free-cash effect, a Move page with quick dates (#scChips: in a week / after payday / start of next month / pick a date) that skips dates another occurrence holds (planTakenDates); the plan sheet's Skip opens the same card; scDate / scMove / skipChooserMove kept",
           'class="scbox"' in html and 'id="scToMove"' in html and 'id="scChips"' in html and 'id="scSkip"' in html
           and 'id="scDate"' in html and 'id="scMove"' in html
