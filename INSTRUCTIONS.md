@@ -1,3 +1,10 @@
+## 2026-11-12 - "when i first open the add sheet, the keypad is clicking the button above what im actually clicking. when i x it and reopen, its now clicking right, fix" -> "The Add sheet no longer focuses the amount on a touch screen (the focus made Safari pan the page, so taps landed a key high)"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.64 (headless mobile emulation: nothing focused on open, keypad taps type the tapped key on the first open)
+
+## 2026-11-12 - "ship the committed redesign, also show how does it look in the home tab without the clutter of growing list" -> canvas board 13 (Home, Next up = 3 rows max) -> building Committed (boards 12/12b/12c) with Saving-for
+Status: **in progress**
+
 ## 2026-11-12 - "for 'saving for' commits ... one offs appear separate from the actual dues, deducted from free cash for display, only deduct from liquid when i lock them (already bought) ... propose for the recurring 'saving for'" + "redesign the card that appears when i click the skip chip" -> boards 11/11b -> "ask to confirm, and ship all of it, including the new skip card" -> "Skip card redesigned (coach chip + the plan sheet's Skip); Saving-for one-offs are set aside in full right away (shown apart from dues), Lock = log the purchase; recurring Saving-for are pots that grow by confirmed top-ups (optional goal), Use = log a spend from the pot"
 Status: **in progress** - the Skip card shipped; Saving-for waits for the Committed redesign mockup (boards 12/12b/12c, "also redesign the commited tab ... mockup first") so it is built into the approved layout.
 - [x] v74.62 (the Skip card)

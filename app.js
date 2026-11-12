@@ -3617,9 +3617,15 @@
     // inputs and an auto-focus would pop the keyboard on open.
     try {
       if (id === 'setSheet' || id === 'numSheet') return;
+      // v74.64 (boss: 'when i first open the add sheet, the keypad is clicking the button above what im actually
+      // clicking; when i x it and reopen, its now clicking right'): focusing the amount on a phone made Safari pan
+      // the page to "show" the field, so the first taps landed one key higher than drawn. On a touch screen the
+      // Add sheet is driven by its own keypad — nothing is focused; a mouse/keyboard device still gets the focus,
+      // without the scroll.
+      if (id === 'addSheet' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return;
       var f = sh.querySelectorAll('input,select,textarea');
       if (!f.length) f = sh.querySelectorAll('button');
-      if (f && f.length) f[0].focus();
+      if (f && f.length) { try { f[0].focus({ preventScroll: true }); } catch (e1) { f[0].focus(); } }
     } catch (e) {}
   }
 
@@ -10889,12 +10895,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.63, live: new Date(2026, 10, 12, 14, 20) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.64, live: new Date(2026, 10, 12, 14, 24) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.64': [
+      'Fixed: the first time you opened the Add sheet, the keypad could press the key above the one you tapped (until you closed and reopened it). The sheet no longer puts the cursor in the amount box on a phone — the keypad types into it as before.'
+    ],
     '74.63': [
       'Add sheet: the empty amount now shows a faint 0.00 at full size, on the same line as what you type, instead of small grey text near the top.'
     ],

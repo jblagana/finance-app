@@ -1999,6 +1999,10 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.64 (boss: 'when i first open the add sheet, the keypad is clicking the button above what im actually clicking. when i x it and reopen, its now clicking right'): openSheet no longer focuses the Add sheet's amount on a touch screen (pointer: coarse) — the focus made Safari pan the page so taps landed a key high; other devices focus with preventScroll",
+          "if (id === 'addSheet' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return;" in js
+          and "f[0].focus({ preventScroll: true });" in js
+          and "'74.64': [" in js)
     check("v74.63 (boss: 'the amount placeholder in add sheet, make it a lil less visible and not floating on top as small number'): the placeholder is just 0.00 at the amount's own size (font-size:inherit), dimmed (var(--mut), opacity .35)",
           '<textarea id="f_amount" rows="1" placeholder="0.00"' in html
           and "#addSheet textarea#f_amount::placeholder{font-size:inherit;font-weight:inherit;letter-spacing:inherit;color:var(--mut);opacity:.35}" in html
