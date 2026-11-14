@@ -3792,6 +3792,25 @@ waitReady().then(async function (F) {
       F.state.txns = F.state.txns.filter(function (t) { return t.id !== 't58m'; });
       var A58b = F.getAdj(); Object.keys(A58b).forEach(function (k) { delete A58b[k]; }); Object.keys(adjKeep58).forEach(function (k) { A58b[k] = adjKeep58[k]; });
 
+      // ============ PART 59: v74.76 - a friend's share is not your spend ============
+      console.log('\n== PART 59: v74.76 - the ipf theirs pair stays out of Spent today ==');
+      var owed59 = JSON.parse(JSON.stringify(F.getOwed())), txns59 = F.getTxns().slice(), adj59 = JSON.parse(JSON.stringify(F.getAdj()));
+      var spent59a = F.insightsData().todaySpend;
+      var free59a = F.effectiveSnap().cash.free, cOwed59a = F.effectiveSnap().card_owed;
+      await F.addOwedPerson('Spend Buddy');
+      var pid59 = F.getOwed().people[F.getOwed().people.length - 1].id;
+      await F.addOwedEntry(pid59, { dir: 'ipf', amt: 600, total: 1000, mine: 400, theirs: 600,
+        acc: 'CARD::Maya CC', cat: 'Food', note: 'v74.76 meal', d: F.todayISO() });
+      await sleep(30);
+      var d59 = F.insightsData();
+      ok(close(d59.todaySpend, spent59a + 400), 'v74.76: a 1,000 card meal with 600 theirs adds 400 to Spent today (got +' + (d59.todaySpend - spent59a).toFixed(2) + ')');
+      ok(close(F.effectiveSnap().card_owed, cOwed59a + 1000) && close(F.effectiveSnap().cash.free, free59a - 400), 'v74.76: balances unchanged by the fix (card owed +1,000, free -400)');
+      var rc59 = F.recapData(F.getTxns(), F.todayISO().slice(0, 7));
+      var rc59b = F.recapData(txns59, F.todayISO().slice(0, 7));
+      ok(rc59 && rc59b && close(rc59.income, rc59b.income), 'v74.76: the theirs cash advance is not income in the month recap');
+      F.setOwed(owed59); F.setTxns(txns59);
+      var A59 = F.getAdj(); Object.keys(A59).forEach(function (k) { delete A59[k]; }); Object.keys(adj59).forEach(function (k) { A59[k] = adj59[k]; });
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

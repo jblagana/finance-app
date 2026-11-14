@@ -4993,11 +4993,32 @@
     // s line). monthEffect keeps the narrower rule (refunds still net the
     // ledger line down) for the audit trail.
     if (t.kind === 'cash_in') return 0;
+    // v74.76 (boss: 'find the bug on the spent today entry that pollutes
+    // it'): the friend's share of an ipf-on-card (fileIpfTheirs) files a
+    // card_charge + a cash_in pair. Before v73.8 the cash_in netted the
+    // charge to zero; since then the charge alone counted as YOUR spend
+    // (₱1,000 meal, ₱600 theirs -> Spent today ₱1,000, not ₱400). The pair
+    // is a cash advance owed back, not spend: the charge counts zero here.
+    // Balances are untouched (they never read spendOf).
+    if (t.id && isIpfTheirsTxn(t.id)) return 0;
     // v74.03 note — plan payments (planRef rows) are NOT excluded here:
     // the projection chart derives its plan-due drops from spendOf() on
     // those rows, so a zero would erase the drops (PART 45 caught it).
     // The exclusion lives where it belongs — the "spent today" aggregate.
     return a;
+  }
+  // v74.76: is this txn one leg of an ipf theirs pair (theirsTxnId /
+  // theirsBumpId on an owed entry)? The owed book is small; read it live so
+  // every path that rewires the pair (add / edit / undo / import) is covered.
+  function isIpfTheirsTxn(id) {
+    var hit = false;
+    ((state.owed && state.owed.people) || []).some(function (p) {
+      return (p && p.entries || []).some(function (e) {
+        if (e && e.dir === 'ipf' && (e.theirsTxnId === id || e.theirsBumpId === id)) hit = true;
+        return hit;
+      });
+    });
+    return hit;
   }
   // ---------- v72.45: the salary cycle (the 15th) ----------
   // The salary lands on the salary_day (the 15th by default; older bases
@@ -5852,7 +5873,7 @@
       var d = String(t.date || '');
       if (d < from || d > to) return;
       var a = Number(t.amount) || 0;
-      if (t.kind === 'cash_in') { income += a; return; }
+      if (t.kind === 'cash_in') { if (!(t.id && isIpfTheirsTxn(t.id))) income += a; return; } // v74.76: the theirs cash advance is not income
       var s = spendOf(t);
       if (s <= 0) return;
       spent += s;
@@ -11615,12 +11636,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.75, live: new Date(2026, 10, 12, 16, 27) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.76, live: new Date(2026, 10, 15, 1, 14) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.76': [
+      'Spent today no longer counts a friend’s share as your spending. When you pay for someone on a card, only your part shows in Spent today, the spending by category and the coach — and their share is not counted as income in the month recap. Your card and cash balances are the same as before.'
+    ],
     '74.75': [
       'Banners tidy themselves: a banner with Undo now hides after 8 seconds (a thin bar shows the time left) and an info banner after 4 \u2014 before, most stayed until you swiped them away. If a banner goes before you tap Undo, the change is still in Settings \u2192 History.',
       'Two banners that had no Undo now do: unlinking a plan payment, and moving old items to Committed.'

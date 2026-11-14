@@ -1999,6 +1999,12 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.76 (boss: 'find the bug on the spent today home tab entry that pollutes it' -> 'yes, fix it'): a friend's share paid on a card (the ipf theirs pair, theirsTxnId / theirsBumpId) is not spend — spendOf returns 0 for it (Spent today, donut, pace, coach, budgets) and the month recap does not count its cash advance as income; balances untouched. Smoke PART 59 (3)",
+          "function isIpfTheirsTxn(id) {" in js
+          and "if (t.id && isIpfTheirsTxn(t.id)) return 0;" in js
+          and "if (t.kind === 'cash_in') { if (!(t.id && isIpfTheirsTxn(t.id))) income += a; return; }" in js
+          and "PART 59: v74.76 - the ipf theirs pair stays out of Spent today" in smoke
+          and "'74.76': [" in js)
     check("v74.75 (boss: 'check what to do or change in the current toast behavior' -> board 15b -> 'go'): every toast hides itself (8 s with Undo, 4 s without — most used to stay until swiped / replaced) with a time bar; the first 3 toasts for a recorded change add 'saved in History'; Unlinked and Moved-to-Committed get an Undo",
           "var ms = undoFn ? 8000 : 4000;" in js
           and "snackTimer = setTimeout(hideSnack, ms);" in js

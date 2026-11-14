@@ -1,3 +1,7 @@
+## 2026-11-15 - "find the bug on the \"spent today\" home tab entry that pollutes it" -> "yes, fix it" -> "A friend's share paid on a card (the ipf theirs card_charge, linked as theirsTxnId) counted as your spend - its matching cash_in stopped netting it after v73.8. The theirs charge now counts zero in spendOf (Spent today, donut, pace, coach, budgets); the card balance is unchanged"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.76 (spendOf skips the ipf theirs pair; recap income skips its cash advance; smoke PART 59: ₱1,000 card meal with ₱600 theirs -> Spent today +400 (was +1,000), balances unchanged; fails without the fix)
+
 ## 2026-11-12 - "should we have a central history record for every changes made such as moving or skipping or reconciling ... (should we exclude the ledger entries ...)" -> "restore, and check what to do or change in the current toast behvior" -> boards 15 / 15b + "in add sheet why is there a wide space between date row and the keypad" -> "go for 1 and 2"
 Status: **done** - each release below is pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.73 (the gap: the plan-link chip moved into the amount's hint line; headless: gap 8px, keys 32 -> 39px at 390x844, keypad unmoved when the chip shows, no scroll at 390x844 / 375x667 / 430x932)
