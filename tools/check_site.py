@@ -1852,7 +1852,7 @@ def main():
           and "due: manual ? r2(Number(card.due_override)) : r2(Math.max(0, bal - nextCycle))," in js
           # (5) the ledger pill + its binding (tap toggles, no row editor)
           and "data-cycletag=" in js and "var cy = body.querySelectorAll('[data-cycletag]');" in js
-          and "t.cycle = (String(t.cycle) === 'next') ? undefined : 'next';" in js
+          and "t.cycle = chargeIsNext(t, info.prevBill) ? 'this' : 'next';" in js  # v74.80 retarget: flips the effective side, stored explicitly
           # (6) migrateCardDays on every base load (the settings-follow path)
           and "state.base = migrateCardDays(migrateBaseKinds(b));" in js
           and "state.base = migrateCardDays(migrateBaseKinds(merged.base));" in js
@@ -1999,10 +1999,17 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.80 (boss: 'yes, default NEXT'): an in-window card charge dated AFTER the billing date defaults to NEXT CYCLE (chargeIsNext: an explicit t.cycle 'this'/'next' from the pill wins, else date > the previous billing date); cardDueData and the pill read it; the tap flips the effective side and stores it explicitly; the edit + import keep 'this' too. Smoke PART 35/62 retargeted + PART 63 (5)",
+          "function chargeIsNext(t, prevBillDate) {" in js
+          and "chargeIsNext(t, prevBillDate)) nextCycle +=" in js
+          and "var cycle = chargeIsNext(t, info.prevBill) ? 'next' : 'this';" in js
+          and "prevBill: prevBill, windowStart: winStart" in js
+          and "PART 63: v74.80 - charges after the billing date default to NEXT CYCLE" in smoke
+          and "'74.80': [" in js)
     check("v74.79 (boss: 'look into that toggle this cycle/next cycle in the card charge ledger entries'): the cycle pill's tag is persisted — toggleTxnCycle writes idbPut(STORE_TX, touchRec(t)) (it only mutated memory: a reload / sync reset every NEXT CYCLE charge and the auto due); saveTxnEdit keeps cycle 'next' on the same card; sanitizeTxnRows keeps it. Smoke PART 62 (4)",
           "return idbPut(STORE_TX, touchRec(t)).then(function () { emit('txn'); }).catch(function () {});" in js
-          and "if (o.cycle === 'next' && t.kind === 'card_charge' && t.account === o.account) t.cycle = 'next';" in js
-          and "if (t.cycle === 'next') r.cycle = 'next';" in js
+          and "if ((o.cycle === 'next' || o.cycle === 'this') && t.kind === 'card_charge' && t.account === o.account) t.cycle = o.cycle;" in js  # v74.80 retarget: 'this' too
+          and "if (t.cycle === 'next' || t.cycle === 'this') r.cycle = t.cycle;" in js
           and "PART 62: v74.79 - the card-charge cycle tag is saved, kept on edit and import" in smoke
           and "'74.79': [" in js)
     check("v74.78 (boss: 'when a new cycle starts and my salary still havent arrived, the free cash goes deep negative' -> 'build it'): Salary pending — cycleDataFor.pending (cycle started, salary expected, none received, base as-of before payday); inside salaryGraceOf days (base.salary_grace, default 3, 0 = off, max 10) insightsData.freeNet counts the expected salary (freeNetRaw = the honest number), the This-cycle block adds a 'Salary · not in yet' row (cycleProjection.salaryPending, the bridge holds), the hero pill reads Salary pending / Salary late with a line, the coach row says not in yet / late; the salary window reaches payday + max(2, grace); a salary landing up to 10 days past payday is THIS cycle's (received.late — headroomWindow no longer reads it as the next cycle's early salary); the import sanitizer keeps t.salary. Settings: salary grace days (b_sgrace). Smoke PART 61 (9)",

@@ -2701,7 +2701,7 @@ waitReady().then(async function (F) {
       // the window is +-5 AROUND the PREVIOUS billing date (2026-10-30):
       // 2026-10-25..2026-11-04. In-window = this cycle by default (toggleable);
       // post-window = next cycle by definition; pre-window = this cycle, locked.
-      var tIn = { kind: 'card_charge', account: 'Maya CC', amount: 500, date: '2026-11-02' };
+      var tIn = { kind: 'card_charge', account: 'Maya CC', amount: 500, date: '2026-10-28' }; // v74.80: on/before the cut (Oct 30) - post-cut charges default NEXT (PART 63)
       var tNext = { kind: 'card_charge', account: 'Maya CC', amount: 300, date: '2026-11-28' };
       var tPre = { kind: 'card_charge', account: 'Maya CC', amount: 200, date: '2026-10-20' };
       var cd35 = F.cardDueData(maya35, [tIn, tNext, tPre], null, TODAY35, 10000);
@@ -2726,18 +2726,18 @@ waitReady().then(async function (F) {
       // Maya CC its per-card days first (the seed predates the model)
       var b35 = JSON.parse(JSON.stringify(F.state.base));
       (F.state.base.accounts || []).forEach(function (a) { if (a.name === 'Maya CC') { a.billing_day = 30; a.due_day = 10; } });
-      var pill35 = F.txnCyclePill({ id: 't35', kind: 'card_charge', account: 'Maya CC', date: '2026-11-02' }, TODAY35);
+      var pill35 = F.txnCyclePill({ id: 't35', kind: 'card_charge', account: 'Maya CC', date: '2026-10-28' }, TODAY35); // v74.80: a pre-cut in-window charge
       ok(pill35.indexOf('data-cycletag="t35"') >= 0 && pill35.indexOf('THIS CYCLE') >= 0, 'v73.90: the in-window charge renders the THIS CYCLE pill (got ' + pill35 + ')');
       ok(F.txnCyclePill({ id: 't35b', kind: 'card_charge', account: 'Maya CC', date: '2026-12-06' }, TODAY35) === '', 'v73.90: the post-window charge renders NO pill');
       // the pill tap: toggles t.cycle on the real ledger entry (and back)
-      var id35 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 100, note: 'v73.90 pill probe', date: '2026-11-02' }, { quiet: true });
+      var id35 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 100, note: 'v73.90 pill probe', date: '2026-10-28' }, { quiet: true });
       await tick();
       F.toggleTxnCycle(String(id35), TODAY35);
       var t35 = null;
       (F.state.txns || []).forEach(function (x) { if (String(x.id) === String(id35)) t35 = x; });
       ok(t35 && String(t35.cycle) === 'next', 'v73.90: the pill tap marks the charge NEXT CYCLE (got ' + (t35 && t35.cycle) + ')');
       F.toggleTxnCycle(String(id35), TODAY35);
-      ok(t35 && !('cycle' in t35), 'v73.90: the second tap clears the tag (back to THIS)');
+      ok(t35 && t35.cycle === 'this', 'v73.90: the second tap puts it back to THIS (v74.80: stored explicitly)');
       F.state.base = b35;
       // (3) the settings round-trip through the REAL form (the 1..31 fix):
       // renderBaseEditor -> readBaseForm must preserve a per-card day of 31
@@ -3858,14 +3858,33 @@ waitReady().then(async function (F) {
       var p62 = F.toggleTxnCycle(String(id62), T62);
       ok(p62 && typeof p62.then === 'function', 'v74.79: the pill tap writes to the store (returns the save)');
       await p62;
-      ok(t62().cycle === 'next' && (t62().updated || '') > st62, 'v74.79: the tag is stamped (updated moved) so a reload / sync keeps it');
+      ok(t62().cycle === 'this' && (t62().updated || '') > st62, 'v74.79: the tag is stamped (updated moved) so a reload / sync keeps it (v74.80: a post-cut charge taps from NEXT to THIS)');
       await F.saveTxnEdit(String(id62), { date: '2026-11-02', account: 'Maya CC', kind: 'card_charge', category: 'Food', amount: 250, note: 'v74.79 note fixed' }, { quiet: true });
       await tick();
-      ok(t62().cycle === 'next', 'v74.79: editing the note keeps NEXT CYCLE (got ' + t62().cycle + ')');
+      ok(t62().cycle === 'this', 'v74.79: editing the note keeps the tag (got ' + t62().cycle + ')');
       var imp62 = F.sanitizeTxnRows([t62()]);
-      ok(imp62.length === 1 && imp62[0].cycle === 'next', 'v74.79: the import sanitizer keeps the tag');
+      ok(imp62.length === 1 && imp62[0].cycle === 'this', 'v74.79: the import sanitizer keeps the tag');
       await F.deleteTxn(String(id62)); await tick();
       F.state.base = b62;
+
+      // ============ PART 63: v74.80 - a post-cut charge defaults to NEXT ============
+      console.log('\n== PART 63: v74.80 - charges after the billing date default to NEXT CYCLE ==');
+      var maya63 = { name: 'Maya CC', kind: 'card', balance: 10000, billing_day: 30, due_day: 10 };
+      var T63 = '2026-11-03'; // cut Oct 30, window Oct 25..Nov 4
+      var pre63 = { kind: 'card_charge', account: 'Maya CC', amount: 500, date: '2026-10-28' };
+      var post63 = { kind: 'card_charge', account: 'Maya CC', amount: 300, date: '2026-11-02' };
+      var c63 = F.cardDueData(maya63, [pre63, post63], null, T63, 10000);
+      ok(close(c63.nextCycle, 300) && close(c63.due, 9700), 'v74.80: the Nov 2 charge (after the Oct 30 cut) is NEXT by default; the Oct 28 one stays THIS (due ' + c63.due + ', next ' + c63.nextCycle + ')');
+      post63.cycle = 'this';
+      var c63b = F.cardDueData(maya63, [pre63, post63], null, T63, 10000);
+      ok(close(c63b.nextCycle, 0) && close(c63b.due, 10000), 'v74.80: tapped to THIS, the post-cut charge counts in the bill (a cut that slipped)');
+      pre63.cycle = 'next';
+      ok(close(F.cardDueData(maya63, [pre63, post63], null, T63, 10000).nextCycle, 500), 'v74.80: a pre-cut charge tapped NEXT still moves out');
+      var b63 = JSON.parse(JSON.stringify(F.state.base));
+      (F.state.base.accounts || []).forEach(function (a) { if (a.name === 'Maya CC') { a.billing_day = 30; a.due_day = 10; } });
+      ok(F.txnCyclePill({ id: 't63', kind: 'card_charge', account: 'Maya CC', date: '2026-11-02' }, T63).indexOf('NEXT CYCLE') >= 0, 'v74.80: the pill on a post-cut charge reads NEXT CYCLE');
+      ok(F.txnCyclePill({ id: 't63b', kind: 'card_charge', account: 'Maya CC', date: '2026-10-30' }, T63).indexOf('THIS CYCLE') >= 0, 'v74.80: a charge ON the billing date reads THIS CYCLE');
+      F.state.base = b63;
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);

@@ -2917,7 +2917,7 @@
     if (t.kind === 'card_payment' && o.payWith) t.payWith = o.payWith;
     if (o.recordOnly) t.recordOnly = true; // v74.15: an edit keeps it record-only
     if (o.salary && t.kind === 'cash_in') t.salary = true; // v74.53: an edit keeps it the salary
-    if (o.cycle === 'next' && t.kind === 'card_charge' && t.account === o.account) t.cycle = 'next'; // v74.79: an edit (a note fix) kept dropping the NEXT CYCLE tag; a move to another card starts fresh
+    if ((o.cycle === 'next' || o.cycle === 'this') && t.kind === 'card_charge' && t.account === o.account) t.cycle = o.cycle; // v74.80: 'this' too // v74.79: an edit (a note fix) kept dropping the NEXT CYCLE tag; a move to another card starts fresh
     state.txns[oIdx] = t; // in place — position preserved
     paidIdx = null; // v74.57: the plan link may have changed in place
     // v73.45: the add+remove pair nets to the edit's delta — but on an EMPTY
@@ -5793,7 +5793,7 @@
       if (String(t.account) !== String(card.name)) return;
       if (String(t.kind) !== 'card_charge') return;
       if (d > winEnd) nextCycle += Number(t.amount) || 0;
-      else if (d >= winStart && d <= winEnd && String(t.cycle) === 'next') nextCycle += Number(t.amount) || 0;
+      else if (d >= winStart && d <= winEnd && chargeIsNext(t, prevBillDate)) nextCycle += Number(t.amount) || 0; // v74.80: post-cut = NEXT by default
     });
     var manual = (card.due_override != null && card.due_override !== '' && !isNaN(Number(card.due_override)));
     return {
@@ -5805,6 +5805,16 @@
       due: manual ? r2(Number(card.due_override)) : r2(Math.max(0, bal - nextCycle)),
       manual: !!manual
     };
+  }
+  // v74.80 (boss: 'yes, default NEXT'): which statement an IN-WINDOW charge
+  // feeds. A charge dated AFTER the billing date cannot be on the statement
+  // already cut, so it defaults to NEXT CYCLE; on/before the cut it defaults
+  // to THIS. The pill's tap stores the choice explicitly (t.cycle 'this' or
+  // 'next'), which always wins — a cut that slipped past a weekend is one tap.
+  function chargeIsNext(t, prevBillDate) {
+    if (t && t.cycle === 'next') return true;
+    if (t && t.cycle === 'this') return false;
+    return String(t && t.date || '') > String(prevBillDate || '');
   }
   function cardDueThisCycle(card) {
     if (!state.base) return null;
@@ -5842,7 +5852,7 @@
     var weC = addDays(pb.y, pb.m, pbDay, 5);
     var winStart = iso(wsC.y, wsC.m, wsC.d);
     var winEnd = iso(weC.y, weC.m, weC.d);
-    return { inWindow: d >= winStart && d <= winEnd, autoNext: d > winEnd, billDate: bill, windowStart: winStart, windowEnd: winEnd };
+    return { inWindow: d >= winStart && d <= winEnd, autoNext: d > winEnd, billDate: bill, prevBill: prevBill, windowStart: winStart, windowEnd: winEnd };
   }
   // migrate a base object in place: every credit card gets its own
   // billing_day/due_day (from the globals when absent) so per-card dates
@@ -5875,7 +5885,7 @@
     var info = cardCycleInfo(card, t.date, state.base, todayStr || todayISO());
     if (!info) return '';
     if (!info.inWindow) return ''; // the toggle pill is ONLY for in-window charges
-    var cycle = String(t.cycle) === 'next' ? 'next' : 'this';
+    var cycle = chargeIsNext(t, info.prevBill) ? 'next' : 'this'; // v74.80: post-cut defaults to NEXT
     var cls = cycle === 'next' ? 'cyclepill next' : 'cyclepill';
     var title = 'feeds the ' + info.billDate.slice(5) + ' statement - tap to toggle';
     return '<button type="button" class="' + cls + '" data-cycletag="' + esc(String(t.id || '')) + '" title="' + title + '">' + (cycle === 'next' ? 'NEXT CYCLE' : 'THIS CYCLE') + '</button>';
@@ -5892,8 +5902,7 @@
       snack('That charge is outside the cycle window - no toggle.');
       return;
     }
-    t.cycle = (String(t.cycle) === 'next') ? undefined : 'next';
-    if (t.cycle === undefined) delete t.cycle;
+    t.cycle = chargeIsNext(t, info.prevBill) ? 'this' : 'next'; // v74.80: flip the EFFECTIVE side, stored explicitly (a post-cut charge's default is NEXT)
     renderMoneyLog();
     renderCoach();
     renderHero();
@@ -11270,7 +11279,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (t.cashback === true) r.cashback = true;
       if (t.recordOnly === true) r.recordOnly = true; // v74.15
       if (t.salary === true) r.salary = true; // v74.78: the salary chip's flag survived nothing but local edits — an import dropped it
-      if (t.cycle === 'next') r.cycle = 'next'; // v74.79: the card-charge NEXT CYCLE tag ("survives export/import" — the sanitizer dropped it)
+      if (t.cycle === 'next' || t.cycle === 'this') r.cycle = t.cycle; // v74.80: an explicit THIS (a post-cut charge kept on this bill) too // v74.79: the card-charge NEXT CYCLE tag ("survives export/import" — the sanitizer dropped it)
       var pr = t.planRef;
       if (pr && typeof pr === 'object' && typeof pr.planId === 'string' && typeof pr.date === 'string') {
         r.planRef = { planId: pr.planId, date: pr.date, name: str(pr.name, 80), amount: Number(pr.amount) || 0 };
@@ -11779,12 +11788,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.79, live: new Date(2026, 10, 15, 2, 58) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.80, live: new Date(2026, 10, 15, 3, 2) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.80': [
+      'A card charge dated after the card’s billing date now starts as NEXT CYCLE — it cannot be on the statement that was already cut, so it no longer pads this bill’s auto due. If your bank moved the cut (a weekend, a holiday), tap the pill to put it back on THIS CYCLE; charges on or before the billing date still start as THIS CYCLE.'
+    ],
     '74.79': [
       'The THIS CYCLE / NEXT CYCLE tag on a card charge now sticks. Before, it was never saved: reopening the app (or a sync from your other phone) put every charge back to THIS CYCLE and the card’s due jumped back up. Editing the charge and restoring a backup keep the tag too.'
     ],
