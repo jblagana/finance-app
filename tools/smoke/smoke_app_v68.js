@@ -2701,11 +2701,11 @@ waitReady().then(async function (F) {
       // the window is +-5 AROUND the PREVIOUS billing date (2026-10-30):
       // 2026-10-25..2026-11-04. In-window = this cycle by default (toggleable);
       // post-window = next cycle by definition; pre-window = this cycle, locked.
-      var tIn = { kind: 'card_charge', account: 'Maya CC', amount: 500, date: '2026-10-28' }; // v74.80: on/before the cut (Oct 30) - post-cut charges default NEXT (PART 63)
+      var tIn = { kind: 'card_charge', account: 'Maya CC', amount: 500, date: '2026-10-28' }; // v74.82: in the 5 days up to the Oct 30 cut
       var tNext = { kind: 'card_charge', account: 'Maya CC', amount: 300, date: '2026-11-28' };
       var tPre = { kind: 'card_charge', account: 'Maya CC', amount: 200, date: '2026-10-20' };
       var cd35 = F.cardDueData(maya35, [tIn, tNext, tPre], null, TODAY35, 10000);
-      ok(cd35.windowStart === '2026-10-25' && cd35.windowEnd === '2026-11-04', 'v73.90: the window = +-5 days AROUND the previous billing date (got ' + cd35.windowStart + '..' + cd35.windowEnd + ')');
+      ok(cd35.windowStart === '2026-10-25' && cd35.windowEnd === '2026-10-30', 'v74.82 retarget: the window = the 5 days UP TO the latest billing date (got ' + cd35.windowStart + '..' + cd35.windowEnd + ')');
       ok(cd35.billDate === '2026-11-30' && cd35.dueDate === '2026-11-10' && cd35.dueIn === 7, 'v73.90: the next billing/due dates from the PER-CARD days (got ' + cd35.billDate + ' / ' + cd35.dueDate + ' / ' + cd35.dueIn + ')');
       ok(close(cd35.due, 9700) && close(cd35.nextCycle, 300) && !cd35.manual, 'v73.90: AUTO due = balance - next-cycle charges (the in-window charge counts THIS cycle by default; got due ' + cd35.due + ' next ' + cd35.nextCycle + ')');
       tIn.cycle = 'next';
@@ -2718,7 +2718,7 @@ waitReady().then(async function (F) {
       var cd35d = F.cardDueData({ name: 'X', kind: 'card', billing_day: 31, due_day: 31 }, [], null, '2026-11-03', 100);
       ok(cd35d.billDate === '2026-11-30' && cd35d.dueDate === '2026-11-30', 'v73.90: day 31 clamps to the month length (got bill ' + cd35d.billDate + ' due ' + cd35d.dueDate + ')');
       // (2) the ledger pill: ONLY an in-window charge gets the toggle
-      var ci35 = F.cardCycleInfo(maya35, '2026-11-02', null, TODAY35);
+      var ci35 = F.cardCycleInfo(maya35, '2026-10-28', null, TODAY35); // v74.82: a pre-cut charge
       ok(ci35.inWindow && !ci35.autoNext, 'v73.90: a charge inside the window is toggleable (got ' + JSON.stringify(ci35) + ')');
       var ci35b = F.cardCycleInfo(maya35, '2026-12-06', null, TODAY35);
       ok(!ci35b.inWindow && ci35b.autoNext, 'v73.90: a post-window charge is next-cycle by definition (no toggle)');
@@ -2727,7 +2727,7 @@ waitReady().then(async function (F) {
       var b35 = JSON.parse(JSON.stringify(F.state.base));
       (F.state.base.accounts || []).forEach(function (a) { if (a.name === 'Maya CC') { a.billing_day = 30; a.due_day = 10; } });
       var pill35 = F.txnCyclePill({ id: 't35', kind: 'card_charge', account: 'Maya CC', date: '2026-10-28' }, TODAY35); // v74.80: a pre-cut in-window charge
-      ok(pill35.indexOf('data-cycletag="t35"') >= 0 && pill35.indexOf('THIS CYCLE') >= 0, 'v73.90: the in-window charge renders the THIS CYCLE pill (got ' + pill35 + ')');
+      ok(pill35.indexOf('data-cycletag="t35"') >= 0 && pill35.indexOf('30 Oct bill') >= 0, 'v74.82 retarget: the in-window charge names its bill - 30 Oct (got ' + pill35 + ')');
       ok(F.txnCyclePill({ id: 't35b', kind: 'card_charge', account: 'Maya CC', date: '2026-12-06' }, TODAY35) === '', 'v73.90: the post-window charge renders NO pill');
       // the pill tap: toggles t.cycle on the real ledger entry (and back)
       var id35 = await F.addTxn({ recordOnly: false, /* v74.15: a counted entry (fixed past date) */  kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 100, note: 'v73.90 pill probe', date: '2026-10-28' }, { quiet: true });
@@ -2735,9 +2735,9 @@ waitReady().then(async function (F) {
       F.toggleTxnCycle(String(id35), TODAY35);
       var t35 = null;
       (F.state.txns || []).forEach(function (x) { if (String(x.id) === String(id35)) t35 = x; });
-      ok(t35 && String(t35.cycle) === 'next', 'v73.90: the pill tap marks the charge NEXT CYCLE (got ' + (t35 && t35.cycle) + ')');
+      ok(t35 && String(t35.cycle) === 'next', 'v73.90: the pill tap moves the charge to the next bill (got ' + (t35 && t35.cycle) + ')');
       F.toggleTxnCycle(String(id35), TODAY35);
-      ok(t35 && t35.cycle === 'this', 'v73.90: the second tap puts it back to THIS (v74.80: stored explicitly)');
+      ok(t35 && !('cycle' in t35), 'v73.90: the second tap puts it back on its own bill (v74.82: the tag is cleared)');
       F.state.base = b35;
       // (3) the settings round-trip through the REAL form (the 1..31 fix):
       // renderBaseEditor -> readBaseForm must preserve a per-card day of 31
@@ -3850,7 +3850,7 @@ waitReady().then(async function (F) {
       var b62 = JSON.parse(JSON.stringify(F.state.base));
       (F.state.base.accounts || []).forEach(function (a) { if (a.name === 'Maya CC') { a.billing_day = 30; a.due_day = 10; } });
       var T62 = '2026-11-06';
-      var id62 = await F.addTxn({ recordOnly: false, kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 250, note: 'v74.79 tag probe', date: '2026-11-02' }, { quiet: true });
+      var id62 = await F.addTxn({ recordOnly: false, kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 250, note: 'v74.79 tag probe', date: '2026-10-28' }, { quiet: true });
       await tick();
       var t62 = function () { var r = null; F.state.txns.forEach(function (x) { if (String(x.id) === String(id62)) r = x; }); return r; };
       var st62 = t62().updated || '';
@@ -3858,12 +3858,12 @@ waitReady().then(async function (F) {
       var p62 = F.toggleTxnCycle(String(id62), T62);
       ok(p62 && typeof p62.then === 'function', 'v74.79: the pill tap writes to the store (returns the save)');
       await p62;
-      ok(t62().cycle === 'this' && (t62().updated || '') > st62, 'v74.79: the tag is stamped (updated moved) so a reload / sync keeps it (v74.80: a post-cut charge taps from NEXT to THIS)');
-      await F.saveTxnEdit(String(id62), { date: '2026-11-02', account: 'Maya CC', kind: 'card_charge', category: 'Food', amount: 250, note: 'v74.79 note fixed' }, { quiet: true });
+      ok(t62().cycle === 'next' && (t62().updated || '') > st62, 'v74.79: the tag is stamped (updated moved) so a reload / sync keeps it');
+      await F.saveTxnEdit(String(id62), { date: '2026-10-28', account: 'Maya CC', kind: 'card_charge', category: 'Food', amount: 250, note: 'v74.79 note fixed' }, { quiet: true });
       await tick();
-      ok(t62().cycle === 'this', 'v74.79: editing the note keeps the tag (got ' + t62().cycle + ')');
+      ok(t62().cycle === 'next', 'v74.79: editing the note keeps the tag (got ' + t62().cycle + ')');
       var imp62 = F.sanitizeTxnRows([t62()]);
-      ok(imp62.length === 1 && imp62[0].cycle === 'this', 'v74.79: the import sanitizer keeps the tag');
+      ok(imp62.length === 1 && imp62[0].cycle === 'next', 'v74.79: the import sanitizer keeps the tag');
       await F.deleteTxn(String(id62)); await tick();
       F.state.base = b62;
 
@@ -3883,25 +3883,28 @@ waitReady().then(async function (F) {
       ok(scrolled64.length === 0, 'v74.81: open + close never scrolls the page (got ' + scrolled64.length + ' scrollTo calls)');
       sc64.classList = keepC64; root64.classList = keepR64; global.scrollTo = keepS64;
 
-      // ============ PART 63: v74.80 - a post-cut charge defaults to NEXT ============
-      console.log('\n== PART 63: v74.80 - charges after the billing date default to NEXT CYCLE ==');
-      var maya63 = { name: 'Maya CC', kind: 'card', balance: 10000, billing_day: 30, due_day: 10 };
-      var T63 = '2026-11-03'; // cut Oct 30, window Oct 25..Nov 4
-      var pre63 = { kind: 'card_charge', account: 'Maya CC', amount: 500, date: '2026-10-28' };
-      var post63 = { kind: 'card_charge', account: 'Maya CC', amount: 300, date: '2026-11-02' };
-      var c63 = F.cardDueData(maya63, [pre63, post63], null, T63, 10000);
-      ok(close(c63.nextCycle, 300) && close(c63.due, 9700), 'v74.80: the Nov 2 charge (after the Oct 30 cut) is NEXT by default; the Oct 28 one stays THIS (due ' + c63.due + ', next ' + c63.nextCycle + ')');
-      post63.cycle = 'this';
-      var c63b = F.cardDueData(maya63, [pre63, post63], null, T63, 10000);
-      ok(close(c63b.nextCycle, 0) && close(c63b.due, 10000), 'v74.80: tapped to THIS, the post-cut charge counts in the bill (a cut that slipped)');
-      pre63.cycle = 'next';
-      ok(close(F.cardDueData(maya63, [pre63, post63], null, T63, 10000).nextCycle, 500), 'v74.80: a pre-cut charge tapped NEXT still moves out');
-      var b63 = JSON.parse(JSON.stringify(F.state.base));
-      (F.state.base.accounts || []).forEach(function (a) { if (a.name === 'Maya CC') { a.billing_day = 30; a.due_day = 10; } });
-      ok(F.txnCyclePill({ id: 't63', kind: 'card_charge', account: 'Maya CC', date: '2026-11-02' }, T63).indexOf('NEXT CYCLE') >= 0, 'v74.80: the pill on a post-cut charge reads NEXT CYCLE');
-      ok(F.txnCyclePill({ id: 't63b', kind: 'card_charge', account: 'Maya CC', date: '2026-10-30' }, T63).indexOf('THIS CYCLE') >= 0, 'v74.80: a charge ON the billing date reads THIS CYCLE');
-      F.state.base = b63;
-
+      // ============ PART 65: v74.82 - the BILLING cycle (the 5 days up to the cut) ============
+      console.log('\n== PART 65: v74.82 - the pill is for charges made in the 5 days before a billing date ==');
+      var maya65 = { name: 'Maya CC', kind: 'card', balance: 10000, billing_day: 15, due_day: 5 };
+      var pre65 = { id: 'p65a', kind: 'card_charge', account: 'Maya CC', amount: 500, date: '2026-11-12' };
+      var post65 = { id: 'p65b', kind: 'card_charge', account: 'Maya CC', amount: 300, date: '2026-11-17' };
+      var old65 = { id: 'p65c', kind: 'card_charge', account: 'Maya CC', amount: 200, date: '2026-11-05' };
+      // ON the billing day (the boss's Nov 15 gap): the cut counts as made
+      var c65 = F.cardDueData(maya65, [pre65, post65, old65], null, '2026-11-15', 10000);
+      ok(c65.lastCut === '2026-11-15' && c65.windowStart === '2026-11-10' && c65.windowEnd === '2026-11-15', 'v74.82: on the billing day the window is the 5 days up to TODAY\u2019s cut (got ' + c65.lastCut + ' ' + c65.windowStart + '..' + c65.windowEnd + ')');
+      ok(close(c65.nextCycle, 300) && close(c65.due, 9700), 'v74.82: after-the-cut charges are the next bill, the Nov 12 one stays on the 15 Nov bill (due ' + c65.due + ')');
+      pre65.cycle = 'next';
+      ok(close(F.cardDueData(maya65, [pre65, post65, old65], null, '2026-11-15', 10000).nextCycle, 800), 'v74.82: moved to the next bill (posted after the cut), it leaves the due');
+      delete pre65.cycle;
+      var b65 = JSON.parse(JSON.stringify(F.state.base));
+      (F.state.base.accounts || []).forEach(function (a) { if (a.name === 'Maya CC') { a.billing_day = 15; a.due_day = 5; } });
+      var pillA = F.txnCyclePill(pre65, '2026-11-15');
+      ok(pillA.indexOf('15 Nov bill') >= 0, 'v74.82: on the billing day, a charge from 3 days before shows its bill - 15 Nov (got ' + pillA + ')');
+      ok(F.txnCyclePill(pre65, '2026-11-13').indexOf('15 Nov bill') >= 0, 'v74.82: BEFORE the cut too (the coming bill) - pre-tag a charge you expect to post late');
+      ok(F.txnCyclePill(post65, '2026-11-18') === '' && F.txnCyclePill(old65, '2026-11-15') === '', 'v74.82: no pill after the cut (next bill by definition) or more than 5 days before it');
+      pre65.cycle = 'next';
+      ok(F.txnCyclePill(pre65, '2026-11-15').indexOf('15 Dec bill') >= 0, 'v74.82: once moved, the pill names the next statement - 15 Dec');
+      F.state.base = b65;
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

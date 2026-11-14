@@ -2917,7 +2917,7 @@
     if (t.kind === 'card_payment' && o.payWith) t.payWith = o.payWith;
     if (o.recordOnly) t.recordOnly = true; // v74.15: an edit keeps it record-only
     if (o.salary && t.kind === 'cash_in') t.salary = true; // v74.53: an edit keeps it the salary
-    if ((o.cycle === 'next' || o.cycle === 'this') && t.kind === 'card_charge' && t.account === o.account) t.cycle = o.cycle; // v74.80: 'this' too // v74.79: an edit (a note fix) kept dropping the NEXT CYCLE tag; a move to another card starts fresh
+    if (o.cycle === 'next' && t.kind === 'card_charge' && t.account === o.account) t.cycle = 'next'; // v74.79: an edit keeps 'moved to the next bill' (same card) // v74.79: an edit (a note fix) kept dropping the NEXT CYCLE tag; a move to another card starts fresh
     state.txns[oIdx] = t; // in place — position preserved
     paidIdx = null; // v74.57: the plan link may have changed in place
     // v73.45: the add+remove pair nets to the edit's delta — but on an EMPTY
@@ -5769,23 +5769,19 @@
     // clamped to the 31st of the billing month).
     function addDays(y, m, d, k) { var dt = new Date(y, m - 1, d + k); return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() }; }
     var tp = today.split('-'), ty = Number(tp[0]), tm = Number(tp[1]);
-    // next billing date on/after today (the statement that will freeze)
-    var billDate = iso(ty, tm, dayClamp(ty, tm, bd));
-    if (billDate < today) { var bn = addM(ty, tm, 1); billDate = iso(bn.y, bn.m, dayClamp(bn.y, bn.m, bd)); }
-    // the window that feeds it: ±5 days AROUND the previous billing date
-    // (v73.88 boss mod - the wip window was (prevBilling-5, prevBilling]).
-    // The balance already carries every charge up to the cut; charges
-    // inside the window are this cycle UNLESS tagged NEXT (the ledger
-    // pill); anything after the window belongs to the NEXT cycle by
-    // definition.
-    var bp = billDate.split('-'), by = Number(bp[0]), bm = Number(bp[1]);
-    var prevBillM = addM(by, bm, -1);
-    var prevBillDay = dayClamp(prevBillM.y, prevBillM.m, bd);
-    var prevBillDate = iso(prevBillM.y, prevBillM.m, prevBillDay);
-    var ws35 = addDays(prevBillM.y, prevBillM.m, prevBillDay, -5);
-    var we35 = addDays(prevBillM.y, prevBillM.m, prevBillDay, 5);
-    var winStart = iso(ws35.y, ws35.m, ws35.d);
-    var winEnd = iso(we35.y, we35.m, we35.d);
+    // v74.82 (boss: 'the cycle were talking about here is the billing cycle,
+    // not the salary cycle'): the BILLING cycle. lastCut = the latest billing
+    // date on or before today (the billing day itself counts - the statement
+    // closes that day); billDate = the next one. The toggle's job (the v73.70
+    // design, boss-confirmed): a charge made in the 5 days UP TO a cut that
+    // the bank only posts after it can be moved to the next bill. So the
+    // window is [cut-5, cut], default = that cut's bill; anything after the
+    // cut is the next bill by definition (no toggle). v73.88's +5 days after
+    // the cut and v74.80's NEXT default for them are gone.
+    var cutsD = billingCuts(bd, today);
+    var prevBillDate = cutsD.last, billDate = cutsD.next;
+    var winStart = isoAdd(prevBillDate, -5);
+    var winEnd = prevBillDate;
     // next due date on/after today
     var dueDate = iso(ty, tm, dayClamp(ty, tm, dd));
     if (dueDate < today) { var dn = addM(ty, tm, 1); dueDate = iso(dn.y, dn.m, dayClamp(dn.y, dn.m, dd)); }
@@ -5799,29 +5795,34 @@
       var d = String(t.date || '');
       if (String(t.account) !== String(card.name)) return;
       if (String(t.kind) !== 'card_charge') return;
-      if (d > winEnd) nextCycle += Number(t.amount) || 0;
-      else if (d >= winStart && d <= winEnd && chargeIsNext(t, prevBillDate)) nextCycle += Number(t.amount) || 0; // v74.80: post-cut = NEXT by default
+      if (d > winEnd) nextCycle += Number(t.amount) || 0; // after the cut: the next bill
+      else if (d >= winStart && t.cycle === 'next') nextCycle += Number(t.amount) || 0; // v74.82: made in the 5 days before the cut, posted after it
     });
     var manual = (card.due_override != null && card.due_override !== '' && !isNaN(Number(card.due_override)));
     return {
       card: card.name,
       billing_day: bd, due_day: dd,
-      billDate: billDate, dueDate: dueDate, dueIn: dueIn,
+      billDate: billDate, lastCut: prevBillDate, dueDate: dueDate, dueIn: dueIn,
       windowStart: winStart, windowEnd: winEnd,
       balance: bal, nextCycle: r2(nextCycle),
       due: manual ? r2(Number(card.due_override)) : r2(Math.max(0, bal - nextCycle)),
       manual: !!manual
     };
   }
-  // v74.80 (boss: 'yes, default NEXT'): which statement an IN-WINDOW charge
-  // feeds. A charge dated AFTER the billing date cannot be on the statement
-  // already cut, so it defaults to NEXT CYCLE; on/before the cut it defaults
-  // to THIS. The pill's tap stores the choice explicitly (t.cycle 'this' or
-  // 'next'), which always wins — a cut that slipped past a weekend is one tap.
-  function chargeIsNext(t, prevBillDate) {
-    if (t && t.cycle === 'next') return true;
-    if (t && t.cycle === 'this') return false;
-    return String(t && t.date || '') > String(prevBillDate || '');
+  // v74.82: a card's billing cuts around a date: last = the latest billing
+  // date on or before iso (iso itself counts), next = the one after it; both
+  // clamped to the month's length (billing 31 in April = the 30th).
+  function billingCuts(bd, iso) {
+    var p = String(iso).split('-'), y = Number(p[0]), m = Number(p[1]) - 1;
+    var c = localISO(dayInMonth(y, m, bd));
+    var last = c <= iso ? c : localISO(dayInMonth(y, m - 1, bd));
+    var lp = last.split('-');
+    return { last: last, next: localISO(dayInMonth(Number(lp[0]), Number(lp[1]), bd)) };
+  }
+  // the cut a charge dated iso lands on: the first billing date on or after it
+  function cutFor(bd, iso) {
+    var c = billingCuts(bd, iso);
+    return c.last === iso ? iso : c.next;
   }
   function cardDueThisCycle(card) {
     if (!state.base) return null;
@@ -5830,36 +5831,24 @@
     if (es && es.cards) es.cards.forEach(function (c) { if (String(c.name) === String(card.name)) bal = c.balance; });
     return cardDueData(card, state.txns, state.base, todayISO(), bal);
   }
-  // which billing window does a charge date fall in (for the ledger pill)?
-  // v73.88: inWindow = the charge sits within ±5 days AROUND the card's
-  // previous billing date; autoNext = the charge is after the window (it
-  // belongs to the next cycle by definition, no toggle offered).
+  // which bill does a charge date feed (for the ledger pill)? v74.82: the
+  // charge's own cut (the first billing date on/after it). inWindow = it was
+  // made in the 5 days up to that cut AND that cut is the latest one or the
+  // coming one (older windows are settled history). autoNext = the charge is
+  // after the latest cut (not on the bill now due, no toggle needed).
   function cardCycleInfo(card, dateStr, b, todayStr) {
     if (!card || String(card.kind) !== 'card') return null;
     var bd = Math.round(Number(card.billing_day) || (b && b.cutoff_day) || 15);
     if (bd < 1 || bd > 31) bd = 15;
     var d = String(dateStr || '');
-    if (!d) return null;
-    function iso(y, m, day) { return y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day; }
-    function dim(y, m) { return new Date(y, m, 0).getDate(); }
-    function addM(y, m, k) { var t = (m - 1 + k) % 12; if (t < 0) t += 12; return { y: y + Math.floor((m - 1 + k) / 12), m: t + 1 }; }
-    function dayClamp(y, m, dd2) { return Math.min(Math.max(1, dd2), dim(y, m)); }
-    function addDays(y, m, d, k) { var dt = new Date(y, m - 1, d + k); return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() }; } // v73.90: the window fix (same as cardDueData)
-    // anchor to the CARD'S CURRENT cycle (today), not the charge's own
-    // month - the same anchor cardDueData uses.
-    var t2 = String(todayStr || todayISO()).split('-');
-    var bill = iso(Number(t2[0]), Number(t2[1]), dayClamp(Number(t2[0]), Number(t2[1]), bd));
-    var todayNow = String(todayStr || todayISO());
-    if (bill < todayNow) { var bn = addM(Number(t2[0]), Number(t2[1]), 1); bill = iso(bn.y, bn.m, dayClamp(bn.y, bn.m, bd)); }
-    var bm2 = bill.split('-');
-    var pb = addM(Number(bm2[0]), Number(bm2[1]), -1);
-    var pbDay = dayClamp(pb.y, pb.m, bd);
-    var prevBill = iso(pb.y, pb.m, pbDay);
-    var wsC = addDays(pb.y, pb.m, pbDay, -5);
-    var weC = addDays(pb.y, pb.m, pbDay, 5);
-    var winStart = iso(wsC.y, wsC.m, wsC.d);
-    var winEnd = iso(weC.y, weC.m, weC.d);
-    return { inWindow: d >= winStart && d <= winEnd, autoNext: d > winEnd, billDate: bill, prevBill: prevBill, windowStart: winStart, windowEnd: winEnd };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    var today = String(todayStr || todayISO());
+    var cuts = billingCuts(bd, today);
+    var own = cutFor(bd, d);
+    var after = billingCuts(bd, own).next; // the bill after the charge's own one
+    var inWindow = d >= isoAdd(own, -5) && (own === cuts.last || own === cuts.next);
+    return { inWindow: inWindow, autoNext: d > cuts.last, cut: own, nextCut: after,
+      billDate: cuts.next, prevBill: cuts.last, windowStart: isoAdd(own, -5), windowEnd: own };
   }
   // migrate a base object in place: every credit card gets its own
   // billing_day/due_day (from the globals when absent) so per-card dates
@@ -5877,12 +5866,12 @@
     });
     return b;
   }
-  // v73.88: the ledger cycle pill. A card charge within ±5 days of the
-  // card's billing date gets a THIS/NEXT CYCLE toggle (default THIS); a
-  // charge after the window is next-cycle by definition (no pill - it is
-  // not part of this bill); a pre-window charge counts THIS cycle with no
-  // pill. The tag rides the ledger entry (t.cycle) so it survives
-  // export/import.
+  // v73.88: the ledger cycle pill; v74.82: the BILLING cycle, named by the
+  // statement it lands on. A card charge made in the 5 days up to a billing
+  // date (the latest cut or the coming one) shows which bill it is on -
+  // '15 Nov bill' by default; tap = the bank posted it after the cut, so it
+  // moves to the next statement ('15 Dec bill'). Other charges get no pill.
+  // The tag rides the entry (t.cycle 'next'), saved + synced (v74.79).
   function txnCyclePill(t, todayStr) {
     if (!state.base || !t) return '';
     var card = null;
@@ -5890,12 +5879,11 @@
     if (!card || String(card.kind) !== 'card') return '';
     if (String(t.kind) !== 'card_charge') return '';
     var info = cardCycleInfo(card, t.date, state.base, todayStr || todayISO());
-    if (!info) return '';
-    if (!info.inWindow) return ''; // the toggle pill is ONLY for in-window charges
-    var cycle = chargeIsNext(t, info.prevBill) ? 'next' : 'this'; // v74.80: post-cut defaults to NEXT
-    var cls = cycle === 'next' ? 'cyclepill next' : 'cyclepill';
-    var title = 'feeds the ' + info.billDate.slice(5) + ' statement - tap to toggle';
-    return '<button type="button" class="' + cls + '" data-cycletag="' + esc(String(t.id || '')) + '" title="' + title + '">' + (cycle === 'next' ? 'NEXT CYCLE' : 'THIS CYCLE') + '</button>';
+    if (!info || !info.inWindow) return '';
+    var moved = t.cycle === 'next';
+    var cls = moved ? 'cyclepill next' : 'cyclepill';
+    var title = moved ? 'posted after the ' + dayMonth(info.cut) + ' cut - tap to put it back on that bill' : 'made just before the ' + dayMonth(info.cut) + ' cut - tap if the bank posted it after';
+    return '<button type="button" class="' + cls + '" data-cycletag="' + esc(String(t.id || '')) + '" title="' + title + '">' + dayMonth(moved ? info.nextCut : info.cut) + ' bill</button>';
   }
   function toggleTxnCycle(tid, todayStr) {
     var t = null;
@@ -5906,14 +5894,14 @@
     if (!card || String(card.kind) !== 'card') return;
     var info = cardCycleInfo(card, t.date, state.base, todayStr || todayISO());
     if (!info || !info.inWindow) {
-      snack('That charge is outside the cycle window - no toggle.');
+      snack('Only a charge made in the 5 days before a billing date can move to the next bill.');
       return;
     }
-    t.cycle = chargeIsNext(t, info.prevBill) ? 'this' : 'next'; // v74.80: flip the EFFECTIVE side, stored explicitly (a post-cut charge's default is NEXT)
+    if (t.cycle === 'next') delete t.cycle; else t.cycle = 'next'; // v74.82: 'next' = posted after the cut
     renderMoneyLog();
     renderCoach();
     renderHero();
-    snack(t.cycle === 'next' ? 'Marked NEXT CYCLE - excluded from the auto due.' : 'Marked THIS CYCLE - counted in the auto due.');
+    snack(t.cycle === 'next' ? 'Moved to the ' + dayMonth(info.nextCut) + ' bill \u2014 posted after the ' + dayMonth(info.cut) + ' cut.' : 'Back on the ' + dayMonth(info.cut) + ' bill.');
     // v74.79 (boss: 'look into that toggle this cycle/next cycle'): the tag
     // was set in memory only — never written to the store and never
     // stamped, so a reload (or the other phone's sync) put every charge back
@@ -11286,7 +11274,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (t.cashback === true) r.cashback = true;
       if (t.recordOnly === true) r.recordOnly = true; // v74.15
       if (t.salary === true) r.salary = true; // v74.78: the salary chip's flag survived nothing but local edits — an import dropped it
-      if (t.cycle === 'next' || t.cycle === 'this') r.cycle = t.cycle; // v74.80: an explicit THIS (a post-cut charge kept on this bill) too // v74.79: the card-charge NEXT CYCLE tag ("survives export/import" — the sanitizer dropped it)
+      if (t.cycle === 'next') r.cycle = 'next'; // v74.79: the 'moved to the next bill' tag survives an import // v74.79: the card-charge NEXT CYCLE tag ("survives export/import" — the sanitizer dropped it)
       var pr = t.planRef;
       if (pr && typeof pr === 'object' && typeof pr.planId === 'string' && typeof pr.date === 'string') {
         r.planRef = { planId: pr.planId, date: pr.date, name: str(pr.name, 80), amount: Number(pr.amount) || 0 };
@@ -11795,12 +11783,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.81, live: new Date(2026, 10, 15, 3, 15) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.82, live: new Date(2026, 10, 15, 3, 23) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.82': [
+      'The card-charge pill is about your card’s BILLING cycle (not the salary cycle) and now names the statement a charge lands on, e.g. “15 Nov bill”. It shows only for charges made in the 5 days before a billing date — tap it when the bank posted one after the cut, and it moves to the next statement (“15 Dec bill”). Charges after the billing date are on the next bill automatically.',
+      'On the billing day itself the pills and the auto due now switch to the new statement (before, they waited until the next day).'
+    ],
     '74.81': [
       'The Add sheet keypad presses the key you tap again. On iPhone (in Safari and the home-screen app) every tap was landing one key higher — tap 0, get 1. Opening a sheet no longer moves the page behind it, which is what threw the taps off; the page still stays put while a sheet is open.'
     ],
