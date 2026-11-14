@@ -1999,6 +1999,12 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.79 (boss: 'look into that toggle this cycle/next cycle in the card charge ledger entries'): the cycle pill's tag is persisted — toggleTxnCycle writes idbPut(STORE_TX, touchRec(t)) (it only mutated memory: a reload / sync reset every NEXT CYCLE charge and the auto due); saveTxnEdit keeps cycle 'next' on the same card; sanitizeTxnRows keeps it. Smoke PART 62 (4)",
+          "return idbPut(STORE_TX, touchRec(t)).then(function () { emit('txn'); }).catch(function () {});" in js
+          and "if (o.cycle === 'next' && t.kind === 'card_charge' && t.account === o.account) t.cycle = 'next';" in js
+          and "if (t.cycle === 'next') r.cycle = 'next';" in js
+          and "PART 62: v74.79 - the card-charge cycle tag is saved, kept on edit and import" in smoke
+          and "'74.79': [" in js)
     check("v74.78 (boss: 'when a new cycle starts and my salary still havent arrived, the free cash goes deep negative' -> 'build it'): Salary pending — cycleDataFor.pending (cycle started, salary expected, none received, base as-of before payday); inside salaryGraceOf days (base.salary_grace, default 3, 0 = off, max 10) insightsData.freeNet counts the expected salary (freeNetRaw = the honest number), the This-cycle block adds a 'Salary · not in yet' row (cycleProjection.salaryPending, the bridge holds), the hero pill reads Salary pending / Salary late with a line, the coach row says not in yet / late; the salary window reaches payday + max(2, grace); a salary landing up to 10 days past payday is THIS cycle's (received.late — headroomWindow no longer reads it as the next cycle's early salary); the import sanitizer keeps t.salary. Settings: salary grace days (b_sgrace). Smoke PART 61 (9)",
           "function salaryGraceOf(b) {" in js
           and "if (pendI && pendI.active) freeNetI = r2(freeNetI + pendI.expected);" in js

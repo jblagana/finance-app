@@ -3845,6 +3845,28 @@ waitReady().then(async function (F) {
       F.setTxns(txns61);
       ok(!F.cycleData().pending, 'v74.78: restored - the seed cycle has its salary');
 
+      // ============ PART 62: v74.79 - the THIS/NEXT CYCLE tag sticks ============
+      console.log('\n== PART 62: v74.79 - the card-charge cycle tag is saved, kept on edit and import ==');
+      var b62 = JSON.parse(JSON.stringify(F.state.base));
+      (F.state.base.accounts || []).forEach(function (a) { if (a.name === 'Maya CC') { a.billing_day = 30; a.due_day = 10; } });
+      var T62 = '2026-11-06';
+      var id62 = await F.addTxn({ recordOnly: false, kind: 'card_charge', category: 'Food', account: 'Maya CC', amount: 250, note: 'v74.79 tag probe', date: '2026-11-02' }, { quiet: true });
+      await tick();
+      var t62 = function () { var r = null; F.state.txns.forEach(function (x) { if (String(x.id) === String(id62)) r = x; }); return r; };
+      var st62 = t62().updated || '';
+      await sleep(5);
+      var p62 = F.toggleTxnCycle(String(id62), T62);
+      ok(p62 && typeof p62.then === 'function', 'v74.79: the pill tap writes to the store (returns the save)');
+      await p62;
+      ok(t62().cycle === 'next' && (t62().updated || '') > st62, 'v74.79: the tag is stamped (updated moved) so a reload / sync keeps it');
+      await F.saveTxnEdit(String(id62), { date: '2026-11-02', account: 'Maya CC', kind: 'card_charge', category: 'Food', amount: 250, note: 'v74.79 note fixed' }, { quiet: true });
+      await tick();
+      ok(t62().cycle === 'next', 'v74.79: editing the note keeps NEXT CYCLE (got ' + t62().cycle + ')');
+      var imp62 = F.sanitizeTxnRows([t62()]);
+      ok(imp62.length === 1 && imp62[0].cycle === 'next', 'v74.79: the import sanitizer keeps the tag');
+      await F.deleteTxn(String(id62)); await tick();
+      F.state.base = b62;
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
