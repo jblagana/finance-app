@@ -1,3 +1,8 @@
+## 2026-11-15 - "when a new cycle starts and my salary still havent arrived, the free cas goes deep negative. should we just accept that or is there better ways ..." -> recommended a time-boxed Salary pending grace -> "build it, also look into that toggle "this cycle/next cycle" in the card charge ledger entries that ensures which ones count in the billed amount" -> "(1) Salary pending: inside N grace days (default 3, Settings, 0 = off) the free cash counts the expected salary, clearly labelled with the number without it; past the grace it stops counting and says late; a late salary counts as this cycle's. (2) Audit the THIS/NEXT CYCLE pill and fix what is broken"
+Status: **in progress**
+- [x] v74.78 (Salary pending + late-salary detection; headless 375x812: pill Salary pending, line 'Counting your PHP 46,615.00 salary (not in yet) until 18 Nov · without it PHP 33,162.36', cycle rows sum to the hero; payday moved 5 days back -> Salary late + coach row; smoke PART 61 9/9)
+- [ ] v74.79 (the cycle pill audit + fixes)
+
 ## 2026-11-15 - "delete the two probe files in tools/smoke, for spent today, make it such that when i click it it shows the overview of those spendings without leving the page (maybe a hover card? or what dou think)" -> "Probe files deleted (untracked scratch). Spent today becomes a tap target (phones have no hover) that opens a popover under the strip: today's counted entries + total + a 'Not counted' line; tap again / outside / X / Esc closes"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] tools/smoke/_probe_skip.js + probe_tail.js deleted (untracked, never committed)

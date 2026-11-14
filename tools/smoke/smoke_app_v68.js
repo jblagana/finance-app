@@ -3818,6 +3818,33 @@ waitReady().then(async function (F) {
       F.setOwed(owed59); F.setTxns(txns59);
       var A59 =F.getAdj(); Object.keys(A59).forEach(function (k) { delete A59[k]; }); Object.keys(adj59).forEach(function (k) { A59[k] = adj59[k]; });
 
+      // ============ PART 61: v74.78 - Salary pending (the grace days) ============
+      console.log('\n== PART 61: v74.78 - Salary pending counts the salary for the grace days ==');
+      var b61 = F.getBase(), keep61 = { sd: b61.salary_day, gr: b61.salary_grace, asOf: b61.as_of };
+      var txns61 = F.getTxns().slice();
+      // pinned today = Nov 6: payday the 5th -> the cycle started yesterday, no Nov salary logged
+      b61.salary_day = 5; delete b61.salary_grace;
+      var cd61 = F.cycleData(), d61 = F.insightsData();
+      ok(cd61.pending && cd61.pending.active && cd61.pending.daysLate === 1 && cd61.pending.grace === 3, 'v74.78: 1 day past payday, no salary -> pending, counted (default grace 3)');
+      ok(close(d61.freeNet, d61.freeNetRaw + cd61.expected), 'v74.78: the free cash counts the expected salary (' + d61.freeNet.toFixed(2) + ' = ' + d61.freeNetRaw.toFixed(2) + ' + ' + cd61.expected + ')');
+      var pj61 = F.cycleProjection('this');
+      ok(close(pj61.net, d61.freeNet) && close(pj61.salaryPending, cd61.expected), 'v74.78: the This-cycle rows still sum to the hero (Salary · not in yet row)');
+      b61.salary_grace = 0;
+      var d61b = F.insightsData();
+      ok(F.cycleData().pending.late && !F.cycleData().pending.active && close(d61b.freeNet, d61b.freeNetRaw), 'v74.78: grace 0 = off - the honest number, flagged late');
+      delete b61.salary_grace; b61.salary_day = 1; // 5 days past payday > 3 grace days
+      ok(F.cycleData().pending.late && !F.cycleData().pending.active, 'v74.78: past the grace the salary stops counting (late)');
+      var sal61 = F.cycleData().expected;
+      F.state.txns.push({ id: 't61s', date: '2026-11-06', account: 'Cash', kind: 'cash_in', category: 'Salary', amount: sal61, note: 'late salary', created: new Date().toISOString() });
+      var cd61c = F.cycleData(), hw61 = F.headroomWindow();
+      ok(cd61c.received && cd61c.received.late && !cd61c.pending, 'v74.78: a salary 5 days late is THIS cycle’s salary (received, late)');
+      ok(hw61 && !hw61.early && hw61.end === cd61c.end, 'v74.78: a late salary does not stretch the headroom into the next cycle');
+      b61.as_of = '2026-11-02'; F.state.txns = F.state.txns.filter(function (t) { return t.id !== 't61s'; });
+      ok(!F.cycleData().pending, 'v74.78: a base dated on/after payday already holds the salary - nothing pending');
+      b61.salary_day = keep61.sd; b61.as_of = keep61.asOf; if (keep61.gr === undefined) delete b61.salary_grace; else b61.salary_grace = keep61.gr;
+      F.setTxns(txns61);
+      ok(!F.cycleData().pending, 'v74.78: restored - the seed cycle has its salary');
+
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

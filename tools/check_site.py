@@ -1999,6 +1999,14 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.78 (boss: 'when a new cycle starts and my salary still havent arrived, the free cash goes deep negative' -> 'build it'): Salary pending — cycleDataFor.pending (cycle started, salary expected, none received, base as-of before payday); inside salaryGraceOf days (base.salary_grace, default 3, 0 = off, max 10) insightsData.freeNet counts the expected salary (freeNetRaw = the honest number), the This-cycle block adds a 'Salary · not in yet' row (cycleProjection.salaryPending, the bridge holds), the hero pill reads Salary pending / Salary late with a line, the coach row says not in yet / late; the salary window reaches payday + max(2, grace); a salary landing up to 10 days past payday is THIS cycle's (received.late — headroomWindow no longer reads it as the next cycle's early salary); the import sanitizer keeps t.salary. Settings: salary grace days (b_sgrace). Smoke PART 61 (9)",
+          "function salaryGraceOf(b) {" in js
+          and "if (pendI && pendI.active) freeNetI = r2(freeNetI + pendI.expected);" in js
+          and "if (rec && !rec.late && rec.date > cd.start && rec.date < cd.end)" in js
+          and "if (t.salary === true) r.salary = true;" in js
+          and 'id="b_sgrace"' in js and ".hero-sp{" in html
+          and "PART 61: v74.78 - Salary pending counts the salary for the grace days" in smoke
+          and "'74.78': [" in js)
     check("v74.77 (boss: 'for spent today, make it such that when i click it it shows the overview of those spendings without leaving the page'): the Spent today cell is a button (#stCell) that opens a popover under the strip (#stPop) — today's counted entries from spentTodayData (the same rule as todaySpend: spendOf, planRef excluded), a total, and a 'Not counted' line (plan payments, friends' shares, card payoffs, money in); tap again / ✕ / tap outside / Esc closes. Smoke PART 60 (3)",
           "function spentTodayData() {" in js
           and "id=\"stCell\"" in js and "id=\"stPop\"" in js

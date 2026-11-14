@@ -3824,6 +3824,7 @@
     if (!parts.length && JSON.stringify(Object.keys(A)) !== JSON.stringify(Object.keys(B))) { parts.push('Reordered accounts'); kind = 'num'; }
     if ((Number(b0.salary) || 0) !== (Number(b1.salary) || 0)) parts.push('Salary ' + pesoShort(b0.salary) + ' → ' + pesoShort(b1.salary));
     if ((b0.salary_day || 0) !== (b1.salary_day || 0)) parts.push('Payday the ' + ordinal(Number(b1.salary_day) || 15));
+    if (salaryGraceOf(b0) !== salaryGraceOf(b1)) parts.push('Salary grace ' + salaryGraceOf(b1) + ' day' + (salaryGraceOf(b1) === 1 ? '' : 's')); // v74.78
     var cA = Object.keys(b0.budgets || {}), cB = Object.keys(b1.budgets || {});
     cB.filter(function (c) { return cA.indexOf(c) < 0; }).forEach(function (c) { parts.push('Added category ' + hN(c)); });
     cA.filter(function (c) { return cB.indexOf(c) < 0; }).forEach(function (c) { parts.push('Removed category ' + hN(c)); });
@@ -4014,6 +4015,14 @@
   // field on commit (spreadsheet-style: the stored value is the total, so a
   // re-opened field shows the plain number). One-way: the original expression
   // is not kept.
+  // v74.78: the salary-grace field -> 0..10 (blank / junk = the default 3)
+  function graceFromField() {
+    var el = byId('b_sgrace'); if (!el) return 3;
+    var raw = String(el.value || '').trim();
+    if (!raw) return 3;
+    var g = Math.round(Number(evalExpr(raw)));
+    return isFinite(g) && g >= 0 ? Math.min(10, g) : 3;
+  }
   function numVal(el, normalize) {
     if (!el) return 0;
     var v = evalExpr(el.value);
@@ -4188,6 +4197,7 @@
     h += brow('<span class="bnote">salary / month</span><input class="grow" id="b_salary" type="text" placeholder="0.00, or a quick sum like 300-125+10" value="' + (b.salary || '') + '">');
     h += brow('<span class="bnote">liquidity floor</span><input class="grow" id="b_floor" type="text" value="' + (b.liquidity_floor || '') + '">');
     h += brow('<span class="bnote">salary day</span><input class="grow" id="b_sday" type="text" value="' + (b.salary_day || b.cutoff_day || 15) + '" title="the day of the month your salary lands — the salary cycle starts on it">');
+    h += brow('<span class="bnote">salary grace days</span><input class="grow" id="b_sgrace" type="text" inputmode="numeric" value="' + salaryGraceOf(b) + '" title="if the salary is late, keep counting it for this many days after payday (0 = off, max 10)">'); // v74.78
     h += '</div><div class="ngrp" data-grp="cardrules">';
     h += brow('<span class="bnote">cc prepay day</span><input class="grow" id="b_pday" type="text" value="' + (b.prepay_day || 14) + '">' +
       '<span class="bnote">cutoff</span><input class="grow" id="b_cday" type="text" value="' + (b.cutoff_day || 15) + '">');
@@ -4370,6 +4380,7 @@
       as_of: (byId('b_asof') ? val(byId('b_asof')) : '') || b0.as_of,
       salary: byId('b_salary') ? nv('b_salary') : b0.salary,
       salary_day: (byId('b_sday') ? Math.round(nv('b_sday')) : 0) || b0.salary_day,
+      salary_grace: byId('b_sgrace') ? graceFromField() : salaryGraceOf(b0), // v74.78
       liquidity_floor: byId('b_floor') ? nv('b_floor') : b0.liquidity_floor,
       prepay_day: (byId('b_pday') ? Math.round(nv('b_pday')) : 0) || b0.prepay_day,
       cutoff_day: (byId('b_cday') ? Math.round(nv('b_cday')) : 0) || b0.cutoff_day,
@@ -4588,6 +4599,7 @@
     b.cutoff_day = cd > 0 ? cd : 15;
     b.due_day = dd > 0 ? dd : 5;
     b.salary_day = sd > 0 ? sd : (b.cutoff_day || 15);
+    if (byId('b_sgrace')) b.salary_grace = graceFromField(); // v74.78: the Salary pending grace (0 = off)
     var ut = numVal(byId('b_util'), true);
     b.card_util_target = ut > 0 ? ut : 0.099;
     bb.querySelectorAll('#rowsSal .brow').forEach(function (row) {
@@ -5044,6 +5056,16 @@
     if (cd >= 1 && cd <= 31) return cd;
     return 15;
   }
+  // v74.78: how many days after payday a missing salary is still COUNTED
+  // as coming (the "Salary pending" grace). base.salary_grace, 0 = off
+  // (the old strict behavior), default 3, max 10.
+  function salaryGraceOf(b) {
+    b = b || state.base || {};
+    if (b.salary_grace === undefined || b.salary_grace === null || b.salary_grace === '') return 3;
+    var g = Math.round(Number(b.salary_grace));
+    if (!isFinite(g) || g < 0) return 3;
+    return Math.min(10, g);
+  }
   function expectedSalaryFor(month, b) {
     b = b || state.base || {};
     var ov = (b.salary_overrides || {})[month];
@@ -5082,10 +5104,15 @@
     // payday (landing on the 13th, prior to the 15th) still belongs to the
     // cycle that STARTS on the 15th — and deleting the entry reverts it.
     var lo = month + '-01';
-    var mp = String(month).split('-');
-    var mDim = new Date(Number(mp[0]), Number(mp[1]), 0).getDate();
-    var hiDay = Math.min(sd + 2, mDim);
-    var hi = month + '-' + (hiDay < 10 ? '0' : '') + hiDay;
+    // v74.78 (boss: 'when a new cycle starts and my salary still havent
+    // arrived, the free cash goes deep negative' -> 'build it'): a LATE
+    // salary is still this cycle's salary — the window reaches payday +
+    // the grace days (min 2, the old rule), counted from the real (clamped)
+    // payday so a payday on the 30th reaches into the next month. Before, a
+    // salary on the 18th (payday 15th) was cash but never "received".
+    var grace = salaryGraceOf(b);
+    var hi = isoAdd(w.start, Math.max(2, grace));
+    if (hi > w.end) hi = w.end;
     var received = null;
     state.txns.forEach(function (t) {
       if (t.kind !== 'cash_in') return;
@@ -5125,6 +5152,13 @@
         if (d <= hi || d > w.end) return;
         if (!received || d < received.date) received = { date: d, amount: r2(amt), id: t.id || null };
       });
+      // v74.78: no on-time salary, and one landed later in the cycle. Up to
+      // 10 days past payday it is THIS cycle's salary arriving LATE (it
+      // used to read as the next cycle's early salary — the headroom then
+      // spread it across two cycles); later than that it is still the next
+      // cycle's early salary (the seed case: the current salary sits in the
+      // base, not the ledger).
+      if (received && received.date <= isoAdd(w.start, 10)) received.late = true;
     }
     var receivedId = received ? received.id : null;
     // spend this cycle (the one spend rule, v72.44 — prepays are not spend).
@@ -5166,9 +5200,25 @@
       prevSpent += spendOf(t);
     });
     var prevExpected = expectedSalaryFor(prevM, b);
+    // v74.78: the "Salary pending" state — the cycle has started (today is
+    // inside it), a salary is expected, none has landed. Within the grace
+    // days the free cash COUNTS the expected salary (the dues of the new
+    // cycle are real, the salary that pays them is near-certain); past the
+    // grace it stops counting and the honest number shows (pending.active
+    // false, pending.late true).
+    var pending = null;
+    // A base whose as-of is on/after payday already holds this cycle's
+    // salary in its balances (it was typed in, not logged) — nothing pending.
+    var asOfIn = !!(b.as_of && String(b.as_of) >= w.start);
+    if (!received && !asOfIn && expected > 0 && today >= w.start && today <= w.end) {
+      var graceEnd = isoAdd(w.start, grace);
+      var daysLate = Math.round((parseISO(today) - parseISO(w.start)) / 86400000);
+      pending = { expected: expected, since: w.start, daysLate: daysLate, grace: grace, graceEnd: graceEnd,
+        active: grace > 0 && today <= graceEnd, late: daysLate > 0 && !(grace > 0 && today <= graceEnd) };
+    }
     return {
       month: month, sday: sd, start: w.start, end: w.end, days: w.days,
-      expected: expected, received: received,
+      expected: expected, received: received, pending: pending,
       spent: r2(spent), spentPlans: r2(spentPlans), plansDue: plansDue, elapsed: elapsed, pace: pace, projectedNet: projectedNet,
       prev: { month: prevM, start: prevW.start, end: prevW.end, expected: prevExpected, spent: r2(prevSpent), net: r2(prevExpected - prevSpent) }
     };
@@ -5193,7 +5243,7 @@
     var cd = cycleData();
     if (!cd) return null;
     var rec = cd.received;
-    if (rec && rec.date > cd.start && rec.date < cd.end) {
+    if (rec && !rec.late && rec.date > cd.start && rec.date < cd.end) { // v74.78: a LATE salary is this cycle's, not the next one early
       // cd.month is the ISO month BEFORE the cycle start (cycle = month+1
       // sday .. month+1 sday-1), so the NEXT cycle end = new Date(y, m+1,
       // sday-1) — one month past the current cycle end.
@@ -5330,6 +5380,11 @@
     var thisCd = cycleDataFor(currentCycleMonth(b, todayISO()), b);
     var heldS = savingData().total; // v74.65: the set-aside comes off this cycle's free and carries into the next
     var thisNet = r2(free - planWindowTotal(thisCd).total - heldS);
+    // v74.78: Salary pending — the hero counts this cycle's expected salary
+    // inside the grace days, so THIS cycle's net (and the carry into the
+    // peek) does too; the rows show it as its own line so the bridge holds.
+    var pendAdd = (thisCd && thisCd.pending && thisCd.pending.active) ? thisCd.pending.expected : 0;
+    thisNet = r2(thisNet + pendAdd);
     var carry = (mode === 'next') ? thisNet : 0;
     var salAdded = (mode === 'next') ? (withSal ? salExpected : 0) : 0;
     // v74.69 (boss: 'does the saving for accounted in the next cycle peek' -> ok): the pots' top-ups that fall in the
@@ -5357,6 +5412,8 @@
       savingHeld: r2(heldS), // v74.65
       salary: r2(salExpected), salaryReceived: salReceived, salaryInFree: salInFree,
       withSalary: withSal, salaryAdded: r2(salAdded),
+      salaryPending: (mode === 'this') ? r2(pendAdd) : 0, // v74.78: the not-yet-landed salary the hero counts
+      salaryPendingInfo: (thisCd && thisCd.pending) || null,
       plans: r2(planTotal), planCount: planCount,
       // v73.37: the peek's expandable breakdown (the specific plan dues)
       planItems: pw.items,
@@ -6219,7 +6276,14 @@
     var paceC = cycI ? cycI.pace : pace; // the cycle's spend per elapsed day (calendar pace when there is no cycle)
     var savingI = savingData(); // v74.65: what Saving-for holds back (one-offs in full, pots as filled)
     var freeNetI = r2(free - planDeduct - savingI.total);
+    // v74.78: Salary pending — inside the grace days the free cash counts the
+    // expected salary (the new cycle's dues are already deducted above).
+    // freeNetRaw keeps the honest number (the hero's "without it" line).
+    var pendI = cycI ? cycI.pending : null;
+    var freeNetRawI = freeNetI;
+    if (pendI && pendI.active) freeNetI = r2(freeNetI + pendI.expected);
     return {
+      salaryPending: pendI, freeNetRaw: freeNetRawI,
       s: s, now: now, today: today, monthPrefix: monthPrefix, daysLeft: daysLeft,
       meal: meal, free: free,
       planDeduct: planDeduct, savingHeld: savingI.total, saving: savingI, freeNet: freeNetI, // v74.65: net of the dues AND the set-aside
@@ -7690,7 +7754,8 @@
     var hp = byId('heroPill');
     if (hp) {
       var overC = (s.cards || []).filter(function (c) { return (Number(c.limit) || 0) > 0 && (Number(c.balance) || 0) > (Number(c.limit) || 0) + 0.004; }); // v74.55 (stress test #11)
-      var pk = free < 0 ? ['bad', 'Negative'] : (overC.length ? ['bad', overC.length === 1 ? overC[0].name + ' over limit' : 'Cards over limit'] : (d && d.prepayAmt > 0 && d.prepayAmt > free ? ['warn', 'Tight'] : ['ok', 'On track']));
+      var spH = d && d.salaryPending; // v74.78: Salary pending / late wins the pill (it explains the number)
+      var pk = (spH && spH.active) ? ['warn', 'Salary pending'] : (spH && spH.late) ? ['bad', 'Salary late'] : free < 0 ? ['bad', 'Negative'] : (overC.length ? ['bad', overC.length === 1 ? overC[0].name + ' over limit' : 'Cards over limit'] : (d && d.prepayAmt > 0 && d.prepayAmt > free ? ['warn', 'Tight'] : ['ok', 'On track']));
       hp.className = 'hero-pill ' + pk[0]; hp.textContent = pk[1];
     }
     var sub = [];
@@ -7707,8 +7772,14 @@
     // 'remove the salary statement in the free/unallocated card') — the
     // salary lives in the coach card's green row (v73.32) and the
     // This-cycle block, not in the hero's sub line.
+    // v74.78: Salary pending — say what the number counts, and what it is
+    // without it; past the grace the honest number shows and says why.
+    var spS = d && d.salaryPending;
+    var spLine = '';
+    if (spS && spS.active) spLine = 'Counting your <b>' + money(spS.expected) + '</b> salary (not in yet) until ' + dayMonth(spS.graceEnd) + ' · without it <b>' + money(d.freeNetRaw) + '</b>';
+    else if (spS && spS.late) spLine = 'Salary ' + spS.daysLate + ' day' + (spS.daysLate === 1 ? '' : 's') + ' late — no longer counted. Log it when it lands.';
     var hs = byId('heroSub');
-    if (hs) hs.innerHTML = sub.join(' · ');
+    if (hs) hs.innerHTML = sub.join(' · ') + (spLine ? '<div class="hero-sp">' + spLine + '</div>' : '');
     // v73.34: the cycle block (This cycle default / Next cycle peek) renders
     // INSIDE the hero — it is the free cash's projection, so it lives where
     // the free cash lives. It repaints on every hero repaint (the emit keys
@@ -7808,6 +7879,7 @@
         }
       }
       if (p.savingHeld > 0.004) rows += '<div class="cbrow"><div class="lab">Saving for<small>set aside</small></div><div class="amt goalv">− ' + money(p.savingHeld) + '</div></div>'; // v74.65
+      if (p.salaryPending > 0.004) rows += '<div class="cbrow"><div class="lab">Salary · not in yet<small>counted until ' + dayMonth(p.salaryPendingInfo.graceEnd) + '</small></div><div class="amt">+ ' + money(p.salaryPending) + '</div></div>'; // v74.78
       rows += '<div class="cbrow cbfree"><div class="lab">Free cash</div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
     }
     if (mode === 'next') {
@@ -8269,7 +8341,16 @@
       // until the cycle flipped. The row now targets the next upcoming
       // payday, shown from 10 days out (the 5th for a 15th payday).
       var salT = null;
-      if (sIn === 0 && !cy0.received) {
+      var pend0 = cy0.pending; // v74.78: past payday, still not in
+      if (pend0 && pend0.daysLate > 0) {
+        var dl0 = pend0.daysLate + ' day' + (pend0.daysLate === 1 ? '' : 's');
+        rows.push({ cls: pend0.active ? 'warn' : 'bad', tag: 'Salary',
+          text: pend0.active
+            ? 'Salary ' + money(pend0.expected) + ' not in yet (' + dl0 + ' past the ' + ordinal(cy0.sday) + ') — counted in your free cash until ' + dayMonth(pend0.graceEnd) + '. Tap when it lands.'
+            : 'Salary is ' + dl0 + ' late — no longer counted, so the free cash shows what you really have. Tap when it lands.',
+          r: money(pend0.expected),
+          act: 'salary', payload: { amount: pend0.expected, date: d.today, sday: cy0.sday } });
+      } else if (sIn === 0 && !cy0.received) {
         salT = { amt: cy0.expected, sIn: 0, sday: cy0.sday };
       } else {
         var nd = parseISO(cy0.end); nd.setDate(nd.getDate() + 1); // v74.10: the next payday = the day after this cycle
@@ -11182,6 +11263,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (typeof t.payWith === 'string' && t.payWith) r.payWith = t.payWith.slice(0, 60);
       if (t.cashback === true) r.cashback = true;
       if (t.recordOnly === true) r.recordOnly = true; // v74.15
+      if (t.salary === true) r.salary = true; // v74.78: the salary chip's flag survived nothing but local edits — an import dropped it
       var pr = t.planRef;
       if (pr && typeof pr === 'object' && typeof pr.planId === 'string' && typeof pr.date === 'string') {
         r.planRef = { planId: pr.planId, date: pr.date, name: str(pr.name, 80), amount: Number(pr.amount) || 0 };
@@ -11690,12 +11772,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.77, live: new Date(2026, 10, 15, 2, 14) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.78, live: new Date(2026, 10, 15, 2, 56) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.78': [
+      'Salary pending: when a new cycle starts and your salary has not landed yet, the free cash now counts it for a few days (3 by default — Settings → salary grace days, 0 turns it off) instead of dropping deep into the red. The hero says it is counting it and shows the number without it; the cycle card lists it as “Salary · not in yet”.',
+      'If it is still not in after the grace days, it stops counting — the hero and the coach say the salary is late, and one tap logs it when it lands. A salary that lands a few days late now counts as this cycle’s salary (it used to read as next cycle’s early one and stretched the per-day number across two cycles).'
+    ],
     '74.77': [
       'Tap Spent today on the Home cycle card to see what went into it — today’s entries with the total, right under the strip, plus a line naming what today did not count (plan payments, friends’ shares, card payoffs). Tap it again, tap outside or press ✕ to close.'
     ],
