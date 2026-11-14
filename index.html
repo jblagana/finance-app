@@ -1632,6 +1632,11 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 .ml-sub{display:block;font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .ml-main b{flex:none;font-size:14.5px;font-weight:600;white-space:nowrap}
 .ml-more{display:none;padding:4px 8px 10px 58px}
+/* v74.83: the bill chip on the row itself, under the amount (tappable in place) */
+.ml-row.has-cyc{position:relative}
+.ml-row.has-cyc .ml-main b{align-self:flex-start;margin-top:4px}
+.ml-row.has-cyc .ml-main .ml-l{padding-right:4px}
+.ml-row > .ml-cyc{position:absolute;right:8px;top:31px;margin:0;z-index:1;font-size:10px;line-height:16px;padding:1px 8px}
 .ml-row.open .ml-more{display:block}
 .ml-more .ml-meta{margin:0 0 4px}
 .ml-acts{display:flex;gap:8px;margin-top:8px}

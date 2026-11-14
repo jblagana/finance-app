@@ -2004,6 +2004,12 @@ def main():
           and "#addSheet{height:min(calc(100svh - 24px),720px)" in html
           and "PART 64: v74.81 - the sheet lock never moves the page" in smoke
           and "'74.81': [" in js)
+    check("v74.83 (boss: 'make the chip visible from the main entry view so its easy to see which ones have toggles'): the bill chip renders on the Ledger row itself (a sibling of the .ml-main row button, absolutely placed under the amount: .ml-row.has-cyc > .ml-cyc), not inside the opened details; the existing [data-cycletag] binding still toggles it (stopPropagation, the row stays closed)",
+          """var cycChip = cyclePill ? cyclePill.replace('class="cyclepill', 'class="ml-cyc cyclepill') : '';""" in js
+          and "amtTxt + '</b></button>' + cycChip +" in js
+          and "(cyclePill ? ' ' + cyclePill : '')" not in js
+          and ".ml-row > .ml-cyc{" in html
+          and "'74.83': [" in js)
     check("v74.82 (boss: 'the cycle were talking about here is the billing cycle, not the salary cycle'): the card-charge pill is the BILLING cycle's — the v73.70 design restored: a charge made in the 5 days UP TO a billing date (billingCuts / cutFor: its own cut, the latest or the coming one) shows the bill it lands on ('15 Nov bill'), a tap moves it to the next statement (t.cycle 'next' = posted after the cut, '15 Dec bill'); after the cut = the next bill by definition, no pill (v73.88's +5 days and v74.80's NEXT default are gone). The billing day counts as cut (lastCut <= today), so the window and the auto due move on the billing day itself. Smoke PART 35/62 retargeted + PART 65 (8)",
           "function billingCuts(bd, iso) {" in js and "function cutFor(bd, iso) {" in js
           and "function chargeIsNext(" not in js

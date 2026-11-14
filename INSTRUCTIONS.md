@@ -1,3 +1,7 @@
+## 2026-11-15 - "make the chip visible from the main entry view so its easy to see which ones have toggles" -> "The bill chip moves from the opened details onto the Ledger row itself (under the amount), tappable in place"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.83 (headless 375x812: 'Grab to airport' and 'Samgyup' (Nov 14 / Nov 12, Maya CC billing 15) show '15 Nov bill' on the row, the Nov 8 charge none; a real tap flips it to '15 Dec bill' and the row stays closed)
+
 ## 2026-11-15 - "why cant i see the thiscycle/next cycle toggle for the eldger entries with card charge around the 15th" -> "read the records for the rational of this toggle" -> "this is true 'Its job was to catch a charge you made just before the billing date that your bank only posts after it' ... so the cycle were talking about here is the billing cycle, not the salary cycle ... now what" -> "Restore the v73.70 design: the pill is for charges made in the 5 days UP TO a billing date and names the statement ('15 Nov bill' -> tap -> '15 Dec bill'); after the cut = the next bill, no pill (drops v73.88's +5 days and v74.80's NEXT default); the billing day counts as cut so the window/auto due switch that day"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.82 (billingCuts / cutFor; smoke PART 35/62 retargeted, PART 65 8/8; headless check of the pill on the Ledger)

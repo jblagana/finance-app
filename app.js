@@ -3485,14 +3485,18 @@
         var mk = 'i' + log.indexOf(e);
         var isOpen = mlOpenKey === mk;
         var subTxt = p.note || ((e.k === 'p' && e.w) ? (p.m || 'card') + ' from ' + e.w : (p.m || ''));
-        return '<div class="ml-row' + (add ? '' : ' del') + (isOpen ? ' open' : '') + '">' +
+        // v74.83 (boss: 'make the chip visible from the main entry view so its easy to see which ones have
+        // toggles'): the bill chip sits on the ROW itself (under the amount), not inside the details — a sibling
+        // of the row button (a button can't hold a button), tappable in place.
+        var cycChip = cyclePill ? cyclePill.replace('class="cyclepill', 'class="ml-cyc cyclepill') : '';
+        return '<div class="ml-row' + (add ? '' : ' del') + (isOpen ? ' open' : '') + (cycChip ? ' has-cyc' : '') + '">' +
           '<button type="button" class="ml-main" data-ml-tog="' + mk + '" aria-expanded="' + (isOpen ? 'true' : 'false') + '">' +
           '<span class="ml-tile" aria-hidden="true" style="background:' + tile.bg + ';color:' + tile.fg + '">' + esc(tile.ch) + '</span>' +
           '<span class="ml-l"><span class="ml-cat">' + esc(p.lab) + '</span>' +
           (subTxt ? '<span class="ml-sub">' + esc(subTxt) + '</span>' : '') + '</span>' +
-          '<b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b></button>' +
+          '<b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b></button>' + cycChip +
           '<div class="ml-more">' +
-          '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) + (cyclePill ? ' ' + cyclePill : '') + '</div>' +
+          '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) + '</div>' +
           extra +
           ((editBtn || delBtn || adjDel) ? '<div class="ml-acts">' + editBtn + delBtn + adjDel + '</div>' : '') +
           '</div></div>';
@@ -11783,12 +11787,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.82, live: new Date(2026, 10, 15, 3, 23) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.83, live: new Date(2026, 10, 15, 3, 31) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.83': [
+      'The bill chip (e.g. “15 Nov bill”) now shows right on the Ledger row, under the amount — you can see at a glance which card charges can move to the next statement, and tap the chip there without opening the entry.'
+    ],
     '74.82': [
       'The card-charge pill is about your card’s BILLING cycle (not the salary cycle) and now names the statement a charge lands on, e.g. “15 Nov bill”. It shows only for charges made in the 5 days before a billing date — tap it when the bank posted one after the cut, and it moves to the next statement (“15 Dec bill”). Charges after the billing date are on the next bill automatically.',
       'On the billing day itself the pills and the auto due now switch to the new statement (before, they waited until the next day).'
