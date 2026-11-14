@@ -7207,8 +7207,62 @@
     // The headroom value gets the .sm size so '₱X,XXX.XX/day' fits one row.
     var cells = '<div class="p"><div class="k">Per day</div><div class="v sm"' + (free < 0 ? ' style="color:var(--bad)"' : ' style="color:var(--ok)"') + '>' + money(hDaily) + '<span class="unit">/day</span></div></div>'
       + '<div class="p"><div class="k">Payday</div><div class="v">' + hDays + '<span class="unit"> days</span></div></div>' // v74.21: 'Payday' + N days (boss: 'use the per day, payday, spent today words')
-      + '<div class="p"><div class="k">Spent today</div><div class="v">' + money(todaySpend) + '</div></div>';
-    body.innerHTML = '<div class="pace">' + cells + '</div>';
+      + '<button type="button" class="p p-tap' + (spentTodayOpen ? ' on' : '') + '" id="stCell" aria-expanded="' + (spentTodayOpen ? 'true' : 'false') + '" aria-controls="stPop"><div class="k">Spent today</div><div class="v">' + money(todaySpend) + '</div></button>'; // v74.77: tap = today's breakdown
+    body.innerHTML = '<div class="pace">' + cells + '</div>' + (spentTodayOpen ? spentTodayPopHtml() : '');
+    if (!body.__stWired) { // v74.77: once — insBody is re-rendered, the listener stays
+      body.__stWired = true;
+      body.addEventListener('click', function (ev) {
+        if (ev.target.closest && ev.target.closest('#stCell, #stX')) { spentTodayOpen = !spentTodayOpen; renderInsights(); }
+      });
+      document.addEventListener('click', function (ev) { // a tap outside closes it
+        if (!spentTodayOpen || !ev.target.closest || ev.target.closest('#stPop, #stCell')) return;
+        spentTodayOpen = false; renderInsights();
+      });
+      document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape' && spentTodayOpen) { spentTodayOpen = false; renderInsights(); }
+      });
+    }
+  }
+  // v74.77 (boss: 'for spent today, make it such that when i click it it
+  // shows the overview of those spendings without leaving the page'): the
+  // Spent today cell opens a popover under the strip — today's counted
+  // entries (the exact rows insightsData sums, same rule) + one line naming
+  // what today did NOT count (plan payments, a friend's share, payoffs,
+  // money in) so the number explains itself. Pure data here; the smoke reads it.
+  var spentTodayOpen = false;
+  function spentTodayData() {
+    var today = todayISO(), items = [], total = 0;
+    var skip = { plans: 0, theirs: 0, payoffs: 0, moneyIn: 0 };
+    state.txns.forEach(function (t) {
+      if (t.date !== today) return;
+      var a = Number(t.amount) || 0;
+      if (t.planRef) { skip.plans += spendOf(t); return; }
+      var sp = spendOf(t);
+      if (sp) { items.push({ id: t.id, name: String(t.note || '').trim() || t.category || 'Unsorted', cat: t.category || 'Unsorted', acc: t.account || '', amt: r2(sp) }); total += sp; return; }
+      if (t.id && isIpfTheirsTxn(t.id)) { if (t.kind !== 'cash_in') skip.theirs += a; return; }
+      if (t.kind === 'card_payment') skip.payoffs += a;
+      else if (t.kind === 'cash_in') skip.moneyIn += a;
+    });
+    items.sort(function (x, y) { return y.amt - x.amt; });
+    Object.keys(skip).forEach(function (k) { skip[k] = r2(skip[k]); });
+    return { items: items, total: r2(total), skip: skip };
+  }
+  function spentTodayPopHtml() {
+    var d = spentTodayData();
+    var rows = d.items.length ? d.items.map(function (it) {
+      return '<div class="st-row"><div class="st-l"><div class="st-n">' + esc(it.name) + '</div><div class="st-s">' + esc(it.cat) + (it.acc ? ' · ' + esc(it.acc) : '') + '</div></div><div class="st-a">' + money(it.amt) + '</div></div>';
+    }).join('') : '<div class="st-empty">Nothing spent yet today.</div>';
+    var notes = [];
+    if (d.skip.plans) notes.push('plan payments ' + money(d.skip.plans));
+    if (d.skip.theirs) notes.push('friends’ shares ' + money(d.skip.theirs));
+    if (d.skip.payoffs) notes.push('card payoffs ' + money(d.skip.payoffs));
+    if (d.skip.moneyIn) notes.push('money in ' + money(d.skip.moneyIn));
+    return '<div class="st-pop" id="stPop" role="region" aria-label="Spent today">'
+      + '<div class="st-head"><span>Today · ' + d.items.length + ' entr' + (d.items.length === 1 ? 'y' : 'ies') + '</span><button type="button" class="st-x" id="stX" aria-label="Close">✕</button></div>'
+      + rows
+      + (d.items.length ? '<div class="st-tot"><span>Total</span><span>' + money(d.total) + '</span></div>' : '')
+      + (notes.length ? '<div class="st-note">Not counted: ' + notes.join(', ') + '.</div>' : '')
+      + '</div>';
   }
   // v74.00 (boss-approved mockup_test_spend.html: 'im thinking to spend on
   // something one time and i wanna know what will my headroom become'):
@@ -11636,12 +11690,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.76, live: new Date(2026, 10, 15, 1, 14) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.77, live: new Date(2026, 10, 15, 2, 14) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.77': [
+      'Tap Spent today on the Home cycle card to see what went into it — today’s entries with the total, right under the strip, plus a line naming what today did not count (plan payments, friends’ shares, card payoffs). Tap it again, tap outside or press ✕ to close.'
+    ],
     '74.76': [
       'Spent today no longer counts a friend’s share as your spending. When you pay for someone on a card, only your part shows in Spent today, the spending by category and the coach — and their share is not counted as income in the month recap. Your card and cash balances are the same as before.'
     ],
@@ -13137,6 +13194,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     getPlanLinkRef: function () { return state.planLinkRef; },
     coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut); v73.68: the cycle-window + no-4-cap assertions
     insightsData: insightsData, // v73.2: the insight math (coachRows' input)
+    spentTodayData: spentTodayData, // v74.77: the Spent today popover's rows (the smoke checks them against todaySpend)
     renderInsights: renderInsights, // v73.94: the 3-cell strip render (smoke PART 38 drives it)
     dayMonth: dayMonth, // v73.94: the date label (smoke PART 38 builds the expected title)
     // v73.75: renderProjection is GONE with the card (the v73.42 export dies too)

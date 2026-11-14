@@ -1,3 +1,8 @@
+## 2026-11-15 - "delete the two probe files in tools/smoke, for spent today, make it such that when i click it it shows the overview of those spendings without leving the page (maybe a hover card? or what dou think)" -> "Probe files deleted (untracked scratch). Spent today becomes a tap target (phones have no hover) that opens a popover under the strip: today's counted entries + total + a 'Not counted' line; tap again / outside / X / Esc closes"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] tools/smoke/_probe_skip.js + probe_tail.js deleted (untracked, never committed)
+- [x] v74.77 (headless 375x812: tap opens the list - rows sum to the cell, the friend's share and the payoff under Not counted; tap again, tap outside close it; smoke PART 60)
+
 ## 2026-11-15 - "find the bug on the \"spent today\" home tab entry that pollutes it" -> "yes, fix it" -> "A friend's share paid on a card (the ipf theirs card_charge, linked as theirsTxnId) counted as your spend - its matching cash_in stopped netting it after v73.8. The theirs charge now counts zero in spendOf (Spent today, donut, pace, coach, budgets); the card balance is unchanged"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.76 (spendOf skips the ipf theirs pair; recap income skips its cash advance; smoke PART 59: ₱1,000 card meal with ₱600 theirs -> Spent today +400 (was +1,000), balances unchanged; fails without the fix)

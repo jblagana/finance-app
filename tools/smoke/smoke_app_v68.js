@@ -3808,8 +3808,15 @@ waitReady().then(async function (F) {
       var rc59 = F.recapData(F.getTxns(), F.todayISO().slice(0, 7));
       var rc59b = F.recapData(txns59, F.todayISO().slice(0, 7));
       ok(rc59 && rc59b && close(rc59.income, rc59b.income), 'v74.76: the theirs cash advance is not income in the month recap');
+      // ============ PART 60: v74.77 - the Spent today breakdown ============
+      console.log('\n== PART 60: v74.77 - the Spent today breakdown matches the cell ==');
+      var st60 = F.spentTodayData();
+      var sum60 = st60.items.reduce(function (s, it) { return s + it.amt; }, 0);
+      ok(close(st60.total, d59.todaySpend) && close(sum60, d59.todaySpend), 'v74.77: the breakdown rows add up to Spent today (' + st60.total.toFixed(2) + ' vs ' + d59.todaySpend.toFixed(2) + ')');
+      ok(st60.items.some(function (it) { return it.amt === 400 && it.acc === 'Maya CC'; }) && !st60.items.some(function (it) { return it.amt === 600; }), 'v74.77: your 400 is listed, the friend’s 600 is not');
+      ok(st60.skip.theirs >= 600, 'v74.77: the friend’s share is named under Not counted (' + st60.skip.theirs + ')');
       F.setOwed(owed59); F.setTxns(txns59);
-      var A59 = F.getAdj(); Object.keys(A59).forEach(function (k) { delete A59[k]; }); Object.keys(adj59).forEach(function (k) { A59[k] = adj59[k]; });
+      var A59 =F.getAdj(); Object.keys(A59).forEach(function (k) { delete A59[k]; }); Object.keys(adj59).forEach(function (k) { A59[k] = adj59[k]; });
 
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);

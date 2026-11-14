@@ -988,6 +988,23 @@ button.gear:active{border-color:var(--accLine);color:var(--acc)}
 .pace .p .v{font-size:15px;font-weight:650;margin-top:2px}
 .pace .p .v.sm{font-size:13.5px}
 .pace .p .v .unit{font-size:11px}
+/* v74.77: Spent today opens today's breakdown under the strip */
+.pace .p-tap{font:inherit;color:inherit;width:100%;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pace .p-tap .k::after{content:" \203A";opacity:.7}
+.pace .p-tap.on{box-shadow:inset 0 0 0 1.5px var(--acc)}
+.st-pop{margin-top:10px;background:var(--card2);border-radius:12px;padding:10px 12px 12px;animation:stIn .16s ease-out}
+@keyframes stIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.st-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--mut);font-weight:600;margin-bottom:4px}
+.st-x{background:transparent;border:0;color:var(--mut);font-size:14px;width:32px;height:32px;margin:-6px -8px -6px 0;cursor:pointer}
+.st-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.st-head + .st-row{border-top:0}
+.st-l{flex:1;min-width:0}
+.st-n{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-s{font-size:11.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-a{font-size:13.5px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+.st-tot{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:8px;margin-top:2px;font-size:13px;font-weight:700}
+.st-empty{font-size:12.5px;color:var(--mut);padding:6px 0 2px}
+.st-note{font-size:11.5px;color:var(--mut);margin-top:8px;line-height:1.45}
 .testrow{border-top:1px solid var(--line);margin-top:14px;padding-top:14px}
 .tr-head{min-height:44px;border-radius:11px;background:var(--card2);padding:0 6px 0 14px}
 .tr-label{font-size:13.5px;color:var(--ink);font-weight:600}

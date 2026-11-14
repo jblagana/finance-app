@@ -1957,7 +1957,7 @@ def main():
     check("v74.21 (boss: 'use the per day, payday, spent today words'): the Home cycle strip's three cells read Per day · Payday · Spent today (same numbers: net free / cycle days with the /day unit, the cycle days left + a ' days' unit, today's in-app spend)",
           "class=\"p\"><div class=\"k\">Per day</div>" in js
           and "class=\"p\"><div class=\"k\">Payday</div>" in js
-          and "class=\"p\"><div class=\"k\">Spent today</div>" in js
+          and "id=\"stCell\" aria-expanded=" in js and "<div class=\"k\">Spent today</div>" in js  # v74.77 retarget: the Spent today cell is a button (tap = the breakdown)
           and "<span class=\"unit\"> days</span>" in js
           and "Days left this cycle</div>" not in js
           and "'74.21': [" in js)
@@ -1999,6 +1999,12 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.77 (boss: 'for spent today, make it such that when i click it it shows the overview of those spendings without leaving the page'): the Spent today cell is a button (#stCell) that opens a popover under the strip (#stPop) — today's counted entries from spentTodayData (the same rule as todaySpend: spendOf, planRef excluded), a total, and a 'Not counted' line (plan payments, friends' shares, card payoffs, money in); tap again / ✕ / tap outside / Esc closes. Smoke PART 60 (3)",
+          "function spentTodayData() {" in js
+          and "id=\"stCell\"" in js and "id=\"stPop\"" in js
+          and ".st-pop{" in html
+          and "PART 60: v74.77 - the Spent today breakdown matches the cell" in smoke
+          and "'74.77': [" in js)
     check("v74.76 (boss: 'find the bug on the spent today home tab entry that pollutes it' -> 'yes, fix it'): a friend's share paid on a card (the ipf theirs pair, theirsTxnId / theirsBumpId) is not spend — spendOf returns 0 for it (Spent today, donut, pace, coach, budgets) and the month recap does not count its cash advance as income; balances untouched. Smoke PART 59 (3)",
           "function isIpfTheirsTxn(id) {" in js
           and "if (t.id && isIpfTheirsTxn(t.id)) return 0;" in js
