@@ -3867,6 +3867,22 @@ waitReady().then(async function (F) {
       await F.deleteTxn(String(id62)); await tick();
       F.state.base = b62;
 
+      // ============ PART 64: v74.81 - the sheet lock never moves the page ============
+      console.log('\n== PART 64: v74.81 - the sheet lock never moves the page ==');
+      var sc64 = document.getElementById('scrim'), root64 = document.documentElement, body64 = document.body;
+      var cls64 = {}, scrolled64 = [], keepC64 = sc64.classList, keepR64 = root64.classList, keepS64 = global.scrollTo;
+      sc64.classList = { contains: function (c) { return c === 'show'; }, add: function () {}, remove: function () {}, toggle: function () {} };
+      root64.classList = { add: function (c) { cls64[c] = true; }, remove: function (c) { delete cls64[c]; }, contains: function (c) { return !!cls64[c]; }, toggle: function () {} };
+      global.scrollTo = function (x, y) { scrolled64.push(y); };
+      body64.style.position = ''; body64.style.top = '';
+      F.syncScrollLock();
+      ok(cls64['modal-open'] && !body64.style.position && !body64.style.top, 'v74.81: an open sheet locks with html.modal-open only - the body is not pinned (position "' + body64.style.position + '", top "' + body64.style.top + '")');
+      sc64.classList = { contains: function () { return false; }, add: function () {}, remove: function () {}, toggle: function () {} };
+      F.syncScrollLock();
+      ok(!cls64['modal-open'], 'v74.81: closing the sheet drops the lock');
+      ok(scrolled64.length === 0, 'v74.81: open + close never scrolls the page (got ' + scrolled64.length + ' scrollTo calls)');
+      sc64.classList = keepC64; root64.classList = keepR64; global.scrollTo = keepS64;
+
       // ============ PART 63: v74.80 - a post-cut charge defaults to NEXT ============
       console.log('\n== PART 63: v74.80 - charges after the billing date default to NEXT CYCLE ==');
       var maya63 = { name: 'Maya CC', kind: 'card', balance: 10000, billing_day: 30, due_day: 10 };

@@ -1999,6 +1999,12 @@ def main():
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
           and "'74.25': [" in js)
+    check("v74.81 (boss: 'when i click 0 it clicks/highlights 1, theres a up offset anywhere i click' -> 'Home-screen app too' -> 'yes, fix it'): the scroll lock no longer pins the body — no position:fixed / top:-scrollY (the scroll jump left iOS WebKit hit-testing the fixed Add sheet one key row high: the Safari toolbar / the black-translucent status bar); html.modal-open puts overflow:hidden on html + body and the v74.59 touch guard stays; the Add sheet is sized with svh (dvh fallback). Smoke PART 64 (3)",
+          "b.style.position = 'fixed'" not in js
+          and "html.modal-open,html.modal-open body{overflow:hidden;overscroll-behavior:none}" in html
+          and "#addSheet{height:min(calc(100svh - 24px),720px)" in html
+          and "PART 64: v74.81 - the sheet lock never moves the page" in smoke
+          and "'74.81': [" in js)
     check("v74.80 (boss: 'yes, default NEXT'): an in-window card charge dated AFTER the billing date defaults to NEXT CYCLE (chargeIsNext: an explicit t.cycle 'this'/'next' from the pill wins, else date > the previous billing date); cardDueData and the pill read it; the tap flips the effective side and stores it explicitly; the edit + import keep 'this' too. Smoke PART 35/62 retargeted + PART 63 (5)",
           "function chargeIsNext(t, prevBillDate) {" in js
           and "chargeIsNext(t, prevBillDate)) nextCycle +=" in js
@@ -2135,7 +2141,7 @@ def main():
           and "'74.60': [" in js)
     check("v74.59 (boss: 'scrolling thru a card in front like the add sheet or the settings, its the background page thats scrolling instead'): while the dim layer shows (a sheet or the coach) the page is pinned (syncScrollLock: body position:fixed at its offset, restored on close) — called by openSheet / closeSheets / openCoach / closeCoach; a touchmove guard (passive:false) blocks vertical drags that start on something that can't scroll or reach a list's end; overscroll-behavior:contain on the sheets + coach",
           "function syncScrollLock() {" in js
-          and "b.style.position = 'fixed'; b.style.top = (-lockY) + 'px';" in js
+          and "if (root && root.classList) root.classList.add('modal-open');" in js  # v74.81 retarget: the lock no longer pins the body (iOS tap offset)
           and js.count("syncScrollLock(); // v74.59") >= 3
           and "document.addEventListener('touchmove', lockTouchMove, { passive: false });" in js
           and ".sheet,.sheet-b,#coachOv,#coachOv *{overscroll-behavior:contain}" in html

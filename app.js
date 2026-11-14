@@ -3570,15 +3570,22 @@
     var sc = byId('scrim'), on = !!(sc && sc.classList && sc.classList.contains('show'));
     var b = document.body, root = document.documentElement;
     if (!b || !b.style) return;
+    // v74.81 (boss: 'when i click 0 it clicks/highlights 1, theres a up offset anywhere i click' -> 'Home-screen
+    // app too' -> 'yes, fix it'): the lock NO LONGER MOVES THE PAGE. Pinning the body (position:fixed at
+    // top:-scrollY) made the document's scroll jump to 0, and iOS WebKit kept hit-testing the fixed sheet at the
+    // old offset — the toolbar's height in Safari, the black-translucent status bar (~47px) in the home-screen
+    // app: one key row, so a tap on 0 pressed 1, every tap, until something scrolled (nothing in the Add sheet
+    // does). Now the page stays exactly where it is: html.modal-open puts overflow:hidden on html + body (iOS 16+
+    // honours it) and the touch guard below still stops the drags that would leak. lockY is the "locked" flag
+    // (and the spot to restore if anything drifted).
     if (on && lockY === null) {
       lockY = window.scrollY || window.pageYOffset || 0;
-      b.style.position = 'fixed'; b.style.top = (-lockY) + 'px'; b.style.left = '0'; b.style.right = '0'; b.style.width = '100%';
       if (root && root.classList) root.classList.add('modal-open');
     } else if (!on && lockY !== null) {
       var y = lockY; lockY = null;
-      b.style.position = ''; b.style.top = ''; b.style.left = ''; b.style.right = ''; b.style.width = '';
       if (root && root.classList) root.classList.remove('modal-open');
-      try { window.scrollTo(0, y); } catch (e) {}
+      var now = window.scrollY || window.pageYOffset || 0;
+      if (Math.abs(now - y) > 1) { try { window.scrollTo(0, y); } catch (e) {} }
     }
   }
   function lockTouchStart(e) {
@@ -11788,12 +11795,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.80, live: new Date(2026, 10, 15, 3, 2) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.81, live: new Date(2026, 10, 15, 3, 15) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.81': [
+      'The Add sheet keypad presses the key you tap again. On iPhone (in Safari and the home-screen app) every tap was landing one key higher — tap 0, get 1. Opening a sheet no longer moves the page behind it, which is what threw the taps off; the page still stays put while a sheet is open.'
+    ],
     '74.80': [
       'A card charge dated after the card’s billing date now starts as NEXT CYCLE — it cannot be on the statement that was already cut, so it no longer pads this bill’s auto due. If your bank moved the cut (a weekend, a holiday), tap the pill to put it back on THIS CYCLE; charges on or before the billing date still start as THIS CYCLE.'
     ],
@@ -13302,6 +13312,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     getPlanLinkRef: function () { return state.planLinkRef; },
     coachRows: coachRows, // v73.2: the coach card's raw rows (the smoke reads the util nudge before the top-5 cut); v73.68: the cycle-window + no-4-cap assertions
     insightsData: insightsData, // v73.2: the insight math (coachRows' input)
+    syncScrollLock: syncScrollLock, // v74.81: the sheet lock (smoke: it never moves the page)
     spentTodayData: spentTodayData, // v74.77: the Spent today popover's rows (the smoke checks them against todaySpend)
     renderInsights: renderInsights, // v73.94: the 3-cell strip render (smoke PART 38 drives it)
     dayMonth: dayMonth, // v73.94: the date label (smoke PART 38 builds the expected title)
