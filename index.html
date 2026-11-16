@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Fin.AI">
 <style>
 :root{--bg:#0f1420;--card:#1a2233;--card2:#212c42;--ink:#e8edf7;--mut:#93a1bd;--line:#2c3a56;
---ok:#37d39b;--bad:#ff6b6b;--warn:#ffc45c;--acc:#37d39b}
+--ok:#37d39b;--bad:#ff6b6b;--warn:#ffc45c;--acc:#37d39b;--note:#d5ddec}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{font:15px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);
@@ -884,7 +884,7 @@ align-items:center;justify-content:center;gap:14px;padding:0 34px;opacity:1;tran
  --nav:rgba(26,34,51,.9);--shadow:0 14px 40px rgba(0,0,0,.5);--scrim:rgba(5,8,14,.6);
  --face:#8bc5a0;--eye:#101828;--smile:#37d39b;
  --fd:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-:root[data-theme=light]{--bg:#F1F3F6;--card:#FFFFFF;--card2:#EEF1F5;--s3:#DCE2EA;--ink:#0E141B;--mut:#556372;--line:rgba(14,20,27,.09);
+:root[data-theme=light]{--bg:#F1F3F6;--card:#FFFFFF;--card2:#EEF1F5;--s3:#DCE2EA;--ink:#0E141B;--mut:#556372;--line:rgba(14,20,27,.09);--note:#26313D;
  --ok:#087A4D;--acc:#087A4D;--accInk:#FFFFFF;--accSoft:rgba(8,122,77,.12);--accLine:rgba(8,122,77,.35);
  --warn:#965700;--warnInk:#FFFFFF;--warnSoft:rgba(150,87,0,.12);--warnLine:rgba(150,87,0,.35);
  --info:#2160C4;--infoSoft:rgba(33,96,196,.12);--bad:#B83A27;--badSoft:rgba(184,58,39,.12);
@@ -1630,11 +1630,15 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 .ml-main .ml-l{flex:1;min-width:0;display:block}
 .ml-main .ml-cat{display:block;font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ml-sub{display:block;font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
-.ml-sub2{display:flex;min-width:0}
-.ml-sub2 .ml-subn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ml-sub2 .ml-subt{flex:none;max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ml-row.open .ml-sub2{display:block;white-space:normal}
-.ml-row.open .ml-sub2 .ml-subn,.ml-row.open .ml-sub2 .ml-subt{white-space:normal;overflow:visible}
+/* v74.85 (Ledger notes mockup, option C): a real note reads brighter than the account fallback;
+   a row from Owed carries the friend's initial on the tile corner; an open row wraps the note */
+.ml-sub.ml-note{color:var(--note);font-size:13px}
+.ml-row.open .ml-sub{white-space:normal;overflow:visible}
+.ml-tile.has-badge{position:relative}
+.ml-badge{position:absolute;right:-5px;bottom:-5px;width:18px;height:18px;box-sizing:border-box;border-radius:50%;border:2px solid var(--card);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;line-height:1;background:linear-gradient(var(--bb),var(--bb)),var(--card);color:var(--bf)}
+:root[data-theme=light] .ml-badge{background:var(--bf);color:#0E141B}
+.ml-row.open .ml-badge{border-color:var(--card2)}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .ml-main b{flex:none;font-size:14.5px;font-weight:600;white-space:nowrap}
 .ml-more{display:none;padding:4px 8px 10px 58px}
 /* v74.83: the bill chip on the row itself, under the amount (tappable in place) */

@@ -2699,15 +2699,22 @@ def main():
           and "migrateIpfTheirs: migrateIpfTheirs" in js
           and "if (dir === 'ipf') {" in js
           and "step = step.then(function () { return fileIpfTheirs(e, p, true, true); });" in js)
-    check("v74.84 (boss: 'for ledger entries derived from the owed tab, if its mine, include the note in the entry but still look neat'): the MINE ledger txn an Owed entry files carries the entry's note — '<note> · Owed · <name>' (note first, one line; no note = 'Owed · <name>' as before), on add AND edit; the Ledger sub line splits it (the note ellipsizes, the Owed tag stays whole; an open row wraps); a one-shot idempotent backfill (migrateOwedMineNotes) rewrites only app-made plain notes, on boot and on import",
+    check("v74.84 (boss: 'for ledger entries derived from the owed tab, if its mine, include the note in the entry but still look neat'): the MINE ledger txn an Owed entry files carries the entry's note — '<note> · Owed · <name>' (note first, one line; no note = 'Owed · <name>' as before), on add AND edit; (v74.85 retired the split sub line: the friend badge tells the row instead — the next check); a one-shot idempotent backfill (migrateOwedMineNotes) rewrites only app-made plain notes, on boot and on import",
           "function owedMineNote(note, name)" in js
           and "function migrateOwedMineNotes()" in js
-          and "function mlSubHTML(txt)" in js
-          and "(subTxt ? mlSubHTML(subTxt) : '')" in js
           and "migrateOwedMineNotes(); // v74.84" in js
-          and "if (hasSec('owed') && hasSec('txns')) migrateOwedMineNotes();" in js
-          and ".ml-sub2 .ml-subt{flex:none;" in html
-          and ".ml-row.open .ml-sub2{display:block;white-space:normal}" in html)
+          and "if (hasSec('owed') && hasSec('txns')) migrateOwedMineNotes();" in js)
+    check("v74.85 (boss: 'Build C' — the Ledger notes mockup, option C): rows keep their height; a real note reads brighter (--note, 13px) than the muted account fallback; a row from Owed (linked by txn id via mlOwedIndex, else read from the note's tag) drops the 'Owed · <name>' text and carries the friend's initial as a badge on the tile corner in their Owed-tab avatar color; no note = 'Your share with <name>' (theirs legs: '<name>’s share'); the open row wraps the note and names 'Owed · <name>' on the meta line",
+          "function mlOwedIndex()" in js
+          and "function mlOwedRow(note, link)" in js
+          and "var owIdx = mlOwedIndex();" in js
+          and "'Your share with ' + ow.name" in js
+          and "(noteTxt ? ' ml-note' : '')" in js
+          and "' · Owed · ' + esc(ow.name)" in js
+          and "function mlSubHTML" not in js
+          and ".ml-sub.ml-note{color:var(--note);font-size:13px}" in html
+          and ".ml-badge{position:absolute;" in html
+          and "--note:#d5ddec" in html and "--note:#26313D" in html)
     check("v72.31 (user: 'add x button in ledger for adjustment, it undoes the record in settings'): an Adjustment row (k='a') carries its own ✕ (data-adj-del = the row's moneyLog index) — it confirms, removes the audit record, and reverses the balance change it filed: the account's Settings value moves by the NEGATIVE of the row's signed diff through the base save with Adjustment-filing SUPPRESSED (deleting an audit record must not file a new one); the account gone from Settings → the row is simply deleted; the toast Undo restores row + value",
           "function findAdjAccount(name)" in js
           and "function askDeleteAdjustment(idx)" in js

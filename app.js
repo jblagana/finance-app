@@ -3149,15 +3149,31 @@
     return MO[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear() +
       ' \u00b7 ' + h12 + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes() + ' ' + ap;
   }
-  // v74.84: the Ledger sub line. A mine row from Owed ('<note> · Owed · <name>',
-  // owedMineNote) splits in two: the note shortens with an ellipsis and the
-  // 'Owed · <name>' tag stays whole after it, so a long note never hides who
-  // it was with. Every other note renders as before.
-  function mlSubHTML(txt) {
-    var cut = txt.lastIndexOf(' · Owed · ');
-    if (cut <= 0) return '<span class="ml-sub">' + esc(txt) + '</span>';
-    return '<span class="ml-sub ml-sub2"><span class="ml-subn">' + esc(txt.slice(0, cut)) + '</span>' +
-      '<span class="ml-subt"> · ' + esc(txt.slice(cut + 3)) + '</span></span>';
+  // v74.85 (boss: 'Build C' — the Ledger notes mockup, option C): a Ledger row
+  // from Owed is told by the friend's initial on the tile corner, not by text.
+  // mlOwedIndex maps each linked txn id to its person + leg (mine = e.txnId,
+  // theirs = the v73.72 pair), built once per render.
+  function mlOwedIndex() {
+    var ix = {};
+    ((state.owed && state.owed.people) || []).forEach(function (p) {
+      (p.entries || []).forEach(function (e) {
+        if (!e) return;
+        if (e.txnId) ix[e.txnId] = { p: p, mine: true };
+        ipfTheirsTxnIds(e).forEach(function (tid) { ix[tid] = { p: p, mine: false }; });
+      });
+    });
+    return ix;
+  }
+  // the row's own note without the app-made Owed tag ('<note> · Owed · <name>',
+  // 'Owed · <name>', '… · theirs'). A row whose entry is gone (no link) but
+  // still carries the tag is read from the note itself (name = the tag's).
+  function mlOwedRow(note, link) {
+    var s = String(note || ''), name = link ? String(link.p.name || '') : '';
+    var m = /(?:^| · )Owed · (.+?)( · theirs)?$/.exec(s);
+    if (!link && !m) return null;
+    if (m && (!name || m[1] === name)) { name = name || m[1]; s = s.slice(0, m.index); }
+    var mine = link ? link.mine : !(m && m[2]);
+    return { name: name, av: owedAvatar(link ? link.p : { name: name }), mine: mine, note: s.trim() };
   }
   function mlParts(e) {
     var lab, note = '';
@@ -3330,6 +3346,7 @@
     var noteEl = byId('mlNote');
     var body = byId('mlBody');
     var log = state.moneyLog || [];
+    var owIdx = mlOwedIndex(); // v74.85: txn id -> Owed person (the friend badge)
     renderMlFilter();
     if (!log.length) {
       if (noteEl) noteEl.style.display = 'none';
@@ -3494,19 +3511,26 @@
         // drop in under it when it is open (mlOpenKey, in-memory, one at a time).
         var mk = 'i' + log.indexOf(e);
         var isOpen = mlOpenKey === mk;
-        var subTxt = p.note || ((e.k === 'p' && e.w) ? (p.m || 'card') + ' from ' + e.w : (p.m || ''));
+        // v74.85 (option C): a real note reads brighter than the account fallback;
+        // an Owed row drops its text tag for the friend badge on the tile
+        var ow = mlOwedRow(p.note, e.tid ? owIdx[e.tid] : null);
+        var noteTxt = ow ? ow.note : p.note;
+        var subTxt = noteTxt || (ow ? (ow.mine ? 'Your share with ' + ow.name : ow.name + '’s share')
+          : ((e.k === 'p' && e.w) ? (p.m || 'card') + ' from ' + e.w : (p.m || '')));
+        var badge = ow ? '<span class="ml-badge" style="--bb:' + ow.av.bg + ';--bf:' + ow.av.fg + '">' + esc(ow.av.ch) + '</span>' : '';
         // v74.83 (boss: 'make the chip visible from the main entry view so its easy to see which ones have
         // toggles'): the bill chip sits on the ROW itself (under the amount), not inside the details — a sibling
         // of the row button (a button can't hold a button), tappable in place.
         var cycChip = cyclePill ? cyclePill.replace('class="cyclepill', 'class="ml-cyc cyclepill') : '';
         return '<div class="ml-row' + (add ? '' : ' del') + (isOpen ? ' open' : '') + (cycChip ? ' has-cyc' : '') + '">' +
           '<button type="button" class="ml-main" data-ml-tog="' + mk + '" aria-expanded="' + (isOpen ? 'true' : 'false') + '">' +
-          '<span class="ml-tile" aria-hidden="true" style="background:' + tile.bg + ';color:' + tile.fg + '">' + esc(tile.ch) + '</span>' +
-          '<span class="ml-l"><span class="ml-cat">' + esc(p.lab) + '</span>' +
-          (subTxt ? mlSubHTML(subTxt) : '') + '</span>' +
+          '<span class="ml-tile' + (badge ? ' has-badge' : '') + '" aria-hidden="true" style="background:' + tile.bg + ';color:' + tile.fg + '">' + esc(tile.ch) + badge + '</span>' +
+          '<span class="ml-l"><span class="ml-cat">' + esc(p.lab) + (ow ? '<span class="vh"> · owed, ' + esc(ow.name) + '</span>' : '') + '</span>' +
+          (subTxt ? '<span class="ml-sub' + (noteTxt ? ' ml-note' : '') + '">' + esc(subTxt) + '</span>' : '') + '</span>' +
           '<b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b></button>' + cycChip +
           '<div class="ml-more">' +
-          '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) + '</div>' +
+          '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) +
+          (ow ? ' · Owed · ' + esc(ow.name) + (ow.mine ? '' : ' (their share)') : '') + '</div>' + // v74.85: the open row names the friend
           extra +
           ((editBtn || delBtn || adjDel) ? '<div class="ml-acts">' + editBtn + delBtn + adjDel + '</div>' : '') +
           '</div></div>';
@@ -11839,12 +11863,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.84, live: new Date(2026, 10, 16, 19, 13) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.85, live: new Date(2026, 10, 16, 21, 5) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.85': [
+      'Ledger notes stand out more: a note you typed now shows in brighter text than the account name, so rows with a note are easy to spot.',
+      'Entries from the Owed tab no longer spell out “Owed · name” — your friend’s initial sits on the corner of the icon instead (in their Owed-tab color). An entry without a note says “Your share with Ana”. Open the row to see the full note and who it was with.'
+    ],
     '74.84': [
       'When you add an Owed entry with your own share, its note now shows on that Ledger row too, e.g. “Samgyup dinner · Owed · Ana”. A long note shortens with “…” but the “Owed · name” part always stays visible; open the row to read the whole note. Past entries pick up their notes as well (unless you already changed that Ledger note yourself).'
     ],
@@ -13412,6 +13440,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     migratePayoffModel: migratePayoffModel, // v72.43: the one-shot persisted-overlay migration (smoke drives it)
     migratePrepayBy: migratePrepayBy, // v73.71: the per-card prepay split rebuild (smoke drives it)
     migrateOwedMineNotes: migrateOwedMineNotes, // v74.84: the Owed-note backfill (smoke)
+    mlOwedRow: mlOwedRow, // v74.85: the Ledger row's Owed reading (smoke)
     migrateIpfTheirs: migrateIpfTheirs, // v73.72: the ipf-theirs backfill (boot/import fire-and-forget)
     migrateIpfTheirsAll: migrateIpfTheirsAll, // v73.72: the promise form (smoke awaits the stamps)
     ipfTheirs: ipfTheirs, // v73.72: the theirs share of an ipf entry (smoke drives the math)

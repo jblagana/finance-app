@@ -3936,6 +3936,19 @@ waitReady().then(async function (F) {
       ok(n66 === 1 && tx66(e66.txnId).note === 'Samgyup dinner · Owed · Note Pal' && row66(e66.txnId).nt === tx66(e66.txnId).note, 'v74.84: the backfill rewrites the old plain note (txn + Ledger row)');
       ok(tx66(e66b.txnId).note === 'my own words', 'v74.84: a hand-edited note is not touched');
       ok((await F.migrateOwedMineNotes()) === 0, 'v74.84: the backfill is idempotent');
+      // ============ PART 67: v74.85 - option C: bright note + friend badge ============
+      console.log('\n== PART 67: v74.85 - a Ledger row from Owed shows the note + the friend badge ==');
+      tx66(e66b.txnId).note = 'Coffee · Owed · Note Pal'; row66(e66b.txnId).nt = tx66(e66b.txnId).note;
+      F.renderMoneyLog();
+      var h67 = String(elMap['mlBody'].innerHTML || '');
+      ok(h67.indexOf('<span class="ml-sub ml-note">Samgyup dinner</span>') >= 0, 'v74.85: the mine row shows its note alone, bright (the Owed tag is gone from the line)');
+      ok(h67.indexOf('<span class="ml-sub ml-note">Coffee</span>') >= 0, 'v74.85: an edited entry’s note shows the same way');
+      ok((h67.match(/class="ml-badge"[^>]*>N<\/span>/g) || []).length >= 2, 'v74.85: Note Pal’s rows carry the N badge on the tile');
+      ok(h67.indexOf(' · Owed · Note Pal</div>') >= 0, 'v74.85: the open-row meta line names the friend');
+      var r67a = F.mlOwedRow('Owed · Ana', null), r67b = F.mlOwedRow('Owed · Ana · theirs', null), r67c = F.mlOwedRow('Lunch at Owed place', null);
+      ok(r67a && r67a.mine && r67a.note === '' && r67a.name === 'Ana', 'v74.85: a no-note mine row reads as Ana, no note (shows Your share with Ana)');
+      ok(r67b && !r67b.mine && r67b.name === 'Ana', 'v74.85: the theirs leg reads as Ana’s share');
+      ok(r67c === null, 'v74.85: an ordinary note is not mistaken for an Owed row');
       F.setOwed(owed66); F.setTxns(txns66);
       F.state.moneyLog.length = log66len;
       var A66 = F.getAdj(); Object.keys(A66).forEach(function (k) { delete A66[k]; }); Object.keys(adj66).forEach(function (k) { A66[k] = adj66[k]; });
