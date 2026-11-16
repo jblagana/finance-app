@@ -1,3 +1,7 @@
+## 2026-11-16 - "for ledger entries derived from the owed tab, if its mine, include the note in the entry but still look neat" -> "The MINE ledger txn an Owed entry files carries the entry's note: '<note> · Owed · <name>' (note first, whitespace collapsed; no note = 'Owed · <name>' as before). The Ledger sub line splits it: the note ellipsizes, the 'Owed · <name>' tag stays whole; an open row wraps the full note. Edits re-file it; a one-shot backfill gives past rows their note (only app-made 'Owed · <name>' notes - a hand-edited one is left alone)"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.84 (owedMineNote + migrateOwedMineNotes + mlSubHTML; smoke PART 66 8/8, PART 28's mine matcher retargeted; headless 375x812: 'Samgyup dinn… · Owed · Ana' / 'Coffee · Owed · Ana' / 'Owed · Ana', open row wraps the whole note, no horizontal scroll)
+
 ## 2026-11-15 - "make the chip visible from the main entry view so its easy to see which ones have toggles" -> "The bill chip moves from the opened details onto the Ledger row itself (under the amount), tappable in place"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.83 (headless 375x812: 'Grab to airport' and 'Samgyup' (Nov 14 / Nov 12, Maya CC billing 15) show '15 Nov bill' on the row, the Nov 8 charge none; a real tap flips it to '15 Dec bill' and the row stays closed)

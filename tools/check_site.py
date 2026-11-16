@@ -1484,7 +1484,7 @@ def main():
           and "k: t.kind === 'card_charge' ? 'c' : t.kind === 'card_payment' ? 'p' : t.kind === 'cash_in' ? 'i' : 'x'" in js
           and '<select class="oent-acc">' in js and "owedAccOptions('CASH::Cash')" in js
           and "function owedTxnKind" not in js
-          and "category: e.cat, amount: ledger, note: 'Owed \u00b7 ' + p.name" in js
+          and "category: e.cat, amount: ledger, note: owedMineNote(e.note, p.name)" in js  # v74.84: the mine row carries the note
           and "if (editId) updateOwedEntry(pid, editId, payload);" in js
           and "function updateOwedEntry(pid, eid, data)" in js
           and "if (names.indexOf('Owed') < 0) names.push('Owed');" not in js)
@@ -1525,8 +1525,8 @@ def main():
           and "cat = e.cat || 'Unsorted';" in js
           and "date: e.d, account: 'Cash', kind: 'cash_out'," in js
           and "date: next.d, account: 'Cash', kind: 'cash_out'," in js
-          and "category: e.cat, amount: ledger, note: 'Owed \u00b7 ' + p.name" in js
-          and "category: next.cat, amount: ledger, note: 'Owed \u00b7 ' + p.name" in js
+          and "category: e.cat, amount: ledger, note: owedMineNote(e.note, p.name)" in js  # v74.84: the mine row carries the note
+          and "category: next.cat, amount: ledger, note: owedMineNote(next.note, p.name)" in js
           and "owedFormSections(f, 'ipf')" in js
           and "owedFormSections(formEl, t.value)" in js
           and "owedFormSections(f3, ee.dir || 'ipf')" in js
@@ -2699,6 +2699,15 @@ def main():
           and "migrateIpfTheirs: migrateIpfTheirs" in js
           and "if (dir === 'ipf') {" in js
           and "step = step.then(function () { return fileIpfTheirs(e, p, true, true); });" in js)
+    check("v74.84 (boss: 'for ledger entries derived from the owed tab, if its mine, include the note in the entry but still look neat'): the MINE ledger txn an Owed entry files carries the entry's note — '<note> · Owed · <name>' (note first, one line; no note = 'Owed · <name>' as before), on add AND edit; the Ledger sub line splits it (the note ellipsizes, the Owed tag stays whole; an open row wraps); a one-shot idempotent backfill (migrateOwedMineNotes) rewrites only app-made plain notes, on boot and on import",
+          "function owedMineNote(note, name)" in js
+          and "function migrateOwedMineNotes()" in js
+          and "function mlSubHTML(txt)" in js
+          and "(subTxt ? mlSubHTML(subTxt) : '')" in js
+          and "migrateOwedMineNotes(); // v74.84" in js
+          and "if (hasSec('owed') && hasSec('txns')) migrateOwedMineNotes();" in js
+          and ".ml-sub2 .ml-subt{flex:none;" in html
+          and ".ml-row.open .ml-sub2{display:block;white-space:normal}" in html)
     check("v72.31 (user: 'add x button in ledger for adjustment, it undoes the record in settings'): an Adjustment row (k='a') carries its own ✕ (data-adj-del = the row's moneyLog index) — it confirms, removes the audit record, and reverses the balance change it filed: the account's Settings value moves by the NEGATIVE of the row's signed diff through the base save with Adjustment-filing SUPPRESSED (deleting an audit record must not file a new one); the account gone from Settings → the row is simply deleted; the toast Undo restores row + value",
           "function findAdjAccount(name)" in js
           and "function askDeleteAdjustment(idx)" in js

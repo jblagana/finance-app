@@ -3149,6 +3149,16 @@
     return MO[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear() +
       ' \u00b7 ' + h12 + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes() + ' ' + ap;
   }
+  // v74.84: the Ledger sub line. A mine row from Owed ('<note> · Owed · <name>',
+  // owedMineNote) splits in two: the note shortens with an ellipsis and the
+  // 'Owed · <name>' tag stays whole after it, so a long note never hides who
+  // it was with. Every other note renders as before.
+  function mlSubHTML(txt) {
+    var cut = txt.lastIndexOf(' · Owed · ');
+    if (cut <= 0) return '<span class="ml-sub">' + esc(txt) + '</span>';
+    return '<span class="ml-sub ml-sub2"><span class="ml-subn">' + esc(txt.slice(0, cut)) + '</span>' +
+      '<span class="ml-subt"> · ' + esc(txt.slice(cut + 3)) + '</span></span>';
+  }
   function mlParts(e) {
     var lab, note = '';
     if (e.c != null) {
@@ -3493,7 +3503,7 @@
           '<button type="button" class="ml-main" data-ml-tog="' + mk + '" aria-expanded="' + (isOpen ? 'true' : 'false') + '">' +
           '<span class="ml-tile" aria-hidden="true" style="background:' + tile.bg + ';color:' + tile.fg + '">' + esc(tile.ch) + '</span>' +
           '<span class="ml-l"><span class="ml-cat">' + esc(p.lab) + '</span>' +
-          (subTxt ? '<span class="ml-sub">' + esc(subTxt) + '</span>' : '') + '</span>' +
+          (subTxt ? mlSubHTML(subTxt) : '') + '</span>' +
           '<b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b></button>' + cycChip +
           '<div class="ml-more">' +
           '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) + '</div>' +
@@ -10303,6 +10313,47 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       return saveOwed();
     });
   }
+  // v74.84 (boss: 'for ledger entries derived from the owed tab, if its mine,
+  // include the note in the entry but still look neat'): the filed MINE part
+  // carries the Owed note. The note leads (the Ledger sub line is one line
+  // with an ellipsis, so the part that tells rows apart survives a narrow
+  // phone) and the owed tag follows: 'Samgyup · Owed · Ana'. Whitespace is
+  // collapsed to one line; no note = the old 'Owed · Ana' exactly.
+  function owedMineNote(note, name) {
+    var n = String(note || '').replace(/\s+/g, ' ').trim();
+    return (n ? n + ' · ' : '') + 'Owed · ' + name;
+  }
+  // v74.84: one-shot, idempotent — mine txns filed before v74.84 (note
+  // 'Owed · <name>') pick up their entry's note. Only a txn still carrying an
+  // app-made note is rewritten (a note the boss edited by hand is left be);
+  // the Ledger row's note (moneyLog nt / l) follows, nothing else moves.
+  function migrateOwedMineNotes() {
+    var log = state.moneyLog || [], txChanged = [], logChanged = false;
+    (state.owed.people || []).forEach(function (p) {
+      (p.entries || []).forEach(function (e) {
+        if (!e || !e.txnId || !String(e.note || '').trim()) return;
+        var want = owedMineNote(e.note, p.name), plain = 'Owed · ' + p.name;
+        for (var i = 0; i < state.txns.length; i++) {
+          var t = state.txns[i];
+          if (t.id !== e.txnId) continue;
+          if (t.note === plain) { t.note = want; txChanged.push(t); }
+          break;
+        }
+        if (txChanged.length && txChanged[txChanged.length - 1].id === e.txnId) {
+          log.forEach(function (r) {
+            if (!r || r.tid !== e.txnId) return;
+            r.nt = want;
+            r.l = (r.c || r.m || 'entry') + ' · ' + want;
+            logChanged = true;
+          });
+        }
+      });
+    });
+    if (!txChanged.length) return Promise.resolve(0);
+    var puts = txChanged.map(function (t) { return idbPut(STORE_TX, touchRec(t)); }); // touchRec: the rewrite syncs
+    if (logChanged) puts.push(idbPut(STORE_META, { key: 'moneyLog', value: log }));
+    return Promise.all(puts).catch(function () {}).then(function () { emit('txn'); return txChanged.length; });
+  }
   // v73.72: the entry's theirs-pair handles (1-2 txn ids, deduped)
   function ipfTheirsTxnIds(e) {
     var ids = [];
@@ -10428,7 +10479,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (ledger > 0) {
       var tData = {
         date: e.d, account: 'Cash', kind: 'cash_out',
-        category: e.cat, amount: ledger, note: 'Owed · ' + p.name
+        category: e.cat, amount: ledger, note: owedMineNote(e.note, p.name)
       };
       if (dir === 'ipf') { // the filed part leaves the picked account
         var isCard = acc.indexOf('CARD::') === 0;
@@ -10749,7 +10800,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var files = ledger > 0;
     var tData = {
       date: next.d, account: 'Cash', kind: 'cash_out',
-      category: next.cat, amount: ledger, note: 'Owed · ' + p.name
+      category: next.cat, amount: ledger, note: owedMineNote(next.note, p.name)
     };
     if (nextDir === 'ipf') { // the filed part leaves the picked account
       var isCard = acc.indexOf('CARD::') === 0;
@@ -11737,6 +11788,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
             if (hasSec('txns')) { migratePayoffModel(); migrateCardFundedPayoffs(); } // v72.43 + v74.18: a pre-v72.42 backup's adj still carries the old payoff model (adj + txns come from the same file)
             if (hasSec('txns')) migratePrepayBy(); // v73.71: an imported per-card split reconciles against the imported txns immediately (not just next boot)
             if (hasSec('txns')) migrateCashBy(); // v73.83: the imported per-funder split reconciles against the imported txns too
+            if (hasSec('owed') && hasSec('txns')) migrateOwedMineNotes(); // v74.84: an imported book's mine rows pick up their Owed notes
             if (hasSec('owed') && hasSec('txns')) migrateIpfTheirs(); // v73.72: an imported book's un-filed ipf-on-card entries file their theirs pair immediately
           }
           if (hasSec('plans') || hasSec('txns')) migratePlanDrift(); // v74.09: an old backup may carry links on drifted plan dates
@@ -11787,12 +11839,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.83, live: new Date(2026, 10, 15, 3, 31) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.84, live: new Date(2026, 10, 16, 19, 13) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.84': [
+      'When you add an Owed entry with your own share, its note now shows on that Ledger row too, e.g. “Samgyup dinner · Owed · Ana”. A long note shortens with “…” but the “Owed · name” part always stays visible; open the row to read the whole note. Past entries pick up their notes as well (unless you already changed that Ledger note yourself).'
+    ],
     '74.83': [
       'The bill chip (e.g. “15 Nov bill”) now shows right on the Ledger row, under the amount — you can see at a glance which card charges can move to the next statement, and tap the chip there without opening the entry.'
     ],
@@ -13356,6 +13411,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     payoffModelDelta: payoffModelDelta, // v72.43: the pure old→new overlay delta (smoke drives it)
     migratePayoffModel: migratePayoffModel, // v72.43: the one-shot persisted-overlay migration (smoke drives it)
     migratePrepayBy: migratePrepayBy, // v73.71: the per-card prepay split rebuild (smoke drives it)
+    migrateOwedMineNotes: migrateOwedMineNotes, // v74.84: the Owed-note backfill (smoke)
     migrateIpfTheirs: migrateIpfTheirs, // v73.72: the ipf-theirs backfill (boot/import fire-and-forget)
     migrateIpfTheirsAll: migrateIpfTheirsAll, // v73.72: the promise form (smoke awaits the stamps)
     ipfTheirs: ipfTheirs, // v73.72: the theirs share of an ipf entry (smoke drives the math)
@@ -14163,6 +14219,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       migrateCashBy(); // v73.83: rebuild the per-funder cash split (lastReconAt-gated; self-heals smeared phones)
       migratePlanDrift(); // v74.09: move payment links / edits off the pre-v74.09 drifted plan dates (idempotent)
       migrateIpfTheirs(); // v73.72: one-shot backfill — past ipf-on-card entries file their theirs pair (stamp-gated, idempotent)
+      migrateOwedMineNotes(); // v74.84: past mine txns pick up the Owed note (only app-made 'Owed · <name>' notes; idempotent)
       setTimeout(function () { histTakeSnap(); histReady = true; }, 2500); // v74.74: History arms after the startup migrations
       if (!state.adjSig) state.adjSig = snapSig(state.snapshot);
       state.adjLoaded = true;

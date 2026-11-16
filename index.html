@@ -1630,6 +1630,11 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 .ml-main .ml-l{flex:1;min-width:0;display:block}
 .ml-main .ml-cat{display:block;font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ml-sub{display:block;font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.ml-sub2{display:flex;min-width:0}
+.ml-sub2 .ml-subn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ml-sub2 .ml-subt{flex:none;max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ml-row.open .ml-sub2{display:block;white-space:normal}
+.ml-row.open .ml-sub2 .ml-subn,.ml-row.open .ml-sub2 .ml-subt{white-space:normal;overflow:visible}
 .ml-main b{flex:none;font-size:14.5px;font-weight:600;white-space:nowrap}
 .ml-more{display:none;padding:4px 8px 10px 58px}
 /* v74.83: the bill chip on the row itself, under the amount (tappable in place) */

@@ -1971,7 +1971,7 @@ waitReady().then(async function (F) {
             var t28 = F.getTxns();
             var ch28 = t28.filter(function (t) { return t.kind === 'card_charge' && t.note === 'Owed · Smoke Friend · theirs'; });
             var ci28 = t28.filter(function (t) { return t.kind === 'cash_in' && t.note === 'Owed · Smoke Friend · theirs'; });
-            var co28 = t28.filter(function (t) { return t.kind === 'card_charge' && t.note === 'Owed · Smoke Friend'; });
+            var co28 = t28.filter(function (t) { return t.kind === 'card_charge' && t.note === 'smoke ipf · Owed · Smoke Friend'; }); // v74.84: the mine row leads with the entry's note
             ok(ch28.length === 1 && ch28[0].amount === 100 && ch28[0].account === 'Maya CC',
               'v73.72: ipf on a card files THEIRS as a card_charge (got ' + ch28.length + ' x ' + (ch28[0] && ch28[0].amount) + ')');
             ok(ci28.length === 1 && ci28[0].amount === 100 && ci28[0].account === 'Cash',
@@ -3905,6 +3905,40 @@ waitReady().then(async function (F) {
       pre65.cycle = 'next';
       ok(F.txnCyclePill(pre65, '2026-11-15').indexOf('15 Dec bill') >= 0, 'v74.82: once moved, the pill names the next statement - 15 Dec');
       F.state.base = b65;
+      // ============ PART 66: v74.84 - the Owed note rides the mine ledger row ============
+      console.log('\n== PART 66: v74.84 - a mine ledger row from Owed carries the note ==');
+      var owed66 = JSON.parse(JSON.stringify(F.getOwed())), txns66 = F.getTxns().slice(), adj66 = JSON.parse(JSON.stringify(F.getAdj()));
+      var log66len = (F.state.moneyLog || []).length;
+      function tx66(id) { var r = null; F.getTxns().forEach(function (t) { if (t.id === id) r = t; }); return r; }
+      function row66(id) { var r = null; (F.state.moneyLog || []).forEach(function (e) { if (e.tid === id) r = e; }); return r; }
+      await F.addOwedPerson('Note Pal');
+      var pid66 = F.getOwed().people[F.getOwed().people.length - 1].id;
+      await F.addOwedEntry(pid66, { dir: 'ipf', amt: 300, total: 500, mine: 200, theirs: 300,
+        acc: 'CASH::Cash', cat: 'Food', note: '  Samgyup\n  dinner ', d: F.todayISO() });
+      await sleep(30);
+      var p66 = F.getOwed().people.filter(function (p) { return p.id === pid66; })[0];
+      var e66 = p66.entries[p66.entries.length - 1];
+      ok(tx66(e66.txnId) && tx66(e66.txnId).note === 'Samgyup dinner · Owed · Note Pal', 'v74.84: the mine txn leads with the note, one line (got ' + (tx66(e66.txnId) || {}).note + ')');
+      ok(row66(e66.txnId) && row66(e66.txnId).nt === 'Samgyup dinner · Owed · Note Pal', 'v74.84: the Ledger row shows the same note');
+      ok(e66.note === 'Samgyup\n  dinner', 'v74.84: the Owed entry keeps its own note as typed (only the ledger copy is tidied)');
+      await F.addOwedEntry(pid66, { dir: 'ipf', amt: 100, total: 150, mine: 50, theirs: 100,
+        acc: 'CASH::Cash', cat: 'Food', note: '', d: F.todayISO() });
+      await sleep(30);
+      var e66b = p66.entries[p66.entries.length - 1];
+      ok(tx66(e66b.txnId) && tx66(e66b.txnId).note === 'Owed · Note Pal', 'v74.84: no note = the old Owed · name exactly');
+      await F.updateOwedEntry(pid66, e66b.id, { dir: 'ipf', total: 150, mine: 50, theirs: 100, acc: 'CASH::Cash', cat: 'Food', note: 'Coffee', d: F.todayISO() });
+      await sleep(30);
+      ok(tx66(e66b.txnId) && tx66(e66b.txnId).note === 'Coffee · Owed · Note Pal', 'v74.84: an edit that adds a note rewrites the row (got ' + (tx66(e66b.txnId) || {}).note + ')');
+      // the backfill: a pre-v74.84 txn (plain note) picks it up; a hand-edited note is left be
+      tx66(e66.txnId).note = 'Owed · Note Pal'; row66(e66.txnId).nt = 'Owed · Note Pal';
+      tx66(e66b.txnId).note = 'my own words';
+      var n66 = await F.migrateOwedMineNotes();
+      ok(n66 === 1 && tx66(e66.txnId).note === 'Samgyup dinner · Owed · Note Pal' && row66(e66.txnId).nt === tx66(e66.txnId).note, 'v74.84: the backfill rewrites the old plain note (txn + Ledger row)');
+      ok(tx66(e66b.txnId).note === 'my own words', 'v74.84: a hand-edited note is not touched');
+      ok((await F.migrateOwedMineNotes()) === 0, 'v74.84: the backfill is idempotent');
+      F.setOwed(owed66); F.setTxns(txns66);
+      F.state.moneyLog.length = log66len;
+      var A66 = F.getAdj(); Object.keys(A66).forEach(function (k) { delete A66[k]; }); Object.keys(adj66).forEach(function (k) { A66[k] = adj66[k]; });
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
