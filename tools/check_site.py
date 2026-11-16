@@ -1534,9 +1534,9 @@ def main():
           and '<select class="oent-cat">' in js
           and 'owedAccRowState' not in js)
     check("every owed entry row carries the edit button (v72.29, user: 'add edit button for all owed entries, including the old ones from old versions'): the v72.10 e.txnId condition is gone — legacy entries (no dir/cat/acc/txnId) edit through the same form, which falls back to ipf + today + empty acc/cat and files per the v72.28 rules on save (adopt on edit, no migration); the '· ledger' chip stays the filed-entries marker",
-          "'<button type=\"button\" class=\"ow-xbtn wide\" data-ow-edit-e=\"' + esc(e.id) + '\" aria-label=\"Edit entry\">edit</button>'" in js
+          "'<button type=\"button\" class=\"mini\" data-ow-edit-e=\"' + esc(e.id) + '\" aria-label=\"Edit entry\">Edit" in js  # v74.86: Edit / Delete sit in the opened row
           and "(e.txnId ? '<button" not in js
-          and "(e.txnId ? ' <span class=\"ow-led\"" in js
+          and "var led = e.txnId ? (ledAmt > 0 ? 'Your ' + money(ledAmt) + ' is in the Ledger' : 'Filed in the Ledger')" in js  # v74.86: the '· ledger' chip became this details line
           and "owedPersonHTML: owedPersonHTML" in js)
     check("the owed edit expands in place (v72.29, user edit: 'when i edit an owed entry, i want the edit to expand in position'): the edit button inserts a prefilled oent-inline form right below that entry's row (Save changes + Cancel); the card-top form stays for '+ entry' adds; the person's name is tappable (data-ow-name → inline input; Enter/blur commits, empty keeps the old name, Escape cancels); Category + Account share one two-column row (oent-pair); the category options always carry 'Unsorted' (never lost when the budgets change) and a stale saved category is still appended",
           "function oentFormHTML(edit)" in js

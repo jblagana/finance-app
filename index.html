@@ -379,7 +379,7 @@ border-top:1px solid var(--line);background:var(--card)}
 .ow-bal.plus{color:var(--ok);border-color:rgba(55,211,155,.4);background:rgba(55,211,155,.08)}
 .ow-bal.minus{color:var(--warn);border-color:rgba(255,196,92,.4);background:rgba(255,196,92,.08)}
 .ow-h .sheet-x{margin-left:auto}
-.ow-e{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.ow-e{border-radius:11px}
 .ow-el{flex:1;min-width:0}
 .ow-el b{font-size:13px}
 .ow-x{color:var(--mut);font-size:12.5px}
@@ -1224,6 +1224,32 @@ button.cmlink.pdnotpay{display:block;margin:10px auto 0;color:var(--bad);font-si
 .ow-add input{height:46px}
 .ow-add .act{height:46px;min-height:46px;padding:0 18px}
 .ow-head-t{letter-spacing:.06em}
+/* v74.86 (option B): an Owed entry row in the Ledger row family */
+.ow-p .ow-body{padding:0 8px 10px}
+.ow-p .ow-acts,.ow-p .ow-pag,.ow-p .ow-body>.note,.ow-p .ow-body>.oent{margin-left:6px;margin-right:6px}
+.ow-acts{margin-bottom:6px}
+.ow-e+.ow-e{margin-top:2px}
+.ow-day{padding:10px 8px 2px;font-size:12.5px;font-weight:600;color:var(--mut)}
+.ow-acts+.ow-day,.ow-acts+.oent+.ow-day{padding-top:6px}
+.ow-e.open{background:var(--card2)}
+.owr-main{width:100%;display:flex;align-items:center;gap:12px;padding:9px 8px;border:0;border-radius:11px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer;min-height:58px;-webkit-tap-highlight-color:transparent}
+.owr-main:active{background:var(--card2)}
+.owr-tile{flex:0 0 auto;width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center}
+.owr-tile.plus{background:var(--accSoft);color:var(--ok)}
+.owr-tile.minus{background:var(--warnSoft);color:var(--warn)}
+.owr-l{flex:1;min-width:0;display:block}
+.owr-t{display:block;font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.owr-s{display:block;font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.ow-e.open .owr-t{white-space:normal;overflow:visible}
+.owr-r{flex:none;display:flex;flex-direction:column;align-items:flex-end;font-variant-numeric:tabular-nums}
+.owr-a{font-size:14.5px;font-weight:600;white-space:nowrap}
+.owr-a.plus{color:var(--ok)}.owr-a.minus{color:var(--warn)}
+.owr-run{font-size:11.5px;color:var(--mut);white-space:nowrap;margin-top:1px}
+.owr-more{display:none;padding:0 8px 10px 58px;font-size:12px;color:var(--mut);line-height:1.45}
+.ow-e.open .owr-more{display:block}
+.owr-acts{display:flex;gap:8px;margin-top:8px}
+.ow-e.open .owr-acts .mini{background:var(--s3)}
+.ow-e+.oent-inline{margin:6px 6px 8px}
 /* ---- the sheets ---- */
 #scrim{background:var(--scrim)}
 .sheet{background:var(--card);border:0;border-top:1px solid var(--line);border-radius:24px 24px 0 0;box-shadow:var(--shadow);transition:transform .28s cubic-bezier(.2,.8,.2,1)}

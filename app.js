@@ -9914,6 +9914,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       runAfter[e.id] = runB;
     });
     var rows = '';
+    var lastDay = null; // v74.86: the day header the previous row sat under
     shownEnts.forEach(function (e) {
       var dir = OWED_DIRS[e.dir] || OWED_DIRS.ipf;
       var amt = Number(e.amt) || 0;
@@ -9926,18 +9927,49 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (e.dir === 'ipf' && ipfMine > 0) hint = ' · ' + money(ipfMine) + ' mine';
       if (e.dir === 'tpf' && e.theirs) hint = ' · ' + money(e.theirs) + ' theirs';
       if (e.total) hint += ' · ' + money(e.total) + ' total';
-      rows += '<div class="ow-e">' +
-        '<div class="ow-el"><b>' + esc(dir.label) + '</b>' +
-        (e.note ? ' <span class="ow-x">' + esc(e.note) + '</span>' : '') +
-        // v72.10: a ledger-filed entry wears the chip (v72.29: the edit
-        // button is on EVERY entry — the legacy ones included)
-        (e.txnId ? ' <span class="ow-led" title="Filed in the ledger — the entry moves your numbers">· ledger</span>' : '') +
-        '<div class="ow-k">' + esc(fmtDate(e.d)) + (e.expr ? ' · ' + esc(e.expr) : '') + hint + '</div></div>' +
-        '<div class="ow-amtbox"><b class="ow-amt ' + (dir.sign > 0 ? 'plus' : 'minus') + '">' + (dir.sign > 0 ? '+' : '\u2212') + money(amt) + '</b>' +
-        '<span class="ow-run">' + owedRunText(runAfter[e.id]) + '</span></div>' +
-        '<button type="button" class="ow-xbtn wide" data-ow-edit-e="' + esc(e.id) + '" aria-label="Edit entry">edit</button>' +
-        '<button type="button" class="ow-xbtn" data-ow-del-e="' + esc(e.id) + '" aria-label="Remove entry">\u2715</button>' +
-        '</div>';
+      // v74.86 (boss: 'Build B' — the Owed entries mockup, option B): the row
+      // is a Ledger-family row — direction tile · title (the note, else the
+      // direction) · one muted sub line · amount + running balance — and a
+      // tap target that opens the details (date/account, the split, the
+      // Ledger filing) with Edit / Delete (v72.29: on EVERY entry, the legacy
+      // ones included). Open state: owedRowOpen, in-memory, one at a time.
+      var kls = dir.sign > 0 ? 'plus' : 'minus';
+      var accNm = (e.dir !== 'tpf' && e.acc) ? String(e.acc).split('::').pop() : '';
+      var title = e.note || dir.label;
+      // the date is the day header's (Ledger-style sections), so the sub line
+      // carries the direction (when the note is the title) and the account
+      var sub = e.note ? dir.label + (accNm ? ' · ' + accNm : '') : accNm;
+      if (e.d !== lastDay) { // v74.86: Today / Yesterday / 'Sat, Nov 14' — the Ledger's day labels
+        lastDay = e.d;
+        var dp = String(e.d || '').split('-');
+        rows += '<div class="ow-day">' + (dp.length === 3
+          ? mlDayLabel(new Date(Number(dp[0]), Number(dp[1]) - 1, Number(dp[2])).getTime())
+          : esc(fmtDate(e.d) || 'No date')) + '</div>';
+      }
+      var split = '';
+      if (e.dir === 'ipf' && ipfMine > 0) split = money(ipfMine) + ' mine · ' + money(amt) + ' theirs';
+      else if (e.dir === 'tpf' && e.theirs) split = money(amt) + ' mine · ' + money(e.theirs) + ' theirs';
+      if (e.total) split += (split ? ' · ' : '') + money(e.total) + ' total';
+      var ledAmt = e.dir === 'ipf' ? ipfMine : (e.dir === 'tpf' ? amt : 0);
+      // v72.10: a ledger-filed entry says so (the old '· ledger' chip, now in the details)
+      var led = e.txnId ? (ledAmt > 0 ? 'Your ' + money(ledAmt) + ' is in the Ledger' : 'Filed in the Ledger') +
+        (e.cat ? ' · ' + esc(e.cat) : '') : '';
+      var rOpen = owedRowOpen === e.id;
+      rows += '<div class="ow-e' + (rOpen ? ' open' : '') + '">' +
+        '<button type="button" class="owr-main" data-ow-etog="' + esc(e.id) + '" aria-expanded="' + (rOpen ? 'true' : 'false') + '">' +
+        '<span class="owr-tile ' + kls + '" aria-hidden="true">' + (OWED_ICON[e.dir] || OWED_ICON.ipf) + '</span>' +
+        '<span class="owr-l"><span class="owr-t">' + esc(title) + '</span>' + (sub ? '<span class="owr-s">' + esc(sub) + '</span>' : '') + '</span>' +
+        '<span class="owr-r"><b class="owr-a ' + kls + '">' + (dir.sign > 0 ? '+' : '−') + money(amt) + '</b>' +
+        '<span class="owr-run">' + owedRunText(runAfter[e.id]) + '</span></span>' +
+        '</button>' +
+        '<div class="owr-more">' +
+        '<div>' + esc(fmtDate(e.d)) + (accNm ? ' · ' + esc(accNm) : '') + (e.expr ? ' · ' + esc(e.expr) : '') + '</div>' +
+        (split ? '<div>' + split + '</div>' : '') +
+        (led ? '<div>' + led + '</div>' : '') +
+        '<div class="owr-acts">' +
+        '<button type="button" class="mini" data-ow-edit-e="' + esc(e.id) + '" aria-label="Edit entry">Edit ✎</button>' +
+        '<button type="button" class="mini" data-ow-del-e="' + esc(e.id) + '" aria-label="Remove entry">Delete ✕</button>' +
+        '</div></div></div>';
     });
     // v72.30 (user edit: 'see less beside see more'): the buttons share one
     // row — See more reveals 5 older, See less re-hides 5 per tap down to the
@@ -9986,6 +10018,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       '</div>' +
       '</section>';
   }
+  // v74.86: the one open Owed entry row (its entry id; in-memory)
+  var owedRowOpen = null;
+  // v74.86: the row's direction tile — paid for = an arrow (out to them /
+  // in to you), paid back = a return arrow
+  var OWED_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">';
+  var OWED_ICON = {
+    ipf: OWED_SVG + '<path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>',
+    tpf: OWED_SVG + '<path d="M17 7 7 17"/><path d="M16 17H7V8"/></svg>',
+    itb: OWED_SVG + '<path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>',
+    tmb: OWED_SVG + '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>'
+  };
   // v74.19: the Owed card open state (in-memory; a sole person starts open)
   var owedOpen = {};
   function owedIsOpen(pid) {
@@ -11074,6 +11117,19 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         // handle or the inline rename input (those keep their own gestures)
         if (t.getAttribute && t.getAttribute('data-ow-drag')) return;
         if (t.className === 'ow-name-in') return;
+        // v74.86: tap an entry row = open/close its details, in place (one at a time)
+        var etog = t.getAttribute && t.getAttribute('data-ow-etog');
+        if (etog) {
+          owedRowOpen = owedRowOpen === etog ? null : etog;
+          var erows = body.querySelectorAll('.ow-e');
+          for (var eri = 0; eri < erows.length; eri++) {
+            var eb = erows[eri].querySelector('[data-ow-etog]');
+            var on = !!eb && eb.getAttribute('data-ow-etog') === owedRowOpen;
+            erows[eri].classList.toggle('open', on);
+            if (eb) eb.setAttribute('aria-expanded', on ? 'true' : 'false');
+          }
+          return;
+        }
         var openE = t.getAttribute && t.getAttribute('data-ow-open');
         if (openE) {
           owedToggleOpen(t, openE);
@@ -11863,12 +11919,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.85, live: new Date(2026, 10, 16, 21, 5) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.86, live: new Date(2026, 10, 16, 22, 58) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.86': [
+      'Owed entries now look like Ledger rows: an arrow icon (green when it adds to what they owe you, amber when it goes the other way), your note as the title, and the amount with the running balance under it.',
+      'Entries are grouped by day — Today, Yesterday, then the date — just like the Ledger.',
+      'Tap an entry to see the details (date, account, the split, and what went to your Ledger) with Edit and Delete. The edit / ✕ buttons are no longer on every row.'
+    ],
     '74.85': [
       'Ledger notes stand out more: a note you typed now shows in brighter text than the account name, so rows with a note are easy to spot.',
       'Entries from the Owed tab no longer spell out “Owed · name” — your friend’s initial sits on the corner of the icon instead (in their Owed-tab color). An entry without a note says “Your share with Ana”. Open the row to see the full note and who it was with.'
