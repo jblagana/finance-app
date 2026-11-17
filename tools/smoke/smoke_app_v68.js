@@ -3994,6 +3994,28 @@ waitReady().then(async function (F) {
       ok(h69.indexOf('class="pltabs"') >= 0 && h69.indexOf('data-cmnew') < 0, 'v74.89: All plans keeps Recurring / One-offs / Done; its + New pill is gone (the header + Plan replaces it)');
       F.setCmView('bogus'); ok(F.getCmView() === 'cyc', 'v74.89: an unknown view falls back to This cycle');
       F.setCmView(v69); F.renderPlans();
+      // ============ PART 70: v74.90 - Extend / End the salary grace ============
+      console.log('\n== PART 70: v74.90 - Extend / End this cycle grace ==');
+      var b70 = F.getBase(), keep70 = { sd: b70.salary_day, gr: b70.salary_grace, sgc: b70.salary_grace_cycle };
+      b70.salary_day = 5; delete b70.salary_grace; delete b70.salary_grace_cycle; // pinned Nov 6: 1 day late, default grace 3
+      var p70 = F.cycleData().pending;
+      ok(p70 && p70.active && p70.canExtend && !p70.ended, 'v74.90: 1 day late inside the grace -> counted, can extend');
+      F.salaryGraceExtend(3);
+      p70 = F.cycleData().pending;
+      ok(p70.active && p70.grace === 6 && p70.graceEnd === '2026-11-11' && p70.extended, 'v74.90: Extend adds 3 days (counted until 11 Nov)');
+      ok(String(byIdStub('heroSub').innerHTML || '').indexOf('data-spend') >= 0, 'v74.90: the hero line carries End now');
+      F.salaryGraceEnd();
+      var d70 = F.insightsData(); p70 = F.cycleData().pending;
+      ok(p70.ended && p70.late && !p70.active && close(d70.freeNet, d70.freeNetRaw), 'v74.90: End stops counting now - the honest number');
+      ok(String(byIdStub('heroSub').innerHTML || '').indexOf('Count it 3 more days') >= 0, 'v74.90: after End the line offers to count it again');
+      F.salaryGraceExtend(3); p70 = F.cycleData().pending;
+      ok(p70.active && !p70.ended && p70.graceEnd === '2026-11-09', 'v74.90: counting again runs 3 days from today');
+      b70.salary_grace_cycle = { start: '2026-10-05', days: 0, ended: true };
+      p70 = F.cycleData().pending;
+      ok(p70.active && p70.grace === 3, 'v74.90: another cycle extend / end is ignored (Settings default)');
+      b70.salary_day = keep70.sd; if (keep70.gr === undefined) delete b70.salary_grace; else b70.salary_grace = keep70.gr;
+      if (keep70.sgc === undefined) delete b70.salary_grace_cycle; else b70.salary_grace_cycle = keep70.sgc;
+      ok(!F.cycleData().pending, 'v74.90: restored');
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

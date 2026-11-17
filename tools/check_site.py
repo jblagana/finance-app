@@ -2720,6 +2720,14 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v74.90 (boss: 'the grace period for the late salary, can i have the option to extend it or end it'): the hero's Salary pending line carries Extend 3 days / End now (Count it 3 more days once the grace ran out); base.salary_grace_cycle {start, days, ended} keyed by the cycle start, so it only changes this cycle; survives a Settings commit; End never shrinks the received window. Smoke PART 70",
+          "function cycleGraceOf(b, start) {" in js
+          and "function salaryGraceExtend(n) {" in js and "function salaryGraceEnd() {" in js
+          and "var hi = isoAdd(w.start, Math.max(2, gC.base, grace));" in js
+          and "b.salary_grace_cycle = cloneObj(state.base.salary_grace_cycle)" in js
+          and "data-spext" in js and "data-spend" in js and ".hero-sp .sp-act{" in html
+          and "PART 70: v74.90" in smoke
+          and "'74.90': [" in js)
     check("v74.89 (boss: 'Build A' — the Committed layout mockup): Committed shows one view at a time — a This cycle / Saving for / All plans switch (.cmseg, data-cmv, counts) under a one-line summary card; every view is rendered and the others carry .off; the pick is remembered on this phone (fin.cmView, try/catch); All plans keeps Recurring / One-offs / Done as an underline split; the '＋ New' pill left All plans for a header '＋ Plan' (#hdPlan, Committed only, opens the plan sheet); the kicker reads days left first. Smoke PART 69",
           'id="hdPlan"' in html and "button.hd-plan{" in html
           and "var hp = byId('hdPlan'); if (hp) hp.hidden = tab !== 'money';" in js

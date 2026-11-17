@@ -4631,6 +4631,7 @@
     if (state.base) b.migrated_from_snapshot = state.base.migrated_from_snapshot || null;
     if (state.base && state.base.details) b.details = state.base.details; // v56: coach-recorded details survive a form commit
     if (state.base && state.base.absorbedBy) b.absorbedBy = cloneObj(state.base.absorbedBy); // v74.15: the absorb dates survive a form commit
+    if (state.base && state.base.salary_grace_cycle) b.salary_grace_cycle = cloneObj(state.base.salary_grace_cycle); // v74.90: this cycle's extend / end survives a form commit
     var gv = function (id) { var el = byId(id); return el ? String(el.value || '') : ''; };
     var isMonth = function (s) { return /^\d{4}-\d{2}$/.test(String(s || '')); };
     b.name = gv('b_name').trim();
@@ -5112,6 +5113,17 @@
     if (!isFinite(g) || g < 0) return 3;
     return Math.min(10, g);
   }
+  // v74.90 (boss: 'the grace period for the late salary, can i have the
+  // option to extend it or end it'): THIS cycle's grace can be stretched
+  // (Extend, +3 days a tap, up to the cycle's end) or cut (End: stop
+  // counting the salary now). base.salary_grace_cycle = {start, days,
+  // ended} — keyed by the cycle's start, so the next cycle is back on the
+  // Settings default with nothing to clear.
+  function cycleGraceOf(b, start) {
+    var g = salaryGraceOf(b), o = b && b.salary_grace_cycle;
+    if (o && o.start === start && isFinite(Number(o.days))) return { days: Math.max(0, Math.round(Number(o.days))), base: g, ended: !!o.ended, adj: true };
+    return { days: g, base: g, ended: false, adj: false };
+  }
   function expectedSalaryFor(month, b) {
     b = b || state.base || {};
     var ov = (b.salary_overrides || {})[month];
@@ -5156,8 +5168,8 @@
     // the grace days (min 2, the old rule), counted from the real (clamped)
     // payday so a payday on the 30th reaches into the next month. Before, a
     // salary on the 18th (payday 15th) was cash but never "received".
-    var grace = salaryGraceOf(b);
-    var hi = isoAdd(w.start, Math.max(2, grace));
+    var gC = cycleGraceOf(b, w.start), grace = gC.days; // v74.90: Extend / End for this cycle
+    var hi = isoAdd(w.start, Math.max(2, gC.base, grace)); // End never shrinks what counts as this cycle's salary
     if (hi > w.end) hi = w.end;
     var received = null;
     state.txns.forEach(function (t) {
@@ -5260,7 +5272,8 @@
       var graceEnd = isoAdd(w.start, grace);
       var daysLate = Math.round((parseISO(today) - parseISO(w.start)) / 86400000);
       pending = { expected: expected, since: w.start, daysLate: daysLate, grace: grace, graceEnd: graceEnd,
-        active: grace > 0 && today <= graceEnd, late: daysLate > 0 && !(grace > 0 && today <= graceEnd) };
+        active: grace > 0 && today <= graceEnd, late: daysLate > 0 && !(grace > 0 && today <= graceEnd),
+        ended: gC.ended, extended: gC.adj && !gC.ended && grace > gC.base, canExtend: (gC.ended ? today : (graceEnd > today ? graceEnd : today)) < w.end }; // v74.90
     }
     return {
       month: month, sday: sd, start: w.start, end: w.end, days: w.days,
@@ -5625,6 +5638,27 @@
     var pd = null; it.pending.forEach(function (q) { if (q.date === dateISO) pd = q; });
     if (!pd) return Promise.resolve();
     return potAdd(pid, dateISO, pd.amount);
+  }
+  // v74.90: Extend (+3 days, from today if the grace already ran out) / End
+  // (stop counting it now) THIS cycle's salary grace; the toast undoes it.
+  function persistBaseQuiet() { if (state.base) idbPut(STORE_META, { key: 'base', value: state.base }).catch(function () {}); }
+  function setGraceCycle(o, msg) {
+    var b = state.base; if (!b) return;
+    var prev = b.salary_grace_cycle ? cloneObj(b.salary_grace_cycle) : null;
+    b.salary_grace_cycle = o;
+    persistBaseQuiet(); emit('txn');
+    snack(msg, function () { if (prev) b.salary_grace_cycle = prev; else delete b.salary_grace_cycle; persistBaseQuiet(); emit('txn'); });
+  }
+  function salaryGraceExtend(n) {
+    var cy = cycleData(), p = cy && cy.pending; if (!p || !p.canExtend) return;
+    n = Math.max(1, Math.round(Number(n) || 3));
+    var maxD = Math.round((parseISO(cy.end) - parseISO(cy.start)) / 86400000);
+    var days = Math.min(maxD, Math.max(p.ended ? 0 : p.grace, p.daysLate) + n);
+    setGraceCycle({ start: cy.start, days: days }, 'Counting the salary until ' + dayMonth(isoAdd(cy.start, days)));
+  }
+  function salaryGraceEnd() {
+    var cy = cycleData(), p = cy && cy.pending; if (!p || !p.active) return;
+    setGraceCycle({ start: cy.start, days: Math.max(0, p.daysLate - 1), ended: true }, 'Stopped counting the salary — the free cash shows what you have');
   }
   function potSkip(pid, dateISO) { return skipPlanChip(pid + '|' + dateISO); }
   function potExtra(pid) {
@@ -7851,9 +7885,18 @@
     var spS = d && d.salaryPending;
     var spLine = '';
     if (spS && spS.active) spLine = 'Counting your <b>' + money(spS.expected) + '</b> salary (not in yet) until ' + dayMonth(spS.graceEnd) + ' · without it <b>' + money(d.freeNetRaw) + '</b>';
-    else if (spS && spS.late) spLine = 'Salary ' + spS.daysLate + ' day' + (spS.daysLate === 1 ? '' : 's') + ' late — no longer counted. Log it when it lands.';
+    else if (spS && spS.late) spLine = spS.ended ? 'You stopped counting the salary — the free cash shows what you have. Log it when it lands.' : 'Salary ' + spS.daysLate + ' day' + (spS.daysLate === 1 ? '' : 's') + ' late — no longer counted. Log it when it lands.';
+    // v74.90: Extend / End the grace for this cycle, right on the line
+    if (spLine && spS) spLine += '<span class="sp-act">' +
+      (spS.canExtend ? '<button type="button" class="cmlink" data-spext>' + (spS.active ? 'Extend 3 days' : 'Count it 3 more days') + '</button>' : '') +
+      (spS.active ? '<button type="button" class="cmlink" data-spend>End now</button>' : '') + '</span>';
     var hs = byId('heroSub');
-    if (hs) hs.innerHTML = sub.join(' · ') + (spLine ? '<div class="hero-sp">' + spLine + '</div>' : '');
+    if (hs) {
+      hs.innerHTML = sub.join(' · ') + (spLine ? '<div class="hero-sp">' + spLine + '</div>' : '');
+      var bx = hs.querySelector ? hs.querySelector('[data-spext]') : null, be = hs.querySelector ? hs.querySelector('[data-spend]') : null;
+      if (bx) bx.onclick = function (e) { if (e) e.stopPropagation(); salaryGraceExtend(3); };
+      if (be) be.onclick = function (e) { if (e) e.stopPropagation(); salaryGraceEnd(); };
+    }
     // v73.34: the cycle block (This cycle default / Next cycle peek) renders
     // INSIDE the hero — it is the free cash's projection, so it lives where
     // the free cash lives. It repaints on every hero repaint (the emit keys
@@ -8421,7 +8464,7 @@
         rows.push({ cls: pend0.active ? 'warn' : 'bad', tag: 'Salary',
           text: pend0.active
             ? 'Salary ' + money(pend0.expected) + ' not in yet (' + dl0 + ' past the ' + ordinal(cy0.sday) + ') — counted in your free cash until ' + dayMonth(pend0.graceEnd) + '. Tap when it lands.'
-            : 'Salary is ' + dl0 + ' late — no longer counted, so the free cash shows what you really have. Tap when it lands.',
+            : pend0.ended ? 'Salary ' + dl0 + ' late — you stopped counting it, so the free cash shows what you really have. Tap when it lands.' : 'Salary is ' + dl0 + ' late — no longer counted, so the free cash shows what you really have. Tap when it lands.',
           r: money(pend0.expected),
           act: 'salary', payload: { amount: pend0.expected, date: d.today, sday: cy0.sday } });
       } else if (sIn === 0 && !cy0.received) {
@@ -11956,12 +11999,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.89, live: new Date(2026, 10, 18, 0, 43) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.90, live: new Date(2026, 10, 18, 1, 24) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.90': [
+      'Late salary: the “counting your salary” line on Home now has Extend 3 days and End now. Extend keeps counting it a few more days (tap again for more, up to the end of the cycle); End stops counting it right away so the free cash shows what you really have. Both have Undo.',
+      'If the grace already ran out, “Count it 3 more days” brings it back. It only changes this cycle; the next one uses your Settings grace days again.'
+    ],
     '74.89': [
       'Committed is shorter: a switch under the summary shows one list at a time — This cycle, Saving for or All plans — and the app remembers your pick. Plans no longer show up twice on the page.',
       'Add a plan from anywhere on Committed with the “＋ Plan” button at the top, next to Coach Fin and Settings.',
@@ -13443,6 +13490,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     planWindowTotal: planWindowTotal, // v73.56: the window walk (the smoke reads the expandable sub-rows' source)
     sparkData: sparkData, // v73.57: the 2-month step chart (the smoke drives the drop dates + live reactivity)
     renderSpark: renderSpark, // v73.65: the axis-throttled render (the smoke counts the <text> ticks)
+    salaryGraceExtend: salaryGraceExtend, salaryGraceEnd: salaryGraceEnd, cycleGraceOf: cycleGraceOf, // v74.90
     potDates: potDates, // v74.87: a pot's own date list (the smoke checks the auto top-ups)
     planAllDates: planAllDates, // v73.57: the whole series (the smoke builds the expected drop dates)
     planLinkSuggestion: planLinkSuggestion, // v73.17: the fuzzy SUGGESTION (pure — the smoke drives it)
