@@ -2715,6 +2715,13 @@ def main():
           and ".ml-sub.ml-note{color:var(--note);font-size:13px}" in html
           and ".ml-badge{position:absolute;" in html
           and "--note:#d5ddec" in html and "--note:#26313D" in html)
+    check("v74.88 (boss: 'repoition the add plan button in the commited tab' -> 'All plans header'): the dashed full-width #planAddBtn under the whole list is hidden (kept as the plan sheet's opener); a '＋ New' pill (data-cmnew) sits on the right of the ALL PLANS section label beside the count and clicks it; with no plans the empty card carries a full-width '＋ New plan'",
+          "#planAddBtn{display:none}" in html
+          and "<button type=\"button\" class=\"cmnew\" data-cmnew>＋ New</button>" in js
+          and "q1('[data-cmnew]', function () { var pb = byId('planAddBtn'); if (pb) pb.click(); });" in js
+          and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
+          and "button.cmnew{" in html
+          and "'74.88': [" in js)
     check("v74.87 (boss: 'Make it automatic'): a recurring Saving-for pot tops itself up with no ask — every date up to this cycle's end that is not skipped and not already in potAdds is set aside automatically (capped at the goal), dates come from potDates (planAllDates' count-less window stuck at 3 dates for a never-paid pot), the next-cycle peek skips dates already set aside; Committed shows an Auto line (Skip on a date set aside ahead), the pot sheet's history marks auto rows with skip. Smoke PART 68 (9)",
           "function potDates(p, until) {" in js
           and "potDates(p, cut).forEach(function (d) {" in js

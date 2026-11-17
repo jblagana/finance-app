@@ -9115,7 +9115,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var cyc = cmCycleItems();
     renderCommittedTop(cyc);
     if (!all.length) {
-      el.innerHTML = '<div class="cmcard"><p class="note" style="margin:6px 0">No plans yet — add one below to see what\'s coming and whether you can afford it.</p></div>';
+      el.innerHTML = '<div class="cmcard"><p class="note" style="margin:6px 0">No plans yet — add one to see what\'s coming and whether you can afford it.</p><button type="button" class="cmnew wide" data-cmnew>＋ New plan</button></div>'; // v74.88
+      el.querySelectorAll('[data-cmnew]').forEach(function (b) { b.onclick = function () { var pb = byId('planAddBtn'); if (pb) pb.click(); }; });
       renderPlanDetail();
       return;
     }
@@ -9202,7 +9203,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       html += '</div>';
     }
     // ---- ALL PLANS ----
-    html += '<div class="cmsec"><span class="l">All plans</span><span class="r">' + all.length + '</span></div><div class="cmcard cmall">';
+    html += '<div class="cmsec"><span class="l">All plans</span><span class="r">' + all.length + '<button type="button" class="cmnew" data-cmnew>＋ New</button></span></div><div class="cmcard cmall">'; // v74.88: the add button lives on the list's header
     // v74.68 (board 12): Recurring | One-offs | Done — Done collects fully paid one-offs, bought Saving-for one-offs and
     // recurring plans with nothing left (all paid); the old Paid bar became this tab
     var recDone = function (p) {
@@ -9244,6 +9245,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     q1('[data-cmplan]', function () { openPlanDetail(this.getAttribute('data-cmplan')); });
     q1('[data-grp]', function () { openPlanDetail(this.getAttribute('data-grp')); });
     q1('[data-cmlock]', function (e) { if (e && e.stopPropagation) e.stopPropagation(); goalLock(this.getAttribute('data-cmlock')); });
+    q1('[data-cmnew]', function () { var pb = byId('planAddBtn'); if (pb) pb.click(); }); // v74.88: the All plans header's + New opens the plan sheet
     q1('[data-potadd]', function (e) { if (e && e.stopPropagation) e.stopPropagation(); var a = this.getAttribute('data-potadd').split('|'); potConfirm(a[0], a[1]); });
     q1('[data-potskip]', function (e) { if (e && e.stopPropagation) e.stopPropagation(); var a = this.getAttribute('data-potskip').split('|'); potSkip(a[0], a[1]); });
     renderPlanDetail();
@@ -11940,12 +11942,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.87, live: new Date(2026, 10, 17, 23, 15) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.88, live: new Date(2026, 10, 17, 23, 21) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.88': [
+      'Committed: the “＋ New plan” button moved from the very bottom of the tab to a small “＋ New” pill on the All plans header, so you no longer scroll past every plan to add one.'
+    ],
     '74.87': [
       'Recurring Saving-for pots now top themselves up: each date’s amount is set aside from your free cash automatically from the start of its cycle — no more Add / Skip asks.',
       'Need to free up a cycle? Tap Skip on the pot’s line in Committed (or on that date in the pot’s history); undo brings it back. A pot with a goal stops topping up once it’s full.'
