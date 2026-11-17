@@ -5884,6 +5884,13 @@
     var dueDate = iso(ty, tm, dayClamp(ty, tm, dd));
     if (dueDate < today) { var dn = addM(ty, tm, 1); dueDate = iso(dn.y, dn.m, dayClamp(dn.y, dn.m, dd)); }
     var dueIn = Math.round((parseISO(dueDate) - parseISO(today)) / 86400000);
+    // v74.91 (boss: 'for the card due rows, display it immedaitely after the
+    // billing date'): the statement cut at lastCut is due on the first due
+    // day AFTER it; the bill is open from the cut through that due date.
+    var lcp = prevBillDate.split('-'), lcy = Number(lcp[0]), lcm = Number(lcp[1]);
+    var stmtDue = iso(lcy, lcm, dayClamp(lcy, lcm, dd));
+    if (stmtDue <= prevBillDate) { var sn = addM(lcy, lcm, 1); stmtDue = iso(sn.y, sn.m, dayClamp(sn.y, sn.m, dd)); }
+    var billOpen = today >= prevBillDate && today <= stmtDue;
     // the LIVE balance - the caller passes the effective snapshot's card
     // balance (base + overlay); when absent (a pure context / smoke) the
     // base card value is the fallback.
@@ -5900,7 +5907,7 @@
     return {
       card: card.name,
       billing_day: bd, due_day: dd,
-      billDate: billDate, lastCut: prevBillDate, dueDate: dueDate, dueIn: dueIn,
+      billDate: billDate, lastCut: prevBillDate, dueDate: dueDate, dueIn: dueIn, stmtDue: stmtDue, billOpen: billOpen, // v74.91
       windowStart: winStart, windowEnd: winEnd,
       balance: bal, nextCycle: r2(nextCycle),
       due: manual ? r2(Number(card.due_override)) : r2(Math.max(0, bal - nextCycle)),
@@ -8340,7 +8347,7 @@
     // rows are up (the prepay date is still ahead, within 10 days) they win;
     // the card-payment rows take over once the prepay date has passed and
     // the due date (the 5th) is within 10 days.
-    var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;
+    var cardPayWindow = !!(d.s && d.s.cards && d.s.cards.length); // v74.91: each card's Bill row opens on its OWN billing date (cd.billOpen below), not 10 days before the global due
     if (prepayActive && prepayWindow) {
       var pw = d.prepayIn === 0 ? 'today' : (d.prepayIn === 1 ? 'tomorrow' : 'in ' + d.prepayIn + ' days');
       // v73.19: one row per owed card (the card's own live amount, the
@@ -8411,7 +8418,7 @@
         var baseCard = null;
         (state.base.accounts || []).forEach(function (a) { if (String(a.name) === String(c.name)) baseCard = a; });
         var cd = cardDueData(baseCard, state.txns, state.base, d.today, c.balance);
-        if (!cd) return;
+        if (!cd || !cd.billOpen) return; // v74.91: from the card's billing date until its due date
         var amt = cd.due;
         var dueTxt = cd.dueIn === 0 ? 'today' : (cd.dueIn === 1 ? 'tomorrow' : 'in ' + cd.dueIn + ' days');
         // v73.30 (boss: 'maya cc is 0 this card cycle so it has to disappear'):
@@ -11999,12 +12006,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.90, live: new Date(2026, 10, 18, 1, 24) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.91, live: new Date(2026, 10, 18, 2, 17) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.91': [
+      'Card bills: each card’s “Bill” row on Home now shows up the day its statement is cut (its billing date) and stays until the due date — before, it waited until 10 days before the due date.'
+    ],
     '74.90': [
       'Late salary: the “counting your salary” line on Home now has Extend 3 days and End now. Extend keeps counting it a few more days (tap again for more, up to the end of the cycle); End stops counting it right away so the free cash shows what you really have. Both have Undo.',
       'If the grace already ran out, “Count it 3 more days” brings it back. It only changes this cycle; the next one uses your Settings grace days again.'

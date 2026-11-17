@@ -1,3 +1,7 @@
+## 2026-11-18 - "for the card due rows, display it immedaitely after the billing date" -> "Each card's Bill row on the Home coach card shows from that card's own billing date (the statement cut) through its due date, instead of only from 10 days before the shared due date (and never while the prepay rows were up)"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.91 (cardDueData.stmtDue / billOpen = lastCut <= today <= the first due day after the cut; the cardpay block runs per card on billOpen, the global cc.dueIn 0..10 gate and the prepay handoff are gone; v73.24 / v74.25 checks retargeted; smoke PART 71 6/6)
+
 ## 2026-11-18 - "the grace period for the late salary, can i have the option to extend it or end it" -> "The Home hero's Salary pending line gets Extend 3 days (tap again for more, up to the cycle's end) and End now (stop counting the salary today, the free cash shows the honest number); once the grace has run out (or was ended) it offers Count it 3 more days; each has Undo on the toast; it changes this cycle only - the next cycle is back on the Settings grace days"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.90 (cycleGraceOf + base.salary_grace_cycle {start, days, ended} keyed by the cycle start, carried through a Settings commit; End never shrinks the window where a late salary still counts as this cycle's; coach row says 'you stopped counting it' after End; smoke PART 70 8/8)

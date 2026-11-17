@@ -4016,6 +4016,18 @@ waitReady().then(async function (F) {
       b70.salary_day = keep70.sd; if (keep70.gr === undefined) delete b70.salary_grace; else b70.salary_grace = keep70.gr;
       if (keep70.sgc === undefined) delete b70.salary_grace_cycle; else b70.salary_grace_cycle = keep70.sgc;
       ok(!F.cycleData().pending, 'v74.90: restored');
+      // ============ PART 71: v74.91 - Bill rows open on the billing date ============
+      console.log('\n== PART 71: v74.91 - a card bill row shows from its billing date ==');
+      var c71 = { name: 'Probe71', kind: 'card', billing_day: 15, due_day: 5, value: 1000 };
+      var cdA = F.cardDueData(c71, [], F.getBase(), '2026-11-15', 1000);
+      ok(cdA.billOpen && cdA.stmtDue === '2026-12-05', 'v74.91: on the billing date (15 Nov) the bill is open, due 5 Dec');
+      ok(F.cardDueData(c71, [], F.getBase(), '2026-11-16', 1000).billOpen, 'v74.91: the day after the cut it is open (was hidden until 25 Nov)');
+      ok(F.cardDueData(c71, [], F.getBase(), '2026-12-05', 1000).billOpen, 'v74.91: still open on the due date');
+      ok(!F.cardDueData(c71, [], F.getBase(), '2026-12-06', 1000).billOpen, 'v74.91: closed after the due date, before the next cut');
+      ok(!F.cardDueData(c71, [], F.getBase(), '2026-11-14', 1000).billOpen, 'v74.91: closed the day before the cut');
+      var c71b = { name: 'Probe71b', kind: 'card', billing_day: 5, due_day: 25, value: 500 };
+      var cdB = F.cardDueData(c71b, [], F.getBase(), '2026-11-07', 500);
+      ok(cdB.billOpen && cdB.stmtDue === '2026-11-25', 'v74.91: a due in the same month as the cut (bills 5th, due 25th)');
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

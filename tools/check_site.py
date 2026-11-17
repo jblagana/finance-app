@@ -574,7 +574,7 @@ def main():
           and "'73.23': [" in js)
     check("v73.24 (boss: 'the card payment dues on the 5th arent showing in the coach card rows'): the card-payment rows were keyed off the PREPAY date (the 30th) — they only appeared 1-10 days AFTER it, so on the 5th (when the bill is actually due) the coach card showed nothing. Now they follow the DUE date: cardPayWindow = cc.dueIn in [0,10], the row text says 'due <today/tomorrow/in N days>', the chip is dated at the due date, and the row is red when the due date is within 2 days (matching the prepay rows' urgency)",
           "var cc = d.ccDue;" in js
-          and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
+          and "var cardPayWindow = !!(d.s && d.s.cards && d.s.cards.length);" in js
           # v73.88 retarget: the cycle data local is `cd` (cardDueData), not
           # the old `cc` (ccDue) — the due-text line moved with it
           and "var dueTxt = cd.dueIn === 0 ? 'today' : (cd.dueIn === 1 ? 'tomorrow' : 'in ' + cd.dueIn + ' days');" in js
@@ -1996,7 +1996,7 @@ def main():
           and "' bills' : ' bill') + ' due'" in js
           and ".rowchip.info{background:var(--info)" in html
           and ".grp-body .dig.info{" in html
-          and "var cardPayWindow = !prepayWindow && cc && cc.dueIn >= 0 && cc.dueIn <= 10;" in js
+          and "var cardPayWindow = !!(d.s && d.s.cards && d.s.cards.length);" in js
           and "'74.25': [" in js)
     check("v74.81 (boss: 'when i click 0 it clicks/highlights 1, theres a up offset anywhere i click' -> 'Home-screen app too' -> 'yes, fix it'): the scroll lock no longer pins the body — no position:fixed / top:-scrollY (the scroll jump left iOS WebKit hit-testing the fixed Add sheet one key row high: the Safari toolbar / the black-translucent status bar); html.modal-open puts overflow:hidden on html + body and the v74.59 touch guard stays; the Add sheet is sized with svh (dvh fallback). Smoke PART 64 (3)",
           "b.style.position = 'fixed'" not in js
@@ -2720,6 +2720,11 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v74.91 (boss: 'for the card due rows, display it immedaitely after the billing date'): a card's Bill row opens on its own billing date (cardDueData.billOpen: lastCut <= today <= the first due day after the cut) and stays until that due date; the global 10-days-before-due gate and the prepay handoff no longer hide it. Smoke PART 71",
+          "var billOpen = today >= prevBillDate && today <= stmtDue;" in js
+          and "if (!cd || !cd.billOpen) return; // v74.91" in js
+          and "PART 71: v74.91" in smoke
+          and "'74.91': [" in js)
     check("v74.90 (boss: 'the grace period for the late salary, can i have the option to extend it or end it'): the hero's Salary pending line carries Extend 3 days / End now (Count it 3 more days once the grace ran out); base.salary_grace_cycle {start, days, ended} keyed by the cycle start, so it only changes this cycle; survives a Settings commit; End never shrinks the received window. Smoke PART 70",
           "function cycleGraceOf(b, start) {" in js
           and "function salaryGraceExtend(n) {" in js and "function salaryGraceEnd() {" in js
