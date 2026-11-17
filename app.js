@@ -5487,9 +5487,10 @@
   //   one-off: the full amount is held from free cash (display only) from the day it is added until it is bought —
   //            Lock logs the purchase (an entry linked to the plan), which moves liquid / owed and releases the hold;
   //            a skipped one-off holds nothing. Deleting the purchase brings the hold back.
-  //   pot (recurring): each date ASKS to add its amount (p.potAdds[date] once confirmed; Skip = the usual skip
-  //            override); "Use" logs a spend linked to the pot (planRef.date 'pot'); held = added − used. An optional
-  //            goal (p.goal) stops the asks once the pot is full. Extra top-ups ride potAdds under an 'x…' key.
+  //   pot (recurring): v74.87 — each date (today or earlier) adds its amount AUTOMATICALLY (p.potAdds[date] = an
+  //            older confirmed add, kept as is; Skip = the usual skip override takes a date back); "Use" logs a spend
+  //            linked to the pot (planRef.date 'pot'); held = added − used. An optional goal (p.goal) stops the
+  //            top-ups once the pot is full. Extra top-ups ride potAdds under an 'x…' key.
   // Display only, like the plan dues: the snapshot's free / the overlay are never touched.
   function isGoalPlan(p) { return !!(p && p.kind === 'goal'); }
   function planLinkedTxns(pid, potOnly) {
@@ -5536,6 +5537,26 @@
       });
     });
   }
+  // v74.87: a pot's dates, from its first date through `until` (+ the first one after it). planAllDates can't be used:
+  // its count-less window only fast-forwards past PAID dates and a pot's dates are never paid, so it stuck at the
+  // first 3 dates forever (a pot older than 3 months stopped topping up). Anchored to p.date like planGridDates.
+  function potDates(p, until) {
+    var d = String(p.date), cnt = Math.floor(Number(p.count)), out = [], idx = 0;
+    var step = function (k) {
+      if (p.repeat === 'daily') { var dd = parseISO(d); dd.setDate(dd.getDate() + k); return localISO(dd); }
+      if (p.repeat === 'weekly') return shiftWeek(d, k);
+      if (p.repeat === 'annual') return shiftYear(d, k);
+      return shiftMonth(d, k);
+    };
+    while (idx < 1200 && !(cnt >= 1 && idx >= cnt)) {
+      var g = step(idx), r = planDateAt(p, g);
+      if (out.indexOf(r) < 0) out.push(r);
+      idx++;
+      if (g > until) break;
+    }
+    out.sort();
+    return out;
+  }
   function savingData() {
     var today = todayISO(), out = { total: 0, items: [], pending: 0 };
     (state.plans || []).forEach(function (p) {
@@ -5556,21 +5577,25 @@
       var adds = 0; Object.keys(p.potAdds || {}).forEach(function (k) { adds += Number(p.potAdds[k]) || 0; });
       var uses = 0; planLinkedTxns(p.id).forEach(function (t) { uses += Number(t.amount) || 0; });
       var bal = r2(adds - uses), goal = Number(p.goal) || 0;
+      // v74.87 (boss: 'Make it automatic'): every date up to the end of THIS cycle that is not skipped and not
+      // already confirmed tops the pot up by itself (no ask), capped at the goal — set aside from the cycle's start,
+      // like a one-off and like the dues; Skip on that date takes it back. No cycle = up to today.
+      var auto = [], next = null, cdP = cycleData(), cut = cdP && cdP.end > today ? cdP.end : today;
+      potDates(p, cut).forEach(function (d) {
+        if (p.potAdds && p.potAdds[d] != null) return;
+        var rd = resolveOccurrence(p, d);
+        if (rd && rd.skip) return;
+        var a = Number(rd && rd.amount != null ? rd.amount : p.amount) || 0;
+        if (goal > 0) a = Math.min(a, r2(goal - bal));
+        if (!(a > 0.004)) return;
+        if (d > cut) { if (!next) next = { date: d, amount: r2(a) }; return; }
+        auto.push({ date: d, amount: r2(a), ahead: d > today }); bal = r2(bal + a); adds = r2(adds + a);
+      });
       var full = goal > 0 && bal >= goal - 0.005;
-      var pending = [];
-      if (!full) {
-        planAllDates(p).forEach(function (d) {
-          if (d > today || (p.potAdds && p.potAdds[d] != null)) return;
-          var rd = resolveOccurrence(p, d);
-          if (rd && rd.skip) return;
-          var a = Number(rd && rd.amount != null ? rd.amount : p.amount) || 0;
-          if (goal > 0) a = Math.min(a, r2(goal - bal));
-          if (a > 0.004) pending.push({ date: d, amount: r2(a) });
-        });
-      }
+      if (full) next = null;
       var heldP = bal > 0 ? bal : 0;
-      out.items.push({ p: p, type: 'pot', added: r2(adds), used: r2(uses), held: heldP, goal: goal, full: full, pending: pending });
-      out.total += heldP; out.pending += pending.length;
+      out.items.push({ p: p, type: 'pot', added: r2(adds), used: r2(uses), held: heldP, goal: goal, full: full, pending: [], auto: auto, next: next, cut: cut });
+      out.total += heldP;
     });
     out.total = r2(out.total);
     return out;
@@ -5638,8 +5663,9 @@
       }
       if (it.type !== 'pot') return;
       var p = it.p, room = it.goal > 0 ? r2(it.goal - it.held) : Infinity;
-      planAllDates(p).forEach(function (d) {
+      potDates(p, cd.end).forEach(function (d) {
         if (d < cd.start || d > cd.end || (p.potAdds && p.potAdds[d] != null) || !(room > 0.004)) return;
+        if (it.auto && it.auto.some(function (q) { return q.date === d; })) return; // v74.87: already set aside (this cycle's auto top-up)
         var r = resolveOccurrence(p, d); if (r && r.skip) return;
         var a = Math.min(Number(r && r.amount != null ? r.amount : p.amount) || 0, room);
         if (!(a > 0.004)) return;
@@ -8516,7 +8542,7 @@
     var cycEnd = (d.cycle && d.cycle.end) || null;
     var urgent = [];
     state.plans.forEach(function (p) {
-      if (isGoalPlan(p)) return; // v74.65: Saving-for rows live in Committed's Saving for (and the pot asks), not the due rows
+      if (isGoalPlan(p)) return; // v74.65: Saving-for rows live in Committed's Saving for (pots top up by themselves, v74.87), not the due rows
       // v73.27: the OVERDUE occurrences (past their due date, unpaid) are
       // reachable only through planAllDates — planOccurrences() is a forward
       // window (first >= today). An unpaid past occurrence stays visible:
@@ -9165,13 +9191,12 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         html += '<div class="cmpot">' + cmRow({ cls: 'cmsv', attr: ' data-cmplan="' + esc(p.id) + '"', tile: 't-b', tileTxt: cmInitial(p.name), name: esc(p.name || 'Pot'), rec: true,
           sub: sub, amt: cmAmt(it.held), goal: true, st: it.full ? 'full' : 'in the pot', stCls: it.full ? 'ok' : 'mut' });
         if (it.goal > 0) html += '<div class="cmpbar"><i style="width:' + Math.min(100, Math.round(it.held / it.goal * 100)) + '%"></i></div>';
-        if (it.pending.length) {
-          var q = it.pending[0];
-          html += '<div class="cmask"><span class="q">' + dayMonth(q.date) + ' · add ' + money(q.amount).replace('PHP ', '₱') + ' to ' + esc(p.name || 'the pot') + '?' +
-            (it.pending.length > 1 ? ' <small>+' + (it.pending.length - 1) + ' more</small>' : '') + '</span>' +
-            '<button type="button" class="cmbtn g" data-potskip="' + esc(p.id) + '|' + q.date + '">Skip</button>' +
-            '<button type="button" class="cmbtn p" data-potadd="' + esc(p.id) + '|' + q.date + '">Add</button></div>';
-        }
+        // v74.87: no ask — the top-ups go in by themselves; the line says what went in this cycle / what comes next
+        var aheadQ = (it.auto || []).filter(function (q) { return q.ahead; })[0];
+        var autoTxt = it.full ? 'Pot is full — no more top-ups' : (aheadQ ? 'Auto · ' + money(aheadQ.amount).replace('PHP ', '₱') + ' set aside for ' + dayMonth(aheadQ.date) :
+          (it.next ? 'Auto · next ' + money(it.next.amount).replace('PHP ', '₱') + ' on ' + dayMonth(it.next.date) : 'Auto top-ups'));
+        html += '<div class="cmask plain"><span class="q">' + autoTxt + '</span>' +
+          (aheadQ ? '<button type="button" class="cmbtn g" data-potskip="' + esc(p.id) + '|' + aheadQ.date + '">Skip</button>' : '') + '</div>';
         html += '</div>';
       });
       html += '</div>';
@@ -9267,21 +9292,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         (it.goal > 0 ? '<div class="cmpbar wide"><i style="width:' + Math.min(100, Math.round(it.held / it.goal * 100)) + '%"></i></div>' : '') +
         '<div class="pdnote">Held back from your free cash.' + est + '</div>' +
         '<div class="pdacts"><button type="button" class="act pdgo b" data-potuse="' + esc(p.id) + '">Pay from pot</button><button type="button" class="act ghost" data-potextra="' + esc(p.id) + '">Add extra</button></div></div>';
-      if (it.pending.length) {
-        h += '<div class="pdlab">Waiting for you</div>';
-        it.pending.forEach(function (q) {
-          h += '<div class="pdocc"><span>' + dayMonth(q.date) + ' · add ' + amtOf(q.amount) + '?</span><span class="pdbtns"><button type="button" class="cmbtn g" data-potskip="' + esc(p.id) + '|' + q.date + '">Skip</button><button type="button" class="cmbtn p" data-potadd="' + esc(p.id) + '|' + q.date + '">Add</button></span></div>';
-        });
-      }
+      if (it.next) h += '<div class="pdnote">Next top-up: ' + amtOf(it.next.amount) + ' on ' + dayMonth(it.next.date) + ' — set aside automatically when its cycle starts.</div>'; // v74.87
       var hist = [];
       Object.keys(p.potAdds || {}).forEach(function (k) { hist.push({ d: /^\d{4}-/.test(k) ? k : '', k: k, t: /^\d{4}-/.test(k) ? 'added' : 'extra added', a: Number(p.potAdds[k]) || 0, s: 1 }); });
+      (it.auto || []).forEach(function (q) { hist.push({ d: q.date, t: q.ahead ? 'set aside · auto' : 'added · auto', a: q.amount, s: 1, sk: true }); }); // v74.87
       planLinkedTxns(p.id).forEach(function (t) { hist.push({ d: t.date, t: 'used' + (t.note ? ' · ' + esc(t.note) : ''), a: Number(t.amount) || 0, s: -1 }); });
-      planAllDates(p).forEach(function (d) { if (d > today) return; var r = resolveOccurrence(p, d); if (r && r.skip) hist.push({ d: d, t: 'skipped', a: 0, s: 0, un: true }); });
+      potDates(p, it.cut || today).forEach(function (d) { if (d > (it.cut || today)) return; var r = resolveOccurrence(p, d); if (r && r.skip) hist.push({ d: d, t: 'skipped', a: 0, s: 0, un: true }); });
       hist.sort(function (a, b) { return (a.d || '9') < (b.d || '9') ? 1 : -1; });
       if (hist.length) {
         h += '<div class="pdlab">History</div>';
         hist.slice(0, 12).forEach(function (x) {
-          h += '<div class="pdocc"><span>' + (x.d ? dayMonth(x.d) + ' · ' : '') + x.t + (x.un ? ' <button type="button" class="cmlink" data-unskip="' + esc(p.id) + '|' + x.d + '">undo</button>' : '') + '</span>' +
+          h += '<div class="pdocc"><span>' + (x.d ? dayMonth(x.d) + ' · ' : '') + x.t + (x.un ? ' <button type="button" class="cmlink" data-unskip="' + esc(p.id) + '|' + x.d + '">undo</button>' : '') + (x.sk ? ' <button type="button" class="cmlink" data-potskip="' + esc(p.id) + '|' + x.d + '">skip</button>' : '') + '</span>' +
             '<span class="' + (x.s > 0 ? 'goalv' : (x.s < 0 ? 'minus' : 'mut')) + '">' + (x.s > 0 ? '+ ' + amtOf(x.a) : (x.s < 0 ? '− ' + amtOf(x.a) : '—')) + '</span></div>';
         });
       }
@@ -9440,7 +9461,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       created: new Date().toISOString() };
     if (data.category) p.category = String(data.category); // v74.47: files under
     if (kind === 'goal' && rep && Number(data.goal) > 0) p.goal = r2(Number(data.goal)); // v74.65: a pot's goal
-    if (kind === 'goal' && rep) p.potAdds = {}; // v74.65: a pot starts empty (each date asks)
+    if (kind === 'goal' && rep) p.potAdds = {}; // v74.65: a pot starts empty (v74.87: each date tops it up by itself)
     state.plans.push(p);
     return idbPut(STORE_PLANS, touchRec(p)).then(function () {
       emit('plan');
@@ -11919,12 +11940,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.86, live: new Date(2026, 10, 16, 22, 58) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.87, live: new Date(2026, 10, 17, 23, 15) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.87': [
+      'Recurring Saving-for pots now top themselves up: each date’s amount is set aside from your free cash automatically from the start of its cycle — no more Add / Skip asks.',
+      'Need to free up a cycle? Tap Skip on the pot’s line in Committed (or on that date in the pot’s history); undo brings it back. A pot with a goal stops topping up once it’s full.'
+    ],
     '74.86': [
       'Owed entries now look like Ledger rows: an arrow icon (green when it adds to what they owe you, amber when it goes the other way), your note as the title, and the amount with the running balance under it.',
       'Entries are grouped by day — Today, Yesterday, then the date — just like the Ledger.',
@@ -13392,6 +13417,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     planWindowTotal: planWindowTotal, // v73.56: the window walk (the smoke reads the expandable sub-rows' source)
     sparkData: sparkData, // v73.57: the 2-month step chart (the smoke drives the drop dates + live reactivity)
     renderSpark: renderSpark, // v73.65: the axis-throttled render (the smoke counts the <text> ticks)
+    potDates: potDates, // v74.87: a pot's own date list (the smoke checks the auto top-ups)
     planAllDates: planAllDates, // v73.57: the whole series (the smoke builds the expected drop dates)
     planLinkSuggestion: planLinkSuggestion, // v73.17: the fuzzy SUGGESTION (pure — the smoke drives it)
     planRefAlive: planRefAlive, // v73.17: does an explicit link still point at a live occurrence (v73.67: full-series check — the smoke drives the overdue case)
@@ -13889,7 +13915,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var kn = byId('p_kindNote');
         if (kn) {
           kn.style.display = kindSel === 'goal' ? '' : 'none';
-          kn.textContent = isRep ? 'A pot: each date asks you to add the amount. What\u2019s in it is held back from free cash until you use it.'
+          kn.textContent = isRep ? 'A pot: each cycle its amount is set aside from free cash automatically (Skip a date if you need to). What\u2019s in it stays held back until you use it.'
             : 'Comes off free cash from the cycle you pick (or the one its date falls in) until you mark it paid.';
         }
       }

@@ -3952,6 +3952,37 @@ waitReady().then(async function (F) {
       F.setOwed(owed66); F.setTxns(txns66);
       F.state.moneyLog.length = log66len;
       var A66 = F.getAdj(); Object.keys(A66).forEach(function (k) { delete A66[k]; }); Object.keys(adj66).forEach(function (k) { A66[k] = adj66[k]; });
+      // ============ PART 68: v74.87 - Saving-for pots top up automatically ============
+      console.log('\n== PART 68: v74.87 - a recurring Saving-for pot sets its amount aside by itself ==');
+      var plans68 = F.state.plans.slice();
+      var free68a = F.insightsData().freeNet;
+      var pot68 = { id: 'p68pot', name: 'Gym pot', amount: 1000, date: F.shiftMonth(F.todayISO(), -2), repeat: 'monthly', count: null, overrides: {}, kind: 'goal', potAdds: {}, created: '2026-09-01T00:00:00.000Z' };
+      F.state.plans.push(pot68);
+      var cut68 = F.cycleData() && F.cycleData().end > F.todayISO() ? F.cycleData().end : F.todayISO();
+      var dates68 = F.potDates(pot68, cut68).filter(function (d) { return d <= cut68; });
+      var it68 = function () { var r = null; F.savingData().items.forEach(function (x) { if (x.p.id === 'p68pot') r = x; }); return r; };
+      var a68 = it68();
+      ok(a68 && a68.pending.length === 0, 'v74.87: no asks - the pot has nothing waiting for you');
+      ok(a68 && close(a68.held, dates68.length * 1000) && a68.auto.length === dates68.length, 'v74.87: every date up to this cycle’s end is set aside automatically (' + dates68.length + ' × 1,000 = ' + (a68 && a68.held) + ')');
+      ok(close(F.insightsData().freeNet, free68a - dates68.length * 1000), 'v74.87: free cash drops by the auto top-ups');
+      ok(a68 && a68.next && a68.next.date > cut68 && close(a68.next.amount, 1000), 'v74.87: the next top-up is the first date after this cycle');
+      pot68.overrides[dates68[0]] = { skip: true };
+      ok(close(it68().held, (dates68.length - 1) * 1000), 'v74.87: a skipped date takes its top-up back');
+      delete pot68.overrides[dates68[0]];
+      pot68.potAdds[dates68[0]] = 700;
+      ok(close(it68().held, (dates68.length - 1) * 1000 + 700), 'v74.87: an older confirmed add keeps its amount (700, not counted twice)');
+      pot68.potAdds = {}; pot68.goal = 1500;
+      var g68 = it68();
+      ok(close(g68.held, Math.min(1500, dates68.length * 1000)) && (dates68.length * 1000 < 1500 || (g68.full && !g68.next)), 'v74.87: a goal caps the top-ups and stops them once full');
+      delete pot68.goal;
+      F.setPlanTab('rec'); F.renderPlans();
+      var h68 = String(byIdStub('plans').innerHTML || '');
+      ok(h68.indexOf('data-potadd="p68pot') < 0 && h68.indexOf('Auto ·') >= 0, 'v74.87: Committed shows the auto line, no Add button');
+      var old68 = { id: 'p68old', name: 'Old pot', amount: 500, date: F.shiftMonth(F.todayISO(), -6), repeat: 'monthly', count: null, overrides: {}, kind: 'goal', potAdds: {}, created: '2026-05-01T00:00:00.000Z' };
+      F.state.plans.push(old68);
+      var o68 = null; F.savingData().items.forEach(function (x) { if (x.p.id === 'p68old') o68 = x; });
+      ok(o68 && o68.auto.length >= 7, 'v74.87: a pot older than 3 months keeps topping up (the old 3-date window cap is gone: ' + (o68 && o68.auto.length) + ' top-ups)');
+      F.state.plans = plans68; F.setPlanTab('one'); F.renderPlans();
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

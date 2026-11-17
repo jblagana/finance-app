@@ -2715,6 +2715,15 @@ def main():
           and ".ml-sub.ml-note{color:var(--note);font-size:13px}" in html
           and ".ml-badge{position:absolute;" in html
           and "--note:#d5ddec" in html and "--note:#26313D" in html)
+    check("v74.87 (boss: 'Make it automatic'): a recurring Saving-for pot tops itself up with no ask — every date up to this cycle's end that is not skipped and not already in potAdds is set aside automatically (capped at the goal), dates come from potDates (planAllDates' count-less window stuck at 3 dates for a never-paid pot), the next-cycle peek skips dates already set aside; Committed shows an Auto line (Skip on a date set aside ahead), the pot sheet's history marks auto rows with skip. Smoke PART 68 (9)",
+          "function potDates(p, until) {" in js
+          and "potDates(p, cut).forEach(function (d) {" in js
+          and "potDates(p, cd.end).forEach(function (d) {" in js
+          and "if (it.auto && it.auto.some(function (q) { return q.date === d; })) return;" in js
+          and "t: q.ahead ? 'set aside · auto' : 'added · auto'" in js
+          and "data-potadd=" not in js.split("function savingData() {")[1].split("function planById(pid)")[0]
+          and "PART 68: v74.87" in smoke
+          and "'74.87': [" in js)
     check("v72.31 (user: 'add x button in ledger for adjustment, it undoes the record in settings'): an Adjustment row (k='a') carries its own ✕ (data-adj-del = the row's moneyLog index) — it confirms, removes the audit record, and reverses the balance change it filed: the account's Settings value moves by the NEGATIVE of the row's signed diff through the base save with Adjustment-filing SUPPRESSED (deleting an audit record must not file a new one); the account gone from Settings → the row is simply deleted; the toast Undo restores row + value",
           "function findAdjAccount(name)" in js
           and "function askDeleteAdjustment(idx)" in js
