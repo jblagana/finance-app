@@ -8831,6 +8831,9 @@
   // keep their ✕ (it's a single date — nothing to nuke by accident).
   var OCC_CAP = 5;
   var planOpen = {}; // planId -> true while the series is expanded
+// v74.89: the Committed view (This cycle | Saving for | All plans), remembered on this phone (a convenience only)
+var cmView = (function () { try { var v = localStorage.getItem('fin.cmView'); return (v === 'sav' || v === 'all') ? v : 'cyc'; } catch (e) { return 'cyc'; } })();
+function setCmView(v) { cmView = (v === 'sav' || v === 'all') ? v : 'cyc'; try { localStorage.setItem('fin.cmView', cmView); } catch (e) {} }
 var planTab = 'rec'; // v73.60: the plans list's tab; v74.68 (board 12): 'rec' (Recurring, DEFAULT) | 'one' (One-offs) | 'done' (Done)
 var histMoreOpen = {}; // v73.59: planId -> true while the history strip's "+N older" second level is open (in-memory, like cbPlansMore)
 var paidOpen = false; // v73.99: the Committed tab's Paid bar — collapsed by default, in-memory (resets on reload, like the hero's Cards row)
@@ -9155,10 +9158,14 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       return h;
     }
     var html = '';
+    // v74.89 (boss: 'Build A' — the Committed layout mockup): one view at a time — This cycle | Saving for | All plans
+    // (cmView, remembered on this phone); every view is rendered, the others carry .off (display:none)
+    var cmOff = function (k) { return cmView === k ? '' : ' off'; };
     // ---- THIS CYCLE ----
+    html += '<div class="cmview' + cmOff('cyc') + '" data-cmview="cyc">';
     if (cyc && cyc.items.length) {
       var CAP = 6, shownI = cmCycleAll ? cyc.items : cyc.items.slice(0, CAP);
-      html += '<div class="cmsec"><span class="l">This cycle</span><span class="r">by due date</span></div><div class="cmcard">';
+      html += '<div class="cmsec"><span class="l">By due date</span><span class="r">' + cyc.items.length + ' due</span></div><div class="cmcard">'; // v74.89: the switch names the view
       shownI.forEach(function (x) {
         var done = x.paid >= x.am - 0.005;
         var w = cmWhen(x.d, today);
@@ -9172,12 +9179,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       });
       if (cyc.items.length > CAP) html += '<button type="button" class="cmmore" data-cmmore="1">' + (cmCycleAll ? 'Show less' : '+' + (cyc.items.length - CAP) + ' more this cycle') + '</button>';
       html += '</div>';
-    }
+    } else html += '<div class="cmcard cmempty"><p class="note">Nothing due this cycle.</p></div>';
+    html += '</div>';
     // ---- SAVING FOR ----
     var sd = savingData();
     var sv = sd.items.filter(function (it) { return it.type === 'pot' || (!it.bought && !it.skip); });
+    html += '<div class="cmview' + cmOff('sav') + '" data-cmview="sav">';
+    if (!sv.length) html += '<div class="cmcard cmempty"><p class="note">Nothing set aside. Add a plan and pick <b>Saving for</b> to hold money back for it.</p></div>';
     if (sv.length) {
-      html += '<div class="cmsec"><span class="l">Saving for</span><span class="r">set aside <b>' + money(sd.total) + '</b></span></div><div class="cmcard">';
+      html += '<div class="cmsec"><span class="l">Held back from free cash</span><span class="r">set aside <b>' + money(sd.total) + '</b></span></div><div class="cmcard">';
       sv.forEach(function (it) {
         var p = it.p;
         if (it.type === 'one') {
@@ -9202,8 +9212,10 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       });
       html += '</div>';
     }
+    html += '</div>';
     // ---- ALL PLANS ----
-    html += '<div class="cmsec"><span class="l">All plans</span><span class="r">' + all.length + '<button type="button" class="cmnew" data-cmnew>＋ New</button></span></div><div class="cmcard cmall">'; // v74.88: the add button lives on the list's header
+    html += '<div class="cmview' + cmOff('all') + '" data-cmview="all">';
+    html += '<div class="cmcard cmall">'; // v74.89: no caption (the switch names the view); the add button moved to the header (+ Plan)
     // v74.68 (board 12): Recurring | One-offs | Done — Done collects fully paid one-offs, bought Saving-for one-offs and
     // recurring plans with nothing left (all paid); the old Paid bar became this tab
     var recDone = function (p) {
@@ -9236,7 +9248,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       html += listHTML(paneL);
       if (!paneL.length) html += '<p class="note" style="margin:8px 2px">' + (planTab === 'one' ? 'No one-offs.' : 'No recurring plans.') + '</p>';
     }
-    html += '</div>';
+    html += '</div></div>';
+    var segB = function (k, lab, n) { return '<button type="button" class="' + (cmView === k ? 'on' : '') + '" data-cmv="' + k + '" aria-pressed="' + (cmView === k) + '">' + lab + '<span class="plcnt">' + n + '</span></button>'; };
+    html = '<div class="cmseg" role="group" aria-label="Committed view">' + segB('cyc', 'This cycle', cyc ? cyc.items.length : 0) + segB('sav', 'Saving for', sv.length) + segB('all', 'All plans', all.length) + '</div>' + html;
     el.innerHTML = html;
     // ---- taps ----
     var q1 = function (sel, fn) { var ns = el.querySelectorAll(sel); for (var i = 0; i < ns.length; i++) ns[i].onclick = fn; };
@@ -9245,7 +9259,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     q1('[data-cmplan]', function () { openPlanDetail(this.getAttribute('data-cmplan')); });
     q1('[data-grp]', function () { openPlanDetail(this.getAttribute('data-grp')); });
     q1('[data-cmlock]', function (e) { if (e && e.stopPropagation) e.stopPropagation(); goalLock(this.getAttribute('data-cmlock')); });
-    q1('[data-cmnew]', function () { var pb = byId('planAddBtn'); if (pb) pb.click(); }); // v74.88: the All plans header's + New opens the plan sheet
+    q1('[data-cmv]', function () { setCmView(this.getAttribute('data-cmv')); renderPlans(); }); // v74.89
     q1('[data-potadd]', function (e) { if (e && e.stopPropagation) e.stopPropagation(); var a = this.getAttribute('data-potadd').split('|'); potConfirm(a[0], a[1]); });
     q1('[data-potskip]', function (e) { if (e && e.stopPropagation) e.stopPropagation(); var a = this.getAttribute('data-potskip').split('|'); potSkip(a[0], a[1]); });
     renderPlanDetail();
@@ -11942,12 +11956,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.88, live: new Date(2026, 10, 17, 23, 21) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.89, live: new Date(2026, 10, 18, 0, 43) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.89': [
+      'Committed is shorter: a switch under the summary shows one list at a time — This cycle, Saving for or All plans — and the app remembers your pick. Plans no longer show up twice on the page.',
+      'Add a plan from anywhere on Committed with the “＋ Plan” button at the top, next to Coach Fin and Settings.',
+      'All plans keeps its Recurring / One-offs / Done split, now as a lighter row of tabs. The “Still to pay this cycle” card is a single line.'
+    ],
     '74.88': [
       'Committed: the “＋ New plan” button moved from the very bottom of the tab to a small “＋ New” pill on the All plans header, so you no longer scroll past every plan to add one.'
     ],
@@ -12795,12 +12814,14 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var win = d && d.cycle && d.cycle.start && d.cycle.end ? 'Cycle ' + dayMonth(d.cycle.start) + ' – ' + dayMonth(d.cycle.end) : '';
       if (tab === 'money') {
         var dl = d ? Number(d.cycleDaysLeft || d.daysLeft) || 0 : 0;
-        kick = win + (dl ? (win ? ' · ' : '') + dl + ' day' + (dl === 1 ? '' : 's') + ' left' : '');
+        // v74.89: days left first — the header's + Plan narrows the line, so a cut trims the dates, not 'left'
+        kick = (dl ? dl + ' day' + (dl === 1 ? '' : 's') + ' left' : '') + (win ? (dl ? ' · ' : '') + win.replace(/^Cycle /, '') : '');
         title = 'Committed';
       } else if (tab === 'ledger') { kick = win; title = 'Ledger'; }
       else { kick = 'Splits and IOUs'; title = 'Owed'; }
     }
     k.textContent = kick; t.textContent = title;
+    var hp = byId('hdPlan'); if (hp) hp.hidden = tab !== 'money'; // v74.89: + Plan on Committed only
   }
   // v74.24 look upgrade: Dark / Light (Settings → Appearance; fin.theme). The
   // inline <head> script paints the saved theme before the first frame.
@@ -13476,6 +13497,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     planSortKey: planSortKey, // v73.59: the sort key (recurring = next occurrence, one-off = its date)
     setPlanOpen: function (id, open) { planOpen[id] = open ? true : undefined; if (open) planDetId = id; else if (planDetId === id) planDetId = null; }, // v73.59; v74.66: 'open' = the plan's sheet (#pdBody)
     openPlanDetail: openPlanDetail, renderPlanDetail: renderPlanDetail, // v74.66
+    setCmView: function (v) { setCmView(v); }, getCmView: function () { return cmView; }, // v74.89: the Committed view switch (the smoke can't click)
     setPlanTab: function (t) { planTab = (t === 'one' || t === 'done') ? t : 'rec'; }, // v74.68: + done // v73.60: the smoke switches the tab (the harness can't click)
     setPaidOpen: function (o) { paidOpen = !!o; }, // v73.99: the smoke toggles the Paid bar (the harness can't click)
     testSpend: testSpend, // v74.00: the one-time-purchase affordability math (smoke drives it)
@@ -13879,6 +13901,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     // sheet. The Money tab is just heading + trigger + list now.
     var pAddBtn = byId('planAddBtn');
     if (pAddBtn) pAddBtn.onclick = function () { openSheet('planSheet'); fillPlanCats('p_cat', ''); }; // v74.47: the category list is fresh
+    var hdPlan = byId('hdPlan'); // v74.89: the header's + Plan (Committed) opens the same sheet
+    if (hdPlan && pAddBtn) hdPlan.onclick = function () { pAddBtn.click(); };
     var pdClose = byId('pdClose'); // v74.66: the plan's sheet
     if (pdClose) pdClose.onclick = function () { closeSheets(); planDetId = null; };
     var pAddClose = byId('planAddClose');

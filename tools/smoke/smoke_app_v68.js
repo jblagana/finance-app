@@ -3983,6 +3983,17 @@ waitReady().then(async function (F) {
       var o68 = null; F.savingData().items.forEach(function (x) { if (x.p.id === 'p68old') o68 = x; });
       ok(o68 && o68.auto.length >= 7, 'v74.87: a pot older than 3 months keeps topping up (the old 3-date window cap is gone: ' + (o68 && o68.auto.length) + ' top-ups)');
       F.state.plans = plans68; F.setPlanTab('one'); F.renderPlans();
+      // ============ PART 69: v74.89 - Committed shows one view at a time ============
+      console.log('\n== PART 69: v74.89 - the This cycle / Saving for / All plans switch ==');
+      var v69 = F.getCmView();
+      F.setCmView('all'); F.renderPlans();
+      var h69 = String(byIdStub('plans').innerHTML || '');
+      ok(h69.indexOf('class="cmseg"') >= 0 && h69.indexOf('data-cmv="cyc"') >= 0 && h69.indexOf('data-cmv="sav"') >= 0 && h69.indexOf('data-cmv="all"') >= 0, 'v74.89: the switch renders its three views');
+      ok(h69.indexOf('class="cmview" data-cmview="all"') >= 0 && h69.indexOf('class="cmview off" data-cmview="cyc"') >= 0 && h69.indexOf('class="cmview off" data-cmview="sav"') >= 0, 'v74.89: only the picked view is shown, the others carry .off');
+      ok(h69.indexOf('data-cmv="all" aria-pressed="true"') >= 0, 'v74.89: the picked button is pressed');
+      ok(h69.indexOf('class="pltabs"') >= 0 && h69.indexOf('data-cmnew') < 0, 'v74.89: All plans keeps Recurring / One-offs / Done; its + New pill is gone (the header + Plan replaces it)');
+      F.setCmView('bogus'); ok(F.getCmView() === 'cyc', 'v74.89: an unknown view falls back to This cycle');
+      F.setCmView(v69); F.renderPlans();
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

@@ -2717,11 +2717,18 @@ def main():
           and "--note:#d5ddec" in html and "--note:#26313D" in html)
     check("v74.88 (boss: 'repoition the add plan button in the commited tab' -> 'All plans header'): the dashed full-width #planAddBtn under the whole list is hidden (kept as the plan sheet's opener); a '＋ New' pill (data-cmnew) sits on the right of the ALL PLANS section label beside the count and clicks it; with no plans the empty card carries a full-width '＋ New plan'",
           "#planAddBtn{display:none}" in html
-          and "<button type=\"button\" class=\"cmnew\" data-cmnew>＋ New</button>" in js
-          and "q1('[data-cmnew]', function () { var pb = byId('planAddBtn'); if (pb) pb.click(); });" in js
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v74.89 (boss: 'Build A' — the Committed layout mockup): Committed shows one view at a time — a This cycle / Saving for / All plans switch (.cmseg, data-cmv, counts) under a one-line summary card; every view is rendered and the others carry .off; the pick is remembered on this phone (fin.cmView, try/catch); All plans keeps Recurring / One-offs / Done as an underline split; the '＋ New' pill left All plans for a header '＋ Plan' (#hdPlan, Committed only, opens the plan sheet); the kicker reads days left first. Smoke PART 69",
+          'id="hdPlan"' in html and "button.hd-plan{" in html
+          and "var hp = byId('hdPlan'); if (hp) hp.hidden = tab !== 'money';" in js
+          and "if (hdPlan && pAddBtn) hdPlan.onclick = function () { pAddBtn.click(); };" in js
+          and "function setCmView(v)" in js and "localStorage.getItem('fin.cmView')" in js
+          and "q1('[data-cmv]', function () { setCmView(this.getAttribute('data-cmv')); renderPlans(); });" in js
+          and ".cmview.off{display:none}" in html and ".cmseg button.on{" in html and ".cmall .pltab.on{" in html
+          and "PART 69: v74.89" in smoke
+          and "'74.89': [" in js)
     check("v74.87 (boss: 'Make it automatic'): a recurring Saving-for pot tops itself up with no ask — every date up to this cycle's end that is not skipped and not already in potAdds is set aside automatically (capped at the goal), dates come from potDates (planAllDates' count-less window stuck at 3 dates for a never-paid pot), the next-cycle peek skips dates already set aside; Committed shows an Auto line (Skip on a date set aside ahead), the pot sheet's history marks auto rows with skip. Smoke PART 68 (9)",
           "function potDates(p, until) {" in js
           and "potDates(p, cut).forEach(function (d) {" in js
