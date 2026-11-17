@@ -5929,6 +5929,17 @@
     var c = billingCuts(bd, iso);
     return c.last === iso ? iso : c.next;
   }
+  // v74.92 (boss: 'for the same card, the prepay and the bill rows should
+  // not appear together right?'): a card whose statement is open (cut ->
+  // due date) with something still due shows its Bill row only; its
+  // Prepay row comes back once the bill is paid or its due date passed.
+  function cardBillOpenDue(c) {
+    var bc = null;
+    ((state.base && state.base.accounts) || []).forEach(function (a) { if (String(a.name) === String(c.name)) bc = a; });
+    if (!bc) return false;
+    var cd = cardDueData(bc, state.txns, state.base, todayISO(), c.balance);
+    return !!(cd && cd.billOpen && cd.due > 0.004);
+  }
   function cardDueThisCycle(card) {
     if (!state.base) return null;
     var es = effectiveSnap();
@@ -8359,7 +8370,8 @@
       var pcards = ((d.s && d.s.cards) || []).filter(function (c) {
         if (!((Number(c.prepay) || 0) > 0)) return false;
         var at = d.prepayAt && d.prepayAt[c.name]; // v74.45: only cards whose OWN prepay date is in the window
-        return !at || (at.in >= 0 && at.in <= 10);
+        if (at && !(at.in >= 0 && at.in <= 10)) return false;
+        return !cardBillOpenDue(c); // v74.92: the same card never shows Prepay and Bill together - the open bill wins
       });
       pcards.sort(function (a, b) { return (Number(b.prepay) || 0) - (Number(a.prepay) || 0); });
       // v74.22 (boss: 'why is this redundant'): the row said the card and
@@ -12006,12 +12018,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.91, live: new Date(2026, 10, 18, 2, 17) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.92, live: new Date(2026, 10, 18, 2, 24) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.92': [
+      'Card rows: one card never shows a Prepay row and a Bill row at the same time. While its statement is open and unpaid, you see the Bill; the Prepay row for the next statement comes back once the bill is paid or its due date has passed.'
+    ],
     '74.91': [
       'Card bills: each card’s “Bill” row on Home now shows up the day its statement is cut (its billing date) and stays until the due date — before, it waited until 10 days before the due date.'
     ],
@@ -13654,6 +13669,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     cycleData: cycleData, // v72.45: the current cycle (chat.js snapshot + smoke)
     cycleWindow: cycleWindow, dayInMonth: dayInMonth, // v74.10: the clamped payday math (smoke)
     ccDueData: ccDueData, // v73.6: the cc-due math (pure — the smoke drives it with a seeded ledger)
+    cardBillOpenDue: cardBillOpenDue, // v74.92
     cardDueData: cardDueData, // v73.88: the per-card cycle math (pure - smoke PART 35)
     cardCycleInfo: cardCycleInfo, // v73.88: the in-window test for the ledger pill (pure)
     migrateCardDays: migrateCardDays, // v73.88: the per-card day fill (smoke: the settings fix)

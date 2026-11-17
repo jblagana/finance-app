@@ -1,3 +1,7 @@
+## 2026-11-18 - "for the same card, the prepay and the bill rows should not appear together right?" -> answered: right, but since v74.91 they could overlap for a day or two (e.g. bills 15th / due 5th / prepay 14th -> both on 4-5 Dec) -> "For one card, while its statement is open and something is still due, only the Bill row shows; its Prepay row comes back once the bill is paid or past due"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v74.92 (cardBillOpenDue in the prepay row filter; smoke PART 72 4/4)
+
 ## 2026-11-18 - "for the card due rows, display it immedaitely after the billing date" -> "Each card's Bill row on the Home coach card shows from that card's own billing date (the statement cut) through its due date, instead of only from 10 days before the shared due date (and never while the prepay rows were up)"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v74.91 (cardDueData.stmtDue / billOpen = lastCut <= today <= the first due day after the cut; the cardpay block runs per card on billOpen, the global cc.dueIn 0..10 gate and the prepay handoff are gone; v73.24 / v74.25 checks retargeted; smoke PART 71 6/6)

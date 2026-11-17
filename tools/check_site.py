@@ -2720,6 +2720,11 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v74.92 (boss: 'for the same card, the prepay and the bill rows should not appear together right?'): the prepay row filter drops a card whose bill is open with something due (cardBillOpenDue) - the Bill wins until it is paid or past due. Smoke PART 72",
+          "function cardBillOpenDue(c) {" in js
+          and "return !cardBillOpenDue(c); // v74.92" in js
+          and "PART 72: v74.92" in smoke
+          and "'74.92': [" in js)
     check("v74.91 (boss: 'for the card due rows, display it immedaitely after the billing date'): a card's Bill row opens on its own billing date (cardDueData.billOpen: lastCut <= today <= the first due day after the cut) and stays until that due date; the global 10-days-before-due gate and the prepay handoff no longer hide it. Smoke PART 71",
           "var billOpen = today >= prevBillDate && today <= stmtDue;" in js
           and "if (!cd || !cd.billOpen) return; // v74.91" in js

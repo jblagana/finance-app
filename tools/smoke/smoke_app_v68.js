@@ -4028,6 +4028,16 @@ waitReady().then(async function (F) {
       var c71b = { name: 'Probe71b', kind: 'card', billing_day: 5, due_day: 25, value: 500 };
       var cdB = F.cardDueData(c71b, [], F.getBase(), '2026-11-07', 500);
       ok(cdB.billOpen && cdB.stmtDue === '2026-11-25', 'v74.91: a due in the same month as the cut (bills 5th, due 25th)');
+      // ============ PART 72: v74.92 - Prepay and Bill never together for one card ============
+      console.log('\n== PART 72: v74.92 - one card shows Bill or Prepay, not both ==');
+      var b72 = F.getBase(), acc72 = { name: 'Probe72', kind: 'card', billing_day: 1, due_day: 20, value: 0 };
+      b72.accounts.push(acc72); // pinned Nov 6: cut 1 Nov, due 20 Nov -> open
+      ok(F.cardBillOpenDue({ name: 'Probe72', balance: 800 }), 'v74.92: an open, unpaid bill hides that card prepay');
+      ok(!F.cardBillOpenDue({ name: 'Probe72', balance: 0 }), 'v74.92: nothing due -> the prepay may show');
+      acc72.due_day = 3; // due 3 Nov passed -> closed
+      ok(!F.cardBillOpenDue({ name: 'Probe72', balance: 800 }), 'v74.92: past the due date -> the prepay may show');
+      b72.accounts = b72.accounts.filter(function (a) { return a !== acc72; });
+      ok(!F.cardBillOpenDue({ name: 'Probe72', balance: 800 }), 'v74.92: an unknown card never hides a prepay');
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
