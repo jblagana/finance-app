@@ -1893,7 +1893,7 @@ def main():
           and 'id="cbCardsRow" role="button"' in js
           and "state.cbCardsOpen = !state.cbCardsOpen;" in js
           and "var cardsOpen = !!state.cbCardsOpen;" in js
-          and "cardDueData(b.accounts.filter(function (a) { return a.kind === 'card' && a.name === c.name; })[0], state.txns, b, todayISO(), c.balance)" in js
+          and "var dueTxt = '';" in js  # v75.01: the sub-row is the card's balance only (the due date left it)
           and ".cbrow.cbcards{cursor:pointer" in html
           and ".cbrow.cbplans .chev.open,.cbrow.cbcards .chev.open{transform:rotate(90deg)}" in html
           and "'73.93': [" in js)
@@ -2720,6 +2720,11 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.01 (boss: 'in hero, for cards owed, remove the in x days as they dont reflect the bill dues just the total owed'): the opened Cards owed sub-rows show the card + its balance only. Smoke PART 81",
+          "var dueTxt = '';" in js
+          and "var dueTxt = cdd ? cbWhenHTML(cdd.dueIn)" not in js
+          and "PART 81: v75.01" in smoke
+          and "'75.01': [" in js)
     check("v75.00 (boss: 'for the collapse card rows, theres a main row that says 2 bills dues - php x next cycle, change that to just 2 due'): the coach card's Cards header sub reads only '<N> due'. Smoke PART 80",
           "(dueN || grow.length) + ' due';" in js
           and "bits.push(money(nextAmt) + ' next cycle');" not in js

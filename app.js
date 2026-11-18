@@ -8006,8 +8006,8 @@
         var csubs = '';
         var ces = effectiveSnap();
         (ces ? ces.cards : []).forEach(function (c) {
-          var cdd = cardDueData(b.accounts.filter(function (a) { return a.kind === 'card' && a.name === c.name; })[0], state.txns, b, todayISO(), c.balance);
-          var dueTxt = cdd ? cbWhenHTML(cdd.dueIn) + (cdd.manual ? ' <span class="cbw">· manual</span>' : '') : ''; // v74.93: 'Maya CC · in 17 days'
+          // v75.01 (boss: 'remove the "in x days" as they dont reflect the bill dues just the total owed'): the row is the card's balance, no due date
+          var dueTxt = '';
           var cOver = c.limit > 0 && c.balance > c.limit + 0.004; // v74.55: over the limit / a credit
           csubs += '<div class="cbsub"><span class="sl">' + esc(c.name) + (c.balance < -0.004 ? ' <span class="cbw">· credit</span>' : (dueTxt ? ' ' + dueTxt : '')) + (cOver ? ' <b class="nv-over">over limit</b>' : '') + '</span><span class="sv">' +
             (c.balance < -0.004 ? '+ ' + money(-c.balance) : money(c.balance)) + '</span></div>';
@@ -12258,12 +12258,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.00, live: new Date(2026, 10, 18, 23, 13) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.01, live: new Date(2026, 10, 18, 23, 24) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.01': [
+      'Home: the opened Cards owed rows show just each card and what you owe on it — the “in N days” is gone, since that row is the total owed, not the bill.'
+    ],
     '75.00': [
       'Home coach card: the folded Cards row now just says how many are due, like “2 due”.'
     ],

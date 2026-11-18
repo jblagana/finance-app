@@ -2870,7 +2870,7 @@ waitReady().then(async function (F) {
       var cdd37 = F.cardDueData(F.state.base.accounts.filter(function (a) { return a.name === 'Maya CC'; })[0], F.state.txns, F.state.base, F.todayISO());
       if (cdd37) {
         var dueLabel37 = cdd37.dueIn < 0 ? (-cdd37.dueIn) + ' day' : cdd37.dueIn === 0 ? 'today' : 'in ' + cdd37.dueIn + ' day'; // v74.93: the sub-row says when ('Maya CC · in 17 days'), not the date
-        ok(cb37.indexOf(dueLabel37) >= 0, 'v73.93: the sub-row carries the card\u2019s own due date (' + dueLabel37 + ' from cardDueData ' + cdd37.dueDate + ')');
+        ok(cb37.indexOf(dueLabel37) < 0, 'v75.01: the sub-row no longer carries a due date (was ' + dueLabel37 + ') - it is the card balance, not the bill');
       }
       // the Plan dues row keeps its own flag - expanding Cards must not touch it
       F.state.cbPlansOpen = false;
@@ -4184,6 +4184,13 @@ waitReady().then(async function (F) {
       var m80 = /<span class="grp-tag">Cards<\/span>([^<]*)<span class="chev">/.exec(all80);
       ok(!!m80 && /^[0-9]+ due$/.test(m80[1]), 'v75.00: the Cards header reads N due (got ' + (m80 ? m80[1] : 'no Cards group') + ')');
       ok(!!m80 && all80.indexOf(' next cycle<span class="chev">') < 0, 'v75.00: no next-cycle money on the header');
+      // ============ PART 81: v75.01 - Cards owed rows are balances, not bills ============
+      console.log('\n== PART 81: v75.01 - no due date on the hero Cards owed rows ==');
+      F.state.cycleMode = 'this'; F.state.cbDeductOpen = true; F.state.cbCardsOpen = true; F.renderCycleBlock();
+      var cb81 = String(byIdStub('cycleBlock').innerHTML || '');
+      var subs81 = ((cb81.split('id="cbCardsRow"')[1] || '').split('class="cbsubwrap"')[1] || '').split('id="cb')[0];
+      ok(subs81.indexOf('Maya CC') >= 0 && subs81.indexOf(' day') < 0 && subs81.indexOf('today') < 0, 'v75.01: the Cards owed rows carry no in N days');
+      F.state.cbCardsOpen = false; F.state.cbDeductOpen = false; F.renderCycleBlock();
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

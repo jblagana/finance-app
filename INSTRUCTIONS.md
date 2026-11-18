@@ -1,3 +1,7 @@
+## 2026-11-18 - "in hero, for cards owed, remove the \"in x days\" as they dont reflect the bill dues just the total owed" -> "The hero's opened Cards owed rows show just the card name and its balance (no '· in N days' / '· manual'); 'credit' and 'over limit' stay"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.01 (dueTxt = '' on the hero Cards owed sub-rows; v73.93 check + smoke assertion retargeted to 'no due date'; smoke PART 81 1/1; preview: 'Maya CC PHP 900.00', 'MariBank CC PHP 6,864.00')
+
 ## 2026-11-18 - "all for the collapse card rows, theres a main row that says \"2 bills dues - php x next cycle\", change that to just \"2 due\"" -> "The coach card's folded Cards group header reads just 'N due' (bills + prepays counted together), without 'bills' / 'prepay' words or the '₱X next cycle' part"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.00 (the Cards group sub = (dueN || grow.length) + ' due'; the bills / prepays / prepay date / next-cycle money bits are gone from the header; v73.29 / v74.22 / v74.25 checks retargeted; smoke PART 80 2/2 (strict: reads the real digBody Cards header); preview: 'CARDS 2 due ▾ PHP 7,764.00')
