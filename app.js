@@ -34,6 +34,7 @@
     cbPlansOpen: false, // v73.37: the peek's Plans row expansion (in-memory, defaults closed)
     cbPlansMore: false, // v73.39: the peek's "+N more…" second-level expansion (in-memory, defaults collapsed)
     cbCardsOpen: false, // v73.93: the this-cycle Cards owed row expansion (in-memory, defaults collapsed)
+    cbFriendsOpen: false, cbOwedInOpen: false, // v74.97: You owe friends / Owed to you expansions (in-memory)
     coachPlansMore: false // v73.68: the coach's Plans group "+N more…" (in-memory, defaults collapsed to 4 rows)
   };
 
@@ -7916,10 +7917,9 @@
     // place the owed chip (mockup C): what friends owe you, NOT counted in
     // free cash (since v74.93 a friend's share leaves the account at once);
     // when nobody owes you but you owe someone, a muted 'you owe' chip.
-    var od = owedHeroData(), chip = '';
-    if (od.owedIn > 0.004 && od.owedOut > 0.004) chip = '<button type="button" class="hero-owed both" data-owedchip aria-label="' + money(od.owedIn) + ' owed to you, ' + money(od.owedOut) + ' you owe"><span class="ho-a"><b>' + money(od.owedIn) + '</b> to you</span><span class="ho-sep" aria-hidden="true"></span><span class="ho-a"><b class="ho-out">' + money(od.owedOut) + '</b> you owe</span><span class="ho-c" aria-hidden="true">›</span></button>'; // v74.96 (boss: 'declutter the owed chip in hero'): both directions fit one line — short labels, no icon, a thin divider
-    else if (od.owedIn > 0.004) chip = '<button type="button" class="hero-owed" data-owedchip><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7 7 17"/><path d="M16 17H7V8"/></svg><span class="ho-a"><b>' + money(od.owedIn) + '</b> owed to you</span><span class="ho-n">· ' + esc(od.inNames) + '</span><span class="ho-c" aria-hidden="true">›</span></button>';
-    else if (od.owedOut > 0.004) chip = '<button type="button" class="hero-owed out" data-owedchip><span class="ho-a"><b>' + money(od.owedOut) + '</b> you owe</span><span class="ho-n">· ' + esc(od.outNames) + '</span><span class="ho-c" aria-hidden="true">›</span></button>';
+    // v74.97 (boss: 'remove the owed chip from hero, put it in the rows instead, expandable'):
+    // the chip is gone; the This-cycle rows carry You owe friends + Owed to you (renderCycleBlock)
+    var chip = '';
     // v73.33: the salary statement LEFT the Free/unallocated line (boss:
     // 'remove the salary statement in the free/unallocated card') — the
     // salary lives in the coach card's green row (v73.32) and the
@@ -7938,8 +7938,6 @@
     if (hs) {
       hs.innerHTML = chip + (spLine ? '<div class="hero-sp">' + spLine + '</div>' : '');
       hs.style.display = (chip || spLine) ? '' : 'none';
-      var oc = hs.querySelector ? hs.querySelector('[data-owedchip]') : null;
-      if (oc) oc.onclick = function (e) { if (e) e.stopPropagation(); setTab('owed'); };
       var bx = hs.querySelector ? hs.querySelector('[data-spext]') : null, be = hs.querySelector ? hs.querySelector('[data-spend]') : null;
       if (bx) bx.onclick = function (e) { if (e) e.stopPropagation(); salaryGraceExtend(3); };
       if (be) be.onclick = function (e) { if (e) e.stopPropagation(); salaryGraceEnd(); };
@@ -8019,7 +8017,11 @@
         if (!csubs) csubs = '<div class="cbsub mut"><span class="sl">no credit cards on file</span></div>';
         rows += '<div class="cbsubwrap">' + csubs + '</div>';
       }
-      if (p.friendOwed > 0.004) rows += '<div class="cbrow"><div class="lab">You owe friends<small>until you pay them back</small></div><div class="amt minus">− ' + money(p.friendOwed) + '</div></div>'; // v74.94
+      if (p.friendOwed > 0.004) { // v74.94; v74.97: tap for who
+        var fOpen = !!state.cbFriendsOpen;
+        rows += '<div class="cbrow cbfriends" id="cbFriendsRow" role="button" tabindex="0" aria-expanded="' + (fOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (fOpen ? ' open' : '') + '">▸</span>You owe friends</div><div class="amt minus">− ' + money(p.friendOwed) + '</div></div>';
+        if (fOpen) rows += '<div class="cbsubwrap">' + friendOwedList().map(function (x) { return '<div class="cbsub"><span class="sl">' + esc(x.name) + '</span><span class="sv">' + money(x.amt) + '</span></div>'; }).join('') + '</div>';
+      }
       if (p.otherOut > 0.004) rows += '<div class="cbrow mut"><div class="lab">Other outflows<small>budgets · debts · sinking · one-offs</small></div><div class="amt minus">− ' + money(p.otherOut) + '</div></div>';
       // v73.56 (boss: 'make the hero card this-cycle plan dues expandable
       // just like next cycle'): the same tap-to-expand row as the peek —
@@ -8046,6 +8048,13 @@
       if (p.savingHeld > 0.004) rows += '<div class="cbrow"><div class="lab">Saving for<small>set aside</small></div><div class="amt goalv">− ' + money(p.savingHeld) + '</div></div>'; // v74.65
       if (p.salaryPending > 0.004) rows += '<div class="cbrow"><div class="lab">Salary · not in yet<small>counted until ' + dayMonth(p.salaryPendingInfo.graceEnd) + '</small></div><div class="amt">+ ' + money(p.salaryPending) + '</div></div>'; // v74.78
       rows += '<div class="cbrow cbfree"><div class="lab">Free cash</div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
+      // v74.97: what friends owe you — below Free cash, not part of it (tap for who)
+      var odR = owedHeroData();
+      if (odR.owedIn > 0.004) {
+        var iOpen = !!state.cbOwedInOpen;
+        rows += '<div class="cbrow cbowedin" id="cbOwedInRow" role="button" tabindex="0" aria-expanded="' + (iOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (iOpen ? ' open' : '') + '">▸</span>Owed to you<small>not in free cash · comes back when they pay</small></div><div class="amt goodv">' + money(odR.owedIn) + '</div></div>';
+        if (iOpen) rows += '<div class="cbsubwrap">' + odR.ins.map(function (x) { return '<div class="cbsub"><span class="sl">' + esc(x.name) + '</span><span class="sv">' + money(x.b) + '</span></div>'; }).join('') + '</div>';
+      }
     }
     if (mode === 'next') {
       // v73.36 (boss: 'that 55k should CARRY OVER to the Next-cycle peek'):
@@ -8144,6 +8153,10 @@
       state.cbCardsOpen = !state.cbCardsOpen;
       renderCycleBlock();
     };
+    var friendsRow = byId('cbFriendsRow'); // v74.97
+    if (friendsRow) friendsRow.onclick = function () { state.cbFriendsOpen = !state.cbFriendsOpen; renderCycleBlock(); };
+    var owedInRow = byId('cbOwedInRow'); // v74.97
+    if (owedInRow) owedInRow.onclick = function () { state.cbOwedInOpen = !state.cbOwedInOpen; renderCycleBlock(); };
     var plansRow = byId('cbPlansRow');
     if (plansRow) plansRow.onclick = function () {
       state.cbPlansOpen = !state.cbPlansOpen;
@@ -10573,34 +10586,76 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // v74.93: what a person still owes from LEGACY (pre-v74.93) entries — the
   // old rule already counted it as yours, so a repayment of it files nothing.
   // Legacy ipf − legacy tmb − what v74.93 repayments already covered.
-  function owedLegacyLeft(p, exceptId) {
-    var left = 0;
-    (p && p.entries || []).forEach(function (x) {
-      if (!x || x.id === exceptId) return;
-      var a = Number(x.amt) || 0;
-      if (!x.m2) { if (x.dir === 'ipf') left += a; else if (x.dir === 'tmb') left -= a; }
-      else if (x.dir === 'tmb') left -= (Number(x.cov) || 0);
-    });
-    return r2(Math.max(0, left));
+  // v74.97 (boss: 'when ipb, it doesnt disappear from the hero row and not
+  // deducting the liquid'): the legacy balance is ONE signed number per
+  // person — legacy ipf / itb +, legacy tmb / tpf −, less what v74.93+
+  // paybacks already covered. v74.93/94 kept the two directions apart, so a
+  // legacy debt netted by a legacy 'I paid for them' still looked open: a
+  // new 'I paid them back' was swallowed as covering it (nothing left the
+  // account, the You owe friends row stayed).
+  function owedLegacyNet(p, exceptId, upTo) {
+    var n = 0, list = (p && p.entries) || [];
+    for (var i = 0; i < list.length; i++) {
+      var x = list[i];
+      if (upTo && x === upTo) break; // the walk: only the paybacks BEFORE this one
+      if (!x || x.id === exceptId) continue;
+      var a = Number(x.amt) || 0, c = Number(x.cov) || 0;
+      if (!x.m2) { if (x.dir === 'ipf' || x.dir === 'itb') n += a; else if (x.dir === 'tmb' || x.dir === 'tpf') n -= a; }
+      else if (x.dir === 'tmb') n -= c;
+      else if (x.dir === 'itb') n += c;
+    }
+    return r2(n);
   }
+  function owedLegacyLeft(p, exceptId) { return r2(Math.max(0, owedLegacyNet(p, exceptId))); }
   // v74.94: what you still owe a person from LEGACY (pre-v74.94) they-paid-
   // for-me entries — already taken off Cash under the old rule, so paying it
   // back files nothing. Legacy tpf − legacy itb − what v74.94 paybacks covered.
-  function owedLegacyDebtLeft(p, exceptId) {
-    var left = 0;
-    (p && p.entries || []).forEach(function (x) {
-      if (!x || x.id === exceptId) return;
-      var a = Number(x.amt) || 0;
-      if (!x.m2) { if (x.dir === 'tpf') left += a; else if (x.dir === 'itb') left -= a; }
-      else if (x.dir === 'itb') left -= (Number(x.cov) || 0);
+  function owedLegacyDebtLeft(p, exceptId) { return r2(Math.max(0, -owedLegacyNet(p, exceptId))); } // v74.97: the signed legacy balance
+  // v74.97: one-shot-safe repair (idempotent, runs at boot) — every v74.93+
+  // payback's covered part is recomputed in entry order against the signed
+  // legacy balance; where it changes, the leg is re-filed (the old one goes)
+  function repairOwedCov() {
+    var jobs = [];
+    (state.owed && state.owed.people || []).forEach(function (p) {
+      var L = 0;
+      (p.entries || []).forEach(function (x) {
+        if (!x) return;
+        var a = Number(x.amt) || 0;
+        if (!x.m2) { if (x.dir === 'ipf' || x.dir === 'itb') L += a; else if (x.dir === 'tmb' || x.dir === 'tpf') L -= a; }
+      });
+      (p.entries || []).forEach(function (x) {
+        if (!x || !x.m2 || (x.dir !== 'tmb' && x.dir !== 'itb')) return;
+        var a = Number(x.amt) || 0, want = 0;
+        if (x.dir === 'tmb') { want = r2(Math.min(a, Math.max(0, L))); L = r2(L - want); }
+        else { want = r2(Math.min(a, Math.max(0, -L))); L = r2(L + want); }
+        if (Math.abs(want - (Number(x.cov) || 0)) < 0.005) return;
+        var oldLeg = x.theirsTxnId;
+        if (want > 0.004) x.cov = want; else delete x.cov;
+        x.theirsTxnId = null;
+        jobs.push((oldLeg ? removeTxnQuiet(oldLeg) : Promise.resolve()).then(function () { return fileOwedLeg(x, p); }));
+      });
     });
-    return r2(Math.max(0, left));
+    if (!jobs.length) return Promise.resolve(0);
+    return Promise.all(jobs).then(function () { return saveOwed(); }).then(function () { emitOwed(); emit('txn'); return jobs.length; });
   }
   // v74.94 (boss: 'ship the suggested fix'): money you owe friends works like
   // a card balance — it comes off free cash (not Liquid) until you pay it
   // back. Per person, from the entries on the account rule (m2) only — legacy
   // ones are already inside Cash. Net per person: what they owe you on m2
   // entries offsets what you owe them; only a net debt counts.
+  function friendOwedList() { // v74.97: the You owe friends row's sub-rows (same math, per person)
+    var out = [];
+    (state.owed && state.owed.people || []).forEach(function (p) {
+      var n = 0;
+      (p && p.entries || []).forEach(function (x) {
+        if (!x || !x.m2) return;
+        var a = Number(x.amt) || 0, c = Number(x.cov) || 0;
+        if (x.dir === 'ipf') n += a; else if (x.dir === 'tmb') n -= (a - c); else if (x.dir === 'tpf') n -= a; else if (x.dir === 'itb') n += (a - c);
+      });
+      if (n < -0.004) out.push({ name: p.name, amt: r2(-n) });
+    });
+    return out.sort(function (x, y) { return y.amt - x.amt; });
+  }
   function friendOwedNow() {
     var total = 0;
     (state.owed && state.owed.people || []).forEach(function (p) {
@@ -10626,7 +10681,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       else if (b < -0.004) { outT -= b; outs.push({ name: p.name, b: -b }); }
     });
     function names(l) { l.sort(function (x, y) { return y.b - x.b; }); var n = l.slice(0, 2).map(function (x) { return x.name; }).join(', '); return n + (l.length > 2 ? ' +' + (l.length - 2) : ''); }
-    return { owedIn: r2(inT), owedOut: r2(outT), inNames: names(ins), outNames: names(outs) };
+    var byB = function (x, y) { return y.b - x.b; };
+    return { owedIn: r2(inT), owedOut: r2(outT), inNames: names(ins.slice()), outNames: names(outs.slice()), ins: ins.slice().sort(byB), outs: outs.slice().sort(byB) };
   }
   // v74.84 (boss: 'for ledger entries derived from the owed tab, if its mine,
   // include the note in the entry but still look neat'): the filed MINE part
@@ -12186,12 +12242,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.96, live: new Date(2026, 10, 18, 22, 26) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.97, live: new Date(2026, 10, 18, 22, 34) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.97': [
+      'Fixed: “I paid them back” now takes the money from the account you picked and clears the “You owe friends” row. Before, a payback could be treated as settling an older debt that was already settled, so nothing moved. Paybacks you already saved are fixed automatically.',
+      'Home: the owed chip is gone. The This cycle rows now show “You owe friends” and, under Free cash, “Owed to you” (not counted). Tap either to see who.'
+    ],
     '74.96': [
       'Home: the owed chip stays on one line. When friends owe you and you owe someone, it reads “PHP 5,000.00 to you | PHP 82.50 you owe”.'
     ],
@@ -13701,6 +13761,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     sparkData: sparkData, // v73.57: the 2-month step chart (the smoke drives the drop dates + live reactivity)
     renderSpark: renderSpark, // v73.65: the axis-throttled render (the smoke counts the <text> ticks)
     salaryGraceExtend: salaryGraceExtend, salaryGraceEnd: salaryGraceEnd, cycleGraceOf: cycleGraceOf, // v74.90
+    owedLegacyNet: owedLegacyNet, repairOwedCov: repairOwedCov, friendOwedList: friendOwedList, // v74.97
     owedSettleAmount: owedSettleAmount, owedFormSections: owedFormSections, // v74.95
     fileOwedLeg: fileOwedLeg, owedLegacyLeft: owedLegacyLeft, owedLegacyDebtLeft: owedLegacyDebtLeft, friendOwedNow: friendOwedNow, owedLegDir: owedLegDir, // v74.94
     owedHeroData: owedHeroData, cbWhenHTML: cbWhenHTML, cbDaysTo: cbDaysTo, // v74.93
@@ -14625,6 +14686,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       migratePrepayBy(); // v73.71: one-shot rebuild of the stale per-card prepay split (AFTER the payoff migration — it re-stamps mv)
       migrateCashBy(); // v73.83: rebuild the per-funder cash split (lastReconAt-gated; self-heals smeared phones)
       migratePlanDrift(); // v74.09: move payment links / edits off the pre-v74.09 drifted plan dates (idempotent)
+      repairOwedCov(); // v74.97: re-check the paybacks' covered parts (idempotent)
       migrateIpfTheirs(); // v73.72: one-shot backfill — past ipf-on-card entries file their theirs pair (stamp-gated, idempotent)
       migrateOwedMineNotes(); // v74.84: past mine txns pick up the Owed note (only app-made 'Owed · <name>' notes; idempotent)
       setTimeout(function () { histTakeSnap(); histReady = true; }, 2500); // v74.74: History arms after the startup migrations

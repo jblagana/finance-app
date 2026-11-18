@@ -4130,12 +4130,34 @@ waitReady().then(async function (F) {
       ], sort: 'recent' });
       F.render();
       var hs76 = String(byIdStub('heroSub').innerHTML || '');
-      ok(hs76.indexOf('hero-owed both') >= 0 && hs76.indexOf('</b> to you') >= 0 && hs76.indexOf('</b> you owe') >= 0, 'v74.96: both directions read to you | you owe');
-      ok(hs76.indexOf('owed to you</span>') < 0 && hs76.indexOf('<svg') < 0 && hs76.indexOf('ho-sep') >= 0, 'v74.96: no long label and no icon on the both chip, a divider between');
+      ok(hs76.indexOf('hero-owed') < 0, 'v74.97: the owed chip is gone from the hero');
+      ok(close(F.effectiveSnap().friend_owed, 82.5) && F.friendOwedList().length === 1 && F.friendOwedList()[0].name === 'Out76', 'v74.97: the You owe friends row lists who (Out76 82.50)');
       F.setOwed({ people: [owed76.people[0] || { id: 'p76c', name: 'In76', entries: [{ id: 'e76c', d: '2026-11-01', dir: 'ipf', amt: 50, m2: 1 }], updated: '' }], sort: 'recent' });
       F.render();
-      ok(String(byIdStub('heroSub').innerHTML || '').indexOf('owed to you</span>') >= 0, 'v74.96: one direction keeps owed to you');
+      ok(String(byIdStub('heroSub').innerHTML || '').indexOf('hero-owed') < 0, 'v74.97: no chip with one direction either');
       F.setOwed(owed76); F.render();
+      // ============ PART 77: v74.97 - a payback is not swallowed by a settled legacy debt ============
+      console.log('\n== PART 77: v74.97 - the signed legacy balance + the repair ==');
+      var owed77 = JSON.parse(JSON.stringify(F.getOwed())), txns77 = F.getTxns().slice(), adj77 = JSON.parse(JSON.stringify(F.getAdj()));
+      await F.addOwedPerson('Probe77');
+      var p77 = F.getOwed().people[F.getOwed().people.length - 1];
+      p77.entries.push({ id: 'l77a', d: '2026-10-01', dir: 'tpf', amt: 200, cat: 'Food', note: 'old' }, { id: 'l77b', d: '2026-10-02', dir: 'ipf', amt: 200, acc: 'CASH::Cash', cat: 'Food', note: 'old' });
+      ok(F.owedLegacyNet(p77) === 0 && F.owedLegacyDebtLeft(p77) === 0, 'v74.97: an old debt netted by an old I paid for them leaves nothing legacy');
+      var liq77 = F.effectiveSnap().cash.total;
+      await F.addOwedEntry(p77.id, { dir: 'tpf', amt: 82.5, total: 82.5, mine: 82.5, theirs: 0, acc: 'CASH::Cash', cat: 'Food', note: '', d: F.todayISO() });
+      await F.addOwedEntry(p77.id, { dir: 'itb', amt: 82.5, total: 82.5, mine: 0, theirs: 0, acc: 'CASH::Maya', cat: 'Unsorted', note: '', d: F.todayISO() });
+      await sleep(30);
+      var i77 = p77.entries[p77.entries.length - 1];
+      ok(!i77.cov && close(F.effectiveSnap().cash.total, liq77 - 82.5) && close(F.effectiveSnap().friend_owed, 0), 'v74.97: the payback takes 82.50 from Liquid and clears You owe friends');
+      // a payback saved by v74.96 (wrongly covered, no leg) is repaired at boot
+      var leg77 = i77.theirsTxnId; await F.deleteTxn(leg77); await tick();
+      i77.cov = 82.5; i77.theirsTxnId = null;
+      ok(close(F.effectiveSnap().friend_owed, 82.5), 'v74.97: (the bug state: the debt still shows)');
+      var n77 = await F.repairOwedCov();
+      ok(n77 === 1 && !i77.cov && !!i77.theirsTxnId && close(F.effectiveSnap().friend_owed, 0) && close(F.effectiveSnap().cash.total, liq77 - 82.5), 'v74.97: the repair re-files the leg and clears the row');
+      ok((await F.repairOwedCov()) === 0, 'v74.97: the repair is idempotent');
+      F.setOwed(owed77); F.setTxns(txns77);
+      var A77 = F.getAdj(); Object.keys(A77).forEach(function (k) { delete A77[k]; }); Object.keys(adj77).forEach(function (k) { A77[k] = adj77[k]; });
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

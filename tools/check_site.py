@@ -2720,9 +2720,16 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v74.97 (boss: 'remove the owed chip from hero, put it in the rows instead, expandable' + 'when ipb, it doesnt disappear from the hero row and not deducting the liquid'): the chip is gone; You owe friends (cbFriendsRow) and Owed to you (cbOwedInRow, under Free cash, not counted) expand to who; the legacy balance is one signed number per person (owedLegacyNet) so a payback is not swallowed by a legacy debt an old I paid for them already netted; repairOwedCov re-files the paybacks saved with the bug at boot. Smoke PART 77",
+          "function owedLegacyNet(p, exceptId, upTo) {" in js
+          and "function repairOwedCov() {" in js
+          and "repairOwedCov(); // v74.97" in js
+          and 'id="cbFriendsRow"' in js
+          and 'id="cbOwedInRow"' in js
+          and "PART 77: v74.97" in smoke
+          and "'74.97': [" in js)
     check("v74.96 (boss: 'declutter the owed chip in hero'): the both-directions chip is one line on a phone - 'PHP X to you | PHP Y you owe', no icon, a thin divider, amounts never wrap; on a very narrow phone the two parts wrap as whole parts. Smoke PART 76",
-          "class=\"hero-owed both\"" in js
-          and ".hero-owed .ho-a{white-space:nowrap;flex:none}" in html
+          ".hero-owed .ho-a{white-space:nowrap;flex:none}" in html
           and ".hero-owed.both{gap:2px 9px;padding-left:12px;flex-wrap:wrap;" in html
           and "PART 76: v74.96" in smoke
           and "'74.96': [" in js)
@@ -2739,14 +2746,14 @@ def main():
           and "function owedLegacyDebtLeft(p, exceptId) {" in js
           and "function owedLegDir(id) {" in js
           and "' · you paid back'" in js
-          and "You owe friends<small>" in js
+          and "You owe friends</div>" in js
           and "PART 74: v74.94" in smoke
           and "'74.94': [" in js)
     check("v74.93 (boss: 'lets do that but i wanna see whats owed to me in the hero card' + 'i pick C. also remove the subline' + 'expanded plan due rows use Home Wifi - in x days'): ipf theirs leaves the paid-from account and tmb files into its picked account (fileOwedLeg, m2 entries; legacy receivables paid down first via owedLegacyLeft), the hero owed chip replaces the Liquid / Cards owed / Prepay sub line, the cycle sub-rows say when (cbWhenHTML). Smoke PART 73",
           "function fileOwedLeg(e, p) {" in js
           and "if (e && e.m2) return fileOwedLeg(e, p);" in js
           and "function owedLegacyLeft(p, exceptId) {" in js
-          and "var od = owedHeroData(), chip = '';" in js
+          and "var chip = '';" in js
           and "hs.innerHTML = chip + (spLine ?" in js
           and "sub.push('Liquid <b>'" not in js
           and "function cbWhenHTML(n) {" in js
