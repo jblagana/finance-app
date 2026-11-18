@@ -4177,6 +4177,13 @@ waitReady().then(async function (F) {
       console.log('\n== PART 79: v74.99 - the coach card rows read Due in N days ==');
       ok(F.cardDueWhen(17) === 'Due in 17 days' && F.cardDueWhen(1) === 'Due tomorrow' && F.cardDueWhen(0) === 'Due today', 'v74.99: Due in 17 days / tomorrow / today');
       ok(F.cardDueWhen(-2) === '2 days late', 'v74.99: a past date reads late');
+      // ============ PART 80: v75.00 - the Cards header is just the count ============
+      console.log('\n== PART 80: v75.00 - coach Cards header reads N due ==');
+      F.renderCoach();
+      var all80 = String(byIdStub('digBody').innerHTML || ''); // the coach card's rows
+      var m80 = /<span class="grp-tag">Cards<\/span>([^<]*)<span class="chev">/.exec(all80);
+      ok(!!m80 && /^[0-9]+ due$/.test(m80[1]), 'v75.00: the Cards header reads N due (got ' + (m80 ? m80[1] : 'no Cards group') + ')');
+      ok(!!m80 && all80.indexOf(' next cycle<span class="chev">') < 0, 'v75.00: no next-cycle money on the header');
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

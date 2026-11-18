@@ -7191,21 +7191,7 @@
         var open = coachGroupOpen[g] === true; // v73.25: default CLOSED (boss: collapse by default)
         var sub = isPlans
           ? dueN + ' due' + (nextN ? ' this cycle' : '') + (nextN ? ' · ' + nextN + ' next' : '')
-          : (function () {
-              var kinds = {};
-              grow.forEach(function (rw) { kinds[rw.kind] = (kinds[rw.kind] || 0) + 1; });
-              var bits = [];
-              if (kinds.prepay) { // v74.22: the prepay date lives here once (not on every row)
-                var pwh = ''; grow.forEach(function (rw) { if (rw.kind === 'prepay' && rw.when && !pwh) pwh = rw.when; });
-                bits.push((kinds.prepay > 1 ? kinds.prepay + ' prepays' : 'prepay') + (pwh ? ' · ' + pwh : ''));
-              }
-              if (kinds.cardpay) bits.push(kinds.cardpay + (kinds.cardpay > 1 ? ' bills' : ' bill') + ' due'); // v74.25: "bill", not "card payment"
-              // v73.29: the next-cycle roll-over is surfaced in the header
-              // too — it is excluded from the total but the boss should see
-              // it without opening the group.
-              if (nextAmt > 0.004) bits.push(money(nextAmt) + ' next cycle');
-              return bits.join(' · ') || (grow.length + ' item' + (grow.length > 1 ? 's' : ''));
-            })();
+          : (dueN || grow.length) + ' due'; // v75.00 (boss: 'change that to just "2 due"'): the Cards header is just the count — the rows say what and when
         var gLabel = isPlans ? 'Plans' : 'Cards';
         html += '<button type="button" class="grp' + (open ? ' open' : '') + '" data-coachgrp="' + g + '" aria-expanded="' + open + '">' +
           '<span class="g-l"><span class="grp-tag">' + gLabel + '</span>' + sub + '<span class="chev">▾</span></span>' +
@@ -12272,12 +12258,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.99, live: new Date(2026, 10, 18, 23, 9) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.00, live: new Date(2026, 10, 18, 23, 13) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.00': [
+      'Home coach card: the folded Cards row now just says how many are due, like “2 due”.'
+    ],
     '74.99': [
       'Home coach card: the Bill and Prepay rows now just say when they’re due, like “Due in 17 days”.'
     ],

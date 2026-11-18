@@ -197,16 +197,16 @@ def main():
           html.index("app.js") < html.index("chat.js") < html.index("ai.js"))
 
     print("\n== PWA shell (offline app, online coach) ==")
-    check("sw.js cache is v74 (dot releases v74.x per subtask)",
-          "finances-pwa-v74" in sw and "finances-pwa-v73" not in sw)
+    check("sw.js cache is v75 (dot releases v75.x per subtask)",
+          "finances-pwa-v75" in sw and "finances-pwa-v74" not in sw)
     check("sw.js handles SKIP_WAITING", "'SKIP_WAITING'" in sw)
     check("shell cache holds the app scripts + manifest + icons (no model files)",
           "'./app.js'" in sw and "'./chat.js'" in sw and "'./ai.js'" in sw
           and "'./manifest.webmanifest'" in sw and "'./favicon.png'" in sw)
     check("sw.js: non-GET and cross-origin (coach) calls stay network-only",
           "url.origin !== self.location.origin" in sw and "req.method !== 'GET'" in sw)
-    check("footer stamp: brand + shell v74 + live date/time, one source for both footers",
-          "var SHELL_RELEASE = { v: 74" in js and "function shellStamp" in js
+    check("footer stamp: brand + shell v75 + live date/time, one source for both footers",
+          "var SHELL_RELEASE = { v: 75" in js and "function shellStamp" in js
           and "'Fin.AI · shell v'" in js and 'id="setFoot"' in html
           and "byId('setFoot')" in js)
     check("service worker registration wired (page or app.js)",
@@ -672,7 +672,7 @@ def main():
           and "nextAmt: nextBal" in js
           and "nextAmt: nextBal" in js  # v74.99: the roll-over left the line; it still rides nextAmt for the header count
           # (4) the Cards header sub-line surfaces the next-cycle roll-over
-          and "bits.push(money(nextAmt) + ' next cycle');" in js
+          and "(dueN || grow.length) + ' due';" in js  # v75.00: the Cards header is just the count (was bills / prepays / next cycle)
           # (5) the editor: the card-only due column + its read-back
           and "data-r=\"due\"" in js
           and "due: (kind === 'card' && di && String(di.value || '').trim() !== '') ? numVal(di, true) : null" in js
@@ -1965,7 +1965,7 @@ def main():
           and "label: 'Bill · ' + c.name" in js  # v74.25: the bill label names its kind (was the bare card)
           and "esc(rw.label != null ? rw.label : rw.tag)" in js
           and "' still owed on ' + c.name" not in js
-          and "kinds.prepay + ' prepays'" in js
+          and "(dueN || grow.length) + ' due';" in js  # v75.00: the Cards header is just the count (was bills / prepays / next cycle)
           and "c.name + ' is at ' + money(amt)" not in js
           and ".grp-body .dig{background:var(--card2)}" in html
           and ".rowchip.warn{background:var(--warn);color:#1F1400;border:0}" in html
@@ -1993,7 +1993,7 @@ def main():
           and "var tb25 = c.target_balance != null ?" in js  # v74.99: the target is still computed (the line no longer prints it)
           and "Number(bc25 && bc25.billing_day)" in js
           and "label: 'Bill · ' + c.name" in js
-          and "' bills' : ' bill') + ' due'" in js
+          and "(dueN || grow.length) + ' due';" in js  # v75.00: the Cards header is just the count (was bills / prepays / next cycle)
           and ".rowchip.info{background:var(--info)" in html
           and ".grp-body .dig.info{" in html
           and "var cardPayWindow = !!(d.s && d.s.cards && d.s.cards.length);" in js
@@ -2720,6 +2720,11 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.00 (boss: 'for the collapse card rows, theres a main row that says 2 bills dues - php x next cycle, change that to just 2 due'): the coach card's Cards header sub reads only '<N> due'. Smoke PART 80",
+          "(dueN || grow.length) + ' due';" in js
+          and "bits.push(money(nextAmt) + ' next cycle');" not in js
+          and "PART 80: v75.00" in smoke
+          and "'75.00': [" in js)
     check("v74.99 (boss: 'in the coach card, for the card rows just use x due to keep it neat'): the coach card's Bill and Prepay rows read only cardDueWhen ('Due in N days' / 'Due tomorrow' / 'Due today'). Smoke PART 79",
           "function cardDueWhen(n) {" in js
           and "var text = cardDueWhen(cd.dueIn);" in js
