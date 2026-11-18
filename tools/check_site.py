@@ -591,8 +591,8 @@ def main():
           # payload, the roll-over text) is unchanged.
           and "var amt = cd.due;" in js
           and "var nextBal = r2(Math.max(0, c.balance - amt));" in js
-          and "'Statement due ' + dueTxt + prov + ' — ' + money(nextBal) + ' rolls to next cycle.'" in js  # v74.22: the card + amount left the line; v74.25: 'Statement due'
-          and "'Statement due ' + dueTxt + prov + '.'" in js
+          and "var text = cardDueWhen(cd.dueIn);" in js  # v74.99: the bill row says only when it is due (was 'Statement due … rolls to next cycle')
+          and "return n === 0 ? 'Due today' : n === 1 ? 'Due tomorrow' : 'Due in ' + n + ' days';" in js  # v74.99
           and "act: 'prepay', payload: { amount: amt, date: cd.dueDate, day: cd.due_day, card: c.name }" in js
           and "rows.push({ cls: cd.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay'" in js
           and "'73.24': [" in js)
@@ -670,7 +670,7 @@ def main():
           and "var nextBal = r2(Math.max(0, c.balance - amt));" in js
           # (3) the roll-over rides nextAmt + the roll-over text
           and "nextAmt: nextBal" in js
-          and "rolls to next cycle.'" in js
+          and "nextAmt: nextBal" in js  # v74.99: the roll-over left the line; it still rides nextAmt for the header count
           # (4) the Cards header sub-line surfaces the next-cycle roll-over
           and "bits.push(money(nextAmt) + ' next cycle');" in js
           # (5) the editor: the card-only due column + its read-back
@@ -1961,7 +1961,7 @@ def main():
           and "Days left this cycle</div>" not in js
           and "'74.21': [" in js)
     check("v74.22 (boss: 'why is this redundant' -> 'ship straight, including the dark blue color'): the coach card's card rows say each thing once — prepay rows show the card as the label + 'Still owed' (the amount only on the chip), the prepay date rides once on the Cards header (rw.when), card-payment rows drop the card + amount from the line; the rows are rounded card2 tiles with FILLED chips",
-          "text: 'Brings it down to ' + money(tb25)" in js  # v74.25: the prepay line says what it is for (was 'Still owed')
+          "text: cardDueWhen(at25.in)" in js  # v74.99: the prepay line says only when it is due (was 'Brings it down to …')
           and "label: 'Bill · ' + c.name" in js  # v74.25: the bill label names its kind (was the bare card)
           and "esc(rw.label != null ? rw.label : rw.tag)" in js
           and "' still owed on ' + c.name" not in js
@@ -1990,7 +1990,7 @@ def main():
           and "'74.24': [" in js)
     check("v74.25 (boss: 'in card due rows, discriminate between prepay and actual due (prepay is to keep the current balance below the util rate before billing date)'): prepay rows are their own blue kind (cls 'info', tag 'Prepay · <card>') whose line names the target balance (limit × card_util_target) and the card's next billing date; statement rows are 'Bill · <card>' + 'Statement due …' in amber/red; the Cards header says 'N bills due'; the prepay/bill handoff (v73.23) is unchanged",
           "rows.push({ cls: 'info', group: 'cards', kind: 'prepay'" in js
-          and "'% of the limit) before it bills on ' + billLbl25" in js  # v74.45 successor: the % is the card's own target
+          and "var tb25 = c.target_balance != null ?" in js  # v74.99: the target is still computed (the line no longer prints it)
           and "Number(bc25 && bc25.billing_day)" in js
           and "label: 'Bill · ' + c.name" in js
           and "' bills' : ' bill') + ' due'" in js
@@ -2720,6 +2720,12 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v74.99 (boss: 'in the coach card, for the card rows just use x due to keep it neat'): the coach card's Bill and Prepay rows read only cardDueWhen ('Due in N days' / 'Due tomorrow' / 'Due today'). Smoke PART 79",
+          "function cardDueWhen(n) {" in js
+          and "var text = cardDueWhen(cd.dueIn);" in js
+          and "text: cardDueWhen(at25.in)" in js
+          and "PART 79: v74.99" in smoke
+          and "'74.99': [" in js)
     check("v74.98 (boss: 'remove the following statements form hero card ... add a main chevron for all deductions from free cash to keep hero neat' + 'Build and ship'): one Deductions row (cbDeductRow, folded by default) holds Cards owed / To pay back / Other outflows / Plan dues / Saving for (cbSaveRow, its pots), total = Liquid + pending salary - free cash; no sub-labels on Saving for, Salary - not in yet, Owed to you; one chevron box everywhere, plain labels indent to match. Smoke PART 78",
           'id="cbDeductRow"' in js
           and 'id="cbSaveRow"' in js

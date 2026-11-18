@@ -7884,6 +7884,12 @@
     if (n === 0) return '<span class="cbw now">· today</span>';
     return '<span class="cbw">· in ' + n + ' day' + (n === 1 ? '' : 's') + '</span>';
   }
+  // v74.99: the coach card's card rows say only when they are due
+  function cardDueWhen(n) {
+    n = Math.round(Number(n) || 0);
+    if (n < 0) return (-n) + ' day' + (n === -1 ? '' : 's') + ' late';
+    return n === 0 ? 'Due today' : n === 1 ? 'Due tomorrow' : 'Due in ' + n + ' days';
+  }
   function renderHero() {
     var el = byId('hero'); if (!el) return;
     var s = effectiveSnap();
@@ -8473,7 +8479,7 @@
         var own25 = at25.in !== d.prepayIn ? ' · prepay ' + (at25.in === 0 ? 'today' : at25.in === 1 ? 'tomorrow' : 'in ' + at25.in + ' days') : '';
         rows.push({ cls: 'info', group: 'cards', kind: 'prepay', amt: c.prepay, when: ppWhen,
           tag: 'Prepay · ' + c.name,
-          text: 'Brings it down to ' + money(tb25) + ' (' + String(Math.round(ut25c * 1000) / 10) + '% of the limit) before it bills on ' + billLbl25 + own25,
+          text: cardDueWhen(at25.in), // v74.99 (boss: 'for the card rows just use "x due" to keep it neat'): just when it is due
           r: money(c.prepay),
           act: 'prepay', payload: { amount: c.prepay, date: at25.date, day: at25.day, card: c.name } });
       });
@@ -8512,9 +8518,7 @@
         var nextBal = r2(Math.max(0, c.balance - amt));
         var hasNext = nextBal > 0.004;
         var prov = cd.manual ? ' (manual)' : ' (auto)';
-        var text = hasNext
-          ? 'Statement due ' + dueTxt + prov + ' — ' + money(nextBal) + ' rolls to next cycle.' // v74.22: the card + amount left the line; v74.25: "Statement" (the bill, not a prepay)
-          : 'Statement due ' + dueTxt + prov + '.';
+        var text = cardDueWhen(cd.dueIn); // v74.99: just when it is due (the roll-over still rides nextAmt for the header count)
         rows.push({ cls: cd.dueIn <= 2 ? 'bad' : 'warn', group: 'cards', kind: 'cardpay', amt: amt, nextAmt: nextBal,
           tag: 'Card payment · ' + c.name, label: 'Bill · ' + c.name, // v74.25: the label names the kind (Bill vs Prepay); the tag stays the aria label
           text: text,
@@ -12268,12 +12272,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.98, live: new Date(2026, 10, 18, 23, 1) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.99, live: new Date(2026, 10, 18, 23, 9) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.99': [
+      'Home coach card: the Bill and Prepay rows now just say when they’re due, like “Due in 17 days”.'
+    ],
     '74.98': [
       'Home: the This cycle rows are neater. Everything taken off Liquid (Cards owed, To pay back, Plan dues, Saving for) folds into one Deductions row. Tap it to open, and each part still opens on its own. Saving for now lists its pots.',
       'The small notes under Saving for, Salary · not in yet and Owed to you are gone, “You owe friends” is now “To pay back”, and every arrow lines up.'
@@ -13791,6 +13798,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     sparkData: sparkData, // v73.57: the 2-month step chart (the smoke drives the drop dates + live reactivity)
     renderSpark: renderSpark, // v73.65: the axis-throttled render (the smoke counts the <text> ticks)
     salaryGraceExtend: salaryGraceExtend, salaryGraceEnd: salaryGraceEnd, cycleGraceOf: cycleGraceOf, // v74.90
+    cardDueWhen: cardDueWhen, // v74.99
     owedLegacyNet: owedLegacyNet, repairOwedCov: repairOwedCov, friendOwedList: friendOwedList, // v74.97
     owedSettleAmount: owedSettleAmount, owedFormSections: owedFormSections, // v74.95
     fileOwedLeg: fileOwedLeg, owedLegacyLeft: owedLegacyLeft, owedLegacyDebtLeft: owedLegacyDebtLeft, friendOwedNow: friendOwedNow, owedLegDir: owedLegDir, // v74.94

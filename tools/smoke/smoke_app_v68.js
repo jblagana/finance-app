@@ -4173,6 +4173,10 @@ waitReady().then(async function (F) {
       var cb78b = String(byIdStub('cycleBlock').innerHTML || '');
       ok(cb78b.indexOf('class="cbgroup"') >= 0 && cb78b.indexOf('id="cbCardsRow"') >= 0 && cb78b.indexOf('id="cbPlansRow"') >= 0, 'v74.98: opened, the parts show inside the group, each still a tap target');
       F.state.cbDeductOpen = false; F.renderCycleBlock();
+      // ============ PART 79: v74.99 - card rows just say when ============
+      console.log('\n== PART 79: v74.99 - the coach card rows read Due in N days ==');
+      ok(F.cardDueWhen(17) === 'Due in 17 days' && F.cardDueWhen(1) === 'Due tomorrow' && F.cardDueWhen(0) === 'Due today', 'v74.99: Due in 17 days / tomorrow / today');
+      ok(F.cardDueWhen(-2) === '2 days late', 'v74.99: a past date reads late');
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
