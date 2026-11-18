@@ -2379,7 +2379,7 @@ def main():
           and "if (testSpendAmt && !testSpendOpen && row) { testSpendOpen = true; row.className = 'testrow ts-open'; }" in js
           and "'74.34': [" in js)
     check("v74.33 (boss: 'remove same as the hero number and salary follows ... amount.'): the Free cash row has no sub-label and the cycle footnote is just 'Estimate — pace & one-offs excluded.'",
-          '<div class="lab">Free cash</div>' in js
+          '<div class="lab ind">Free cash</div>' in js
           and "Salary follows the target cycle" not in js
           and "'<p class=\"cbnote\">Estimate — pace &amp; one-offs excluded.</p>'" in js
           and "'74.33': [" in js)
@@ -2720,6 +2720,16 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v74.98 (boss: 'remove the following statements form hero card ... add a main chevron for all deductions from free cash to keep hero neat' + 'Build and ship'): one Deductions row (cbDeductRow, folded by default) holds Cards owed / To pay back / Other outflows / Plan dues / Saving for (cbSaveRow, its pots), total = Liquid + pending salary - free cash; no sub-labels on Saving for, Salary - not in yet, Owed to you; one chevron box everywhere, plain labels indent to match. Smoke PART 78",
+          'id="cbDeductRow"' in js
+          and 'id="cbSaveRow"' in js
+          and "dTotal = r2(p.liquid + (p.salaryPending || 0) - p.net)" in js
+          and "Saving for<small>set aside</small>" not in js
+          and "Owed to you<small>" not in js
+          and "Salary · not in yet<small>counted until" not in js
+          and ".cbrow .lab.ind{padding-left:18px}" in html
+          and "PART 78: v74.98" in smoke
+          and "'74.98': [" in js)
     check("v74.97 (boss: 'remove the owed chip from hero, put it in the rows instead, expandable' + 'when ipb, it doesnt disappear from the hero row and not deducting the liquid'): the chip is gone; You owe friends (cbFriendsRow) and Owed to you (cbOwedInRow, under Free cash, not counted) expand to who; the legacy balance is one signed number per person (owedLegacyNet) so a payback is not swallowed by a legacy debt an old I paid for them already netted; repairOwedCov re-files the paybacks saved with the bug at boot. Smoke PART 77",
           "function owedLegacyNet(p, exceptId, upTo) {" in js
           and "function repairOwedCov() {" in js
@@ -2746,7 +2756,7 @@ def main():
           and "function owedLegacyDebtLeft(p, exceptId) {" in js
           and "function owedLegDir(id) {" in js
           and "' · you paid back'" in js
-          and "You owe friends</div>" in js
+          and "To pay back</div>" in js
           and "PART 74: v74.94" in smoke
           and "'74.94': [" in js)
     check("v74.93 (boss: 'lets do that but i wanna see whats owed to me in the hero card' + 'i pick C. also remove the subline' + 'expanded plan due rows use Home Wifi - in x days'): ipf theirs leaves the paid-from account and tmb files into its picked account (fileOwedLeg, m2 entries; legacy receivables paid down first via owedLegacyLeft), the hero owed chip replaces the Liquid / Cards owed / Prepay sub line, the cycle sub-rows say when (cbWhenHTML). Smoke PART 73",

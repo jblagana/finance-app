@@ -896,10 +896,11 @@ waitReady().then(async function (F) {
   // cbPlansOpen flag and the sub-rows (from planItems) appear.
   F.state.cycleMode = 'this';
   F.state.cbPlansOpen = false;
+  F.state.cbDeductOpen = true; // v74.98: Plan dues lives inside the Deductions group (open it to reach the row)
   F.renderCycleBlock();
   var cbClosed = String(byIdStub('cycleBlock').innerHTML || '');
   ok(cbClosed.indexOf('id="cbPlansRow"') >= 0, 'v73.56: the this-cycle Plan dues row renders (cbPlansRow present)');
-  ok(cbClosed.indexOf('class="chev"') >= 0 && cbClosed.indexOf('chev open') < 0,
+  ok(cbClosed.indexOf('id="cbPlansRow" role="button" tabindex="0" aria-expanded="false"') >= 0, // v74.98: read on the Plan dues row itself (the Deductions group around it is open)
     'v73.56: the this-cycle Plan dues row is collapsed by default (chevron, not open)');
   F.state.cbPlansOpen = true;
   F.renderCycleBlock();
@@ -2850,12 +2851,13 @@ waitReady().then(async function (F) {
       console.log('\n== PART 37: v73.93 - the hero Cards owed row is expandable (collapsed by default) =');
       F.state.cycleMode = 'this';
       F.state.cbCardsOpen = false;
+      F.state.cbDeductOpen = true; // v74.98: Cards owed lives inside the Deductions group
       F.renderCycleBlock();
       var cb37 = String(byIdStub('cycleBlock').innerHTML || '');
       ok(cb37.indexOf('id="cbCardsRow"') >= 0, 'v73.93: the this-cycle Cards owed row renders (cbCardsRow present)');
       ok(cb37.indexOf('role="button"') >= 0 && cb37.indexOf('aria-expanded="false"') >= 0,
         'v73.93: the Cards owed row is a tap target, collapsed by default (aria-expanded=false)');
-      ok(cb37.indexOf('class="chev open"') < 0, 'v73.93: the chevron is closed by default');
+      ok(cb37.indexOf('id="cbCardsRow" role="button" tabindex="0" aria-expanded="false"') >= 0, 'v73.93: the chevron is closed by default (v74.98: read on the Cards owed row itself - the Deductions group around it is open)');
       ok(cb37.indexOf('class="cbsubwrap"') < 0, 'v73.93: collapsed = NO per-card sub-rows (cbsubwrap absent)');
       F.state.cbCardsOpen = true;
       F.renderCycleBlock();
@@ -4158,6 +4160,19 @@ waitReady().then(async function (F) {
       ok((await F.repairOwedCov()) === 0, 'v74.97: the repair is idempotent');
       F.setOwed(owed77); F.setTxns(txns77);
       var A77 = F.getAdj(); Object.keys(A77).forEach(function (k) { delete A77[k]; }); Object.keys(adj77).forEach(function (k) { A77[k] = adj77[k]; });
+      // ============ PART 78: v74.98 - the Deductions group ============
+      console.log('\n== PART 78: v74.98 - one Deductions row folds what comes off Liquid ==');
+      F.state.cycleMode = 'this'; F.state.cbDeductOpen = false;
+      F.renderCycleBlock();
+      var cb78 = String(byIdStub('cycleBlock').innerHTML || ''), pj78 = F.cycleProjection('this');
+      var d78 = Math.round((pj78.liquid + (pj78.salaryPending || 0) - pj78.net) * 100) / 100;
+      ok(cb78.indexOf('id="cbDeductRow"') >= 0 && cb78.indexOf('id="cbCardsRow"') < 0 && cb78.indexOf('id="cbPlansRow"') < 0, 'v74.98: folded, only the Deductions row shows (Cards owed + Plan dues inside)');
+      ok(close(d78, pj78.cardOwed + pj78.friendOwed + pj78.otherOut + pj78.planShare + pj78.savingHeld), 'v74.98: the Deductions total is exactly its parts');
+      ok(cb78.indexOf('counted until') < 0 && cb78.indexOf('not in free cash') < 0 && cb78.indexOf('set aside') < 0, 'v74.98: no sub-labels on Salary / Owed to you / Saving for');
+      F.state.cbDeductOpen = true; F.renderCycleBlock();
+      var cb78b = String(byIdStub('cycleBlock').innerHTML || '');
+      ok(cb78b.indexOf('class="cbgroup"') >= 0 && cb78b.indexOf('id="cbCardsRow"') >= 0 && cb78b.indexOf('id="cbPlansRow"') >= 0, 'v74.98: opened, the parts show inside the group, each still a tap target');
+      F.state.cbDeductOpen = false; F.renderCycleBlock();
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

@@ -34,7 +34,8 @@
     cbPlansOpen: false, // v73.37: the peek's Plans row expansion (in-memory, defaults closed)
     cbPlansMore: false, // v73.39: the peek's "+N more…" second-level expansion (in-memory, defaults collapsed)
     cbCardsOpen: false, // v73.93: the this-cycle Cards owed row expansion (in-memory, defaults collapsed)
-    cbFriendsOpen: false, cbOwedInOpen: false, // v74.97: You owe friends / Owed to you expansions (in-memory)
+    cbFriendsOpen: false, cbOwedInOpen: false, // v74.97: To pay back / Owed to you expansions (in-memory)
+    cbDeductOpen: false, cbSaveOpen: false, // v74.98: the Deductions group + Saving for pots (in-memory, folded by default)
     coachPlansMore: false // v73.68: the coach's Plans group "+N more…" (in-memory, defaults collapsed to 4 rows)
   };
 
@@ -7993,7 +7994,12 @@
       // = free − planShare (cyclePlanDeduction, the hero's own deduction) —
       // so the rows sum EXACTLY to the hero: Liquid − (Cards owed + Other
       // outflows) − Plan dues = Free cash. All display-only, one source each.
-      rows += '<div class="cbrow"><div class="lab">Liquid</div><div class="amt">' + money(p.liquid) + '</div></div>';
+      rows += '<div class="cbrow"><div class="lab ind">Liquid</div><div class="amt">' + money(p.liquid) + '</div></div>';
+      // v74.98 (boss: 'add a main chevron for all deductions from free cash to
+      // keep hero neat'): everything taken off Liquid (Cards owed, To pay
+      // back, Other outflows, Plan dues, Saving for) folds under ONE
+      // Deductions row; each part keeps its own tap-to-open inside
+      var dStart = rows.length;
       // v73.93 (boss: 'make the cards due in hero card expandable/collapsible,
       // collapsed by default'): the Cards owed row is a tap target - the
       // per-card breakdown drops in as sub-rows (LIVE balances from the
@@ -8019,7 +8025,7 @@
       }
       if (p.friendOwed > 0.004) { // v74.94; v74.97: tap for who
         var fOpen = !!state.cbFriendsOpen;
-        rows += '<div class="cbrow cbfriends" id="cbFriendsRow" role="button" tabindex="0" aria-expanded="' + (fOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (fOpen ? ' open' : '') + '">▸</span>You owe friends</div><div class="amt minus">− ' + money(p.friendOwed) + '</div></div>';
+        rows += '<div class="cbrow cbfriends" id="cbFriendsRow" role="button" tabindex="0" aria-expanded="' + (fOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (fOpen ? ' open' : '') + '">▸</span>To pay back</div><div class="amt minus">− ' + money(p.friendOwed) + '</div></div>';
         if (fOpen) rows += '<div class="cbsubwrap">' + friendOwedList().map(function (x) { return '<div class="cbsub"><span class="sl">' + esc(x.name) + '</span><span class="sv">' + money(x.amt) + '</span></div>'; }).join('') + '</div>';
       }
       if (p.otherOut > 0.004) rows += '<div class="cbrow mut"><div class="lab">Other outflows<small>budgets · debts · sinking · one-offs</small></div><div class="amt minus">− ' + money(p.otherOut) + '</div></div>';
@@ -8045,14 +8051,30 @@
           rows += '<div class="cbsubwrap">' + subsT + '</div>';
         }
       }
-      if (p.savingHeld > 0.004) rows += '<div class="cbrow"><div class="lab">Saving for<small>set aside</small></div><div class="amt goalv">− ' + money(p.savingHeld) + '</div></div>'; // v74.65
-      if (p.salaryPending > 0.004) rows += '<div class="cbrow"><div class="lab">Salary · not in yet<small>counted until ' + dayMonth(p.salaryPendingInfo.graceEnd) + '</small></div><div class="amt">+ ' + money(p.salaryPending) + '</div></div>'; // v74.78
-      rows += '<div class="cbrow cbfree"><div class="lab">Free cash</div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
+      if (p.savingHeld > 0.004) { // v74.65; v74.98: no sub-label, tap for the pots
+        var sItems = (savingData().items || []).filter(function (it) { return (Number(it.held) || 0) > 0.004; });
+        var sOpen = !!state.cbSaveOpen;
+        rows += '<div class="cbrow cbsave" id="cbSaveRow" role="button" tabindex="0" aria-expanded="' + (sOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (sOpen ? ' open' : '') + '">▸</span>Saving for' + (sItems.length ? ' · ' + sItems.length + (sItems.length === 1 ? ' pot' : ' pots') : '') + '</div><div class="amt goalv">− ' + money(p.savingHeld) + '</div></div>';
+        if (sOpen) rows += '<div class="cbsubwrap">' + sItems.map(function (it) {
+          var nd = it.type === 'pot' ? (it.next && it.next.date) : it.date;
+          return '<div class="cbsub"><span class="sl">' + esc((it.p && it.p.name) || 'Saving') + (nd ? ' · next ' + dayMonth(nd) : '') + '</span><span class="sv">' + money(it.held) + '</span></div>';
+        }).join('') + '</div>';
+      }
+      var dInner = rows.slice(dStart), dTotal = r2(p.liquid + (p.salaryPending || 0) - p.net); // the group's total = exactly what the rows inside take off
+      var dCount = [p.cardOwed, p.friendOwed, p.otherOut, p.planShare, p.savingHeld].filter(function (v) { return v > 0.004; }).length;
+      rows = rows.slice(0, dStart);
+      if (dInner) {
+        var dOpen = !!state.cbDeductOpen;
+        rows += '<div class="cbrow cbdeduct" id="cbDeductRow" role="button" tabindex="0" aria-expanded="' + (dOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (dOpen ? ' open' : '') + '">▸</span>Deductions' + (dCount ? ' <span class="cbn">· ' + dCount + '</span>' : '') + '</div><div class="amt minus">− ' + money(dTotal) + '</div></div>';
+        if (dOpen) rows += '<div class="cbgroup">' + dInner + '</div>';
+      }
+      if (p.salaryPending > 0.004) rows += '<div class="cbrow"><div class="lab ind">Salary · not in yet</div><div class="amt">+ ' + money(p.salaryPending) + '</div></div>'; // v74.78; v74.98: no 'counted until' (the hero line says it)
+      rows += '<div class="cbrow cbfree"><div class="lab ind">Free cash</div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
       // v74.97: what friends owe you — below Free cash, not part of it (tap for who)
       var odR = owedHeroData();
       if (odR.owedIn > 0.004) {
         var iOpen = !!state.cbOwedInOpen;
-        rows += '<div class="cbrow cbowedin" id="cbOwedInRow" role="button" tabindex="0" aria-expanded="' + (iOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (iOpen ? ' open' : '') + '">▸</span>Owed to you<small>not in free cash · comes back when they pay</small></div><div class="amt goodv">' + money(odR.owedIn) + '</div></div>';
+        rows += '<div class="cbrow cbowedin" id="cbOwedInRow" role="button" tabindex="0" aria-expanded="' + (iOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (iOpen ? ' open' : '') + '">▸</span>Owed to you</div><div class="amt goodv">' + money(odR.owedIn) + '</div></div>';
         if (iOpen) rows += '<div class="cbsubwrap">' + odR.ins.map(function (x) { return '<div class="cbsub"><span class="sl">' + esc(x.name) + '</span><span class="sv">' + money(x.b) + '</span></div>'; }).join('') + '</div>';
       }
     }
@@ -8155,6 +8177,10 @@
     };
     var friendsRow = byId('cbFriendsRow'); // v74.97
     if (friendsRow) friendsRow.onclick = function () { state.cbFriendsOpen = !state.cbFriendsOpen; renderCycleBlock(); };
+    var deductRow = byId('cbDeductRow'); // v74.98
+    if (deductRow) deductRow.onclick = function () { state.cbDeductOpen = !state.cbDeductOpen; renderCycleBlock(); };
+    var saveRow = byId('cbSaveRow'); // v74.98
+    if (saveRow) saveRow.onclick = function () { state.cbSaveOpen = !state.cbSaveOpen; renderCycleBlock(); };
     var owedInRow = byId('cbOwedInRow'); // v74.97
     if (owedInRow) owedInRow.onclick = function () { state.cbOwedInOpen = !state.cbOwedInOpen; renderCycleBlock(); };
     var plansRow = byId('cbPlansRow');
@@ -12242,12 +12268,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.97, live: new Date(2026, 10, 18, 22, 34) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.98, live: new Date(2026, 10, 18, 23, 1) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.98': [
+      'Home: the This cycle rows are neater. Everything taken off Liquid (Cards owed, To pay back, Plan dues, Saving for) folds into one Deductions row. Tap it to open, and each part still opens on its own. Saving for now lists its pots.',
+      'The small notes under Saving for, Salary · not in yet and Owed to you are gone, “You owe friends” is now “To pay back”, and every arrow lines up.'
+    ],
     '74.97': [
       'Fixed: “I paid them back” now takes the money from the account you picked and clears the “You owe friends” row. Before, a payback could be treated as settling an older debt that was already settled, so nothing moved. Paybacks you already saved are fixed automatically.',
       'Home: the owed chip is gone. The This cycle rows now show “You owe friends” and, under Free cash, “Owed to you” (not counted). Tap either to see who.'
