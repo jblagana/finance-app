@@ -4071,6 +4071,43 @@ waitReady().then(async function (F) {
       ok(hs73.indexOf('Liquid <b>') < 0 && hs73.indexOf('Cards owed <b>') < 0, 'v74.93: the hero sub line (Liquid / Cards owed / Prepay) is gone');
       F.setOwed(owed73); F.setTxns(txns73);
       var A73 = F.getAdj(); Object.keys(A73).forEach(function (k) { delete A73[k]; }); Object.keys(adj73).forEach(function (k) { A73[k] = adj73[k]; });
+      // ============ PART 74: v74.94 - money you owe friends works like a card balance ============
+      console.log('\n== PART 74: v74.94 - tpf comes off free (not liquid), itb takes it from the account ==');
+      var owed74 = JSON.parse(JSON.stringify(F.getOwed())), txns74 = F.getTxns().slice(), adj74 = JSON.parse(JSON.stringify(F.getAdj()));
+      var es74a = F.effectiveSnap(), spent74a = F.spentTodayData().total;
+      await F.addOwedPerson('Probe74');
+      var pid74 = F.getOwed().people[F.getOwed().people.length - 1].id;
+      await F.addOwedEntry(pid74, { dir: 'tpf', amt: 400, total: 1000, mine: 400, theirs: 600, acc: 'CASH::Cash', cat: 'Food', note: 'p74', d: F.todayISO() });
+      await sleep(30);
+      var es74b = F.effectiveSnap();
+      ok(close(es74b.cash.total, es74a.cash.total), 'v74.94: a friend paying for you moves no account (liquid unchanged)');
+      ok(close(es74b.friend_owed, 400) && close(es74b.cash.free, es74a.cash.free - 400), 'v74.94: the 400 you owe comes off free cash');
+      ok(close(F.spentTodayData().total, spent74a + 400), 'v74.94: your share still counts as spent today');
+      var pj74 = F.cycleProjection('this');
+      ok(close(pj74.friendOwed, 400) && close(pj74.liquid - pj74.cardOwed - pj74.friendOwed - pj74.otherOut, pj74.free), 'v74.94: the You owe friends row keeps the cycle rows summing to free cash');
+      await F.addOwedEntry(pid74, { dir: 'itb', amt: 400, total: 400, mine: 0, theirs: 0, acc: 'CASH::Maya', cat: 'Unsorted', note: '', d: F.todayISO() });
+      await sleep(30);
+      var p74 = F.getOwed().people.filter(function (x) { return x.id === pid74; })[0], i74 = p74.entries[1];
+      var leg74 = F.getTxns().filter(function (t) { return t.id === i74.theirsTxnId; })[0];
+      var es74c = F.effectiveSnap();
+      ok(leg74 && leg74.kind === 'cash_out' && leg74.account === 'Maya' && leg74.amount === 400, 'v74.94: I paid them back files a 400 cash_out on Maya');
+      ok(close(es74c.cash.total, es74a.cash.total - 400) && close(es74c.cash.free, es74a.cash.free - 400) && close(es74c.friend_owed, 0), 'v74.94: after the payback liquid is -400, free unchanged by it, nothing owed');
+      ok(close(F.spentTodayData().total, spent74a + 400) && F.spentTodayData().skip.owedBack >= 400, 'v74.94: the payback is not spend (named under paid back to friends)');
+      // netting: they owe you on one entry, you owe them on another -> only the net debt counts
+      await F.addOwedEntry(pid74, { dir: 'tpf', amt: 300, total: 300, mine: 300, theirs: 0, acc: 'CASH::Cash', cat: 'Food', note: '', d: F.todayISO() });
+      await F.addOwedEntry(pid74, { dir: 'ipf', amt: 100, total: 100, mine: 0, theirs: 100, acc: 'CASH::Cash', cat: 'Food', note: '', d: F.todayISO() });
+      await sleep(30);
+      ok(close(F.friendOwedNow(), 200), 'v74.94: per person the 100 they owe you offsets the 300 you owe (200 counted)');
+      // legacy (pre-v74.94) debt: already off Cash, so its payback takes nothing
+      p74.entries.push({ id: 'e74old', d: '2026-10-01', dir: 'tpf', amt: 250, cat: 'Food', note: 'old' });
+      ok(close(F.owedLegacyDebtLeft(p74), 250), 'v74.94: a legacy they-paid-for-me debt is tracked');
+      await F.addOwedEntry(pid74, { dir: 'itb', amt: 300, total: 300, mine: 0, theirs: 0, acc: 'CASH::Cash', cat: 'Unsorted', note: '', d: F.todayISO() });
+      await sleep(30);
+      var j74 = p74.entries[p74.entries.length - 1], jl74 = F.getTxns().filter(function (t) { return t.id === j74.theirsTxnId; })[0];
+      ok(j74.cov === 250 && jl74 && jl74.amount === 50, 'v74.94: a payback settles the legacy 250 first, takes the other 50 from Cash');
+      ok(F.mlOwedRow('Owed · Probe74 · you paid back', null).leg === 'itb' && F.mlOwedRow('Owed · Probe74 · paid for you', null).leg === 'tpf', 'v74.94: the Ledger tells the legs apart');
+      F.setOwed(owed74); F.setTxns(txns74);
+      var A74 = F.getAdj(); Object.keys(A74).forEach(function (k) { delete A74[k]; }); Object.keys(adj74).forEach(function (k) { A74[k] = adj74[k]; });
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

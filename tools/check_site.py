@@ -801,7 +801,7 @@ def main():
     check("v73.44 (boss: 'add the cards owed row and plan dues in this cycle, informational only — liquid deducted by the plans due and cards owed, then finally the free cash which should display the same amount as the big hero card number'): the THIS-cycle block renders the bridge rows Liquid / Cards owed / Other outflows / Plan dues / Free cash — the Free cash row is the hero's number (net = free − planShare, planShare = cyclePlanDeduction, one source), and Other outflows is the EXACT RESIDUAL (liquid − cardOwed − free) so the rows sum to the hero by construction (the overlay shifts free and liquid differently — card_charge moves free not liquid); the separate 'Free at end of this cycle' net line renders only for the peek now",
           'class="cbrow cbfree"' in js
           and "same as the hero number" not in js  # v74.33 (boss: 'remove same as the hero number'): the sub-label is gone, the row stays
-          and "var otherOut = r2(liquid - cardOwed - free);" in js
+          and "var otherOut = r2(liquid - cardOwed - friendOwed - free);" in js
           and "var planShare = r2(cyclePlanDeduction());" in js
           and "planShare: planShare," in js and "otherOut: r2(otherOut)," in js
           and "mode === 'next' ? '<div class=\"cbnet\"><span class=\"nl\">Free at end of next cycle</span>" in js
@@ -2720,6 +2720,16 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v74.94 (boss: 'ship the suggesed fix' - money you owe friends works like a card balance): tpf files your share as spend plus a 'paid for you' cash_in leg (no account moves), friendOwedNow() takes the net debt per person off free cash in effectiveSnap (a 'You owe friends' cycle row keeps the rows summing), itb files a cash_out / card_charge on the picked account less the legacy debt it settles (owedLegacyDebtLeft); owedLegDir names every leg for the Ledger and Spent today; the hero chip shows both directions. Smoke PART 74",
+          "function friendOwedNow() {" in js
+          and "e.friend_owed = friendOwedNow();" in js
+          and "var otherOut = r2(liquid - cardOwed - friendOwed - free);" in js
+          and "function owedLegacyDebtLeft(p, exceptId) {" in js
+          and "function owedLegDir(id) {" in js
+          and "' · you paid back'" in js
+          and "You owe friends<small>" in js
+          and "PART 74: v74.94" in smoke
+          and "'74.94': [" in js)
     check("v74.93 (boss: 'lets do that but i wanna see whats owed to me in the hero card' + 'i pick C. also remove the subline' + 'expanded plan due rows use Home Wifi - in x days'): ipf theirs leaves the paid-from account and tmb files into its picked account (fileOwedLeg, m2 entries; legacy receivables paid down first via owedLegacyLeft), the hero owed chip replaces the Liquid / Cards owed / Prepay sub line, the cycle sub-rows say when (cbWhenHTML). Smoke PART 73",
           "function fileOwedLeg(e, p) {" in js
           and "if (e && e.m2) return fileOwedLeg(e, p);" in js

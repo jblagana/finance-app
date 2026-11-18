@@ -1839,6 +1839,8 @@
       accounts: s.cash ? s.cash.accounts : []
     };
     e.budget_credit = bc.total; e.budget_used = bc.by; // v74.16: what the budgets already absorbed
+    e.friend_owed = friendOwedNow(); // v74.94: money you owe friends — off free cash, like a card balance
+    e.cash.free = r2(e.cash.free - e.friend_owed);
     e.card_owed = r2((s.card_owed || 0) + state.adj.card);
     e.total_prepay = r2((s.total_prepay || 0) + state.adj.prepay);
     // v72.33: the per-card prepay goes live too (the card's own balance delta
@@ -3159,7 +3161,7 @@
       (p.entries || []).forEach(function (e) {
         if (!e) return;
         if (e.txnId) ix[e.txnId] = { p: p, mine: true };
-        ipfTheirsTxnIds(e).forEach(function (tid) { ix[tid] = { p: p, mine: false, back: e.dir === 'tmb' }; }); // v74.93: back = the tmb paid-back leg
+        ipfTheirsTxnIds(e).forEach(function (tid) { ix[tid] = { p: p, mine: false, leg: e.dir }; }); // v74.94: leg = the entry's dir (ipf / tmb / tpf / itb)
       });
     });
     return ix;
@@ -3169,11 +3171,13 @@
   // still carries the tag is read from the note itself (name = the tag's).
   function mlOwedRow(note, link) {
     var s = String(note || ''), name = link ? String(link.p.name || '') : '';
-    var m = /(?:^| · )Owed · (.+?)( · theirs| · paid back)?$/.exec(s); // v74.93: the tmb leg's tag
+    var m = /(?:^| · )Owed · (.+?)( · theirs| · paid back| · paid for you| · you paid back)?$/.exec(s); // v74.93/94: the legs' tags
     if (!link && !m) return null;
     if (m && (!name || m[1] === name)) { name = name || m[1]; s = s.slice(0, m.index); }
     var mine = link ? link.mine : !(m && m[2]);
-    return { name: name, av: owedAvatar(link ? link.p : { name: name }), mine: mine, back: link ? !!link.back : !!(m && m[2] === ' · paid back'), note: s.trim() };
+    var TAGS = { ' · theirs': 'ipf', ' · paid back': 'tmb', ' · paid for you': 'tpf', ' · you paid back': 'itb' };
+    var leg = link ? (link.leg || '') : ((m && TAGS[m[2]]) || '');
+    return { name: name, av: owedAvatar(link ? link.p : { name: name }), mine: mine, leg: leg, back: leg === 'tmb', note: s.trim() };
   }
   function mlParts(e) {
     var lab, note = '';
@@ -3515,7 +3519,7 @@
         // an Owed row drops its text tag for the friend badge on the tile
         var ow = mlOwedRow(p.note, e.tid ? owIdx[e.tid] : null);
         var noteTxt = ow ? ow.note : p.note;
-        var subTxt = noteTxt || (ow ? (ow.mine ? 'Your share with ' + ow.name : ow.back ? 'Paid back by ' + ow.name : ow.name + '’s share')
+        var subTxt = noteTxt || (ow ? (ow.mine ? 'Your share with ' + ow.name : ow.leg === 'tmb' ? 'Paid back by ' + ow.name : ow.leg === 'tpf' ? ow.name + ' paid for you' : ow.leg === 'itb' ? 'Paid back to ' + ow.name : ow.name + '’s share')
           : ((e.k === 'p' && e.w) ? (p.m || 'card') + ' from ' + e.w : (p.m || '')));
         var badge = ow ? '<span class="ml-badge" style="--bb:' + ow.av.bg + ';--bf:' + ow.av.fg + '">' + esc(ow.av.ch) + '</span>' : '';
         // v74.83 (boss: 'make the chip visible from the main entry view so its easy to see which ones have
@@ -3530,7 +3534,7 @@
           '<b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b></button>' + cycChip +
           '<div class="ml-more">' +
           '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) +
-          (ow ? ' · Owed · ' + esc(ow.name) + (ow.mine ? '' : ow.back ? ' (paid back)' : ' (their share)') : '') + '</div>' + // v74.85: the open row names the friend
+          (ow ? ' · Owed · ' + esc(ow.name) + (ow.mine ? '' : ow.leg === 'tmb' ? ' (paid back)' : ow.leg === 'tpf' ? ' (they paid for you)' : ow.leg === 'itb' ? ' (you paid back)' : ' (their share)') : '') + '</div>' + // v74.85: the open row names the friend
           extra +
           ((editBtn || delBtn || adjDel) ? '<div class="ml-acts">' + editBtn + delBtn + adjDel + '</div>' : '') +
           '</div></div>';
@@ -5069,12 +5073,17 @@
   // v74.76: is this txn one leg of an ipf theirs pair (theirsTxnId /
   // theirsBumpId on an owed entry)? The owed book is small; read it live so
   // every path that rewires the pair (add / edit / undo / import) is covered.
-  function isIpfTheirsTxn(id) {
-    var hit = false;
+  function isIpfTheirsTxn(id) { return !!owedLegDir(id); }
+  // v74.94: the dir of the owed entry whose linked leg this txn is ('' = none)
+  // — ipf theirs, tmb paid back (v74.93), tpf paid for you, itb you paid back
+  // (v74.94). Every leg is a transfer: not spend, not income.
+  function owedLegDir(id) {
+    var hit = '';
+    if (!id) return hit;
     ((state.owed && state.owed.people) || []).some(function (p) {
       return (p && p.entries || []).some(function (e) {
-        if (e && (e.dir === 'ipf' || e.dir === 'tmb') && (e.theirsTxnId === id || e.theirsBumpId === id)) hit = true; // v74.93: the tmb paid-back leg too
-        return hit;
+        if (e && OWED_DIRS[e.dir] && (e.theirsTxnId === id || e.theirsBumpId === id)) hit = e.dir;
+        return !!hit;
       });
     });
     return hit;
@@ -5461,12 +5470,13 @@
     // overlay's net card effect — which makes the bridge hold by construction:
     // liquid − cardOwed − otherOut − planShare = free − planShare = hero.
     var planShare = r2(cyclePlanDeduction());
-    var otherOut = r2(liquid - cardOwed - free);
+    var friendOwed = (es && es.friend_owed) ? Number(es.friend_owed) || 0 : 0; // v74.94: its own row
+    var otherOut = r2(liquid - cardOwed - friendOwed - free);
     return {
       mode: mode, month: m, start: cd.start, end: cd.end, sday: cd.sday,
       free: r2(free),
       carry: r2(carry),
-      liquid: r2(liquid), cardOwed: r2(cardOwed), otherOut: r2(otherOut),
+      liquid: r2(liquid), cardOwed: r2(cardOwed), friendOwed: r2(friendOwed), otherOut: r2(otherOut),
       planShare: planShare,
       savingHeld: r2(heldS), // v74.65
       salary: r2(salExpected), salaryReceived: salReceived, salaryInFree: salInFree,
@@ -7422,14 +7432,15 @@
   var spentTodayOpen = false;
   function spentTodayData() {
     var today = todayISO(), items = [], total = 0;
-    var skip = { plans: 0, theirs: 0, payoffs: 0, moneyIn: 0 };
+    var skip = { plans: 0, theirs: 0, payoffs: 0, moneyIn: 0, owedBack: 0 }; // v74.94: owedBack = paid back to friends
     state.txns.forEach(function (t) {
       if (t.date !== today) return;
       var a = Number(t.amount) || 0;
       if (t.planRef) { skip.plans += spendOf(t); return; }
       var sp = spendOf(t);
       if (sp) { items.push({ id: t.id, name: String(t.note || '').trim() || t.category || 'Unsorted', cat: t.category || 'Unsorted', acc: t.account || '', amt: r2(sp) }); total += sp; return; }
-      if (t.id && isIpfTheirsTxn(t.id)) { if (t.kind !== 'cash_in') skip.theirs += a; return; }
+      var lg = t.id ? owedLegDir(t.id) : '';
+      if (lg) { if (lg === 'itb') skip.owedBack += a; else if (t.kind !== 'cash_in') skip.theirs += a; return; }
       if (t.kind === 'card_payment') skip.payoffs += a;
       else if (t.kind === 'cash_in') skip.moneyIn += a;
     });
@@ -7445,6 +7456,7 @@
     var notes = [];
     if (d.skip.plans) notes.push('plan payments ' + money(d.skip.plans));
     if (d.skip.theirs) notes.push('friends’ shares ' + money(d.skip.theirs));
+    if (d.skip.owedBack) notes.push('paid back to friends ' + money(d.skip.owedBack)); // v74.94
     if (d.skip.payoffs) notes.push('card payoffs ' + money(d.skip.payoffs));
     if (d.skip.moneyIn) notes.push('money in ' + money(d.skip.moneyIn));
     return '<div class="st-pop" id="stPop" role="region" aria-label="Spent today">'
@@ -7905,7 +7917,8 @@
     // free cash (since v74.93 a friend's share leaves the account at once);
     // when nobody owes you but you owe someone, a muted 'you owe' chip.
     var od = owedHeroData(), chip = '';
-    if (od.owedIn > 0.004) chip = '<button type="button" class="hero-owed" data-owedchip><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7 7 17"/><path d="M16 17H7V8"/></svg><span><b>' + money(od.owedIn) + '</b> owed to you</span><span class="ho-n">· ' + esc(od.inNames) + '</span><span class="ho-c" aria-hidden="true">›</span></button>';
+    if (od.owedIn > 0.004 && od.owedOut > 0.004) chip = '<button type="button" class="hero-owed" data-owedchip><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7 7 17"/><path d="M16 17H7V8"/></svg><span><b>' + money(od.owedIn) + '</b> owed to you</span><span class="ho-n">· <b class="ho-out">' + money(od.owedOut) + '</b> you owe</span><span class="ho-c" aria-hidden="true">›</span></button>'; // v74.94: both directions
+    else if (od.owedIn > 0.004) chip = '<button type="button" class="hero-owed" data-owedchip><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7 7 17"/><path d="M16 17H7V8"/></svg><span><b>' + money(od.owedIn) + '</b> owed to you</span><span class="ho-n">· ' + esc(od.inNames) + '</span><span class="ho-c" aria-hidden="true">›</span></button>';
     else if (od.owedOut > 0.004) chip = '<button type="button" class="hero-owed out" data-owedchip><span><b>' + money(od.owedOut) + '</b> you owe</span><span class="ho-n">· ' + esc(od.outNames) + '</span><span class="ho-c" aria-hidden="true">›</span></button>';
     // v73.33: the salary statement LEFT the Free/unallocated line (boss:
     // 'remove the salary statement in the free/unallocated card') — the
@@ -8006,6 +8019,7 @@
         if (!csubs) csubs = '<div class="cbsub mut"><span class="sl">no credit cards on file</span></div>';
         rows += '<div class="cbsubwrap">' + csubs + '</div>';
       }
+      if (p.friendOwed > 0.004) rows += '<div class="cbrow"><div class="lab">You owe friends<small>until you pay them back</small></div><div class="amt minus">− ' + money(p.friendOwed) + '</div></div>'; // v74.94
       if (p.otherOut > 0.004) rows += '<div class="cbrow mut"><div class="lab">Other outflows<small>budgets · debts · sinking · one-offs</small></div><div class="amt minus">− ' + money(p.otherOut) + '</div></div>';
       // v73.56 (boss: 'make the hero card this-cycle plan dues expandable
       // just like next cycle'): the same tap-to-expand row as the peek —
@@ -10518,6 +10532,18 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     } else if (e.dir === 'tmb') {
       amt = r2((Number(e.amt) || 0) - (Number(e.cov) || 0));
       t = { date: e.d, account: isCardAcc(acc) ? 'Cash' : accName, kind: 'cash_in', category: 'Unsorted', amount: amt, note: 'Owed · ' + p.name + ' · paid back' };
+    } else if (e.dir === 'tpf') {
+      // v74.94: your share is spend (the mine txn, on Cash) but no money left
+      // you — this leg puts it back on Cash; the debt itself comes off free
+      // cash through friendOwedNow() until you pay them back
+      amt = r2(Number(e.amt) || 0);
+      t = { date: e.d, account: 'Cash', kind: 'cash_in', category: e.cat || 'Unsorted', amount: amt, note: 'Owed · ' + p.name + ' · paid for you' };
+    } else if (e.dir === 'itb') {
+      // v74.94: paying them back takes the money from the picked account (a
+      // card pick is a card charge), less e.cov — the part that pays a LEGACY
+      // debt (pre-v74.94 they-paid-for-me, already taken off Cash)
+      amt = r2((Number(e.amt) || 0) - (Number(e.cov) || 0));
+      t = { date: e.d, account: accName, kind: isCardAcc(acc) ? 'card_charge' : 'cash_out', category: 'Unsorted', amount: amt, note: 'Owed · ' + p.name + ' · you paid back' };
     }
     delete e.theirsBumpId;
     if (!t || !(amt > 0.004)) { e.theirsTxnId = null; return Promise.resolve(); }
@@ -10538,6 +10564,40 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       else if (x.dir === 'tmb') left -= (Number(x.cov) || 0);
     });
     return r2(Math.max(0, left));
+  }
+  // v74.94: what you still owe a person from LEGACY (pre-v74.94) they-paid-
+  // for-me entries — already taken off Cash under the old rule, so paying it
+  // back files nothing. Legacy tpf − legacy itb − what v74.94 paybacks covered.
+  function owedLegacyDebtLeft(p, exceptId) {
+    var left = 0;
+    (p && p.entries || []).forEach(function (x) {
+      if (!x || x.id === exceptId) return;
+      var a = Number(x.amt) || 0;
+      if (!x.m2) { if (x.dir === 'tpf') left += a; else if (x.dir === 'itb') left -= a; }
+      else if (x.dir === 'itb') left -= (Number(x.cov) || 0);
+    });
+    return r2(Math.max(0, left));
+  }
+  // v74.94 (boss: 'ship the suggested fix'): money you owe friends works like
+  // a card balance — it comes off free cash (not Liquid) until you pay it
+  // back. Per person, from the entries on the account rule (m2) only — legacy
+  // ones are already inside Cash. Net per person: what they owe you on m2
+  // entries offsets what you owe them; only a net debt counts.
+  function friendOwedNow() {
+    var total = 0;
+    (state.owed && state.owed.people || []).forEach(function (p) {
+      var n = 0;
+      (p && p.entries || []).forEach(function (x) {
+        if (!x || !x.m2) return;
+        var a = Number(x.amt) || 0, c = Number(x.cov) || 0;
+        if (x.dir === 'ipf') n += a;
+        else if (x.dir === 'tmb') n -= (a - c);
+        else if (x.dir === 'tpf') n -= a;
+        else if (x.dir === 'itb') n += (a - c);
+      });
+      if (n < -0.004) total += -n;
+    });
+    return r2(total);
   }
   // v74.93: the hero's owed chip — the Owed tab's own totals
   function owedHeroData() {
@@ -10735,8 +10795,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       // already left free cash, so there is nothing to convert)
       step = step.then(function () { return fileIpfTheirs(e, p, true, true); });
     }
-    if (dir === 'tmb') { // v74.93: the repayment lands in the picked account (less what pays down legacy entries)
-      var cov = Math.min(owed, owedLegacyLeft(p));
+    if (dir === 'tmb' || dir === 'itb' || dir === 'tpf') { // v74.93/94: the leg (less what settles legacy entries)
+      var cov = dir === 'tmb' ? Math.min(owed, owedLegacyLeft(p)) : dir === 'itb' ? Math.min(owed, owedLegacyDebtLeft(p)) : 0;
       if (cov > 0.004) e.cov = r2(cov);
       step = step.then(function () { return fileOwedLeg(e, p); });
     }
@@ -11087,8 +11147,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       step = step.then(function () { return fileIpfTheirs(e, p, true, true); });
     }
     delete e.cov;
-    if (nextDir === 'tmb' && e.m2) { // v74.93: re-file the paid-back leg on the new values
-      var cov2 = Math.min(e.amt, owedLegacyLeft(p, e.id));
+    if (e.m2 && (nextDir === 'tmb' || nextDir === 'itb' || nextDir === 'tpf')) { // v74.93/94: re-file the leg on the new values
+      var cov2 = nextDir === 'tmb' ? Math.min(e.amt, owedLegacyLeft(p, e.id)) : nextDir === 'itb' ? Math.min(e.amt, owedLegacyDebtLeft(p, e.id)) : 0;
       if (cov2 > 0.004) e.cov = r2(cov2);
       step = step.then(function () { return fileOwedLeg(e, p); });
     }
@@ -12103,12 +12163,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.93, live: new Date(2026, 10, 18, 21, 50) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.94, live: new Date(2026, 10, 18, 22, 10) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.94': [
+      'Owed: when a friend pays for you, your share counts as spent, but no money leaves your accounts. What you owe comes off free cash (a new “You owe friends” row on Home) until you pay them back.',
+      '“I paid them back” now takes the money from the account you pick. Paybacks of older entries (from before this update) take nothing, since those were already taken off Cash.',
+      'Home: when friends owe you and you owe someone too, the chip shows both.'
+    ],
     '74.93': [
       'Owed: when you pay for a friend, their share now leaves the account you paid from right away, so your accounts match the bank and your wallet. Free cash drops by the full bill until they pay you back.',
       '“They paid me back” now adds the money to the account you pick. Repayments of older entries (from before this update) add nothing, since those were already counted as yours.',
@@ -13607,7 +13672,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     sparkData: sparkData, // v73.57: the 2-month step chart (the smoke drives the drop dates + live reactivity)
     renderSpark: renderSpark, // v73.65: the axis-throttled render (the smoke counts the <text> ticks)
     salaryGraceExtend: salaryGraceExtend, salaryGraceEnd: salaryGraceEnd, cycleGraceOf: cycleGraceOf, // v74.90
-    fileOwedLeg: fileOwedLeg, owedLegacyLeft: owedLegacyLeft, owedHeroData: owedHeroData, cbWhenHTML: cbWhenHTML, cbDaysTo: cbDaysTo, // v74.93
+    fileOwedLeg: fileOwedLeg, owedLegacyLeft: owedLegacyLeft, owedLegacyDebtLeft: owedLegacyDebtLeft, friendOwedNow: friendOwedNow, owedLegDir: owedLegDir, // v74.94
+    owedHeroData: owedHeroData, cbWhenHTML: cbWhenHTML, cbDaysTo: cbDaysTo, // v74.93
     potDates: potDates, // v74.87: a pot's own date list (the smoke checks the auto top-ups)
     planAllDates: planAllDates, // v73.57: the whole series (the smoke builds the expected drop dates)
     planLinkSuggestion: planLinkSuggestion, // v73.17: the fuzzy SUGGESTION (pure — the smoke drives it)
