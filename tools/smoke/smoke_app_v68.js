@@ -4108,6 +4108,19 @@ waitReady().then(async function (F) {
       ok(F.mlOwedRow('Owed · Probe74 · you paid back', null).leg === 'itb' && F.mlOwedRow('Owed · Probe74 · paid for you', null).leg === 'tpf', 'v74.94: the Ledger tells the legs apart');
       F.setOwed(owed74); F.setTxns(txns74);
       var A74 = F.getAdj(); Object.keys(A74).forEach(function (k) { delete A74[k]; }); Object.keys(adj74).forEach(function (k) { A74[k] = adj74[k]; });
+      // ============ PART 75: v74.95 - a blank payback amount settles the person ============
+      console.log('\n== PART 75: v74.95 - blank amount on a payback = exactly what is owed ==');
+      var owed75 = JSON.parse(JSON.stringify(F.getOwed()));
+      F.setOwed({ people: [{ id: 'p75', name: 'Probe75', entries: [
+        { id: 'e75a', d: '2026-11-01', dir: 'ipf', amt: 600, m2: 1 },
+        { id: 'e75b', d: '2026-11-02', dir: 'tpf', amt: 150, m2: 1 }
+      ], updated: '' }], sort: 'recent' });
+      ok(F.owedSettleAmount('p75', 'tmb') === 450, 'v74.95: They paid me back, blank = the 450 they owe you');
+      ok(F.owedSettleAmount('p75', 'itb') === 0, 'v74.95: I paid them back, blank = 0 when you owe them nothing');
+      F.getOwed().people[0].entries.push({ id: 'e75c', d: '2026-11-03', dir: 'tpf', amt: 700, m2: 1 });
+      ok(F.owedSettleAmount('p75', 'itb') === 250 && F.owedSettleAmount('p75', 'tmb') === 0, 'v74.95: once you owe them 250, a blank payback files 250');
+      ok(F.owedSettleAmount('nobody', 'tmb') === 0, 'v74.95: an unknown person settles nothing');
+      F.setOwed(owed75);
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

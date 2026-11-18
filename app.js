@@ -10308,8 +10308,26 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // itb / tmb = Account only. v72.49: the split row (Mine + Theirs) shows
   // for ipf/tpf, the amount label reads Total (the total for both) there,
   // and Category shows for ipf too (the filed "mine" part lands in it).
+  // v74.95 (boss: 'for ipb and tpb, when i dont type an amount and just save
+  // directly, file the exact amount owed'): what a blank amount settles —
+  // I paid them back = what you owe them, They paid me back = what they owe
+  // you (the person's balance, that direction only; 0 = nothing to settle)
+  function owedSettleAmount(pid, dir) {
+    var p = null;
+    (state.owed && state.owed.people || []).forEach(function (x) { if (x.id === pid) p = x; });
+    if (!p) return 0;
+    var b = owedBal(p);
+    if (dir === 'itb') return b < -0.004 ? r2(-b) : 0;
+    if (dir === 'tmb') return b > 0.004 ? r2(b) : 0;
+    return 0;
+  }
   function owedFormSections(form, dir) {
     if (!form || !form.querySelector) return;
+    var amtIn = form.querySelector('.oent-amt'); // v74.95: the blank-amount hint
+    if (amtIn) {
+      var settleA = (form.getAttribute && !form.getAttribute('data-ow-edit')) ? owedSettleAmount(form.getAttribute('data-ow-for'), dir) : 0;
+      amtIn.placeholder = settleA > 0 ? 'Blank = ' + money(settleA) + ' (all of it)' : '';
+    }
     var a = form.querySelector('.oent-accrow');
     if (a) a.style.display = dir === 'tpf' ? 'none' : '';
     var c = form.querySelector('.oent-catrow');
@@ -11317,8 +11335,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         if (split.err) { alert(split.err); return; }
         owed = split.owed;
       } else {
+        // v74.95: a NEW payback saved with the amount left blank files exactly
+        // what is owed that way (settles the person); edits still need one
+        if (!raw && !f.getAttribute('data-ow-edit')) T = owedSettleAmount(pid, dir);
         if (!(T > 0)) {
-          alert('Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.');
+          alert(!raw && !f.getAttribute('data-ow-edit')
+            ? (dir === 'itb' ? 'You don’t owe them anything right now — enter an amount.' : 'They don’t owe you anything right now — enter an amount.')
+            : 'Enter an amount greater than 0 — a plain number, or a quick sum like 300-125+10.');
           return;
         }
         owed = T;
@@ -12163,12 +12186,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.94, live: new Date(2026, 10, 18, 22, 10) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.95, live: new Date(2026, 10, 18, 22, 13) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.95': [
+      'Owed: on “I paid them back” or “They paid me back”, leave the amount blank and save — it files exactly what’s owed and settles them. The box shows the amount before you save.'
+    ],
     '74.94': [
       'Owed: when a friend pays for you, your share counts as spent, but no money leaves your accounts. What you owe comes off free cash (a new “You owe friends” row on Home) until you pay them back.',
       '“I paid them back” now takes the money from the account you pick. Paybacks of older entries (from before this update) take nothing, since those were already taken off Cash.',
@@ -13672,6 +13698,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     sparkData: sparkData, // v73.57: the 2-month step chart (the smoke drives the drop dates + live reactivity)
     renderSpark: renderSpark, // v73.65: the axis-throttled render (the smoke counts the <text> ticks)
     salaryGraceExtend: salaryGraceExtend, salaryGraceEnd: salaryGraceEnd, cycleGraceOf: cycleGraceOf, // v74.90
+    owedSettleAmount: owedSettleAmount, owedFormSections: owedFormSections, // v74.95
     fileOwedLeg: fileOwedLeg, owedLegacyLeft: owedLegacyLeft, owedLegacyDebtLeft: owedLegacyDebtLeft, friendOwedNow: friendOwedNow, owedLegDir: owedLegDir, // v74.94
     owedHeroData: owedHeroData, cbWhenHTML: cbWhenHTML, cbDaysTo: cbDaysTo, // v74.93
     potDates: potDates, // v74.87: a pot's own date list (the smoke checks the auto top-ups)

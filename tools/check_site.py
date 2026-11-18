@@ -2720,6 +2720,12 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v74.95 (boss: 'for ipb and tpb, when i dont type an amount and just save directly, file the exact amount owed'): a NEW itb / tmb saved with the amount blank files owedSettleAmount (itb: what you owe them, tmb: what they owe you); the amount box shows it as its placeholder; nothing owed = a direction-aware message. Smoke PART 75",
+          "function owedSettleAmount(pid, dir) {" in js
+          and "if (!raw && !f.getAttribute('data-ow-edit')) T = owedSettleAmount(pid, dir);" in js
+          and "amtIn.placeholder = settleA > 0 ?" in js
+          and "PART 75: v74.95" in smoke
+          and "'74.95': [" in js)
     check("v74.94 (boss: 'ship the suggesed fix' - money you owe friends works like a card balance): tpf files your share as spend plus a 'paid for you' cash_in leg (no account moves), friendOwedNow() takes the net debt per person off free cash in effectiveSnap (a 'You owe friends' cycle row keeps the rows summing), itb files a cash_out / card_charge on the picked account less the legacy debt it settles (owedLegacyDebtLeft); owedLegDir names every leg for the Ledger and Spent today; the hero chip shows both directions. Smoke PART 74",
           "function friendOwedNow() {" in js
           and "e.friend_owed = friendOwedNow();" in js
