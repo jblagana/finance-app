@@ -82,6 +82,81 @@ function fail(status, message, origin, env) {
   return new Response(JSON.stringify({ error: String(message) }), { status: status, headers: jsonHeaders(origin, env) });
 }
 
+
+// ---------- v75.02: Owed connections relay ----------
+// Two phones share one Owed record. The relay only stores sealed mailbox
+// messages: the app encrypts every message (AES-256-GCM) with a pair key that
+// never leaves the two phones (it rides in the invite link's #fragment), so
+// the Worker sees ciphertext, a random pair id and a token hash, nothing else.
+// KV layout (binding CONN):
+//   p:<pair>                 sha256(token) — set by the inviter's first call
+//   m:<pair>:<a|b>:<ts>-<r>  one sealed message for side a / b (TTL 30 days;
+//                            the invite 24 hours)
+// The coach's APP_TOKEN does not apply here (the friend's phone never has it);
+// the pair token is the gate, with its own rate limit (RL_CONN).
+var CONN_MAX_MSG = 6000;      // characters of sealed message
+var CONN_PULL_MAX = 50;       // messages per pull
+var CONN_TTL = 30 * 86400;    // a message waits up to 30 days
+var CONN_INVITE_TTL = 86400;  // the invite link works for 24 hours
+function hexOk(v, n) { return typeof v === 'string' && v.length === n && /^[0-9a-f]+$/.test(v); }
+async function sha256hex(s) {
+  var d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(s)));
+  return Array.prototype.map.call(new Uint8Array(d), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+}
+async function handleConn(request, env, origin) {
+  if (!env.CONN) return fail(503, 'connections are not set up on this Worker (KV binding CONN missing)', origin, env);
+  var ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (!(await underLimit(env.RL_CONN, 'c:' + ip))) return fail(429, 'too many requests — try again in a minute', origin, env);
+  var b;
+  try { b = await request.json(); } catch (e) { return fail(400, 'invalid JSON', origin, env); }
+  b = b || {};
+  var op = String(b.op || ''), pair = b.pair, tok = b.tok;
+  if (!hexOk(pair, 32) || !hexOk(tok, 64)) return fail(400, 'bad pair or token', origin, env);
+  var th = await sha256hex(tok);
+  var rec = await env.CONN.get('p:' + pair);
+  if (op === 'reg') {
+    if (!rec) { await env.CONN.put('p:' + pair, th); return ok({ ok: true, created: true }, origin, env); }
+    return sameSecret(rec, th) ? ok({ ok: true }, origin, env) : fail(403, 'pair taken', origin, env);
+  }
+  if (!rec) return fail(404, 'no such connection (it was removed or never set up)', origin, env);
+  if (!sameSecret(rec, th)) return fail(403, 'wrong pair token', origin, env);
+  var side = function (v) { return v === 'a' || v === 'b' ? v : ''; };
+  if (op === 'send') {
+    var to = side(b.to), msg = b.msg;
+    if (!to || typeof msg !== 'string' || !msg || msg.length > CONN_MAX_MSG) return fail(400, 'bad message', origin, env);
+    var ts = Date.now().toString(36);
+    while (ts.length < 10) ts = '0' + ts;
+    var id = 'm:' + pair + ':' + to + ':' + ts + '-' + Math.random().toString(36).slice(2, 8);
+    await env.CONN.put(id, msg, { expirationTtl: b.invite ? CONN_INVITE_TTL : CONN_TTL });
+    return ok({ ok: true, id: id }, origin, env);
+  }
+  if (op === 'pull') {
+    var me = side(b.me);
+    if (!me) return fail(400, 'bad side', origin, env);
+    var ls = await env.CONN.list({ prefix: 'm:' + pair + ':' + me + ':', limit: CONN_PULL_MAX });
+    var out = [];
+    for (var i = 0; i < ls.keys.length; i++) {
+      var v = await env.CONN.get(ls.keys[i].name);
+      if (v) out.push({ id: ls.keys[i].name, msg: v });
+    }
+    return ok({ ok: true, msgs: out, more: !ls.list_complete }, origin, env);
+  }
+  if (op === 'ack') {
+    var me2 = side(b.me), ids = Array.isArray(b.ids) ? b.ids.slice(0, CONN_PULL_MAX) : [];
+    if (!me2) return fail(400, 'bad side', origin, env);
+    var pre = 'm:' + pair + ':' + me2 + ':';
+    for (var j = 0; j < ids.length; j++) if (typeof ids[j] === 'string' && ids[j].indexOf(pre) === 0) await env.CONN.delete(ids[j]);
+    return ok({ ok: true }, origin, env);
+  }
+  if (op === 'drop') {
+    var ls2 = await env.CONN.list({ prefix: 'm:' + pair + ':', limit: 1000 });
+    for (var k = 0; k < ls2.keys.length; k++) await env.CONN.delete(ls2.keys[k].name);
+    await env.CONN.delete('p:' + pair);
+    return ok({ ok: true }, origin, env);
+  }
+  return fail(400, 'unknown op', origin, env);
+}
+
 export default {
   async fetch(request, env) {
     var origin = request.headers.get('Origin') || '';
@@ -98,6 +173,10 @@ export default {
     // The real gates are the app token and the rate limits below.
     if (!originAllowed(origin, env)) {
       return fail(403, 'forbidden origin', origin, env);
+    }
+    // v75.02: the Owed connections relay (its own gate: the pair token)
+    if (new URL(request.url).pathname.replace(/\/+$/, '') === '/conn') {
+      return handleConn(request, env, origin);
     }
     // v74.07: the app token. When the APP_TOKEN secret is set
     // (wrangler secret put APP_TOKEN), every call must carry it as ?t=<token>

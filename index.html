@@ -1722,6 +1722,47 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 .tr-peso{color:var(--mut);font-weight:600;flex:none}
 .testrow .tr-amt{display:block;flex:1;min-width:0;width:auto;height:100%;padding:0;background:transparent;border:0;border-radius:0;font-size:16px;font-weight:600;color:var(--ink)}
 .testrow .tr-amt::placeholder{color:var(--mut);font-weight:600;opacity:1}
+
+/* v75.02: Owed connections */
+.cn-nl{display:flex;align-items:center;gap:6px;min-width:0}
+.cn-nl .ow-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
+.cn-badge{display:inline-block;flex:0 0 auto;font-size:11px;font-weight:600;color:var(--ok);border:1px solid rgba(55,211,155,.45);border-radius:999px;padding:1px 7px}
+.cn-badge.off{color:var(--mut);border-color:var(--line)}
+.cn-dot{font-weight:600;white-space:nowrap}
+.cn-inbox{margin:10px 0 6px;padding:10px 12px;border:1px solid var(--warnLine,rgba(255,196,92,.4));background:var(--warnSoft,rgba(255,196,92,.13));border-radius:14px}
+.cn-ih{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--warn);margin-bottom:4px}
+.cn-ih span+span{font-weight:500;text-transform:none;letter-spacing:0;color:var(--mut);font-size:12px}
+.cn-it{padding:10px 0;border-top:1px solid var(--line)}
+.cn-it:first-of-type{border-top:0}
+.cn-r{display:flex;justify-content:space-between;gap:10px;font-size:14px}
+.cn-r b:first-child{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cn-r b:last-child{flex:0 0 auto}
+.cn-s{font-size:12.5px;color:var(--mut);margin-top:2px}
+.cn-pick{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--mut);margin-top:8px}
+.cn-pick select{flex:1;min-width:0;margin:0;height:40px;min-height:40px;padding-top:0;padding-bottom:0;line-height:38px}
+.cn-acts{display:flex;gap:8px;margin-top:10px}
+.cn-acts .act{flex:1;margin:0;min-height:40px}
+.cn-acts .act.bad{background:var(--badSoft,rgba(255,107,107,.14));color:var(--bad);border:1px solid var(--bad)}
+.cn-rej label{display:block;font-size:12px;color:var(--mut);margin-top:10px}
+.cn-rej input{display:block;width:100%;margin:6px 0 0}
+.cn-openrow{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px;color:var(--mut);margin:8px 0 2px}
+.cn-ok{color:var(--ok)}.cn-w{color:var(--warn)}.cn-no{color:var(--bad)}
+.owr-s.cn-ok,.owr-s.cn-w,.owr-s.cn-no{display:block}
+.owr-a.cn-x{text-decoration:line-through;color:var(--mut)}
+.cn-kv{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:7px 0;border-bottom:1px solid var(--line)}
+.cn-kv>span:first-child{color:var(--mut);flex:0 0 auto}
+.cn-kv>*:last-child{text-align:right;min-width:0}
+.cn-qrbox{display:flex;justify-content:center;margin:4px 0 6px}
+.cn-qr{width:200px;height:200px;border-radius:12px}
+.cn-open{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card2)}
+.cn-open>span{font-size:12.5px;color:var(--mut);line-height:1.45}
+.cn-open>b{font-size:20px}
+.cn-promise{margin:12px 0;padding:0;list-style:none;font-size:13.5px;line-height:1.45}
+.cn-promise li{padding-left:22px;position:relative;margin:4px 0}
+.cn-promise li::before{content:"✓";position:absolute;left:2px;color:var(--ok)}
+.cn-chk{display:flex;gap:10px;align-items:center;font-size:13.5px;margin:12px 0 0}
+.cn-chk input{width:18px;height:18px;margin:0}
+#connSheet .pos,.cn-r .pos{color:var(--ok)}#connSheet .neg,.cn-r .neg{color:var(--bad)}
 </style>
 </head>
 
@@ -1961,6 +2002,14 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 
 </main>
 <!-- v73.2: the full recap sheet — last month, the whole story -->
+<!-- v75.02: Owed connections — make / show an invite, a link's status, the friend's join screen -->
+<div id="connSheet" class="sheet" role="dialog" aria-labelledby="connTitle">
+  <div class="sheet-h">
+    <div class="t" id="connTitle">Connect</div>
+    <button id="connClose" class="sheet-x" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-b"><div id="connBody"></div></div>
+</div>
 <div id="recapSheet" class="sheet" role="dialog" aria-label="Monthly recap">
   <div class="sheet-h">
     <div class="t" id="recapSheetTitle">Last month</div>

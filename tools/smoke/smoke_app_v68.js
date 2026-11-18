@@ -4191,6 +4191,52 @@ waitReady().then(async function (F) {
       var subs81 = ((cb81.split('id="cbCardsRow"')[1] || '').split('class="cbsubwrap"')[1] || '').split('id="cb')[0];
       ok(subs81.indexOf('Maya CC') >= 0 && subs81.indexOf(' day') < 0 && subs81.indexOf('today') < 0, 'v75.01: the Cards owed rows carry no in N days');
       F.state.cbCardsOpen = false; F.state.cbDeductOpen = false; F.renderCycleBlock();
+      // ============ PART 82: v75.02 - Owed connections ============
+      console.log('\n== PART 82: v75.02 - a shared Owed record (no relay: the message rules) ==');
+      var owed82 = JSON.parse(JSON.stringify(F.getOwed())), txns82 = F.getTxns().slice(), adj82 = JSON.parse(JSON.stringify(F.getAdj()));
+      await F.addOwedPerson('Probe82');
+      var p82 = F.getOwed().people[F.getOwed().people.length - 1];
+      p82.entries.push({ id: 'l82a', d: '2026-10-01', dir: 'ipf', amt: 500, acc: 'CASH::Cash', cat: 'Food', note: 'before' });
+      p82.conn = { pair: '0123456789abcdef0123456789abcdef', k: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', side: 'a', relay: '', st: 'linked', out: [], in: [] };
+      ok(F.connPreBal(p82) === 500, 'v75.02: the balance before the link is the unshared entries');
+      await F.addOwedEntry(p82.id, { dir: 'ipf', amt: 200, total: 260, mine: 60, theirs: 200, acc: 'CASH::Cash', cat: 'Food', note: 'Dinner', d: F.todayISO() });
+      await sleep(30);
+      var e82 = p82.entries[p82.entries.length - 1], m82 = p82.conn.out[p82.conn.out.length - 1];
+      ok(e82.cid === e82.id && e82.cst === 'wait' && e82.cv === 1, 'v75.02: your entry on a linked card is shared, waiting');
+      ok(m82 && m82.t === 'e' && m82.dir === 'ipf' && m82.amt === 200 && m82.note === 'Dinner' && m82.mine === undefined && m82.acc === undefined && m82.total === undefined, 'v75.02: the message carries direction, amount, note, date only (no mine / total / account)');
+      F.connApply(p82, { t: 'no', cid: e82.cid, cv: 1, why: 'I paid this one' });
+      ok(e82.cst === 'no' && e82.cwhy === 'I paid this one', 'v75.02: a reject marks it with the reason');
+      ok(F.owedHeroData().ins.filter(function (x) { return x.name === 'Probe82'; })[0].b === 500, 'v75.02: a rejected entry stops counting');
+      ok(F.connRowStatus(p82, e82).indexOf('Rejected') >= 0, 'v75.02: the row says Rejected');
+      F.connApply(p82, { t: 'e', cid: 'x82', cv: 1, dir: 'ipf', amt: 120, note: 'Lunch', d: F.todayISO() });
+      ok(p82.conn.in.length === 1 && p82.conn.in[0].dir === 'tpf' && p82.conn.in[0].amt === 120, 'v75.02: the friend\'s I paid for them arrives as your They paid for me, waiting');
+      ok(F.owedHeroData().ins.filter(function (x) { return x.name === 'Probe82'; })[0].b === 500, 'v75.02: it does not count until you confirm');
+      ok(F.connCardHTML(p82).indexOf('Waiting for you · 1') >= 0, 'v75.02: the card shows Waiting for you');
+      await F.connConfirm(p82.id, 'x82', 'e', '', 'Food');
+      await sleep(30);
+      var c82 = p82.entries.filter(function (x) { return x.cid === 'x82'; })[0];
+      ok(!!c82 && c82.dir === 'tpf' && c82.cst === 'ok' && !!c82.txnId && p82.conn.in.length === 0, 'v75.02: confirm files it like your own They paid for me (your share in the Ledger)');
+      ok(F.owedHeroData().ins.filter(function (x) { return x.name === 'Probe82'; })[0].b === 380, 'v75.02: then it counts (500 - 120)');
+      ok(p82.conn.out.some(function (x) { return x.t === 'ok' && x.cid === 'x82'; }), 'v75.02: the friend is told it is confirmed');
+      F.connApply(p82, { t: 'ok', cid: e82.cid, cv: 2 });
+      ok(e82.cst === 'no', 'v75.02: a confirm of an older version does not change the status');
+      // the friend's side of a starting balance
+      await F.addOwedPerson('Probe82b');
+      var q82 = F.getOwed().people[F.getOwed().people.length - 1];
+      F.connOpenAdjust(q82, 4450);
+      ok(q82.entries.length === 1 && q82.entries[0].dir === 'tpf' && q82.entries[0].amt === 4450 && q82.entries[0].m2 === 1 && !q82.entries[0].txnId, 'v75.02: a confirmed starting balance of 4,450 lands as one They paid for me, no Ledger rows');
+      F.connOpenAdjust(q82, 4450);
+      ok(q82.entries.length === 1, 'v75.02: a matching balance adds nothing');
+      ok(!!F.connParseJoin('#join=0123456789abcdef0123456789abcdef.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.aHR0cHM6Ly94LndvcmtlcnMuZGV2') && !F.connParseJoin('#join=zz') && !F.connParseJoin('#join=0123456789abcdef0123456789abcdef.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.aHR0cDovL2V2aWwuZXhhbXBsZQ'), 'v75.02: an invite link parses (https relay only)');
+      var qr82 = F.qrEncode('https://jblagana.github.io/finance-app/#join=' + new Array(181 - 45).join('a'));
+      ok(!!qr82 && qr82.ver === 8 && qr82.size === 49, 'v75.02: an invite-sized link fits a version 8 QR');
+      if (typeof crypto !== 'undefined' && crypto.subtle) {
+        var s82 = await F.connSeal(p82.conn, { t: 'e', amt: 1 });
+        var o82 = await F.connOpenMsg(p82.conn, s82);
+        ok(o82 && o82.amt === 1 && s82.indexOf('amt') < 0, 'v75.02: messages are sealed (AES-GCM) and open again');
+      }
+      F.setOwed(owed82); F.setTxns(txns82);
+      var A82 = F.getAdj(); Object.keys(A82).forEach(function (k) { delete A82[k]; }); Object.keys(adj82).forEach(function (k) { A82[k] = adj82[k]; });
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

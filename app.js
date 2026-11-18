@@ -9950,7 +9950,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   function owedBal(p) {
     var b = 0;
     (p && p.entries || []).forEach(function (e) {
-      if (e && e.dir && OWED_DIRS[e.dir]) b += owedSign(e.dir) * (Number(e.amt) || 0);
+      if (e && e.dir && OWED_DIRS[e.dir] && e.cst !== 'no') b += owedSign(e.dir) * (Number(e.amt) || 0); // v75.02: a rejected shared entry stops counting
     });
     return r2(b);
   }
@@ -10068,7 +10068,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var runAfter = {};
     var runB = 0;
     ents.slice().reverse().forEach(function (e) {
-      if (e && e.dir && OWED_DIRS[e.dir]) runB = r2(runB + owedSign(e.dir) * (Number(e.amt) || 0));
+      if (e && e.dir && OWED_DIRS[e.dir] && e.cst !== 'no') runB = r2(runB + owedSign(e.dir) * (Number(e.amt) || 0));
       runAfter[e.id] = runB;
     });
     var rows = '';
@@ -10116,16 +10116,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       rows += '<div class="ow-e' + (rOpen ? ' open' : '') + '">' +
         '<button type="button" class="owr-main" data-ow-etog="' + esc(e.id) + '" aria-expanded="' + (rOpen ? 'true' : 'false') + '">' +
         '<span class="owr-tile ' + kls + '" aria-hidden="true">' + (OWED_ICON[e.dir] || OWED_ICON.ipf) + '</span>' +
-        '<span class="owr-l"><span class="owr-t">' + esc(title) + '</span>' + (sub ? '<span class="owr-s">' + esc(sub) + '</span>' : '') + '</span>' +
-        '<span class="owr-r"><b class="owr-a ' + kls + '">' + (dir.sign > 0 ? '+' : '−') + money(amt) + '</b>' +
+        '<span class="owr-l"><span class="owr-t">' + esc(title) + '</span>' + (sub ? '<span class="owr-s">' + esc(sub) + '</span>' : '') + connRowStatus(p, e) + '</span>' +
+        '<span class="owr-r"><b class="owr-a ' + kls + (e.cst === 'no' ? ' cn-x' : '') + '">' + (dir.sign > 0 ? '+' : '−') + money(amt) + '</b>' +
         '<span class="owr-run">' + owedRunText(runAfter[e.id]) + '</span></span>' +
         '</button>' +
         '<div class="owr-more">' +
         '<div>' + esc(fmtDate(e.d)) + (accNm ? ' · ' + esc(accNm) : '') + (e.expr ? ' · ' + esc(e.expr) : '') + '</div>' +
         (split ? '<div>' + split + '</div>' : '') +
         (led ? '<div>' + led + '</div>' : '') +
+        (e.cst === 'no' && e.cwhy ? '<div class="cn-no">' + esc(p.name) + ' rejected it: “' + esc(e.cwhy) + '”</div>' : '') + // v75.02
         '<div class="owr-acts">' +
-        '<button type="button" class="mini" data-ow-edit-e="' + esc(e.id) + '" aria-label="Edit entry">Edit ✎</button>' +
+        '<button type="button" class="mini" data-ow-edit-e="' + esc(e.id) + '" aria-label="Edit entry">' + (e.cst === 'no' ? 'Edit and resend ✎' : 'Edit ✎') + '</button>' +
         '<button type="button" class="mini" data-ow-del-e="' + esc(e.id) + '" aria-label="Remove entry">Delete ✕</button>' +
         '</div></div></div>';
     });
@@ -10152,8 +10153,11 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       '<div class="ow-h" data-ow-open="' + esc(p.id) + '" role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '">' +
       '<span class="bdrag" data-ow-drag="1" aria-label="Drag to reorder" title="Drag to reorder">⡿</span>' +
       '<span class="ow-av" style="background:' + av.bg + ';color:' + av.fg + '" aria-hidden="true">' + esc(av.ch) + '</span>' +
-      '<span class="ow-who"><b class="ow-name" data-ow-name="' + esc(p.id) + '" title="Rename">' + esc(p.name) + '</b>' +
-      '<span class="ow-cnt">' + n + (n === 1 ? ' entry' : ' entries') + '</span></span>' +
+      '<span class="ow-who">' + (p.conn ? '<span class="cn-nl">' : '') + '<b class="ow-name" data-ow-name="' + esc(p.id) + '" title="Rename">' + esc(p.name) + '</b>' +
+      (p.conn ? '<span class="cn-badge' + (p.conn.st === 'linked' ? '' : ' off') + '">' + (p.conn.st === 'linked' ? 'linked' : p.conn.st === 'invited' ? 'invited' : 'unlinked') + '</span>' : '') +
+      (p.conn ? '</span>' : '') +
+      '<span class="ow-cnt">' + n + (n === 1 ? ' entry' : ' entries') +
+      (p.conn && (p.conn.in || []).length ? ' · <span class="cn-w cn-dot">' + p.conn.in.length + ' to confirm</span>' : '') + '</span></span>' + // v75.02
       '<span class="ow-balbox"><b class="ow-bv ' + bk + '">' + money(Math.abs(b)) + '</b><span class="ow-bd ' + bk + '">' + bdir + '</span></span>' +
       '<span class="ow-chev" aria-hidden="true">❯</span>' +
       '</div>' +
@@ -10167,11 +10171,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       // exports this person's full account (every entry, running balance,
       // closing direction) as a PDF file
       '<button type="button" class="ow-xbtn wide" data-ow-soa="' + esc(p.id) + '" title="Statement of account (PDF)">SOA (PDF)</button>' +
+      '<button type="button" class="ow-xbtn wide" data-cn-conn="' + esc(p.id) + '">' + (p.conn ? (p.conn.st === 'linked' ? 'Linked ✓' : p.conn.st === 'invited' ? 'Invite…' : 'Unlinked') : 'Connect') + '</button>' +
       '<button type="button" class="ow-xbtn" data-ow-del="' + esc(p.id) + '" aria-label="Remove person">✕</button>' +
       '</div>' +
       '<form class="oent" data-ow-for="' + esc(p.id) + '" style="display:none" autocomplete="off">' +
       oentFormHTML() +
       '</form>' +
+      connCardHTML(p) + // v75.02: Waiting for you + the starting balance status
       (rows || '<p class="note" style="margin:8px 0 0">No entries yet — add the first one above.</p>') +
       '</div>' +
       '</section>';
@@ -10284,6 +10290,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var html = '';
     people.forEach(function (p) { html += owedPersonHTML(p); });
     body.innerHTML = html;
+    connSyncAll(); // v75.02: linked cards check their mailbox (at most every 20 s)
     // v72.49: the card-top forms start on the default direction (ipf) — the
     // Total label, the split row and the Category section follow the pick
     var oentFs = body.querySelectorAll('.oent');
@@ -10664,7 +10671,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     (state.owed && state.owed.people || []).forEach(function (p) {
       var n = 0;
       (p && p.entries || []).forEach(function (x) {
-        if (!x || !x.m2) return;
+        if (!x || !x.m2 || x.cst === 'no') return;
         var a = Number(x.amt) || 0, c = Number(x.cov) || 0;
         if (x.dir === 'ipf') n += a; else if (x.dir === 'tmb') n -= (a - c); else if (x.dir === 'tpf') n -= a; else if (x.dir === 'itb') n += (a - c);
       });
@@ -10677,7 +10684,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     (state.owed && state.owed.people || []).forEach(function (p) {
       var n = 0;
       (p && p.entries || []).forEach(function (x) {
-        if (!x || !x.m2) return;
+        if (!x || !x.m2 || x.cst === 'no') return;
         var a = Number(x.amt) || 0, c = Number(x.cov) || 0;
         if (x.dir === 'ipf') n += a;
         else if (x.dir === 'tmb') n -= (a - c);
@@ -10819,7 +10826,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       emit('txn');
     });
   }
-  function addOwedEntry(pid, data) {
+  function addOwedEntry(pid, data, opts) {
     var p = null;
     (state.owed.people || []).forEach(function (x) { if (x.id === pid) p = x; });
     if (!p) return;
@@ -10890,6 +10897,10 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (cov > 0.004) e.cov = r2(cov);
       step = step.then(function () { return fileOwedLeg(e, p); });
     }
+    if (owed > 0) { // v75.02: a linked card shares the entry (yours: waiting; a confirmed one of theirs: in sync)
+      if (opts && opts.conn) { e.cid = opts.conn.cid; e.cv = opts.conn.cv; e.cst = 'ok'; }
+      else connStampMine(p, e, false);
+    }
     if (owed > 0) p.entries.push(e); // v72.49: an ipf add with ONLY yours = a ledger txn, no owed entry
     return saveOwed().then(function () { return step; }).then(function () {
       emitOwed();
@@ -10897,8 +10908,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (ledger > 0 && owed > 0) msg = OWED_DIRS[e.dir].label + ' ' + money(owed) + ' · ' + money(ledger) + ' in the ledger · ' + esc(p.name);
       else if (ledger > 0) msg = 'Added ' + money(ledger) + ' to the ledger · ' + esc(p.name);
       else msg = OWED_DIRS[e.dir].label + ' ' + money(owed) + ' · ' + esc(p.name);
-      snack(msg, function () {
+      snack(msg, (opts && opts.conn) ? null : function () {
         p.entries = p.entries.filter(function (x) { return x.id !== e.id; });
+        if (e.cid && connLive(p)) connQueue(p, { t: 'del', cid: e.cid }); // v75.02
         // v73.72: undo removes the theirs pair too (charge + cash advance)
         var u = removeTxnsQuiet([e.txnId].concat(ipfTheirsTxnIds(e)));
         e.txnId = null; e.theirsTxnId = null; delete e.theirsBumpId;
@@ -10906,7 +10918,730 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       }, 'add');
     });
   }
-  function delOwedEntry(pid, eid) {
+  // ---------- v75.02: Owed connections (boss: 'add him as a connection which shows us a shared record of the owed tab of each other only') ----------
+  // Two phones keep ONE shared Owed record for the pair. A person card gets
+  // p.conn = { pair, k, side 'a' (inviter) | 'b', relay, st 'invited' |
+  // 'linked' | 'ended', exp, open {amt, st, why}, out [queued messages],
+  // in [inbox items], at }. Messages ride the Worker's /conn mailbox sealed
+  // with AES-256-GCM under the pair key k (it travels only in the invite
+  // link's #fragment, so the Worker never sees it). Entries are sent in the
+  // sender's own words and mirrored on arrival (ipf <-> tpf, itb <-> tmb).
+  // Shared: direction, amount, note, date. Never shared: the mine part, the
+  // total, accounts, categories, other people, any balance.
+  // Rules (the mockup's assumptions): your own entries count at once (status
+  // waiting -> confirmed / rejected); the friend's entries sit in 'Waiting for
+  // you' and count once you confirm (that files them exactly like an entry
+  // you logged); a rejected entry stops counting until edited and resent.
+  var CONN_MIRROR = { ipf: 'tpf', tpf: 'ipf', itb: 'tmb', tmb: 'itb' };
+  var connKeyCache = {}, connTokCache = {};
+  function connB64u(bytes) {
+    var s = '';
+    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function connUnb64u(str) {
+    var s = String(str || '').replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function connRand(n) { var a = new Uint8Array(n); crypto.getRandomValues(a); return a; }
+  function connHex(bytes) { var s = ''; for (var i = 0; i < bytes.length; i++) s += ('0' + bytes[i].toString(16)).slice(-2); return s; }
+  // the relay = the coach Worker's origin (Settings -> Worker URL); its ?t=
+  // token is never used or shared (the friend's phone does not have it)
+  function connRelayOk(u) {
+    try {
+      var x = new URL(String(u || ''));
+      if (x.protocol === 'https:') return x.origin;
+      if (x.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(x.hostname)) return x.origin; // local testing only
+    } catch (e) {}
+    return '';
+  }
+  function connRelay() {
+    var u = '';
+    try { u = (window.FinAI && window.FinAI.remoteUrl) ? window.FinAI.remoteUrl() : ''; } catch (e) {}
+    return connRelayOk(u);
+  }
+  function connLive(p) { return !!(p && p.conn && p.conn.st === 'linked'); }
+  function connKeyOf(c) {
+    if (connKeyCache[c.pair]) return Promise.resolve(connKeyCache[c.pair]);
+    return crypto.subtle.importKey('raw', connUnb64u(c.k), 'AES-GCM', false, ['encrypt', 'decrypt']).then(function (k) {
+      connKeyCache[c.pair] = k; return k;
+    });
+  }
+  function connTokOf(c) {
+    if (connTokCache[c.pair]) return Promise.resolve(connTokCache[c.pair]);
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode('finai-conn|' + c.k)).then(function (d) {
+      var t = connHex(new Uint8Array(d)); connTokCache[c.pair] = t; return t;
+    });
+  }
+  function connSeal(c, obj) {
+    var iv = connRand(12);
+    return connKeyOf(c).then(function (k) {
+      return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, k, new TextEncoder().encode(JSON.stringify(obj)));
+    }).then(function (ct) {
+      var ctb = new Uint8Array(ct), all = new Uint8Array(12 + ctb.length);
+      all.set(iv, 0); all.set(ctb, 12);
+      return connB64u(all);
+    });
+  }
+  function connOpenMsg(c, str) {
+    var all = connUnb64u(str);
+    return connKeyOf(c).then(function (k) {
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: all.slice(0, 12) }, k, all.slice(12));
+    }).then(function (pt) { return JSON.parse(new TextDecoder().decode(pt)); });
+  }
+  function connCall(c, body) {
+    return connTokOf(c).then(function (tok) {
+      body.pair = c.pair; body.tok = tok;
+      return fetch(c.relay + '/conn', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) { var er = new Error(j.error || ('relay ' + r.status)); er.status = r.status; throw er; }
+        return j;
+      });
+    });
+  }
+  function connOther(c) { return c.side === 'a' ? 'b' : 'a'; }
+  function connFind(pid) { var p = null; (state.owed.people || []).forEach(function (x) { if (x.id === pid) p = x; }); return p; }
+  // the balance before the link: entries that are not shared (no cid)
+  function connPreBal(p) {
+    var b = 0;
+    (p && p.entries || []).forEach(function (e) {
+      if (e && !e.cid && e.cst !== 'no' && OWED_DIRS[e.dir]) b += owedSign(e.dir) * (Number(e.amt) || 0);
+    });
+    return r2(b);
+  }
+  function connEntryMsg(e) { return { t: 'e', cid: e.cid, cv: e.cv || 1, dir: e.dir, amt: r2(e.amt), note: e.note || '', d: e.d }; }
+  function connQueue(p, msg) {
+    if (!p || !p.conn) return;
+    if (!p.conn.out) p.conn.out = [];
+    p.conn.out.push(msg);
+    connSyncSoon(p.id);
+  }
+  // an entry you logged / edited on a linked card goes to the friend (waiting)
+  function connStampMine(p, e, bump) {
+    if (!connLive(p)) return;
+    if (!e.cid) { e.cid = e.id; e.cv = 1; } else if (bump) e.cv = (Number(e.cv) || 1) + 1;
+    e.cst = 'wait'; delete e.cwhy;
+    connQueue(p, connEntryMsg(e));
+  }
+  var connSyncTimers = {}, connSyncing = {}, connLastAll = 0;
+  function connSyncSoon(pid) {
+    clearTimeout(connSyncTimers[pid]);
+    connSyncTimers[pid] = setTimeout(function () { connSync(pid); }, 400);
+  }
+  function connSyncAll(force) {
+    var now = Date.now();
+    if (!force && now - connLastAll < 20000) return Promise.resolve();
+    connLastAll = now;
+    var jobs = [];
+    (state.owed && state.owed.people || []).forEach(function (p) {
+      if (p && p.conn && (p.conn.st === 'linked' || p.conn.st === 'invited')) jobs.push(connSync(p.id));
+    });
+    return Promise.all(jobs);
+  }
+  // one round: send the queued messages, then read the mailbox
+  function connSync(pid) {
+    var p = connFind(pid);
+    if (!p || !p.conn || !p.conn.relay || p.conn.st === 'ended') return Promise.resolve();
+    if (connSyncing[pid]) return connSyncing[pid];
+    var c = p.conn, changed = false;
+    var run = Promise.resolve().then(function () {
+      var out = (c.out || []).slice();
+      var step = Promise.resolve();
+      out.forEach(function (m) {
+        step = step.then(function () {
+          return connSeal(c, m).then(function (sealed) {
+            return connCall(c, { op: 'send', to: connOther(c), msg: sealed });
+          }).then(function () { c.out.shift(); changed = true; });
+        });
+      });
+      return step;
+    }).then(function () {
+      return connCall(c, { op: 'pull', me: c.side });
+    }).then(function (j) {
+      var msgs = (j && j.msgs) || [], ids = [], step = Promise.resolve();
+      msgs.forEach(function (row) {
+        step = step.then(function () {
+          ids.push(row.id);
+          return connOpenMsg(c, row.msg).then(function (m) { connApply(p, m); changed = true; }, function () {});
+        });
+      });
+      return step.then(function () {
+        if (ids.length) return connCall(c, { op: 'ack', me: c.side, ids: ids });
+      }).then(function () {
+        c.err = ''; c.seen = new Date().toISOString();
+        if (j && j.more) connSyncSoon(pid);
+      });
+    }).catch(function (er) {
+      c.err = String((er && er.message) || er || 'offline');
+      if (er && er.status === 404 && c.st === 'linked') { c.st = 'ended'; changed = true; } // the pair was removed on the relay
+    }).then(function () {
+      delete connSyncing[pid];
+      if (changed) return saveOwed().then(emitOwed);
+      emitOwed();
+    });
+    connSyncing[pid] = run;
+    return run;
+  }
+  // a message from the friend (already opened)
+  function connApply(p, m) {
+    var c = p.conn;
+    if (!m || !c) return;
+    if (!c.in) c.in = [];
+    var t = m.t;
+    var ent = function (cid) { var f = null; (p.entries || []).forEach(function (e) { if (e.cid === cid) f = e; }); return f; };
+    var dropIn = function (cid) { c.in = c.in.filter(function (x) { return x.cid !== cid; }); };
+    if (t === 'hi') {
+      if (c.side === 'a') {
+        c.st = 'linked'; c.at = c.at || new Date().toISOString();
+        if (!c.open) c.open = { amt: 0 };
+        c.open.st = m.open === 'ok' ? 'ok' : 'no'; c.open.why = String(m.why || '');
+        snack(esc(p.name) + ' connected');
+      }
+    } else if (t === 'e' && CONN_MIRROR[m.dir] && Number(m.amt) > 0) {
+      var dir = CONN_MIRROR[m.dir], have = ent(m.cid);
+      var item = { k: 'e', cid: String(m.cid), cv: Number(m.cv) || 1, dir: dir, amt: r2(m.amt), note: String(m.note || '').slice(0, 120), d: String(m.d || todayISO()), at: new Date().toISOString() };
+      if (have && have.dir === dir && Math.abs((Number(have.amt) || 0) - item.amt) < 0.005 && have.d === item.d && (have.note || '') === item.note) {
+        // nothing changed on your side (e.g. they resent the same entry): it is in sync
+        have.cv = item.cv; have.cst = 'ok'; delete have.cwhy; dropIn(item.cid);
+        connQueue(p, { t: 'ok', cid: item.cid, cv: item.cv });
+        return;
+      }
+      if (have) item.old = { amt: r2(have.amt), dir: have.dir };
+      dropIn(item.cid);
+      c.in.push(item);
+    } else if (t === 'del') {
+      var had = c.in.some(function (x) { return x.cid === m.cid && x.k === 'e' && !x.old; });
+      dropIn(m.cid);
+      var h2 = ent(m.cid);
+      if (h2 && !had) c.in.push({ k: 'del', cid: String(m.cid), dir: h2.dir, amt: r2(h2.amt), note: h2.note || '', d: h2.d, at: new Date().toISOString() });
+    } else if (t === 'ok' || t === 'no') {
+      var e = ent(m.cid);
+      if (e && (Number(e.cv) || 1) === (Number(m.cv) || 1)) {
+        if (t === 'ok') { e.cst = 'ok'; delete e.cwhy; } else { e.cst = 'no'; e.cwhy = String(m.why || '').slice(0, 120); }
+      }
+    } else if (t === 'open') {
+      c.in = c.in.filter(function (x) { return x.k !== 'open'; });
+      c.in.push({ k: 'open', cid: 'open', b: r2(m.b), at: new Date().toISOString() });
+    } else if (t === 'oack') {
+      if (!c.open) c.open = { amt: 0 };
+      c.open.st = m.st === 'ok' ? 'ok' : 'no'; c.open.why = String(m.why || '');
+    } else if (t === 'bye') {
+      c.st = 'ended'; c.out = []; c.in = [];
+      snack(esc(p.name) + ' disconnected — the entries stay in your book');
+    }
+  }
+  // the friend's starting balance lands as one unshared entry that makes your
+  // pre-link balance match theirs (none when it already does). m2, no legs:
+  // a debt you owe comes off free cash like any other.
+  function connOpenAdjust(p, theirB) {
+    var want = r2(-theirB), diff = r2(want - connPreBal(p));
+    if (Math.abs(diff) < 0.005) return;
+    if (!p.entries) p.entries = [];
+    p.entries.push({ id: owedUid('oe'), d: todayISO(), dir: diff > 0 ? 'ipf' : 'tpf', amt: r2(Math.abs(diff)), note: 'Starting balance', created: new Date().toISOString(), m2: 1, open: 1, cat: 'Unsorted' });
+  }
+  // ---- the inbox actions ----
+  function connInItem(p, cid, k) {
+    var f = null;
+    (p.conn && p.conn.in || []).forEach(function (x) { if (x.cid === cid && x.k === k) f = x; });
+    return f;
+  }
+  function connConfirm(pid, cid, k, acc, cat) {
+    var p = connFind(pid); if (!p || !p.conn) return Promise.resolve();
+    var it = connInItem(p, cid, k); if (!it) return Promise.resolve();
+    var c = p.conn;
+    c.in = c.in.filter(function (x) { return x !== it; });
+    if (k === 'open') {
+      connOpenAdjust(p, it.b);
+      connQueue(p, { t: 'oack', st: 'ok' });
+      return saveOwed().then(emitOwed);
+    }
+    if (k === 'del') {
+      var gone = null;
+      (p.entries || []).forEach(function (e) { if (e.cid === cid) gone = e; });
+      if (!gone) return saveOwed().then(emitOwed);
+      return saveOwed().then(function () { delOwedEntry(pid, gone.id, { conn: true }); });
+    }
+    var have = null;
+    (p.entries || []).forEach(function (e) { if (e.cid === cid) have = e; });
+    var data = { d: it.d, amt: it.amt, dir: it.dir, note: it.note, acc: acc || 'CASH::Cash', cat: cat || 'Unsorted' };
+    var conn = { cid: cid, cv: it.cv };
+    connQueue(p, { t: 'ok', cid: cid, cv: it.cv });
+    return saveOwed().then(function () {
+      if (have) return updateOwedEntry(pid, have.id, data, { conn: conn });
+      return addOwedEntry(pid, data, { conn: conn });
+    });
+  }
+  function connReject(pid, cid, k, why) {
+    var p = connFind(pid); if (!p || !p.conn) return Promise.resolve();
+    var it = connInItem(p, cid, k); if (!it) return Promise.resolve();
+    p.conn.in = p.conn.in.filter(function (x) { return x !== it; });
+    why = String(why || '').trim().slice(0, 120);
+    if (k === 'open') connQueue(p, { t: 'oack', st: 'no', why: why });
+    else if (k === 'e') connQueue(p, { t: 'no', cid: cid, cv: it.cv, why: why });
+    else if (k === 'del') { // keep it: it stays in your book, no longer shared
+      (p.entries || []).forEach(function (e) { if (e.cid === cid) { delete e.cid; delete e.cv; delete e.cst; delete e.cwhy; } });
+    }
+    return saveOwed().then(emitOwed);
+  }
+  // ---- pairing ----
+  function connInviteLink(c, pid) {
+    var base = location.origin + location.pathname;
+    return base + '#join=' + c.pair + '.' + c.k + '.' + connB64u(new TextEncoder().encode(c.relay));
+  }
+  function connCreateInvite(pid, myName) {
+    var p = connFind(pid); if (!p) return Promise.reject(new Error('no person'));
+    var relay = connRelay();
+    if (!relay) return Promise.reject(new Error('norelay'));
+    myName = String(myName || '').trim().slice(0, 24);
+    if (!myName) return Promise.reject(new Error('noname'));
+    state.owed.me = myName;
+    var c = { pair: connHex(connRand(16)), k: connB64u(connRand(32)), side: 'a', relay: relay, st: 'invited', exp: Date.now() + 86400000, out: [], in: [], open: { amt: connPreBal(p), st: 'wait' } };
+    return connCall(c, { op: 'reg' }).then(function () {
+      return connSeal(c, { t: 'inv', n: myName, b: c.open.amt });
+    }).then(function (sealed) {
+      return connCall(c, { op: 'send', to: 'b', msg: sealed, invite: 1 });
+    }).then(function () {
+      p.conn = c;
+      return saveOwed().then(function () { emitOwed(); return c; });
+    });
+  }
+  function connParseJoin(hash) {
+    var m = /^#join=([0-9a-f]{32})\.([A-Za-z0-9_-]{43})\.([A-Za-z0-9_-]+)$/.exec(String(hash || ''));
+    if (!m) return null;
+    var relay = '';
+    try { relay = connRelayOk(new TextDecoder().decode(connUnb64u(m[3]))); } catch (e) {}
+    if (!relay) return null;
+    return { pair: m[1], k: m[2], relay: relay, side: 'b' };
+  }
+  // the friend's side: read the invite (it is the only message waiting for b)
+  function connReadInvite(j) {
+    return connCall(j, { op: 'pull', me: 'b' }).then(function (r) {
+      var rows = (r && r.msgs) || [], found = null, step = Promise.resolve();
+      rows.forEach(function (row) {
+        step = step.then(function () {
+          if (found) return;
+          return connOpenMsg(j, row.msg).then(function (m) { if (m && m.t === 'inv') found = { id: row.id, n: String(m.n || 'Friend').slice(0, 24), b: r2(m.b) }; }, function () {});
+        });
+      });
+      return step.then(function () { return found; });
+    });
+  }
+  function connJoin(j, inv, pid, confirmOpen) {
+    var p = pid ? connFind(pid) : null;
+    if (!p) {
+      p = { id: owedUid('op'), name: inv.n, entries: [], updated: new Date().toISOString() };
+      state.owed.people.push(p);
+    }
+    if (p.conn && p.conn.st !== 'ended') return Promise.reject(new Error('That card is already connected.'));
+    p.conn = { pair: j.pair, k: j.k, side: 'b', relay: j.relay, st: 'linked', at: new Date().toISOString(), out: [], in: [] };
+    if (confirmOpen) connOpenAdjust(p, inv.b);
+    p.conn.out.push({ t: 'hi', open: confirmOpen ? 'ok' : 'no', why: confirmOpen ? '' : 'Not confirmed yet' });
+    return connCall(p.conn, { op: 'ack', me: 'b', ids: [inv.id] }).catch(function () {}).then(function () {
+      owedOpen[p.id] = true;
+      return saveOwed();
+    }).then(function () { emitOwed(); return connSync(p.id); }).then(function () { return p; });
+  }
+  function connDisconnect(pid) {
+    var p = connFind(pid); if (!p || !p.conn) return Promise.resolve();
+    var c = p.conn;
+    var step = c.st === 'linked'
+      ? connSeal(c, { t: 'bye' }).then(function (s) { return connCall(c, { op: 'send', to: connOther(c), msg: s }); }).catch(function () {})
+      : connCall(c, { op: 'drop' }).catch(function () {});
+    return step.then(function () {
+      if (c.st === 'ended') return connCall(c, { op: 'drop' }).catch(function () {});
+    }).then(function () {
+      (p.entries || []).forEach(function (e) { delete e.cid; delete e.cv; delete e.cst; delete e.cwhy; }); // the link marks go (a later link starts from the full balance); the entries stay
+      delete p.conn;
+      return saveOwed().then(emitOwed);
+    });
+  }
+  // ---- QR (byte mode, ECC L, versions 1-10 — an invite link is ~180 chars) ----
+  var QR_EC = [0, 7, 10, 15, 20, 26, 18, 20, 24, 30, 18];      // EC codewords per block (L)
+  var QR_BLK = [0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 4];               // blocks (L)
+  var QR_RAW = [0, 26, 44, 70, 100, 134, 172, 196, 242, 292, 346]; // total codewords
+  var QR_AL = [[], [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]];
+  function qrMul(x, y) { var z = 0; for (var i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> i) & 1) * x; } return z & 255; }
+  function qrDivisor(deg) {
+    var r = []; for (var i = 0; i < deg - 1; i++) r.push(0); r.push(1);
+    var root = 1;
+    for (var k = 0; k < deg; k++) {
+      for (var j = 0; j < r.length; j++) { r[j] = qrMul(r[j], root); if (j + 1 < r.length) r[j] ^= r[j + 1]; }
+      root = qrMul(root, 2);
+    }
+    return r;
+  }
+  function qrRem(data, div) {
+    var r = div.map(function () { return 0; });
+    data.forEach(function (b) {
+      var f = b ^ r.shift(); r.push(0);
+      for (var i = 0; i < div.length; i++) r[i] ^= qrMul(div[i], f);
+    });
+    return r;
+  }
+  function qrEncode(text, forceMask) {
+    var bytes = Array.prototype.slice.call(new TextEncoder().encode(String(text)));
+    var ver = 0;
+    for (var v = 1; v <= 10; v++) {
+      var cap = QR_RAW[v] - QR_EC[v] * QR_BLK[v];
+      if (4 + (v < 10 ? 8 : 16) + bytes.length * 8 <= cap * 8) { ver = v; break; }
+    }
+    if (!ver) return null;
+    var dataCap = QR_RAW[ver] - QR_EC[ver] * QR_BLK[ver];
+    var bits = [];
+    var put = function (val, n) { for (var i = n - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+    put(4, 4); put(bytes.length, ver < 10 ? 8 : 16);
+    bytes.forEach(function (b) { put(b, 8); });
+    put(0, Math.min(4, dataCap * 8 - bits.length));
+    while (bits.length % 8) bits.push(0);
+    var data = [];
+    for (var bi = 0; bi < bits.length; bi += 8) { var x = 0; for (var q = 0; q < 8; q++) x = (x << 1) | bits[bi + q]; data.push(x); }
+    for (var pad = 0xEC; data.length < dataCap; pad ^= 0xEC ^ 0x11) data.push(pad);
+    // blocks: short ones first (v10 L: 2 x 68 + 2 x 69)
+    var nb = QR_BLK[ver], ecl = QR_EC[ver], shortLen = Math.floor(dataCap / nb), nLong = dataCap % nb;
+    var blocks = [], ecs = [], div = qrDivisor(ecl), pos = 0;
+    for (var b2 = 0; b2 < nb; b2++) {
+      var len = shortLen + (b2 >= nb - nLong ? 1 : 0);
+      var blk = data.slice(pos, pos + len); pos += len;
+      blocks.push(blk); ecs.push(qrRem(blk, div));
+    }
+    var all = [];
+    for (var i2 = 0; i2 < shortLen + 1; i2++) blocks.forEach(function (bk) { if (i2 < bk.length) all.push(bk[i2]); });
+    for (var i3 = 0; i3 < ecl; i3++) ecs.forEach(function (ek) { all.push(ek[i3]); });
+    var size = ver * 4 + 17, mod = [], fn = [];
+    for (var y = 0; y < size; y++) { mod.push([]); fn.push([]); for (var x2 = 0; x2 < size; x2++) { mod[y].push(false); fn[y].push(false); } }
+    var setF = function (x, y, dark) { mod[y][x] = dark; fn[y][x] = true; };
+    for (var t = 0; t < size; t++) { setF(6, t, t % 2 === 0); setF(t, 6, t % 2 === 0); }
+    var finder = function (cx, cy) {
+      for (var dy = -4; dy <= 4; dy++) for (var dx = -4; dx <= 4; dx++) {
+        var d = Math.max(Math.abs(dx), Math.abs(dy)), xx = cx + dx, yy = cy + dy;
+        if (xx >= 0 && xx < size && yy >= 0 && yy < size) setF(xx, yy, d !== 2 && d !== 4);
+      }
+    };
+    finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+    var al = QR_AL[ver], na = al.length;
+    for (var ai = 0; ai < na; ai++) for (var aj = 0; aj < na; aj++) {
+      if ((ai === 0 && aj === 0) || (ai === 0 && aj === na - 1) || (ai === na - 1 && aj === 0)) continue;
+      for (var ady = -2; ady <= 2; ady++) for (var adx = -2; adx <= 2; adx++) setF(al[ai] + adx, al[aj] + ady, Math.max(Math.abs(adx), Math.abs(ady)) !== 1);
+    }
+    var drawFormat = function (mask) {
+      var dat = (1 << 3) | mask, rem = dat; // ECC L = 01
+      for (var i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+      var fb = ((dat << 10) | rem) ^ 0x5412;
+      var g = function (i) { return ((fb >>> i) & 1) !== 0; };
+      for (var i1 = 0; i1 <= 5; i1++) setF(8, i1, g(i1));
+      setF(8, 7, g(6)); setF(8, 8, g(7)); setF(7, 8, g(8));
+      for (var i4 = 9; i4 < 15; i4++) setF(14 - i4, 8, g(i4));
+      for (var i5 = 0; i5 < 8; i5++) setF(size - 1 - i5, 8, g(i5));
+      for (var i6 = 8; i6 < 15; i6++) setF(8, size - 15 + i6, g(i6));
+      setF(8, size - 8, true);
+    };
+    drawFormat(0);
+    if (ver >= 7) {
+      var vr = ver;
+      for (var vi = 0; vi < 12; vi++) vr = (vr << 1) ^ ((vr >>> 11) * 0x1F25);
+      var vb = (ver << 12) | vr;
+      for (var vk = 0; vk < 18; vk++) {
+        var bit = ((vb >>> vk) & 1) !== 0, a = size - 11 + vk % 3, bb = Math.floor(vk / 3);
+        setF(a, bb, bit); setF(bb, a, bit);
+      }
+    }
+    var idx = 0;
+    for (var right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (var vert = 0; vert < size; vert++) for (var jj = 0; jj < 2; jj++) {
+        var xx2 = right - jj, up = ((right + 1) & 2) === 0, yy2 = up ? size - 1 - vert : vert;
+        if (!fn[yy2][xx2] && idx < all.length * 8) { mod[yy2][xx2] = ((all[idx >>> 3] >>> (7 - (idx & 7))) & 1) !== 0; idx++; }
+      }
+    }
+    var maskFn = [
+      function (x, y) { return (x + y) % 2 === 0; }, function (x, y) { return y % 2 === 0; },
+      function (x) { return x % 3 === 0; }, function (x, y) { return (x + y) % 3 === 0; },
+      function (x, y) { return (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0; },
+      function (x, y) { return x * y % 2 + x * y % 3 === 0; },
+      function (x, y) { return (x * y % 2 + x * y % 3) % 2 === 0; },
+      function (x, y) { return ((x + y) % 2 + x * y % 3) % 2 === 0; }
+    ];
+    var applyMask = function (m) {
+      for (var y = 0; y < size; y++) for (var x = 0; x < size; x++) if (!fn[y][x] && maskFn[m](x, y)) mod[y][x] = !mod[y][x];
+    };
+    var penalty = function () { // rules 1, 2 and 4 (enough to avoid the worst masks)
+      var s = 0, dark = 0;
+      for (var y = 0; y < size; y++) {
+        var runR = 1, runC = 1;
+        for (var x = 0; x < size; x++) {
+          if (mod[y][x]) dark++;
+          if (x > 0) {
+            if (mod[y][x] === mod[y][x - 1]) { runR++; if (runR === 5) s += 3; else if (runR > 5) s++; } else runR = 1;
+            if (mod[x][y] === mod[x - 1][y]) { runC++; if (runC === 5) s += 3; else if (runC > 5) s++; } else runC = 1;
+          }
+          if (x < size - 1 && y < size - 1 && mod[y][x] === mod[y][x + 1] && mod[y][x] === mod[y + 1][x] && mod[y][x] === mod[y + 1][x + 1]) s += 3;
+        }
+      }
+      return s + Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
+    };
+    var best = forceMask, bestP = Infinity;
+    if (best == null) {
+      for (var m = 0; m < 8; m++) {
+        applyMask(m); drawFormat(m);
+        var pn = penalty();
+        if (pn < bestP) { bestP = pn; best = m; }
+        applyMask(m);
+      }
+    }
+    applyMask(best); drawFormat(best);
+    return { size: size, mod: mod, ver: ver, mask: best };
+  }
+  function qrSvg(text) {
+    var q = qrEncode(text);
+    if (!q) return '';
+    var n = q.size + 8, d = '';
+    for (var y = 0; y < q.size; y++) for (var x = 0; x < q.size; x++) if (q.mod[y][x]) d += 'M' + (x + 4) + ' ' + (y + 4) + 'h1v1h-1z';
+    return '<svg class="cn-qr" viewBox="0 0 ' + n + ' ' + n + '" role="img" aria-label="QR code of the invite link" shape-rendering="crispEdges"><rect width="' + n + '" height="' + n + '" fill="#fff"/><path d="' + d + '" fill="#000"/></svg>';
+  }
+  // ---- the UI: the connect / status sheet, the join sheet, the inbox ----
+  var connJoinPending = null;
+  function connStatusHTML(p) {
+    var c = p.conn, nm = esc(p.name);
+    if (!c) return '';
+    if (c.st === 'invited') {
+      var expired = Date.now() > (c.exp || 0);
+      return '<p class="note" style="margin:0 0 12px">' + (expired ? 'The invite link expired before ' + nm + ' opened it. Make a new one.' : 'Send this to ' + nm + '. When they open it in Fin.AI, the card links. The link works for 24 hours.') + '</p>' +
+        (expired ? '' : '<div class="cn-qrbox">' + qrSvg(connInviteLink(c, p.id)) + '</div>' +
+          '<div class="cn-acts"><button type="button" class="act" data-cn-share="' + esc(p.id) + '">Share link</button>' +
+          '<button type="button" class="act ghost" data-cn-copy="' + esc(p.id) + '">Copy link</button></div>') +
+        '<div class="cn-acts"><button type="button" class="act ghost" data-cn-cancel="' + esc(p.id) + '">' + (expired ? 'Start over' : 'Cancel invite') + '</button></div>';
+    }
+    var rows = '<div class="cn-kv"><span>Status</span><b class="' + (c.st === 'linked' ? 'pos' : 'neg') + '">' + (c.st === 'linked' ? 'linked' : 'disconnected') + '</b></div>' +
+      '<div class="cn-kv"><span>' + nm + ' sees</span><span>only entries between you two, from ' + esc(fmtDate(String(c.at || '').slice(0, 10)) || 'the link') + ' on</span></div>' +
+      '<div class="cn-kv"><span>Stays private</span><span>your share, accounts, other people, balances</span></div>' +
+      (c.seen ? '<div class="cn-kv"><span>Last checked</span><span>' + esc(new Date(c.seen).toLocaleString()) + '</span></div>' : '') +
+      (c.err ? '<div class="cn-kv"><span>Problem</span><span class="neg">' + esc(c.err) + '</span></div>' : '') +
+      ((c.out || []).length ? '<div class="cn-kv"><span>Not sent yet</span><span>' + c.out.length + ' (sends when online)</span></div>' : '');
+    return rows + '<div class="cn-acts">' +
+      (c.st === 'linked' ? '<button type="button" class="act" data-cn-sync="' + esc(p.id) + '">Check now</button>' : '') +
+      '<button type="button" class="act ghost" data-cn-unlink="' + esc(p.id) + '">' + (c.st === 'linked' ? 'Disconnect' : 'Remove link') + '</button></div>' +
+      '<p class="note" style="margin:10px 0 0">Disconnecting keeps every entry in both books; new ones stop being shared.</p>';
+  }
+  function connOpenSheet(pid) {
+    var p = connFind(pid); if (!p) return;
+    var t = byId('connTitle'), b = byId('connBody');
+    if (!t || !b) return;
+    connSheetPid = pid;
+    if (p.conn) {
+      t.textContent = p.conn.st === 'invited' ? 'Connect with ' + p.name : p.name + ' · connection';
+      b.innerHTML = connStatusHTML(p);
+    } else {
+      t.textContent = 'Connect with ' + p.name;
+      var pre = connPreBal(p), relay = connRelay();
+      var bal = pre > 0.004 ? esc(p.name) + ' owes you ' + money(pre) : pre < -0.004 ? 'You owe ' + esc(p.name) + ' ' + money(-pre) : 'Settled (nothing owed)';
+      b.innerHTML = '<p class="note" style="margin:0 0 12px">' + esc(p.name) + ' opens your link in their own Fin.AI. After that, what either of you logs between you two shows up on the other phone to confirm.</p>' +
+        (relay ? '' : '<p class="note low" style="margin:0 0 12px">The connection uses your online coach Worker. Set its URL in Settings → Coach → Advanced first.</p>') +
+        '<div class="cn-kv"><span>Starting balance</span><b class="' + (pre > 0.004 ? 'pos' : pre < -0.004 ? 'neg' : '') + '">' + bal + '</b></div>' +
+        '<div class="cn-kv"><span>' + esc(p.name) + ' sees</span><span>only entries between you two</span></div>' +
+        '<div class="cn-kv"><span>Stays private</span><span>your share, accounts, other people, balances</span></div>' +
+        '<label class="fl" for="connMe" style="margin-top:12px">Your name (as ' + esc(p.name) + ' knows you)</label>' +
+        '<input id="connMe" maxlength="24" autocomplete="off" value="' + esc(state.owed.me || '') + '" placeholder="Your first name">' +
+        '<div class="cn-acts"><button type="button" class="act" data-cn-make="' + esc(pid) + '"' + (relay ? '' : ' disabled') + '>Make invite link</button></div>';
+    }
+    if (!(byId('connSheet') || {}).classList || !byId('connSheet').classList.contains('show')) openSheet('connSheet');
+  }
+  var connSheetPid = null;
+  function connShowJoin(j) {
+    var t = byId('connTitle'), b = byId('connBody');
+    if (!t || !b) return;
+    connSheetPid = null;
+    t.textContent = 'Connect';
+    b.innerHTML = '<p class="note">Opening the invite…</p>';
+    openSheet('connSheet');
+    connReadInvite(j).then(function (inv) {
+      if (!inv) { b.innerHTML = '<p class="note">This invite has expired or was already used. Ask for a new link.</p>'; return; }
+      connJoinPending = { j: j, inv: inv };
+      var bal = inv.b > 0.004 ? 'You owe ' + esc(inv.n) + ' ' + money(inv.b) : inv.b < -0.004 ? esc(inv.n) + ' owes you ' + money(-inv.b) : 'Settled (nothing owed)';
+      var opts = '<option value="">New card: ' + esc(inv.n) + '</option>';
+      (state.owed.people || []).forEach(function (x) {
+        if (x.conn && x.conn.st !== 'ended') return;
+        var same = String(x.name).toLowerCase() === String(inv.n).toLowerCase();
+        opts += '<option value="' + esc(x.id) + '"' + (same ? ' selected' : '') + '>' + esc(x.name) + ' (my card, ' + (owedBal(x) ? money(Math.abs(owedBal(x))) + ' ' + (owedBal(x) > 0 ? 'owes me' : 'I owe') : 'settled') + ')</option>';
+      });
+      t.textContent = esc(inv.n) ? inv.n + ' wants to connect' : 'Connect';
+      b.innerHTML = '<p class="note" style="margin:0 0 12px">to keep your Owed record with ' + esc(inv.n) + ' in sync.</p>' +
+        '<div class="cn-open"><span>Starting balance, from ' + esc(inv.n) + '’s book</span><b class="' + (inv.b > 0.004 ? 'neg' : inv.b < -0.004 ? 'pos' : '') + '">' + bal + '</b>' +
+        '<span>Confirm it only if it is right. If it is not, connect anyway and leave it unticked.</span></div>' +
+        '<ul class="cn-promise"><li>' + esc(inv.n) + ' sees only entries between you two</li><li>Nothing ' + esc(inv.n) + ' logs counts in your numbers until you confirm it</li><li>Your accounts, other people and balances stay private</li></ul>' +
+        '<label class="fl" for="connJoinTo">Keep it under</label><select id="connJoinTo">' + opts + '</select>' +
+        '<label class="cn-chk"><input type="checkbox" id="connJoinOpen" checked> Confirm the starting balance too</label>' +
+        '<div class="cn-acts"><button type="button" class="act ghost" data-cn-notnow="1">Not now</button><button type="button" class="act" data-cn-join="1">Connect</button></div>';
+    }, function (er) {
+      b.innerHTML = '<p class="note">Could not open the invite: ' + esc((er && er.message) || 'offline') + '. Try the link again when you are online.</p>';
+    });
+  }
+  function connCheckHash() {
+    var h = location.hash || '';
+    if (h.indexOf('#join=') !== 0) return;
+    var j = connParseJoin(h);
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    if (!j) { snack('That invite link is broken — ask for a new one.'); return; }
+    var dupe = (state.owed.people || []).some(function (x) { return x.conn && x.conn.pair === j.pair && x.conn.st !== 'ended'; });
+    if (dupe) { snack('You are already connected through that link.'); return; }
+    try { setTab('owed'); } catch (e) {}
+    connShowJoin(j);
+  }
+  // the inbox + the starting-balance status on a linked card
+  function connCardHTML(p) {
+    var c = p.conn;
+    if (!c) return '';
+    var nm = esc(p.name), h = '';
+    var items = (c.in || []);
+    if (items.length) {
+      h += '<div class="cn-inbox"><div class="cn-ih"><span>Waiting for you · ' + items.length + '</span><span>from ' + nm + '</span></div>';
+      items.forEach(function (it) {
+        var key = esc(p.id) + '|' + esc(it.cid) + '|' + it.k;
+        if (it.k === 'open') {
+          var ob = it.b > 0.004 ? 'You owe ' + nm + ' ' + money(it.b) : it.b < -0.004 ? nm + ' owes you ' + money(-it.b) : 'Settled';
+          h += '<div class="cn-it"><div class="cn-r"><b>Starting balance</b><b>' + ob + '</b></div><div class="cn-s">' + nm + ' resent it</div>' + connItActs(key, it, '') + '</div>';
+          return;
+        }
+        var dl = OWED_DIRS[it.dir] || OWED_DIRS.ipf, sg = dl.sign > 0 ? '+' : '−';
+        var say = { ipf: 'You paid for ' + nm, tpf: nm + ' paid for you', itb: 'You paid ' + nm + ' back', tmb: nm + ' paid you back' }[it.dir] || dl.label;
+        var sub = it.k === 'del' ? nm + ' removed this entry' : say + ' · ' + esc(fmtDate(it.d)) + (it.old ? ' · changed from ' + money(it.old.amt) : '');
+        var pick = '';
+        if (it.k === 'e') {
+          if (it.dir === 'tpf') pick = '<select class="cn-cat" aria-label="Category">' + owedCatOptions('Unsorted') + '</select>';
+          else pick = '<select class="cn-acc" aria-label="' + (it.dir === 'tmb' ? 'Into account' : 'From account') + '">' + owedAccOptions('CASH::Cash') + '</select>';
+        }
+        h += '<div class="cn-it"><div class="cn-r"><b>' + esc(it.note || dl.label) + '</b><b class="' + (dl.sign > 0 ? 'pos' : 'neg') + '">' + sg + money(it.amt) + '</b></div>' +
+          '<div class="cn-s">' + sub + '</div>' + (pick ? '<div class="cn-pick">' + (it.dir === 'tpf' ? 'Category' : it.dir === 'tmb' ? 'Into' : 'From') + ' ' + pick + '</div>' : '') +
+          connItActs(key, it, it.k === 'del' ? 'del' : '') + '</div>';
+      });
+      h += '</div>';
+    }
+    if (c.side === 'a' && c.open && c.st !== 'invited') {
+      var os = c.open.st === 'ok' ? '<span class="cn-ok">✓ ' + nm + ' confirmed</span>' : c.open.st === 'no' ? '<span class="cn-no">' + nm + ' did not confirm' + (c.open.why ? ' · “' + esc(c.open.why) + '”' : '') + '</span>' : '<span class="cn-w">waiting for ' + nm + '</span>';
+      h += '<div class="cn-openrow"><span>Starting balance ' + money(Math.abs(c.open.amt || 0)) + ' · ' + os + '</span>' +
+        (c.open.st === 'no' ? '<button type="button" class="mini" data-cn-resend="' + esc(p.id) + '">Resend</button>' : '') + '</div>';
+    }
+    return h;
+  }
+  function connItActs(key, it, kind) {
+    var a = kind === 'del' ? ['Keep it', 'Remove'] : ['Reject', 'Confirm'];
+    return '<div class="cn-rej" data-cn-rejbox="' + key + '" hidden><label>Why? (' + 'they see this)<input type="text" maxlength="120" class="cn-why" placeholder="Say what is off"></label>' +
+      '<div class="cn-acts"><button type="button" class="act ghost" data-cn-back="' + key + '">Back</button><button type="button" class="act bad" data-cn-rejsend="' + key + '">Send reject</button></div></div>' +
+      '<div class="cn-acts" data-cn-btns="' + key + '"><button type="button" class="act ghost" data-cn-rej="' + key + '"' + (kind === 'del' ? ' data-cn-keep="1"' : '') + '>' + a[0] + '</button>' +
+      '<button type="button" class="act" data-cn-ok="' + key + '">' + a[1] + '</button></div>';
+  }
+  // the status words under a shared entry's title
+  function connRowStatus(p, e) {
+    if (!e.cid || !p.conn) return '';
+    var nm = esc(p.name);
+    if (e.cst === 'no') return '<span class="owr-s cn-no">Rejected' + (e.cwhy ? ' · “' + esc(e.cwhy) + '”' : '') + '</span>';
+    if (e.cst === 'wait') return '<span class="owr-s cn-w">waiting for ' + nm + '</span>';
+    if (e.cst === 'ok') return '<span class="owr-s cn-ok">✓ in sync with ' + nm + '</span>';
+    return '';
+  }
+  function connWire() {
+    var body = byId('owedBody'), sheet = byId('connSheet');
+    var parse = function (v) { var s = String(v || '').split('|'); return { pid: s[0], cid: s[1], k: s[2] }; };
+    var box = function (root, attr, key) { return root.querySelector('[' + attr + '="' + key.replace(/"/g, '') + '"]'); };
+    if (body) body.addEventListener('click', function (ev) {
+      var t = ev.target && ev.target.closest ? ev.target.closest('[data-cn-conn],[data-cn-ok],[data-cn-rej],[data-cn-back],[data-cn-rejsend],[data-cn-resend]') : null;
+      if (!t) return;
+      ev.stopPropagation();
+      if (t.hasAttribute('data-cn-conn')) { connOpenSheet(t.getAttribute('data-cn-conn')); return; }
+      if (t.hasAttribute('data-cn-resend')) {
+        var rp = connFind(t.getAttribute('data-cn-resend'));
+        if (rp && rp.conn) { rp.conn.open = { amt: connPreBal(rp), st: 'wait' }; connQueue(rp, { t: 'open', b: rp.conn.open.amt }); saveOwed().then(emitOwed); }
+        return;
+      }
+      var key, x;
+      if (t.hasAttribute('data-cn-ok')) {
+        key = t.getAttribute('data-cn-ok'); x = parse(key);
+        var it = t.closest('.cn-it');
+        var acc = it && it.querySelector('.cn-acc') ? it.querySelector('.cn-acc').value : '';
+        var cat = it && it.querySelector('.cn-cat') ? it.querySelector('.cn-cat').value : '';
+        t.disabled = true;
+        connConfirm(x.pid, x.cid, x.k, acc, cat);
+        return;
+      }
+      if (t.hasAttribute('data-cn-rej')) {
+        key = t.getAttribute('data-cn-rej'); x = parse(key);
+        if (t.hasAttribute('data-cn-keep')) { connReject(x.pid, x.cid, x.k, ''); return; }
+        var rb = box(body, 'data-cn-rejbox', key), bb = box(body, 'data-cn-btns', key);
+        if (rb) { rb.hidden = false; var w = rb.querySelector('.cn-why'); if (w) w.focus(); }
+        if (bb) bb.hidden = true;
+        return;
+      }
+      if (t.hasAttribute('data-cn-back')) {
+        key = t.getAttribute('data-cn-back');
+        var rb2 = box(body, 'data-cn-rejbox', key), bb2 = box(body, 'data-cn-btns', key);
+        if (rb2) rb2.hidden = true; if (bb2) bb2.hidden = false;
+        return;
+      }
+      if (t.hasAttribute('data-cn-rejsend')) {
+        key = t.getAttribute('data-cn-rejsend'); x = parse(key);
+        var rb3 = box(body, 'data-cn-rejbox', key);
+        connReject(x.pid, x.cid, x.k, rb3 && rb3.querySelector('.cn-why') ? rb3.querySelector('.cn-why').value : '');
+      }
+    }, true);
+    if (sheet) sheet.addEventListener('click', function (ev) {
+      var t = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+      if (!t) return;
+      if (t.id === 'connClose' || t.hasAttribute('data-cn-notnow')) { closeSheets(); connJoinPending = null; return; }
+      var pid = connSheetPid;
+      if (t.hasAttribute('data-cn-make')) {
+        var me = byId('connMe');
+        t.disabled = true; t.textContent = 'Making the link…';
+        connCreateInvite(t.getAttribute('data-cn-make'), me ? me.value : '').then(function () {
+          connOpenSheet(pid);
+        }, function (er) {
+          t.disabled = false; t.textContent = 'Make invite link';
+          var m = er && er.message;
+          alert(m === 'noname' ? 'Type your name first — it is how the card shows up on the other phone.' : m === 'norelay' ? 'Set the online coach Worker URL in Settings first.' : 'Could not reach the Worker: ' + (m || 'offline') + (er && er.status === 503 ? ' (the Worker needs the connections update — see worker/README.md)' : ''));
+        });
+        return;
+      }
+      var p = pid ? connFind(pid) : null;
+      if (t.hasAttribute('data-cn-share') || t.hasAttribute('data-cn-copy')) {
+        if (!p || !p.conn) return;
+        var link = connInviteLink(p.conn, p.id);
+        var copy = function () {
+          var done = function () { snack('Invite link copied'); };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done, function () { prompt('Copy this link', link); });
+          else prompt('Copy this link', link);
+        };
+        if (t.hasAttribute('data-cn-share') && navigator.share) navigator.share({ title: 'Fin.AI', text: 'Connect our Owed record in Fin.AI', url: link }).catch(function () {});
+        else copy();
+        return;
+      }
+      if (t.hasAttribute('data-cn-cancel') || t.hasAttribute('data-cn-unlink')) {
+        if (!p) return;
+        if (t.hasAttribute('data-cn-unlink') && p.conn && p.conn.st === 'linked' && !confirm('Disconnect from ' + p.name + '? Every entry stays in both books; new ones stop being shared.')) return;
+        connDisconnect(p.id).then(function () { connOpenSheet(p.id); });
+        return;
+      }
+      if (t.hasAttribute('data-cn-sync')) {
+        if (!p) return;
+        t.disabled = true; t.textContent = 'Checking…';
+        connSync(p.id).then(function () { connOpenSheet(p.id); });
+        return;
+      }
+      if (t.hasAttribute('data-cn-join')) {
+        var jp = connJoinPending; if (!jp) return;
+        t.disabled = true; t.textContent = 'Connecting…';
+        var to = byId('connJoinTo'), op = byId('connJoinOpen');
+        connJoin(jp.j, jp.inv, to ? to.value : '', !!(op && op.checked)).then(function (np) {
+          connJoinPending = null; closeSheets();
+          snack('Connected with ' + esc(np.name));
+        }, function (er) { t.disabled = false; t.textContent = 'Connect'; alert((er && er.message) || 'Could not connect.'); });
+      }
+    });
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') connSyncAll(); });
+    window.addEventListener('hashchange', connCheckHash);
+  }
+  function delOwedEntry(pid, eid, opts) {
     var p = null;
     (state.owed.people || []).forEach(function (x) { if (x.id === pid) p = x; });
     if (!p) return;
@@ -10914,6 +11649,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     (p.entries || []).forEach(function (e, i) { if (e.id === eid) idx = i; });
     if (idx < 0) return;
     var gone = p.entries.splice(idx, 1)[0];
+    var connDel = !!(gone.cid && connLive(p) && !(opts && opts.conn)); // v75.02: the friend is told (they confirm the removal)
+    if (connDel) connQueue(p, { t: 'del', cid: gone.cid });
     // v72.10: the linked ledger txn (if any) is snapshotted for the undo
     var goneTxn = null;
     if (gone.txnId) {
@@ -10931,8 +11668,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (goneTxn) u = u.then(function () { return removeTxnQuiet(goneTxn.id); });
       goneTheirs.forEach(function (t) { u = u.then(function () { return removeTxnQuiet(t.id); }); });
       u.then(function () {
-        snack('Removed ' + money(gone.amt) + ' entry', function () {
+        snack('Removed ' + money(gone.amt) + ' entry', (opts && opts.conn) ? null : function () {
           p.entries.push(gone);
+          if (connDel) connStampMine(p, gone, true); // v75.02: back to the friend as a new version
           var r = Promise.resolve();
           if (goneTxn) r = r.then(function () { return restoreTxnQuiet(goneTxn); });
           goneTheirs.forEach(function (t) { r = r.then(function () { return restoreTxnQuiet(t); }); });
@@ -10958,6 +11696,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var bal = 0;
     var rows = [];
     ents.forEach(function (e) {
+      if (e && e.cst === 'no') return; // v75.02: a rejected shared entry is not on the statement
       var dir = OWED_DIRS[e.dir] || OWED_DIRS.ipf;
       var amt = r2((Number(e.amt) || 0) * dir.sign); // + = they owe you more, - = they owe you less
       bal = r2(bal + amt);
@@ -11135,7 +11874,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // linked+linked → v72.9's in-place edit (position + original timestamp stay);
   // linked→none → the txn is removed; none→linked (or a dangling link) → a
   // fresh txn is filed. ONE toast covers entry + txn; Undo reverses both.
-  function updateOwedEntry(pid, eid, data) {
+  function updateOwedEntry(pid, eid, data, opts) {
     var p = null, e = null;
     (state.owed.people || []).forEach(function (x) {
       if (x.id === pid) {
@@ -11206,6 +11945,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     e.d = next.d; e.amt = next.amt; e.dir = next.dir; e.note = next.note;
     e.cat = next.cat; // v72.25→v72.28
     if (data.expr) e.expr = data.expr; else delete e.expr;
+    if (opts && opts.conn) { e.cid = opts.conn.cid; e.cv = opts.conn.cv; e.cst = 'ok'; delete e.cwhy; } // v75.02
+    else if (e.cid) connStampMine(p, e, true); // v75.02: an edit goes back to the friend to confirm
     // v72.49: the split parts — only the ones that are there (ipf: mine +
     // total; tpf: theirs + total; e.amt IS the debt side)
     delete e.mine; delete e.theirs; delete e.total;
@@ -11247,7 +11988,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     }).then(function () {
       emitOwed();
       var undoNewId = !prevTxn && files ? e.txnId : null; // the just-created link
-      snack('Updated ' + money(e.amt) + ' · ' + esc(p.name), function () {
+      snack('Updated ' + money(e.amt) + ' · ' + esc(p.name), (opts && opts.conn) ? null : function () {
+        var cvNow = e.cv;
         var newLegs = ipfTheirsTxnIds(e); // v74.93: read the NEW legs before prev's handles come back (undo used to remove the old ids and leave the new leg behind)
         Object.keys(prev).forEach(function (k) { e[k] = prev[k]; });
         if (prev.acc) e.acc = prev.acc; else delete e.acc;
@@ -11258,6 +12000,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         if (prev.theirsTxnId) e.theirsTxnId = prev.theirsTxnId; else delete e.theirsTxnId; // v73.72
         if (prev.theirsBumpId) e.theirsBumpId = prev.theirsBumpId; else delete e.theirsBumpId;
         if (prev.cov) e.cov = prev.cov; else delete e.cov; // v74.93
+        if (e.cid && connLive(p)) { e.cv = cvNow; connStampMine(p, e, true); } // v75.02: the undone values go back as a new version
         var u = Promise.resolve();
         // v73.72: undo removes the NEW theirs pair, then restores the old one
         newLegs.forEach(function (tid) { u = u.then(function () { return removeTxnQuiet(tid); }); });
@@ -11767,8 +12510,20 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var entries = (Array.isArray(p.entries) ? p.entries : []).filter(function (e) {
         return e && e.id && OWED_DIRS[e.dir] && (Number(e.amt) || 0) > 0 && e.d;
       });
-      return { id: p.id || owedUid('ow'), name: p.name.trim(), entries: entries,
+      var out = { id: p.id || owedUid('ow'), name: p.name.trim(), entries: entries,
         updated: typeof p.updated === 'string' ? p.updated : '' }; // v72.7: recent-sort key
+      // v75.02: a connection survives a backup restore (its pair key is how the link keeps working)
+      var c = p.conn;
+      if (c && typeof c === 'object' && /^[0-9a-f]{32}$/.test(String(c.pair || '')) && /^[A-Za-z0-9_-]{43}$/.test(String(c.k || '')) &&
+        (c.side === 'a' || c.side === 'b') && connRelayOk(c.relay)) {
+        out.conn = { pair: c.pair, k: c.k, side: c.side, relay: connRelayOk(c.relay),
+          st: (c.st === 'linked' || c.st === 'invited' || c.st === 'ended') ? c.st : 'ended',
+          exp: Number(c.exp) || 0, at: typeof c.at === 'string' ? c.at : '',
+          open: (c.open && typeof c.open === 'object') ? { amt: r2(c.open.amt), st: String(c.open.st || ''), why: String(c.open.why || '').slice(0, 120) } : undefined,
+          out: Array.isArray(c.out) ? c.out.slice(0, 200) : [], in: Array.isArray(c.in) ? c.in.slice(0, 200) : [] };
+        if (!out.conn.open) delete out.conn.open;
+      }
+      return out;
     });
   }
   function sanitizeMoneyLogRows(rows) {
@@ -12258,12 +13013,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.01, live: new Date(2026, 10, 18, 23, 24) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.02, live: new Date(2026, 10, 19, 2, 40) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.02': [
+      'Owed: connect a friend who also uses Fin.AI. Tap Connect on their card, send the link (or show the QR), and from then on what either of you logs between you two shows up on the other phone to confirm or reject. Only those entries are shared — your share, accounts, other people and balances stay on your phone.'
+    ],
     '75.01': [
       'Home: the opened Cards owed rows show just each card and what you owe on it — the “in N days” is gone, since that row is the total owed, not the bill.'
     ],
@@ -13732,6 +14490,12 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
 
   // ---------- bridge for chat.js (the chat writes through the app's own actions) ----------
   window.FinApp = {
+    // v75.02: Owed connections (smoke drives the pieces without a relay)
+    connApply: connApply, connConfirm: connConfirm, connReject: connReject, connPreBal: connPreBal,
+    connOpenAdjust: connOpenAdjust, connParseJoin: connParseJoin, connSeal: connSeal, connOpenMsg: connOpenMsg,
+    connCardHTML: connCardHTML, connRowStatus: connRowStatus, connEntryMsg: connEntryMsg, qrEncode: qrEncode, qrSvg: qrSvg,
+    connCreateInvite: connCreateInvite, connReadInvite: connReadInvite, connJoin: connJoin, connSync: connSync,
+    connDisconnect: connDisconnect, connInviteLink: connInviteLink, connOpenSheet: connOpenSheet,
     headroomWindow: headroomWindow, // v73.98: the early-salary headroom window (smoke drives it)
     addPlan: addPlan,
     deletePlan: deletePlan,
@@ -14426,6 +15190,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (ro) ro.onclick = openRecap;
     var rc = byId('recapClose');
     if (rc) rc.onclick = closeSheets;
+    connWire(); // v75.02: Owed connections (the sheet, the inbox buttons, sync on return)
     var rp = byId('recapPin');
     if (rp) rp.onclick = function () {
       var now = new Date();
@@ -14728,6 +15493,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       render();
       setTab(currentTab());
       hideBoot(); // v72.53: the first render is in — the splash fades
+      connCheckHash(); // v75.02: opened from an invite link (#join=...)
     }).catch(function (err) {
       console.warn('IDB load failed', err);
       state.base = state.base || defaultBase();

@@ -1486,7 +1486,7 @@ def main():
           and "function owedTxnKind" not in js
           and "category: e.cat, amount: ledger, note: owedMineNote(e.note, p.name)" in js  # v74.84: the mine row carries the note
           and "if (editId) updateOwedEntry(pid, editId, payload);" in js
-          and "function updateOwedEntry(pid, eid, data)" in js
+          and "function updateOwedEntry(pid, eid, data, opts)" in js  # v75.02: opts.conn (a confirmed friend's edit)
           and "if (names.indexOf('Owed') < 0) names.push('Owed');" not in js)
     check("v72.33 (user: 'when i ask the bot how much i should prepay in just my maribank cc, it shows the total amount i should prepay (maribank cc and maya cc combined), i want it to show only the prepay amount for the card asked'): a prepay question about ONE card answers with that card's LIVE prepay — the overlay tracks the prepay delta per card (the card txn's account name rides in txnAdj, adj.prepayBy, a delta netting to zero is dropped), the effective snapshot recomputes each card's prepay as max(0, live balance − target balance) (target_balance rides in the snapshot cards; the stored card_util_target is the fallback for old snapshots), the local status rule shows the mentioned card's prepay line (no card mentioned = the total, as before), and the coach prompt carries the per-card breakdown plus the never-quote-the-total guidance",
           "if (t.kind === 'card_charge') return { cash: 0, free: amt, card: amt, prepay: amt, acc: t.account };" in js
@@ -1534,7 +1534,7 @@ def main():
           and '<select class="oent-cat">' in js
           and 'owedAccRowState' not in js)
     check("every owed entry row carries the edit button (v72.29, user: 'add edit button for all owed entries, including the old ones from old versions'): the v72.10 e.txnId condition is gone — legacy entries (no dir/cat/acc/txnId) edit through the same form, which falls back to ipf + today + empty acc/cat and files per the v72.28 rules on save (adopt on edit, no migration); the '· ledger' chip stays the filed-entries marker",
-          "'<button type=\"button\" class=\"mini\" data-ow-edit-e=\"' + esc(e.id) + '\" aria-label=\"Edit entry\">Edit" in js  # v74.86: Edit / Delete sit in the opened row
+          "'<button type=\"button\" class=\"mini\" data-ow-edit-e=\"' + esc(e.id) + '\" aria-label=\"Edit entry\">' + (e.cst === 'no' ? 'Edit and resend ✎' : 'Edit ✎')" in js  # v74.86: Edit / Delete sit in the opened row; v75.02: a rejected shared entry reads Edit and resend
           and "(e.txnId ? '<button" not in js
           and "var led = e.txnId ? (ledAmt > 0 ? 'Your ' + money(ledAmt) + ' is in the Ledger' : 'Filed in the Ledger')" in js  # v74.86: the '· ledger' chip became this details line
           and "owedPersonHTML: owedPersonHTML" in js)
@@ -2720,6 +2720,18 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.02 (boss: 'have my friend install the finai app so that i can add him as a connection which shows us a shared record of the owed tab' -> mockup -> 'resume with the build'): Owed connections - invite link / QR, the Worker's /conn mailbox (sealed AES-GCM, pair token), mirrored entries, Waiting for you with Confirm / Reject, statuses, starting balance. Smoke PART 82",
+          "function connApply(p, m) {" in js
+          and "function qrEncode(text, forceMask) {" in js
+          and "var CONN_MIRROR = { ipf: 'tpf', tpf: 'ipf', itb: 'tmb', tmb: 'itb' };" in js
+          and "connStampMine(p, e, false);" in js
+          and "e.cst !== 'no') b += owedSign(e.dir)" in js
+          and 'id="connSheet"' in html
+          and ".cn-inbox{" in html
+          and "async function handleConn(request, env, origin)" in worker
+          and "\"binding\": \"CONN\"" in rd(os.path.join("worker", "wrangler.jsonc"))
+          and "PART 82: v75.02" in smoke
+          and "'75.02': [" in js)
     check("v75.01 (boss: 'in hero, for cards owed, remove the in x days as they dont reflect the bill dues just the total owed'): the opened Cards owed sub-rows show the card + its balance only. Smoke PART 81",
           "var dueTxt = '';" in js
           and "var dueTxt = cdd ? cbWhenHTML(cdd.dueIn)" not in js

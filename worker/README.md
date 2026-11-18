@@ -88,6 +88,27 @@ Then open the coach and ask an open question; the reply is labelled
 `Coach · remote`. Turn your phone's network off (or wait for the remote to fail)
 and the next question is labelled `Coach · local` — that's the fallback working.
 
+## 4. Owed connections (v75.02)
+
+The same Worker also relays **Owed connections**: two phones sharing one Owed
+record. It needs one Cloudflare KV namespace (free plan is enough):
+
+```bash
+# from this folder, once
+npx wrangler kv namespace create CONN
+```
+
+Paste the `id` it prints into `wrangler.jsonc` → `kv_namespaces` (replace
+`REPLACE_WITH_KV_ID`; the id is not a secret), then `npx wrangler deploy`.
+
+What the relay sees: a random pair id, a hash of the pair token, and sealed
+messages (AES-256-GCM; the key is only in the invite link's `#fragment`, which
+browsers never send to a server). Messages wait up to 30 days, the invite 24
+hours; read ones are deleted. `/conn` does not use `APP_TOKEN` (the friend's
+phone never has it) — the pair token is its gate, with its own rate limit
+(`RL_CONN`, 60/min per IP). Your friend's phone talks only to `/conn`, never to
+the coach.
+
 ## Switch providers
 
 All handled via non-secret `vars` (or a secret) in `wrangler.jsonc`; no code

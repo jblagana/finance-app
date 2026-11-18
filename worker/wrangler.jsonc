@@ -12,7 +12,15 @@
   // bucket for the whole Worker. A personal app makes a few calls a minute.
   "ratelimits": [
     { "name": "RL_PER_IP", "namespace_id": "7401", "simple": { "limit": 10, "period": 60 } },
-    { "name": "RL_GLOBAL", "namespace_id": "7402", "simple": { "limit": 30, "period": 60 } }
+    { "name": "RL_GLOBAL", "namespace_id": "7402", "simple": { "limit": 30, "period": 60 } },
+    // v75.02: the Owed connections relay (/conn) — per caller IP
+    { "name": "RL_CONN", "namespace_id": "7403", "simple": { "limit": 60, "period": 60 } }
+  ],
+  // v75.02: the Owed connections mailbox. Create it once with
+  //   npx wrangler kv namespace create CONN
+  // and paste the id it prints here (the id is not a secret).
+  "kv_namespaces": [
+    { "binding": "CONN", "id": "REPLACE_WITH_KV_ID" }
   ],
   "vars": {
     // The app's origin. Browsers send Origin WITHOUT a path, so this is compared
