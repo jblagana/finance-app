@@ -7917,9 +7917,9 @@
     // free cash (since v74.93 a friend's share leaves the account at once);
     // when nobody owes you but you owe someone, a muted 'you owe' chip.
     var od = owedHeroData(), chip = '';
-    if (od.owedIn > 0.004 && od.owedOut > 0.004) chip = '<button type="button" class="hero-owed" data-owedchip><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7 7 17"/><path d="M16 17H7V8"/></svg><span><b>' + money(od.owedIn) + '</b> owed to you</span><span class="ho-n">· <b class="ho-out">' + money(od.owedOut) + '</b> you owe</span><span class="ho-c" aria-hidden="true">›</span></button>'; // v74.94: both directions
-    else if (od.owedIn > 0.004) chip = '<button type="button" class="hero-owed" data-owedchip><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7 7 17"/><path d="M16 17H7V8"/></svg><span><b>' + money(od.owedIn) + '</b> owed to you</span><span class="ho-n">· ' + esc(od.inNames) + '</span><span class="ho-c" aria-hidden="true">›</span></button>';
-    else if (od.owedOut > 0.004) chip = '<button type="button" class="hero-owed out" data-owedchip><span><b>' + money(od.owedOut) + '</b> you owe</span><span class="ho-n">· ' + esc(od.outNames) + '</span><span class="ho-c" aria-hidden="true">›</span></button>';
+    if (od.owedIn > 0.004 && od.owedOut > 0.004) chip = '<button type="button" class="hero-owed both" data-owedchip aria-label="' + money(od.owedIn) + ' owed to you, ' + money(od.owedOut) + ' you owe"><span class="ho-a"><b>' + money(od.owedIn) + '</b> to you</span><span class="ho-sep" aria-hidden="true"></span><span class="ho-a"><b class="ho-out">' + money(od.owedOut) + '</b> you owe</span><span class="ho-c" aria-hidden="true">›</span></button>'; // v74.96 (boss: 'declutter the owed chip in hero'): both directions fit one line — short labels, no icon, a thin divider
+    else if (od.owedIn > 0.004) chip = '<button type="button" class="hero-owed" data-owedchip><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7 7 17"/><path d="M16 17H7V8"/></svg><span class="ho-a"><b>' + money(od.owedIn) + '</b> owed to you</span><span class="ho-n">· ' + esc(od.inNames) + '</span><span class="ho-c" aria-hidden="true">›</span></button>';
+    else if (od.owedOut > 0.004) chip = '<button type="button" class="hero-owed out" data-owedchip><span class="ho-a"><b>' + money(od.owedOut) + '</b> you owe</span><span class="ho-n">· ' + esc(od.outNames) + '</span><span class="ho-c" aria-hidden="true">›</span></button>';
     // v73.33: the salary statement LEFT the Free/unallocated line (boss:
     // 'remove the salary statement in the free/unallocated card') — the
     // salary lives in the coach card's green row (v73.32) and the
@@ -12186,12 +12186,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 74.95, live: new Date(2026, 10, 18, 22, 13) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 74.96, live: new Date(2026, 10, 18, 22, 26) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '74.96': [
+      'Home: the owed chip stays on one line. When friends owe you and you owe someone, it reads “PHP 5,000.00 to you | PHP 82.50 you owe”.'
+    ],
     '74.95': [
       'Owed: on “I paid them back” or “They paid me back”, leave the amount blank and save — it files exactly what’s owed and settles them. The box shows the amount before you save.'
     ],

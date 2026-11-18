@@ -2720,6 +2720,12 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v74.96 (boss: 'declutter the owed chip in hero'): the both-directions chip is one line on a phone - 'PHP X to you | PHP Y you owe', no icon, a thin divider, amounts never wrap; on a very narrow phone the two parts wrap as whole parts. Smoke PART 76",
+          "class=\"hero-owed both\"" in js
+          and ".hero-owed .ho-a{white-space:nowrap;flex:none}" in html
+          and ".hero-owed.both{gap:2px 9px;padding-left:12px;flex-wrap:wrap;" in html
+          and "PART 76: v74.96" in smoke
+          and "'74.96': [" in js)
     check("v74.95 (boss: 'for ipb and tpb, when i dont type an amount and just save directly, file the exact amount owed'): a NEW itb / tmb saved with the amount blank files owedSettleAmount (itb: what you owe them, tmb: what they owe you); the amount box shows it as its placeholder; nothing owed = a direction-aware message. Smoke PART 75",
           "function owedSettleAmount(pid, dir) {" in js
           and "if (!raw && !f.getAttribute('data-ow-edit')) T = owedSettleAmount(pid, dir);" in js

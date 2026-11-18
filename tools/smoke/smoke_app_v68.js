@@ -4121,6 +4121,21 @@ waitReady().then(async function (F) {
       ok(F.owedSettleAmount('p75', 'itb') === 250 && F.owedSettleAmount('p75', 'tmb') === 0, 'v74.95: once you owe them 250, a blank payback files 250');
       ok(F.owedSettleAmount('nobody', 'tmb') === 0, 'v74.95: an unknown person settles nothing');
       F.setOwed(owed75);
+      // ============ PART 76: v74.96 - the owed chip fits one line ============
+      console.log('\n== PART 76: v74.96 - both directions: short labels, no icon ==');
+      var owed76 = JSON.parse(JSON.stringify(F.getOwed()));
+      F.setOwed({ people: [
+        { id: 'p76a', name: 'In76', entries: [{ id: 'e76a', d: '2026-11-01', dir: 'ipf', amt: 5000, m2: 1 }], updated: '' },
+        { id: 'p76b', name: 'Out76', entries: [{ id: 'e76b', d: '2026-11-01', dir: 'tpf', amt: 82.5, m2: 1 }], updated: '' }
+      ], sort: 'recent' });
+      F.render();
+      var hs76 = String(byIdStub('heroSub').innerHTML || '');
+      ok(hs76.indexOf('hero-owed both') >= 0 && hs76.indexOf('</b> to you') >= 0 && hs76.indexOf('</b> you owe') >= 0, 'v74.96: both directions read to you | you owe');
+      ok(hs76.indexOf('owed to you</span>') < 0 && hs76.indexOf('<svg') < 0 && hs76.indexOf('ho-sep') >= 0, 'v74.96: no long label and no icon on the both chip, a divider between');
+      F.setOwed({ people: [owed76.people[0] || { id: 'p76c', name: 'In76', entries: [{ id: 'e76c', d: '2026-11-01', dir: 'ipf', amt: 50, m2: 1 }], updated: '' }], sort: 'recent' });
+      F.render();
+      ok(String(byIdStub('heroSub').innerHTML || '').indexOf('owed to you</span>') >= 0, 'v74.96: one direction keeps owed to you');
+      F.setOwed(owed76); F.render();
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
