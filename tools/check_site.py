@@ -2720,6 +2720,11 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.03 (boss: 'test button not working or displaying any status'): the Worker page's Test result shows on that page (#aiRemoteTestNote; #aiRemoteNote sits on the hidden main page) and the typed URL is saved before the test",
+          'id="aiRemoteTestNote"' in html
+          and "var notes = [byId('aiRemoteNote'), byId('aiRemoteTestNote')];" in rd("ai.js")
+          and "if (ruIn && String(ruIn.value || '').trim() !== remoteUrl()) setRemoteUrl(ruIn.value);" in rd("ai.js")
+          and "'75.03': [" in js)
     check("v75.02 (boss: 'have my friend install the finai app so that i can add him as a connection which shows us a shared record of the owed tab' -> mockup -> 'resume with the build'): Owed connections - invite link / QR, the Worker's /conn mailbox (sealed AES-GCM, pair token), mirrored entries, Waiting for you with Confirm / Reject, statuses, starting balance. Smoke PART 82",
           "function connApply(p, m) {" in js
           and "function qrEncode(text, forceMask) {" in js

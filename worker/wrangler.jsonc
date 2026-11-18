@@ -20,7 +20,7 @@
   //   npx wrangler kv namespace create CONN
   // and paste the id it prints here (the id is not a secret).
   "kv_namespaces": [
-    { "binding": "CONN", "id": "REPLACE_WITH_KV_ID" }
+    { "binding": "CONN", "id": "90f67267492b4702b3dacec2c0bfdef8" }
   ],
   "vars": {
     // The app's origin. Browsers send Origin WITHOUT a path, so this is compared

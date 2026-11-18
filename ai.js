@@ -201,8 +201,13 @@
   }
 
   function testRemote() {
-    var note = byId('aiRemoteNote');
-    function show(msg, ok) { if (note) { note.textContent = msg; note.style.color = ok === null ? '' : (ok ? 'var(--ok)' : 'var(--bad)'); } }
+    // v75.03: the Worker URL typed but not yet saved (no blur before the tap) is the one tested
+    var ruIn = byId('aiRemoteUrl');
+    if (ruIn && String(ruIn.value || '').trim() !== remoteUrl()) setRemoteUrl(ruIn.value);
+    // v75.03 (boss: 'test button not working or displaying any status'): the result also shows on the
+    // Worker page itself - aiRemoteNote lives on the main Settings page, hidden while this page is open
+    var notes = [byId('aiRemoteNote'), byId('aiRemoteTestNote')];
+    function show(msg, ok) { notes.forEach(function (note) { if (note) { note.textContent = msg; note.style.color = ok === null ? '' : (ok ? 'var(--ok)' : 'var(--bad)'); } }); }
     if (!workerConfigured() && !byoConfigured()) { show('Set a Worker URL or a bring-your-own key first.', false); return; }
     if (typeof fetch !== 'function') { show('fetch is unavailable in this browser.', false); return; }
     var useWorker = workerConfigured();

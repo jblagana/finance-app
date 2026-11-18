@@ -13013,12 +13013,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.02, live: new Date(2026, 10, 19, 2, 40) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.03, live: new Date(2026, 10, 19, 3, 16) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.03': [
+      'Settings → Worker & your own key: Test now shows its result right under the Worker URL (it used to show on the main Settings page, out of sight), and it tests what you just typed even before you leave the box.'
+    ],
     '75.02': [
       'Owed: connect a friend who also uses Fin.AI. Tap Connect on their card, send the link (or show the QR), and from then on what either of you logs between you two shows up on the other phone to confirm or reject. Only those entries are shared — your share, accounts, other people and balances stay on your phone.'
     ],
