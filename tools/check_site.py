@@ -2720,6 +2720,10 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.04 (boss: 'when i click reject button, it expands into 4 buttons'): the hidden Reject / Confirm row really hides (.cn-acts{display:flex} beat the hidden attribute)",
+          ".cn-acts[hidden],.cn-rej[hidden]{display:none}" in html
+          and "if (bb) bb.hidden = true;" in js
+          and "'75.04': [" in js)
     check("v75.03 (boss: 'test button not working or displaying any status'): the Worker page's Test result shows on that page (#aiRemoteTestNote; #aiRemoteNote sits on the hidden main page) and the typed URL is saved before the test",
           'id="aiRemoteTestNote"' in html
           and "var notes = [byId('aiRemoteNote'), byId('aiRemoteTestNote')];" in rd("ai.js")

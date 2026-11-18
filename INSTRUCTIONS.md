@@ -1,3 +1,8 @@
+## 2026-11-19 - "it works now, the qr shows. but when i click reject button, it expands into 4 buttons, why" -> "Reject on a Waiting-for-you entry swaps Reject / Confirm for Back / Send reject (not all four at once)"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.04 (root cause: the swap hides the Reject / Confirm row with the hidden attribute, but .cn-acts{display:flex} overrides the browser's [hidden]{display:none}; fix: .cn-acts[hidden],.cn-rej[hidden]{display:none}; preview: after Reject only 'Back', 'Send reject' are visible, after Back only 'Reject', 'Confirm'; test person removed)
+(Earlier in the thread: 'the link inowed says could not reach the worker: messages[] is required' -> answered, no code change: the phone still pointed at the OLD jblagana Worker (no /conn route, it answered the probe with exactly that error); the new Worker's URL fixed it.)
+
 ## 2026-11-19 - "test button not working or displaying any status" -> "Settings -> Worker & your own key: the Test button shows its result (Testing... / working / the error) on that page, and tests the URL just typed"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.03 (root cause: since the v74.44 Settings sub-pages, testRemote wrote into #aiRemoteNote, which sits on the main page - hidden (display:none) while the Worker page is open, so every test ran with no visible status; fix: #aiRemoteTestNote under the Worker URL gets the same message, and a typed-but-unsaved URL is saved first; preview: 'Testing...' then 'Could not reach https://nothing-here.invalid/ ...' on the Worker page; test_ai_timeout all pass)
