@@ -1974,18 +1974,18 @@ waitReady().then(async function (F) {
             var co28 = t28.filter(function (t) { return t.kind === 'card_charge' && t.note === 'smoke ipf · Owed · Smoke Friend'; }); // v74.84: the mine row leads with the entry's note
             ok(ch28.length === 1 && ch28[0].amount === 100 && ch28[0].account === 'Maya CC',
               'v73.72: ipf on a card files THEIRS as a card_charge (got ' + ch28.length + ' x ' + (ch28[0] && ch28[0].amount) + ')');
-            ok(ci28.length === 1 && ci28[0].amount === 100 && ci28[0].account === 'Cash',
-              'v73.72: the cash advance files as a cash_in for the same amount (got ' + ci28.length + ' x ' + (ci28[0] && ci28[0].amount) + ')');
+            ok(ci28.length === 0,
+              'v74.93: no cash advance any more - the friend share stays on the card until they pay you back (got ' + ci28.length + ')');
             ok(co28.length === 1 && co28[0].amount === 100,
               'v73.72: MINE still files as before (100 card charge for the boss\'s own part)');
             var es28 = F.effectiveSnap();
-            ok(close(es28.cash.free, freeA - 100),
-              'v73.72: only MINE commits free cash — theirs is neutralized (charge −100, advance +100; got ' + es28.cash.free.toFixed(2) + ' vs ' + (freeA - 100).toFixed(2) + ')');
+            ok(close(es28.cash.free, freeA - 200),
+              'v74.93: free cash drops by the FULL bill until repaid (mine 100 + theirs 100; got ' + es28.cash.free.toFixed(2) + ' vs ' + (freeA - 200).toFixed(2) + ')');
             ok(close(es28.card_owed, owedA + 200),
               'v73.72: card owed grew by the FULL bill (mine + theirs; got ' + es28.card_owed.toFixed(2) + ')');
             var e28 = F.getOwed().people.filter(function (p) { return p.id === pid; })[0].entries[0];
-            ok(!!e28.theirsTxnId && !!e28.theirsBumpId && e28.theirsTxnId !== e28.theirsBumpId,
-              'v73.72: the entry carries both pair handles (charge + advance)');
+            ok(!!e28.theirsTxnId && !e28.theirsBumpId && e28.m2 === 1,
+              'v74.93: the entry carries one leg handle (the charge) and the m2 stamp');
             // ---- the backfill: pre-base entries get the advance only (their
             // card spend is already in the sheet's base), post-base get both ----
             F.setOwed({ people: [{ id: 'p28b', name: 'Backfill Buddy', entries: [
@@ -2867,7 +2867,7 @@ waitReady().then(async function (F) {
         'v73.93: every card on file gets a sub-row (Maya CC + MariBank CC present)');
       var cdd37 = F.cardDueData(F.state.base.accounts.filter(function (a) { return a.name === 'Maya CC'; })[0], F.state.txns, F.state.base, F.todayISO());
       if (cdd37) {
-        var dueLabel37 = Number(cdd37.dueDate.slice(8)) + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(cdd37.dueDate.slice(5, 7)) - 1];
+        var dueLabel37 = cdd37.dueIn < 0 ? (-cdd37.dueIn) + ' day' : cdd37.dueIn === 0 ? 'today' : 'in ' + cdd37.dueIn + ' day'; // v74.93: the sub-row says when ('Maya CC · in 17 days'), not the date
         ok(cb37.indexOf(dueLabel37) >= 0, 'v73.93: the sub-row carries the card\u2019s own due date (' + dueLabel37 + ' from cardDueData ' + cdd37.dueDate + ')');
       }
       // the Plan dues row keeps its own flag - expanding Cards must not touch it
@@ -3804,7 +3804,7 @@ waitReady().then(async function (F) {
       await sleep(30);
       var d59 = F.insightsData();
       ok(close(d59.todaySpend, spent59a + 400), 'v74.76: a 1,000 card meal with 600 theirs adds 400 to Spent today (got +' + (d59.todaySpend - spent59a).toFixed(2) + ')');
-      ok(close(F.effectiveSnap().card_owed, cOwed59a + 1000) && close(F.effectiveSnap().cash.free, free59a - 400), 'v74.76: balances unchanged by the fix (card owed +1,000, free -400)');
+      ok(close(F.effectiveSnap().card_owed, cOwed59a + 1000) && close(F.effectiveSnap().cash.free, free59a - 1000), 'v74.93: card owed +1,000, free -1,000 (the friend 600 is owed to you, not counted)');
       var rc59 = F.recapData(F.getTxns(), F.todayISO().slice(0, 7));
       var rc59b = F.recapData(txns59, F.todayISO().slice(0, 7));
       ok(rc59 && rc59b && close(rc59.income, rc59b.income), 'v74.76: the theirs cash advance is not income in the month recap');
@@ -4038,6 +4038,39 @@ waitReady().then(async function (F) {
       ok(!F.cardBillOpenDue({ name: 'Probe72', balance: 800 }), 'v74.92: past the due date -> the prepay may show');
       b72.accounts = b72.accounts.filter(function (a) { return a !== acc72; });
       ok(!F.cardBillOpenDue({ name: 'Probe72', balance: 800 }), 'v74.92: an unknown card never hides a prepay');
+      // ============ PART 73: v74.93 - the friend's share leaves the account; repayments land ============
+      console.log('\n== PART 73: v74.93 - ipf theirs leaves the account, tmb files into it, the owed chip ==');
+      var owed73 = JSON.parse(JSON.stringify(F.getOwed())), txns73 = F.getTxns().slice(), adj73 = JSON.parse(JSON.stringify(F.getAdj()));
+      var free73a = F.effectiveSnap().cash.free;
+      await F.addOwedPerson('Probe73');
+      var pid73 = F.getOwed().people[F.getOwed().people.length - 1].id;
+      await F.addOwedEntry(pid73, { dir: 'ipf', amt: 600, total: 1000, mine: 400, theirs: 600, acc: 'CASH::Cash', cat: 'Food', note: 'p73', d: F.todayISO() });
+      await sleep(30);
+      var p73 = F.getOwed().people.filter(function (x) { return x.id === pid73; })[0], e73 = p73.entries[0];
+      var leg73 = F.getTxns().filter(function (t) { return t.id === e73.theirsTxnId; })[0];
+      ok(e73.m2 === 1 && leg73 && leg73.kind === 'cash_out' && leg73.account === 'Cash' && leg73.amount === 600, 'v74.93: a cash ipf files theirs as a cash_out on the paid-from account');
+      ok(close(F.effectiveSnap().cash.free, free73a - 1000), 'v74.93: free cash drops by the full 1,000 until repaid');
+      ok(F.owedHeroData().owedIn >= 600 && F.owedHeroData().inNames.indexOf('Probe73') >= 0, 'v74.93: the hero chip data counts the 600 owed to you');
+      await F.addOwedEntry(pid73, { dir: 'tmb', amt: 600, total: 600, mine: 0, theirs: 0, acc: 'CASH::Cash', cat: 'Unsorted', note: '', d: F.todayISO() });
+      await sleep(30);
+      var b73 = p73.entries[1], back73 = F.getTxns().filter(function (t) { return t.id === b73.theirsTxnId; })[0];
+      ok(back73 && back73.kind === 'cash_in' && back73.amount === 600 && !b73.cov, 'v74.93: They paid me back files a 600 cash_in on the picked account');
+      ok(close(F.effectiveSnap().cash.free, free73a - 400), 'v74.93: after the repayment only your 400 is gone');
+      var rc73 = F.recapData(F.getTxns(), F.todayISO().slice(0, 7)), rc73b = F.recapData(txns73, F.todayISO().slice(0, 7));
+      ok(rc73 && rc73b && close(rc73.income, rc73b.income), 'v74.93: the repayment is not income in the month recap');
+      // legacy (pre-v74.93) receivable: already counted as yours, so its repayment files nothing
+      p73.entries.push({ id: 'e73old', d: '2026-10-01', dir: 'ipf', amt: 300, acc: 'CASH::Cash', cat: 'Food', note: 'old' });
+      await F.addOwedEntry(pid73, { dir: 'tmb', amt: 500, total: 500, mine: 0, theirs: 0, acc: 'CASH::Maya', cat: 'Unsorted', note: '', d: F.todayISO() });
+      await sleep(30);
+      var c73 = p73.entries[p73.entries.length - 1], cl73 = F.getTxns().filter(function (t) { return t.id === c73.theirsTxnId; })[0];
+      ok(c73.cov === 300 && cl73 && cl73.amount === 200 && cl73.account === 'Maya', 'v74.93: a repayment pays down the legacy 300 first, files the other 200 into Maya');
+      ok(F.owedLegacyLeft(p73) === 0, 'v74.93: nothing legacy left after that');
+      ok(F.cbWhenHTML(-3).indexOf('3 days late') >= 0 && F.cbWhenHTML(0).indexOf('today') >= 0 && F.cbWhenHTML(1).indexOf('in 1 day') >= 0 && F.cbWhenHTML(17).indexOf('in 17 days') >= 0, 'v74.93: the sub-rows say when (late / today / in N days)');
+      F.render();
+      var hs73 = String(byIdStub('heroSub').innerHTML || '');
+      ok(hs73.indexOf('Liquid <b>') < 0 && hs73.indexOf('Cards owed <b>') < 0, 'v74.93: the hero sub line (Liquid / Cards owed / Prepay) is gone');
+      F.setOwed(owed73); F.setTxns(txns73);
+      var A73 = F.getAdj(); Object.keys(A73).forEach(function (k) { delete A73[k]; }); Object.keys(adj73).forEach(function (k) { A73[k] = adj73[k]; });
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

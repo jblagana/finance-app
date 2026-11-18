@@ -2720,6 +2720,17 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v74.93 (boss: 'lets do that but i wanna see whats owed to me in the hero card' + 'i pick C. also remove the subline' + 'expanded plan due rows use Home Wifi - in x days'): ipf theirs leaves the paid-from account and tmb files into its picked account (fileOwedLeg, m2 entries; legacy receivables paid down first via owedLegacyLeft), the hero owed chip replaces the Liquid / Cards owed / Prepay sub line, the cycle sub-rows say when (cbWhenHTML). Smoke PART 73",
+          "function fileOwedLeg(e, p) {" in js
+          and "if (e && e.m2) return fileOwedLeg(e, p);" in js
+          and "function owedLegacyLeft(p, exceptId) {" in js
+          and "var od = owedHeroData(), chip = '';" in js
+          and "hs.innerHTML = chip + (spLine ?" in js
+          and "sub.push('Liquid <b>'" not in js
+          and "function cbWhenHTML(n) {" in js
+          and ".hero-owed{" in html
+          and "PART 73: v74.93" in smoke
+          and "'74.93': [" in js)
     check("v74.92 (boss: 'for the same card, the prepay and the bill rows should not appear together right?'): the prepay row filter drops a card whose bill is open with something due (cardBillOpenDue) - the Bill wins until it is paid or past due. Smoke PART 72",
           "function cardBillOpenDue(c) {" in js
           and "return !cardBillOpenDue(c); // v74.92" in js
