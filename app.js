@@ -8216,8 +8216,7 @@
         '<button type="button" data-m="without" class="' + (salMode === 'without' ? 'on' : '') + '" aria-pressed="' + (salMode === 'without' ? 'true' : 'false') + '">Without</button>' +
       '</div></div>' : '') +
       '<div class="cbrows">' + rows + '</div>' +
-      (mode === 'next' ? '<div class="cbnet"><span class="nl">Free at end of next cycle</span><span class="nv ' + netCls + '">' + netTxt + '</span></div>' : '') +
-      '<p class="cbnote">Estimate — daily spending not included.</p>'; // v74.33: the salary sentence is gone; v75.07: one-offs ARE in it since v73.63 (the old line said excluded)
+      (mode === 'next' ? '<div class="cbnet"><span class="nl">Free at end of next cycle</span><span class="nv ' + netCls + '">' + netTxt + '</span></div>' : ''); // v75.12: the 'daily spending not included' note moved under the graph
     // re-wire the switches (innerHTML wiped the old listeners — the v73.20
     // chip pattern: the element is rebuilt, so the handler must be re-bound)
     var segC = byId('cbSegCycle');
@@ -8226,6 +8225,7 @@
       if (!btn) return;
       state.cycleMode = btn.getAttribute('data-m') === 'next' ? 'next' : 'this';
       renderCycleBlock();
+      renderSpark(); // v75.12: the graph shows the selected cycle
     };
     var segS = byId('cbSegSalary');
     if (segS) segS.onclick = function (e) {
@@ -8233,6 +8233,7 @@
       if (!btn) return;
       state.peekMode = btn.getAttribute('data-m') === 'without' ? 'without' : 'with';
       renderCycleBlock();
+      renderSpark(); // v75.12
     };
     // v73.37: the peek's Plans row expands the specific dues (in-memory
     // flag, defaults closed; the row is a div[role=button] — the v73.20
@@ -8361,66 +8362,165 @@
     });
     return { pts: pts, floor: Number(s.floor) || 0 };
   }
+  // v75.12 (boss: 'build the hero graph from the mockup' — the Hero graph mockup, boards 2 + 3): the hero graph is the
+  // hero's own bridge laid out in time. It starts at Liquid (next cycle: the carry), every deduction steps down on its
+  // date (this cycle's unpaid past-due dues and the set-asides drop TODAY), and the line ENDS exactly at the hero's free
+  // cash (next cycle: 'Free at end'). The selected cycle only, from zero. Pure — reads, never writes.
+  function heroSteps(mode) {
+    var b = state.base; if (!b) return null;
+    var isNext = mode === 'next';
+    var p = cycleProjection(isNext ? 'next' : 'this', state.peekMode === 'without' ? 'without' : 'with');
+    if (!p || !p.start || !p.end) return null;
+    var today = todayISO();
+    var x0 = isNext ? p.start : today, end = p.end;
+    if (x0 > end) x0 = end;
+    var groups = {};
+    function add(date, label, amt, parts) {
+      if (!(Math.abs(Number(amt) || 0) >= 0.005)) return;
+      var d = String(date || x0); if (d < x0) d = x0; if (d > end) d = end;
+      (groups[d] = groups[d] || []).push({ label: label, amt: r2(amt), parts: parts || '' });
+    }
+    var start = r2(isNext ? p.carry : p.liquid);
+    var items = p.planItems || [];
+    if (!isNext) {
+      if (p.salaryPending > 0.004) add(today, 'Salary · not in yet', p.salaryPending);
+      var over = items.filter(function (it) { return it.date < today; }), overT = 0;
+      over.forEach(function (it) { overT += Number(it.amount) || 0; });
+      if (over.length) add(today, 'Overdue · ' + over.length, -overT, over.map(function (it) { return it.name + ' ' + pesoShort(it.amount); }).join(' · '));
+      items.forEach(function (it) { if (it.date >= today) add(it.date, it.name, -(Number(it.amount) || 0)); });
+      // the cards: each balance on its first due date from today (the card's due day, else the global one, else the 5th)
+      var es = effectiveSnap(), byDate = {};
+      (es && es.cards || []).forEach(function (c) {
+        var bal = Number(c.balance) || 0; if (!(bal > 0.004)) return;
+        var acc = null; ((b.accounts) || []).forEach(function (a) { if (a && a.kind === 'card' && String(a.name) === String(c.name)) acc = a; });
+        var dd = Math.round(Number(acc && acc.due_day) || Number(b.due_day) || 5); if (dd < 1 || dd > 31) dd = 5;
+        var tp = today.split('-'), y = Number(tp[0]), m = Number(tp[1]), due = null;
+        for (var k = 0; k < 3 && !due; k++) {
+          var mm = m + k, yy = y + Math.floor((mm - 1) / 12); mm = ((mm - 1) % 12) + 1;
+          var dim = new Date(yy, mm, 0).getDate();
+          var iso = yy + '-' + (mm < 10 ? '0' : '') + mm + '-' + (Math.min(dd, dim) < 10 ? '0' : '') + Math.min(dd, dim);
+          if (iso >= today) due = iso;
+        }
+        due = due || end;
+        (byDate[due] = byDate[due] || []).push(c.name + ' ' + pesoShort(bal));
+        byDate[due].t = r2((byDate[due].t || 0) + bal);
+      });
+      Object.keys(byDate).forEach(function (d) { add(d, 'Cards owed', -byDate[d].t, byDate[d].join(' · ')); });
+      if (p.savingHeld > 0.004) add(today, 'Saving for', -p.savingHeld, (savingData().items || []).filter(function (it) { return (Number(it.held) || 0) > 0.004; }).map(function (it) { return it.p.name + ' ' + pesoShort(it.held); }).join(' · '));
+      if (p.friendOwed > 0.004) add(today, 'To pay back', -p.friendOwed, friendOwedList().map(function (x) { return x.name + ' ' + pesoShort(x.amt); }).join(' · '));
+      if (p.otherOut > 0.004) add(today, 'Other outflows', -p.otherOut, 'budgets · debts · sinking · one-offs');
+    } else {
+      if (p.salaryAdded > 0.004) add(p.start, 'Salary', p.salaryAdded);
+      items.forEach(function (it) { add(it.date, it.name, -(Number(it.amount) || 0)); });
+      (p.potItems || []).forEach(function (it) { add(it.date, it.name + ' (Saving for)', -(Number(it.amount) || 0)); });
+    }
+    function build() {
+      var v = start, out = [];
+      Object.keys(groups).sort().forEach(function (d) {
+        var g = groups[d], t = 0; g.forEach(function (i) { t += i.amt; });
+        var before = v; v = r2(v + t);
+        out.push({ date: d, items: g, amt: r2(t), before: before, after: v });
+      });
+      return out;
+    }
+    var steps = build();
+    var last = steps.length ? steps[steps.length - 1].after : start;
+    var diff = r2(p.net - last);
+    if (Math.abs(diff) > 0.5) { add(x0, 'Other', diff); steps = build(); } // the line ends exactly at the hero's number
+    return { mode: isNext ? 'next' : 'this', start: start, startLabel: isNext ? 'Carried over' : 'Liquid', x0: x0, end: end, steps: steps, net: r2(p.net), payday: isNext ? null : isoAdd(end, 1) };
+  }
+  function pesoK(v) { var n = Number(v) || 0, a = Math.abs(n); return (n < 0 ? '−' : '') + (a >= 10000 ? '₱' + (a / 1000).toFixed(1) + 'k' : pesoShort(Math.round(a))); }
   function renderSpark() {
     var box = byId('sparkBox'); if (!box) return;
-    var data = sparkData();
+    var mode = state.cycleMode === 'next' ? 'next' : 'this';
+    var data = heroSteps(mode);
     if (!data) { box.innerHTML = ''; return; }
-    var pts = data.pts, floor = data.floor;
-    var W = 320, H = 108, PL = 8, PR = 8, PT = 10, PB = 16;
-    var vals = pts.map(function (p) { return p.v; });
-    var lo = Math.min.apply(null, vals.concat(floor > 0 ? [floor] : []));
-    var hi = Math.max.apply(null, vals);
-    var pad = Math.max(1, (hi - lo) * 0.1);
-    lo -= pad; hi += pad;
-    var iw = W - PL - PR, ih = H - PT - PB;
-    var X = function (i) { return PL + iw * (i / (pts.length - 1)); };
+    if (state.heroStepMode !== mode) { state.heroStepMode = mode; state.heroStepSel = null; }
+    var steps = data.steps, sel = state.heroStepSel;
+    if (sel != null && !steps[sel]) sel = state.heroStepSel = null;
+    var W = 320, H = 150, PL = 10, PR = 10, PT = 28, PB = 18;
+    var vals = [data.start]; steps.forEach(function (s) { vals.push(s.after); });
+    var hi = Math.max.apply(null, vals.concat([0])), lo = Math.min.apply(null, vals.concat([0]));
+    if (hi - lo < 1) hi = lo + 1;
+    hi += (hi - lo) * 0.06; if (lo < 0) lo -= (hi - lo) * 0.06;
+    var iw = W - PL - PR, ih = H - PT - PB, days = Math.max(1, diffDays(data.x0, data.end));
+    var X = function (d) { return PL + iw * Math.max(0, Math.min(1, diffDays(data.x0, d) / days)); };
     var Y = function (v) { return PT + ih * (1 - (v - lo) / (hi - lo)); };
-    var line = pts.map(function (p, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p.v).toFixed(1); }).join(' ');
-    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Projected cash for the next two months (v73.57 step chart: raw cash start, plan dues + card owed drop on their due dates, salary rises on payday)">' +
-      '<path d="' + line + ' L' + X(pts.length - 1).toFixed(1) + ' ' + (H - PB) + ' L' + X(0).toFixed(1) + ' ' + (H - PB) + ' Z" fill="var(--accSoft)" stroke="none"/>' +
-      '<path d="' + line + '" fill="none" stroke="var(--acc)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
-    if (floor > 0) {
-      var fy = Y(floor).toFixed(1);
-      svg += '<line x1="' + PL + '" y1="' + fy + '" x2="' + (W - PR) + '" y2="' + fy + '" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 4" opacity=".8"/>' +
-        '<text x="' + (W - PR - 2) + '" y="' + (fy - 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="var(--warn)">floor ' + fmtNum(floor) + '</text>';
-    }
-    svg += '<circle cx="' + X(0).toFixed(1) + '" cy="' + Y(pts[0].v).toFixed(1) + '" r="3.2" fill="var(--acc)" stroke="var(--card)" stroke-width="1.5"/>';
-    // v73.0: the TODAY marker — the start point is "now" (asOf) and the rest
-    // are month-ends, so today sits ON the first point; mark it with a halo
-    // so "where am I" is readable at a glance. (When the as-of predates
-    // today, the point IS today's live number — same spot.)
-    var t0x = X(0).toFixed(1), t0y = Y(pts[0].v).toFixed(1);
-    svg += '<circle class="spark-today" cx="' + t0x + '" cy="' + t0y + '" r="6.5" fill="rgba(55,211,155,.28)" stroke="none"/>';
-    // v72.41 (user: 'write the x axis ticks as end of month, e.g. 30 Sep, 31 Oct, etc'):
-    // every tick is a DATE (p.label, the compact month name, is only the
-    // no-date fallback). v73.65 (boss: the labels collide — 'Oct2 Oct29
-    // Oct5 Nov8…' overlap into each other): NOT every point gets a tick —
-    // the axis is throttled to a minimum pixel distance (a "Nov15"-width
-    // label ≈ 5 chars × 4.6px at font-size 8, plus a 6px gutter). First and
-    // last points always label; middle ticks are greedy-skip'd when they'd
-    // land closer than the floor to the previous one (the NEXT candidate
-    // gets the slot — no double-skip). The plotted line is untouched: this
-    // only thins the axis, never the data.
-    var tickMinPx = Math.max(34, Math.round(4.6 * 5 + 6));
-    var tickIdx = [0];
-    // v74.23 (boss: 'theres overlap in x axis'): the FIRST label is
-    // start-anchored and the LAST end-anchored, so each spans a whole label
-    // width on the inner side — a middle tick next to either needs a wider
-    // gap (the old loop let '18 Jan' sit on the forced '29 Jan').
-    var tickEdgePx = Math.round(tickMinPx * 1.4);
-    for (var ti = 1; ti < pts.length - 1; ti++) {
-      if (tickIdx.length === 1 && X(ti) - X(0) < tickEdgePx) continue;
-      if (X(ti) - X(tickIdx[tickIdx.length - 1]) >= tickMinPx) tickIdx.push(ti);
-    }
-    while (tickIdx.length > 1 && X(pts.length - 1) - X(tickIdx[tickIdx.length - 1]) < tickEdgePx) tickIdx.pop();
-    tickIdx.push(pts.length - 1);
-    tickIdx.forEach(function (i) {
-      var p = pts[i];
-      var anch = i === 0 ? 'start' : (i === pts.length - 1 ? 'end' : 'middle');
-      var lab = p.date ? dayMonth(p.date) : p.label;
-      svg += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 4) + '" text-anchor="' + anch + '" font-size="8" fill="#93a1bd">' + esc(lab) + '</text>';
+    var f = function (n) { return n.toFixed(1); };
+    // soft steps: flat between dates, a short S-curve on each date (a step on the start day sits just right of the dot)
+    var x0 = X(data.x0), lastX = x0, geo = [];
+    var line = 'M' + f(x0) + ' ' + f(Y(data.start));
+    steps.forEach(function (s) {
+      var xs = Math.max(X(s.date), s.date === data.x0 ? x0 + 7 : x0 + 3);
+      var w = Math.max(1.2, Math.min(4, (xs - lastX) / 2));
+      var y1 = Y(s.before), y2 = Y(s.after);
+      line += ' H' + f(xs - w) + ' C' + f(xs) + ' ' + f(y1) + ' ' + f(xs) + ' ' + f(y2) + ' ' + f(xs + w) + ' ' + f(y2);
+      geo.push({ xs: xs, w: w, y1: y1, y2: y2 });
+      lastX = xs + w;
     });
-    box.innerHTML = svg + '</svg>';
+    var xe = X(data.end);
+    line += ' H' + f(Math.max(xe, lastX));
+    var base = f(Y(Math.max(lo, 0) === 0 ? 0 : lo));
+    var title = data.mode === 'this' ? 'Free cash' : 'Free at end';
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc((data.mode === 'this' ? 'This cycle' : 'Next cycle') + ': starts at ' + data.startLabel + ' ' + pesoFull(data.start) + ', ' + steps.length + ' steps, ends at ' + title + ' ' + pesoFull(data.net)) + '">' +
+      '<path d="' + line + ' V' + base + ' H' + f(x0) + ' Z" fill="var(--accSoft)" stroke="none"/>';
+    if (lo < 0) svg += '<line x1="' + PL + '" y1="' + f(Y(0)) + '" x2="' + (W - PR) + '" y2="' + f(Y(0)) + '" stroke="var(--bad)" stroke-width="1" stroke-dasharray="3 3" opacity=".7"/>';
+    svg += '<line x1="' + PL + '" y1="' + f(Y(0)) + '" x2="' + (W - PR) + '" y2="' + f(Y(0)) + '" stroke="var(--line)" stroke-width="1"/>';
+    svg += '<path d="' + line + '" fill="none" stroke="var(--acc)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    // the free cash line, on the end of the line (the lowest point before payday this cycle)
+    var yN = Y(data.net);
+    svg += '<line x1="' + PL + '" y1="' + f(yN) + '" x2="' + (W - PR) + '" y2="' + f(yN) + '" stroke="var(--ink)" stroke-width="1" stroke-dasharray="4 4" opacity=".5"/>';
+    var lastDrop = null; steps.forEach(function (s, i) { if (s.amt < 0) lastDrop = i; });
+    var below = yN + 26 < H - PB;
+    svg += '<text x="' + (W - PR) + '" y="' + f(below ? yN + 13 : yN - 16) + '" font-size="10" font-weight="600" fill="var(--ink)" text-anchor="end">' + title + ' ' + esc(pesoK(data.net)) + '</text>';
+    if (lastDrop != null) {
+      var gL = geo[lastDrop];
+      svg += '<circle cx="' + f(gL.xs + gL.w) + '" cy="' + f(yN) + '" r="3.4" fill="var(--ink)" stroke="var(--card)" stroke-width="1.5"/>';
+      svg += '<text x="' + (W - PR) + '" y="' + f(below ? yN + 24 : yN - 5) + '" font-size="9" fill="var(--mut)" text-anchor="end">' + (data.mode === 'this' ? 'lowest before payday · ' : 'after the last due · ') + esc(dayMonth(steps[lastDrop].date)) + '</text>';
+    }
+    // the start: a dot + its label
+    var yS = Y(data.start);
+    svg += '<circle class="spark-today" cx="' + f(x0) + '" cy="' + f(yS) + '" r="6.5" fill="var(--accSoft)" stroke="none"/>' +
+      '<circle cx="' + f(x0) + '" cy="' + f(yS) + '" r="3.2" fill="var(--acc)" stroke="var(--card)" stroke-width="1.5"/>' +
+      '<text x="' + f(x0 + 12) + '" y="' + f(yS < PT + 4 ? yS + 13 : yS - 5) + '" font-size="10" fill="var(--ink)" opacity=".85">' + esc(data.startLabel + ' ' + pesoK(data.start)) + '</text>';
+    if (data.payday) svg += '<rect x="' + (W - PR - 86) + '" y="4" width="86" height="18" rx="9" fill="var(--accSoft)" stroke="var(--accLine)"/>' +
+      '<text x="' + (W - PR - 43) + '" y="16.5" font-size="9.5" fill="var(--acc)" text-anchor="middle">Payday ' + esc(dayMonth(data.payday)) + ' ↗</text>';
+    // the selected step
+    if (sel != null && geo[sel]) {
+      var gS = geo[sel];
+      svg += '<line x1="' + f(gS.xs) + '" y1="' + PT + '" x2="' + f(gS.xs) + '" y2="' + (H - PB) + '" stroke="var(--ink)" stroke-width="1" stroke-dasharray="2 3" opacity=".45"/>' +
+        '<path d="M' + f(gS.xs - gS.w) + ' ' + f(gS.y1) + ' C' + f(gS.xs) + ' ' + f(gS.y1) + ' ' + f(gS.xs) + ' ' + f(gS.y2) + ' ' + f(gS.xs + gS.w) + ' ' + f(gS.y2) + '" fill="none" stroke="var(--warn)" stroke-width="4" stroke-linecap="round"/>' +
+        '<circle cx="' + f(gS.xs + gS.w) + '" cy="' + f(gS.y2) + '" r="4" fill="var(--warn)" stroke="var(--card)" stroke-width="1.5"/>';
+    }
+    // x ticks: the start (Today), the step dates that fit, the end
+    var ticks = [{ x: x0, t: data.mode === 'this' ? 'Today' : dayMonth(data.x0), a: 'start' }], lastT = x0;
+    steps.forEach(function (s, i) {
+      var xt = geo[i].xs;
+      if (xt - lastT >= 44 && xe - xt >= 40) { ticks.push({ x: xt, t: dayMonth(s.date), a: 'middle' }); lastT = xt; }
+    });
+    ticks.push({ x: xe, t: dayMonth(data.end), a: 'end' });
+    ticks.forEach(function (tk) { svg += '<text x="' + f(tk.x) + '" y="' + (H - 4) + '" font-size="9" fill="var(--mut)" text-anchor="' + tk.a + '">' + esc(tk.t) + '</text>'; });
+    // tap targets: one band per step
+    geo.forEach(function (g, i) {
+      var l = i ? (geo[i - 1].xs + g.xs) / 2 : PL, r = i < geo.length - 1 ? (g.xs + geo[i + 1].xs) / 2 : W - PR;
+      svg += '<rect data-hstep="' + i + '" x="' + f(l) + '" y="' + PT + '" width="' + f(Math.max(6, r - l)) + '" height="' + ih + '" fill="transparent" style="cursor:pointer"><title>' + esc(dayMonth(steps[i].date)) + '</title></rect>';
+    });
+    svg += '</svg>';
+    var below2 = '';
+    if (sel != null && steps[sel]) {
+      var s0 = steps[sel], lab = s0.items.length === 1 ? s0.items[0].label : s0.items.map(function (i) { return i.label; }).join(' + ');
+      var parts = s0.items.length === 1 ? s0.items[0].parts : s0.items.map(function (i) { return i.label + ' ' + (i.amt < 0 ? '−' : '+') + pesoShort(Math.abs(i.amt)); }).join(' · ');
+      below2 = '<div class="hs-panel"><div class="hs-r"><b>' + esc(dayMonth(s0.date) + ' · ' + lab) + '</b><b class="' + (s0.amt < 0 ? 'neg' : 'pos') + '">' + (s0.amt < 0 ? '− ' : '+ ') + esc(pesoFull(Math.abs(s0.amt))) + '</b></div>' +
+        (parts ? '<div class="hs-p">' + esc(parts) + '</div>' : '') +
+        '<div class="hs-r hs-m"><span>Left after</span><span>' + esc(pesoFull(s0.after)) + '</span></div></div>';
+    } else below2 = '<p class="hs-cap">' + (steps.length ? 'Tap a step to see what it is · ' : '') + 'daily spending not included</p>';
+    box.innerHTML = svg + below2;
+    var rs = box.querySelectorAll ? box.querySelectorAll('[data-hstep]') : [];
+    for (var ri = 0; ri < rs.length; ri++) rs[ri].onclick = function () {
+      var i = Number(this.getAttribute('data-hstep'));
+      state.heroStepSel = state.heroStepSel === i ? null : i;
+      renderSpark();
+    };
   }
   // ---------- Phase 5: attention rows for the unified coach card ----------
   // v74.57 (stress test: a 10,000-entry ledger took 1.3 s per add): "is this
@@ -13219,12 +13319,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.11, live: new Date(2026, 10, 19, 14, 56) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.12, live: new Date(2026, 10, 19, 15, 6) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.12': [
+      'Home: the graph is the hero\'s own math over time — it starts at your Liquid, steps down on each due date (unpaid past dues this cycle drop today), and ends exactly at your free cash, marked by a dashed line.',
+      'It shows the cycle you pick (This cycle / Next cycle), starts from zero, and the steps have soft corners. Tap a step to see what it was, how much, and what is left after.'
+    ],
     '75.11': [
       'Home: the card under the hero is titled Today (the hero above already shows this cycle\'s dates).',
       'Coach: Plans counts this cycle\'s dues like the hero and Committed (7 due), and a second line shows the ones still unpaid from earlier cycles.'
@@ -14730,6 +14834,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
 
   // ---------- bridge for chat.js (the chat writes through the app's own actions) ----------
   window.FinApp = {
+    heroSteps: heroSteps, // v75.12 (smoke)
     planCurrent: planCurrent, planLeftCount: planLeftCount, planRuleAt: planRuleAt, cmPer: cmPer, // v75.06 (smoke)
     // v75.02: Owed connections (smoke drives the pieces without a relay)
     connApply: connApply, connConfirm: connConfirm, connReject: connReject, connPreBal: connPreBal,

@@ -1666,16 +1666,17 @@ waitReady().then(async function (F) {
   var sparkBefore = String(byIdStub('sparkBox').innerHTML || '');
   F.renderSpark();
   var sparkAfter = String(byIdStub('sparkBox').innerHTML || '');
-  var tickCount = sparkAfter.split('<text').length - 1; // the axis <text>s (floor label only if floor>0 — the seed has none)
+  var tickCount = (sparkAfter.match(/font-size="9" fill="var\(--mut\)" text-anchor=/g) || []).length; // v75.12: the axis <text>s of the new graph
   ok(tickCount >= 2, 'v73.65: at least the first + last tick render (got ' + tickCount + ')');
   // the throttle floor: W=320, PL=PR=8 → iw=304; a "Nov15"-width label at
   // font-size 8 ≈ 5 chars × 4.6px + 6px gutter = 34px minimum spacing.
   var maxTicks = Math.floor(304 / 34) + 1; // greedy worst case + the forced last
   ok(tickCount <= maxTicks, 'v73.65: the tick count is throttled to the pixel floor (got ' + tickCount + ', max ' + maxTicks + ' for ' + sd21.pts.length + ' points)');
-  ok(tickCount < sd21.pts.length, 'v73.65: fewer ticks than points — the axis is thinned, not 1:1 (ticks ' + tickCount + ' vs points ' + sd21.pts.length + ')');
-  // the line keeps EVERY point (thinning the axis must never thin the data)
-  var pathSegs = (sparkAfter.match(/L\d+/g) || []).length;
-  ok(pathSegs >= sd21.pts.length - 1, 'v73.65: the line still has a segment per point (got ' + pathSegs + ' L-segments for ' + sd21.pts.length + ' points)');
+  // v75.12: the graph is heroSteps now — the line keeps a curve per step (thinning the axis never thins the data)
+  var hs21 = F.heroSteps('this');
+  var pathSegs = (sparkAfter.split('stroke="var(--acc)" stroke-width="2"')[0].match(/ C/g) || []).length;
+  ok(hs21 && pathSegs >= hs21.steps.length, 'v73.65: the line has a curve per step (got ' + pathSegs + ' for ' + (hs21 && hs21.steps.length) + ' steps)');
+  ok(!hs21 || tickCount <= hs21.steps.length + 2, 'v73.65: never more ticks than steps + the two ends (ticks ' + tickCount + ')');
   ok(sparkBefore !== sparkAfter, 'v73.65: renderSpark actually wrote the svg (the stub instance is the real target)');
   // a dense synthetic series (12 events in 60 days) must thin to ≤ the floor
   var _t21 = F.parseISO(F.todayISO());
@@ -1692,9 +1693,9 @@ waitReady().then(async function (F) {
   ok(greedy21.length <= expectMax21, 'v73.65: the greedy thinning bound holds for a dense 13-point series (got ' + greedy21.length + ', max ' + expectMax21 + ')');
   ok(greedy21[0] === 0 && greedy21[greedy21.length - 1] === dense21.length - 1, 'v73.65: the first + last points always keep their tick');
   // v74.23: in the REAL render no label sits closer than the edge gap to the end-anchored last one
-  var xs21 = (sparkAfter.match(/<text x="([0-9.]+)" y="[0-9.]+" text-anchor="(?:start|middle|end)"/g) || []).map(function (t) { return Number(/x="([0-9.]+)"/.exec(t)[1]); });
+  var xs21 = (sparkAfter.match(/<text x="([0-9.]+)" y="[0-9.]+" font-size="9" fill="var\(--mut\)" text-anchor="(?:start|middle|end)"/g) || []).map(function (t) { return Number(/x="([0-9.]+)"/.exec(t)[1]); }); // v75.12
   ok(xs21.length >= 2, "v74.23 precondition: the axis labels are found (" + xs21.length + ")");
-  if (xs21.length >= 2) ok(xs21[xs21.length - 1] - xs21[xs21.length - 2] >= Math.round(34 * 1.4) - 0.5, 'v74.23: the last two axis labels keep the edge gap (' + (xs21[xs21.length - 1] - xs21[xs21.length - 2]).toFixed(1) + 'px)');
+  if (xs21.length >= 2) ok(xs21.length === 2 || xs21[xs21.length - 1] - xs21[xs21.length - 2] >= 39.5, 'v74.23: the last two axis labels keep the edge gap (' + (xs21[xs21.length - 1] - xs21[xs21.length - 2]).toFixed(1) + 'px)'); // v75.12: 40px off the end
 
   // ============ PART 22: v73.66 — the coach + notes are roasty ==========
   // (boss: 'make coach fin and coachs note very funny and very roasty'). The
@@ -4352,6 +4353,22 @@ waitReady().then(async function (F) {
       var src89 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'app.js'), 'utf8');
       ok(src89.indexOf("if (rw.earlier) { earlyN++; earlyAmt += Number(rw.amt) || 0; return; }") >= 0, 'v75.11: dues from earlier cycles leave the Plans header count and total');
       ok(dig89.indexOf('grp-early') < 0 || dig89.indexOf('unpaid from earlier cycles') >= 0, 'v75.11: the earlier-cycles line names them');
+      // ============ PART 90: v75.12 - the hero graph is the hero's bridge in time ============
+      console.log('\n== PART 90: v75.12 - heroSteps ends at the hero number ==');
+      var hs90 = F.heroSteps('this'), cp90 = F.cycleProjection('this', 'with');
+      var last90 = hs90 && hs90.steps.length ? hs90.steps[hs90.steps.length - 1].after : (hs90 && hs90.start);
+      ok(hs90 && Math.abs(hs90.start - cp90.liquid) < 0.005, 'v75.12: the graph starts at Liquid (' + (hs90 && hs90.start) + ')');
+      ok(hs90 && Math.abs(last90 - cp90.net) < 0.005, 'v75.12: the graph ends exactly at the hero free cash (' + last90 + ' vs ' + cp90.net + ')');
+      ok(hs90 && hs90.steps.every(function (s) { return s.date >= hs90.x0 && s.date <= hs90.end; }), 'v75.12: every step sits inside the cycle (today -> ' + (hs90 && hs90.end) + ')');
+      var over90 = (cp90.planItems || []).filter(function (it) { return it.date < F.todayISO(); });
+      ok(!over90.length || hs90.steps[0].date === F.todayISO() && hs90.steps[0].items.some(function (i) { return /^Overdue/.test(i.label); }), 'v75.12: this cycle\'s unpaid past dues drop today');
+      var hn90 = F.heroSteps('next'), cn90 = F.cycleProjection('next', 'with');
+      var lastN90 = hn90 && hn90.steps.length ? hn90.steps[hn90.steps.length - 1].after : (hn90 && hn90.start);
+      ok(hn90 && Math.abs(hn90.start - cn90.carry) < 0.005 && Math.abs(lastN90 - cn90.net) < 0.005, 'v75.12: next cycle starts at the carry and ends at Free at end (' + lastN90 + ' vs ' + cn90.net + ')');
+      F.state.cycleMode = 'this'; F.state.heroStepSel = 0; F.renderSpark();
+      var sp90 = String((byIdStub('sparkBox') || {}).innerHTML || '');
+      ok(sp90.indexOf('hs-panel') >= 0 && sp90.indexOf('Left after') >= 0, 'v75.12: a tapped step shows what it was and what is left after');
+      F.state.heroStepSel = null; F.renderSpark();
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

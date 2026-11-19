@@ -1059,14 +1059,14 @@ def main():
           and "'73.64': [" in js)
     check("v73.65 (boss: 'the free-cash chart's x-axis date labels overlap' — 'Oct2 Oct29 Oct5 Nov8…' collided into each other): the x-axis is THROTTLED, not 1:1 — every tick is still a date (the v72.41 rule survives), but middle ticks are greedy-skip'd when they'd land closer than ~34px (a 'Nov15'-width label at font-size 8 + gutter) to the previous one; first + last points always keep their tick; the plotted line keeps EVERY point (thinning the axis never thins the data)",
           # (a) the throttle floor (label width + gutter)
-          "var tickMinPx = Math.max(34, Math.round(4.6 * 5 + 6));" in js
+          "if (xt - lastT >= 44 && xe - xt >= 40) { ticks.push({ x: xt, t: dayMonth(s.date), a: 'middle' }); lastT = xt; }" in js  # v75.12: the new graph keeps the throttle (44px apart, 40px off the end)
           # (b) the greedy skip of middle ticks only (first/last forced)
-          and "if (X(ti) - X(tickIdx[tickIdx.length - 1]) >= tickMinPx) tickIdx.push(ti);" in js
-          and "tickIdx.push(pts.length - 1);" in js
+          and "ticks.push({ x: xe, t: dayMonth(data.end), a: 'end' });" in js  # v75.12
+          and "var ticks = [{ x: x0, t: data.mode === 'this' ? 'Today' : dayMonth(data.x0), a: 'start' }]" in js  # v75.12: the start keeps its tick
           # (c) the render iterates the THINNED set, not every point
-          and "tickIdx.forEach(function (i) {" in js
+          and "ticks.forEach(function (tk) {" in js  # v75.12: the render iterates the thinned set
           # (d) the v72.41 date-label rule survives on the thinned ticks
-          and "var lab = p.date ? dayMonth(p.date) : p.label;" in js
+          and "t: dayMonth(s.date)" in js  # v75.12: every tick is a date
           # the notes
           and "'73.65': [" in js)
     check("v73.66 (boss: 'make coach fin and coachs note very funny and very roasty'): the coach card + the insights/recap one-liners got the roast treatment — every coach branch (negative free, prepay due, over-budget week, red-month pace, tight daily, on-track) now lands a roasty line, the 'On repeat' line and the coach-memory lines roast too, and the insights Today / Next-7-days / cycle / month + recap one-liners match. The NUMBERS are untouched — every line still quotes the same computed values (money(), d.daily, d.pace, remainders); only the words around them changed",
@@ -1578,7 +1578,7 @@ def main():
     check("live stamp is fresh (v73.47: one commit per release — `live` must be within 30 min of the gate run; re-run release.ps1 right before commit if this fails)",
           _fresh)
     check("v72.41 (user: 'write the x axis ticks as end of month, e.g. 30 Sep, 31 Oct, etc' + 'i wanna prepay maya cc and maribank cc separately'): (1) EVERY x-axis tick is a date — the month points sit on the last day of their month (the plotted value is that month-end projection), so the axis reads '6 Sep · 30 Sep · 31 Oct · … · 28 Feb'; the v72.37 start/middle/end special-case is gone (the compact month name stays only as the no-date fallback); (2) the Add sheet gains a direction — Spend (the old rules) vs Pay card (kind card_payment, the payoff that settles the owed balance — v72.42 corrected it to leave free untouched; a payoff must land on a CARD account, the first card is preselected, the title/button follow the mode, the deficit hint is off in payoff mode); (3) the coach's prepay action is ONE BUTTON PER card owed above its target (that card's live amount + account prefilled, Pay-card mode) — the combined button survives only as the no-per-card-breakdown fallback",
-          "var lab = p.date ? dayMonth(p.date) : p.label;" in js
+          "t: dayMonth(s.date)" in js  # v75.12: the new graph's ticks are dates too
           and "function addSheetKind(mode, type, editingKind)" in js
           and "if (mode === 'prepay') return 'card_payment';" in js
           and "if (addMode === 'prepay' && type !== 'CARD')" in js
@@ -1971,9 +1971,9 @@ def main():
           and ".rowchip.warn{background:var(--warn);color:#1F1400;border:0}" in html
           and "'74.22': [" in js)
     check("v74.23 (boss: 'theres overlap in x axis'): the spark's edge labels (start-anchored first, end-anchored last) get a wider gap — a middle tick too close to either is dropped, so '18 Jan' never sits on the forced last '29 Jan'",
-          "var tickEdgePx = Math.round(tickMinPx * 1.4);" in js
-          and "if (tickIdx.length === 1 && X(ti) - X(0) < tickEdgePx) continue;" in js
-          and "while (tickIdx.length > 1 && X(pts.length - 1) - X(tickIdx[tickIdx.length - 1]) < tickEdgePx) tickIdx.pop();" in js
+          "xe - xt >= 40" in js  # v75.12: no middle tick crowds the end label
+          and "if (xt - lastT >= 44" in js  # v75.12
+          and "var ticks = [{ x: x0," in js  # v75.12
           and "'74.23': [" in js)
     check("v74.24 (boss: 'merge the wip to main and ship'): the look upgrade ships — the CSS layer (tokens + light theme), self-hosted fonts in the sw shell, the header (kicker/title via renderHead + the Coach Fin button + LED mirror), the floating icon nav, the hero pill, the Committed paid bar (cyclePlanPaid), the Ledger daily bars (renderDailyBars), the Add-sheet chips + keypad (renderAddChips / wireAddKeypad), the coach as a bottom sheet (#coachFab hidden by CSS, its drag code untouched)",
           "v74.24 look upgrade (boss: merge the wip to main and ship)" in html
@@ -2381,7 +2381,7 @@ def main():
     check("v74.33 (boss: 'remove same as the hero number and salary follows ... amount.'): the Free cash row has no sub-label and the cycle footnote is just 'Estimate — pace & one-offs excluded.'",
           '<div class="lab ind">Free cash</div>' in js
           and "Salary follows the target cycle" not in js
-          and "'<p class=\"cbnote\">Estimate — daily spending not included.</p>'" in js  # v75.07: one-offs are in the estimate
+          and "'<p class=\"cbnote\">" not in js and "daily spending not included</p>'" in js  # v75.07: one-offs are in the estimate; v75.12: the note sits under the graph
           and "'74.33': [" in js)
     check("v74.32 (boss: 'in hero card, remove all cards; Plan dues · N due on one row'): the This-cycle Cards owed row has no 'all cards' sub-label and the Plan dues row reads 'Plan dues · N due' (no sub-label)",
           "Cards owed' + (p.cardOwed > 0.004 ? '' : '<small>no cards</small>') + '</div>" in js
@@ -2720,6 +2720,15 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.12 (boss: 'build the hero graph from the mockup'): heroSteps lays the hero's bridge out in time - starts at Liquid (next: the carry), steps on dates (this cycle's unpaid past dues drop today), ends exactly at free cash (residual step); renderSpark draws soft S-curve steps from zero, the dashed free cash line, a Payday pill, tap a step for the panel; the cycle switch re-renders it. Smoke PART 90",
+          "function heroSteps(mode) {" in js
+          and "if (Math.abs(diff) > 0.5) { add(x0, 'Other', diff); steps = build(); }" in js
+          and "' C' + f(xs) + ' ' + f(y1) + ' ' + f(xs) + ' ' + f(y2) + ' ' + f(xs + w) + ' ' + f(y2);" in js
+          and "state.heroStepSel = state.heroStepSel === i ? null : i;" in js
+          and "renderSpark(); // v75.12: the graph shows the selected cycle" in js
+          and ".hs-panel{" in html
+          and "PART 90: v75.12" in smoke
+          and "'75.12': [" in js)
     check("v75.11 (boss: 'only do and ship 3 and 4'): the strip card is titled Today; the coach Plans header counts this cycle and a grp-early line carries the dues unpaid from earlier cycles. Smoke PART 89",
           "if (it2) it2.textContent = 'Today';" in js
           and "earlier: uEarlier," in js
@@ -2746,7 +2755,7 @@ def main():
           "var goneLater = add && e.tid && !mlTxn" in js
           and "if (e.c && e.c !== 'Unsorted')" in js
           and "See this cycle\\'s plans" in js
-          and "Estimate — daily spending not included." in js
+          and "daily spending not included</p>'" in js  # v75.12: the note moved under the graph
           and '<span class="k">Liquid</span>' in js
           and "document.hidden)) { el.textContent = fmt(to); return; }" in js
           and "PART 85: v75.07" in smoke
