@@ -2103,7 +2103,7 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
      plus skip-this-occurrence and the explicit whole-plan delete -->
 <div id="planEditSheet" class="sheet" role="dialog" aria-label="Edit this occurrence">
   <div class="sheet-h">
-    <div class="t">Edit this occurrence</div>
+    <div class="t" id="peTitle">Edit this occurrence</div>
     <button id="peClose" class="sheet-x" type="button" aria-label="Close">✕</button>
   </div>
   <div class="sheet-b">
@@ -2114,7 +2114,7 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
         <label for="pe_amount">Amount (₱)</label>
         <input id="pe_amount" type="text">
       </div>
-      <div>
+      <div id="pe_dateWrap">
         <label for="pe_date">Date</label>
         <div class="dfield">
           <input id="pe_date" type="date">
@@ -2126,6 +2126,28 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
     </div>
     <label for="pe_cat" style="margin-top:12px;display:block">Files under <span class="note" style="margin-left:6px">every payment of this plan</span></label>
     <select id="pe_cat"><option value="">No category</option></select>
+    <!-- v75.05: the whole plan (Edit plan on the plan's sheet): how often, how many left, a pot's goal -->
+    <div id="peWhole" style="display:none">
+      <div class="row rowpair" style="margin-top:12px">
+        <div>
+          <label for="pe_repeat">Repeats</label>
+          <select id="pe_repeat">
+            <option value="daily">Every day</option>
+            <option value="weekly">Every week</option>
+            <option value="monthly">Every month</option>
+            <option value="annual">Every year</option>
+          </select>
+        </div>
+        <div>
+          <label for="pe_left">Payments left</label>
+          <input id="pe_left" type="number" min="1" step="1" inputmode="numeric" placeholder="no end">
+        </div>
+      </div>
+      <div id="pe_goalWrap" style="display:none;margin-top:12px">
+        <label for="pe_goal">Goal (₱)</label>
+        <input id="pe_goal" type="text" placeholder="no goal">
+      </div>
+    </div>
     <label for="pe_scope" style="margin-top:12px;display:block">Apply to</label>
     <select id="pe_scope">
       <option value="this" selected>Just this one</option>

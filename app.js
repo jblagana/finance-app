@@ -9543,13 +9543,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         h += '</div>';
       }
     }
-    h += '<div class="pdfoot"><button type="button" class="act ghost" data-editp="' + esc(p.id) + '" data-editd="' + editD + '">Edit plan</button>' +
+    h += '<div class="pdfoot"><button type="button" class="act ghost" data-editp="' + esc(p.id) + '" data-editd="' + editD + '" data-editmode="plan">Edit plan</button>' +
       '<button type="button" class="act ghost pddel" data-delp="' + esc(p.id) + '">Delete plan</button></div>';
     body.innerHTML = h;
     var q2 = function (sel, fn) { var ns = body.querySelectorAll ? body.querySelectorAll(sel) : []; for (var i = 0; i < ns.length; i++) ns[i].onclick = fn; };
     q2('[data-pdpay]', function () { payPlanChip(this.getAttribute('data-pdpay')); });
     q2('[data-pdskip]', function () { var a = this.getAttribute('data-pdskip').split('|'); closeSheets(); openSkipChooser(a[0], a[1]); });
-    q2('[data-editp]', function () { var id = this.getAttribute('data-editp'), d = this.getAttribute('data-editd'); closeSheets(); openPlanEdit(id, d); });
+    q2('[data-editp]', function () { var id = this.getAttribute('data-editp'), d = this.getAttribute('data-editd'); closeSheets(); openPlanEdit(id, d, this.getAttribute('data-editmode')); }); // v75.05: Edit plan = the whole plan
     q2('[data-delp]', function () { var id = this.getAttribute('data-delp'); closeSheets(); planDetId = null; deletePlan(id); });
     q2('[data-unskip]', function () { var a = this.getAttribute('data-unskip').split('|'); unskipPlanOccurrence(a[0], a[1]); });
     q2('[data-histmore]', function () { var k = this.getAttribute('data-histmore'); histMoreOpen[k] = !histMoreOpen[k]; renderPlanDetail(); });
@@ -9617,13 +9617,46 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // occurrence. Skip writes a skip-override (the occurrence hides, the
   // series survives). Delete-whole-plan is the old deletePlan, now explicit.
   var planEditCtx = null; // { plan, dateISO }
-  function openPlanEdit(planId, dateISO) {
+  // v75.05: occurrence #k of a plan's grid (anchored to p.date, like planGridDates), and how
+  // many grid dates fall before a date (the payments already behind it)
+  function planStepAt(p, k) {
+    var d = String(p.date);
+    if (p.repeat === 'daily') { var dd = parseISO(d); dd.setDate(dd.getDate() + k); return localISO(dd); }
+    if (p.repeat === 'weekly') return shiftWeek(d, k);
+    if (p.repeat === 'annual') return shiftYear(d, k);
+    return shiftMonth(d, k);
+  }
+  function planStepsBefore(p, iso) {
+    var k = 0;
+    while (k < 5000 && planStepAt(p, k) < String(iso)) k++;
+    return k;
+  }
+  function openPlanEdit(planId, dateISO, mode) {
     var p = null;
     for (var i = 0; i < state.plans.length; i++) if (state.plans[i].id === planId) p = state.plans[i];
     // v73.59: one-offs are editable too — their one occurrence IS the row,
     // so the same sheet works: name/amount direct, the date field is the
     // move (no scope select — there is nothing to fork).
     if (!p) return;
+    // v75.05 (boss: 'check the current edit behavior for saving for and expenses'): Edit plan on the plan's
+    // sheet edits the WHOLE plan — its own title, All occurrences picked, and the whole-plan fields
+    // (Repeats, Payments left, a pot's Goal); a date tapped under Coming up stays a one-date edit
+    var whole = mode === 'plan' || !p.repeat;
+    var goal = isGoalPlan(p);
+    var tEl = byId('peTitle');
+    if (tEl) tEl.textContent = whole ? 'Edit plan' : 'Edit ' + fmtDate(dateISO);
+    var pw = byId('peWhole');
+    if (pw) pw.style.display = (whole && p.repeat) ? '' : 'none';
+    var prp = byId('pe_repeat'); if (prp) prp.value = p.repeat || 'monthly';
+    var plf = byId('pe_left');
+    if (plf) {
+      var cntE = Math.floor(Number(p.count));
+      plf.value = cntE >= 1 && p.repeat ? String(Math.max(1, cntE - planStepsBefore(p, planGridDateFor(p, dateISO)))) : '';
+    }
+    var pgw = byId('pe_goalWrap'); if (pgw) pgw.style.display = (goal && p.repeat) ? '' : 'none';
+    var pgl = byId('pe_goal'); if (pgl) pgl.value = Number(p.goal) > 0 ? String(p.goal) : '';
+    // a Saving-for one-off changes its date with Move on its sheet (it shows what that frees / takes)
+    var pdw = byId('pe_dateWrap'); if (pdw) pdw.style.display = (goal && !p.repeat) ? 'none' : '';
     var scopeSel = byId('pe_scope');
     if (scopeSel) {
       scopeSel.style.display = p.repeat ? '' : 'none';
@@ -9636,16 +9669,24 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     // v73.59: a one-off has no occurrence to skip — its exit is the ✕
     // (delete) or the sheet's "Delete whole plan"; the skip button hides.
     var peSkipBtn = byId('peSkip');
-    if (peSkipBtn) peSkipBtn.style.display = p.repeat ? '' : 'none';
-    planEditCtx = { plan: p, dateISO: dateISO };
+    // v75.05: nor does the whole-plan edit (Skip or move on the sheet's card does the next one), nor a
+    // pot (its history rows carry skip)
+    if (peSkipBtn) peSkipBtn.style.display = (p.repeat && !whole && !goal) ? '' : 'none';
+    planEditCtx = { plan: p, dateISO: dateISO, whole: whole };
     var ro = resolveOccurrence(p, dateISO);
     var n = byId('pe_name'), a = byId('pe_amount'), dt = byId('pe_date'), sc = byId('pe_scope'), h = byId('peHint');
     if (n) n.value = ro.name || '';
     if (a) a.value = String(ro.amount != null ? ro.amount : '');
     if (dt) { dt.value = dateISO; syncDateLabel(dt); } // v73.46: show the real date, not "Pick a date"
     fillPlanCats('pe_cat', p.category || ''); // v74.47: files under (the whole plan)
-    if (sc) sc.value = 'this';
-    if (h) {
+    // v75.05: the whole plan = from its next date on ('This one and after'); 'All occurrences' would also
+    // shift the dates already paid, and a payment's link is keyed by its date
+    if (sc) sc.value = (whole && p.repeat) ? 'following' : 'this';
+    if (h && whole) {
+      h.textContent = !p.repeat ? (goal ? 'To change when it is set aside, use Move on its sheet.' : 'Editing ' + esc(p.name || 'plan') + ' — a new date moves it.')
+        : 'Editing the whole plan. A new date moves ' + fmtDate(dateISO) + ' and every date after it' + (goal ? '' : ' (pick Just this one to change only that date)') + '. A new Repeats starts from that date; the dates before it stay as they are.';
+      h.style.display = '';
+    } else if (h) {
       // v73.41: the date is now editable — the hint says what each scope does
       // to it (this = move this one, following = shift the tail by the same
       // days, all = re-anchor the whole series)
@@ -9720,6 +9761,28 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var peCat = byId('pe_cat');
     if (peCat) { if (peCat.value) p.category = peCat.value; else delete p.category; }
     var scope = byId('pe_scope').value;
+    // v75.05: the whole-plan fields (Edit plan on a recurring plan): Goal, Payments left, Repeats
+    var wh = null;
+    if (planEditCtx.whole && p.repeat) {
+      wh = { rep: (byId('pe_repeat') || {}).value || p.repeat, left: null, goal: undefined };
+      if (['daily', 'weekly', 'monthly', 'annual'].indexOf(wh.rep) < 0) wh.rep = p.repeat;
+      var lRaw = String((byId('pe_left') || {}).value || '').trim();
+      if (lRaw) {
+        var lN = Math.floor(Number(lRaw));
+        if (!(lN >= 1)) { alert('Payments left: a whole number, 1 or more (blank = no end).'); return; }
+        wh.left = lN;
+      }
+      if (isGoalPlan(p)) {
+        var gRaw = String((byId('pe_goal') || {}).value || '').trim();
+        if (gRaw) {
+          var gN = evalExpr(gRaw);
+          if (!(gN > 0)) { alert('Goal: an amount greater than 0 (blank = no goal).'); return; }
+          wh.goal = r2(gN);
+        } else wh.goal = null;
+      }
+      if (wh.goal !== undefined) { if (wh.goal) p.goal = wh.goal; else delete p.goal; }
+      if (wh.rep !== p.repeat) return savePlanRepeat(p, planPrev, name, amount, byId('pe_date').value || dateISO, wh);
+    }
     // v73.59: a one-off has no series to fork — name/amount/date write
     // STRAIGHT onto the record (the date field is the move; there is no
     // scope). The override machinery is recurring-only.
@@ -9817,11 +9880,63 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       }
     }
     p.overrides = ov;
+    // v75.05: Payments left counts from this date on (the series' count is from its first date)
+    if (wh) {
+      if (wh.left) p.count = planStepsBefore(p, gridDate) + wh.left;
+      else p.count = null;
+    }
     closeSheets();
     planEditCtx = null;
     return idbPut(STORE_PLANS, touchRec(p)).then(function () {
       emit('plan');
       snack('Updated ' + esc(name) + ' · ' + fmtDate(dateISO) + (scope === 'all' ? ' · all occurrences' : (scope === 'following' ? ' · this one and after' : '')), function () { restorePlanCopy(p, planPrev); }); // v74.14: a real Undo (was an empty function)
+    });
+  }
+  // v75.05: a new Repeats on Edit plan. The dates before the edited one stay as they were:
+  //   an expense with dates behind it ENDS there (its count = the dates before, so its paid / unpaid
+  //   history and the payment links stay) and a new plan carries on from the new date at the new pace;
+  //   with nothing behind it, it just changes in place.
+  //   a pot changes in place: its automatic top-ups so far are kept as confirmed ones (so the money in
+  //   the pot does not move), then the new pace starts from the new date.
+  function savePlanRepeat(p, planPrev, name, amount, newDate, wh) {
+    var dateISO = planEditCtx ? planEditCtx.dateISO : newDate;
+    var gridDate = planGridDateFor(p, dateISO);
+    var cat = p.category, np = null, msg;
+    if (isGoalPlan(p)) {
+      var it = null; savingData().items.forEach(function (x) { if (String(x.p.id) === String(p.id)) it = x; });
+      p.potAdds = p.potAdds || {};
+      ((it && it.auto) || []).forEach(function (q) { if (p.potAdds[q.date] == null) p.potAdds[q.date] = q.amount; });
+      p.repeat = wh.rep; p.date = newDate; p.overrides = {}; p.count = wh.left || null;
+      p.name = name; p.amount = amount;
+    } else {
+      var kept = planStepsBefore(p, gridDate);
+      if (kept < 1) {
+        p.repeat = wh.rep; p.date = newDate; p.overrides = {}; p.count = wh.left || null;
+        p.name = name; p.amount = amount;
+      } else {
+        p.count = kept;
+        var ov = p.overrides || {};
+        Object.keys(ov).forEach(function (k) { if (k >= gridDate || (ov[k] && ov[k].shiftFrom && ov[k].shiftFrom >= gridDate)) delete ov[k]; });
+        p.overrides = ov;
+        np = { id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: name, amount: amount, date: newDate,
+          repeat: wh.rep, count: wh.left || null, overrides: {}, kind: p.kind === 'goal' ? 'goal' : 'expense', created: new Date().toISOString() };
+        if (cat) np.category = cat;
+        state.plans.push(np);
+      }
+    }
+    var per = { daily: 'every day', weekly: 'every week', monthly: 'every month', annual: 'every year' }[wh.rep];
+    msg = 'Updated ' + esc(name) + ' · ' + per + ' from ' + fmtDate(newDate);
+    closeSheets();
+    planEditCtx = null;
+    if (np && planDetId === p.id) planDetId = np.id;
+    return idbPut(STORE_PLANS, touchRec(p)).then(function () {
+      return np ? idbPut(STORE_PLANS, touchRec(np)) : null;
+    }).then(function () {
+      emit('plan');
+      snack(msg, function () {
+        if (np) { state.plans = state.plans.filter(function (x) { return x.id !== np.id; }); idbDel(STORE_PLANS, np.id); }
+        restorePlanCopy(p, planPrev);
+      });
     });
   }
   function skipPlanOccurrence() {
@@ -13013,12 +13128,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.04, live: new Date(2026, 10, 19, 3, 30) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.05, live: new Date(2026, 10, 19, 13, 18) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.05': [
+      'Committed: Edit plan now edits the whole plan from its next date on, and can change how often it repeats, how many payments are left and, for a Saving for pot, its goal.',
+      'Tapping a date under Coming up still edits just that date. A Saving for one-off changes its date with Move; pots skip from their history.'
+    ],
     '75.04': [
       'Owed: tapping Reject on an entry waiting for you now shows just Back and Send reject (the Reject and Confirm buttons stayed on screen too).'
     ],

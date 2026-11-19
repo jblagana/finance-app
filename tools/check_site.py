@@ -468,7 +468,7 @@ def main():
           and "function resolveOccurrence(p, dateISO) {" in js
           and "var cnt = Math.floor(Number(p.count));" in js
           and 'id="planEditSheet"' in html and 'id="pe_scope"' in html and 'id="peSkip"' in html and 'id="peDeleteAll"' in html
-          and "function openPlanEdit(planId, dateISO) {" in js
+          and "function openPlanEdit(planId, dateISO, mode) {" in js  # v75.05: + mode (Edit plan = the whole plan)
           and "function savePlanOccurrence() {" in js and "function skipPlanOccurrence() {" in js
           and "data-editp" in js and "edited</span>" in js
           and "overrides: {}" in js
@@ -2481,7 +2481,7 @@ def main():
           "function restoreReconSnapshot(prev) {" in js
           and "restoreReconSnapshot(reconPrev);" in js
           and "function restorePlanCopy(p, prev) {" in js
-          and js.count("restorePlanCopy(p, planPrev);") == 2
+          and js.count("restorePlanCopy(p, planPrev);") == 3  # v75.05: + the new-Repeats Undo (savePlanRepeat)
           and "clamped to its credit limit" in js
           and "function () {});" not in js.split("function reconSave() {")[1].split("function reconCancel() {")[0]
           and "keep it simple */ });" not in js
@@ -2720,6 +2720,12 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.05 (boss: 'check the current edit behavior for saving for and expenses' -> 'Fix editing first'): Edit plan edits the whole plan (Repeats / Payments left / a pot's Goal, This one and after picked); a Coming-up date stays a one-date edit; a Saving-for one-off has no date field; a pot has no Skip",
+          'id="peWhole"' in html and 'id="pe_repeat"' in html and 'id="pe_left"' in html and 'id="pe_goal"' in html and 'id="pe_dateWrap"' in html
+          and 'data-editmode="plan">Edit plan</button>' in js
+          and "function savePlanRepeat(p, planPrev, name, amount, newDate, wh)" in js
+          and "if (sc) sc.value = (whole && p.repeat) ? 'following' : 'this';" in js
+          and "'75.05': [" in js)
     check("v75.04 (boss: 'when i click reject button, it expands into 4 buttons'): the hidden Reject / Confirm row really hides (.cn-acts{display:flex} beat the hidden attribute)",
           ".cn-acts[hidden],.cn-rej[hidden]{display:none}" in html
           and "if (bb) bb.hidden = true;" in js

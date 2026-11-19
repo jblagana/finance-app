@@ -4237,6 +4237,41 @@ waitReady().then(async function (F) {
       }
       F.setOwed(owed82); F.setTxns(txns82);
       var A82 = F.getAdj(); Object.keys(A82).forEach(function (k) { delete A82[k]; }); Object.keys(adj82).forEach(function (k) { A82[k] = adj82[k]; });
+      // ============ PART 83: v75.05 - Edit plan edits the whole plan ============
+      console.log('\n== PART 83: v75.05 - Edit plan (whole plan: Repeats / Payments left / Goal) ==');
+      var plans83 = st.plans.slice();
+      var e83 = await F.addPlan({ name: 'Probe83', amount: 1000, date: '2026-09-25', repeat: 'monthly', count: 6, kind: 'expense' });
+      F.openPlanEdit(e83, '2026-11-25', 'plan');
+      await sleep(20);
+      ok(elMap['peTitle'].textContent === 'Edit plan' && elMap['pe_scope'].value === 'following' && elMap['pe_left'].value === '4' && elMap['pe_repeat'].value === 'monthly', 'v75.05: Edit plan opens as the whole plan (This one and after, 4 of 6 payments left from Nov 25)');
+      ok(elMap['peSkip'].style.display === 'none', 'v75.05: the whole-plan edit has no Skip');
+      elMap['pe_repeat'].value = 'weekly'; elMap['pe_left'].value = '3';
+      await F.savePlanOccurrence();
+      await sleep(30);
+      var old83 = st.plans.filter(function (x) { return x.id === e83; })[0];
+      var new83 = st.plans.filter(function (x) { return x.name === 'Probe83' && x.id !== e83; })[0];
+      ok(old83 && old83.repeat === 'monthly' && old83.count === 2, 'v75.05: a new Repeats ends the old series at the dates before (Sep 25, Oct 25 stay)');
+      ok(new83 && new83.repeat === 'weekly' && new83.date === '2026-11-25' && new83.count === 3, 'v75.05: and a new plan carries on weekly from Nov 25, 3 payments');
+      F.openPlanEdit(new83.id, '2026-12-02');
+      await sleep(20);
+      ok(elMap['peTitle'].textContent.indexOf('Edit ') === 0 && elMap['peTitle'].textContent !== 'Edit plan' && elMap['pe_scope'].value === 'this', 'v75.05: a date from Coming up stays a one-date edit');
+      var g83 = await F.addPlan({ name: 'Probe83pot', amount: 500, date: '2026-11-01', repeat: 'monthly', kind: 'goal', goal: 6000 });
+      var gp83 = st.plans.filter(function (x) { return x.id === g83; })[0];
+      var held83 = function () { var it = F.savingData().items.filter(function (x) { return x.p.id === g83; })[0]; return it ? it.held : -1; };
+      var h83 = held83();
+      F.openPlanEdit(g83, '2026-12-01', 'plan');
+      await sleep(20);
+      ok(elMap['pe_goalWrap'].style.display === '' && elMap['pe_goal'].value === '6000' && elMap['peSkip'].style.display === 'none', 'v75.05: a pot shows its Goal, no Skip');
+      elMap['pe_goal'].value = '8000'; elMap['pe_left'].value = '';
+      await F.savePlanOccurrence();
+      await sleep(30);
+      ok(gp83.goal === 8000 && held83() === h83, 'v75.05: the goal changes, the pot keeps its money');
+      var b83 = await F.addPlan({ name: 'Probe83bike', amount: 3000, date: '2027-01-10', repeat: 'once', kind: 'goal' });
+      F.openPlanEdit(b83, '2027-01-10', 'plan');
+      await sleep(20);
+      ok(elMap['pe_dateWrap'].style.display === 'none', 'v75.05: a Saving-for one-off has no date field (Move does that)');
+      F.closeSheets && F.closeSheets();
+      st.plans.length = 0; plans83.forEach(function (x) { st.plans.push(x); });
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
