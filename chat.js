@@ -102,6 +102,8 @@
     return 'PHP ' + sign + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
   function fmtNum(v) { return Math.round(Number(v) || 0).toLocaleString('en-US'); }
+  // v75.20 (the chat mockup): the chat shows the peso sign ('PHP 56,608.36' wrapped at phone width)
+  function pesoHtml(h) { return String(h == null ? '' : h).replace(/PHP\s*(-?)\s*(\d)/g, function (m0, sg, d) { return (sg ? '\u2212' : '') + '\u20b1' + d; }); }
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var MONFULL = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
   var MOKEY = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
@@ -482,24 +484,27 @@
   function freshness(ctx) { return ''; }
 
   // ---------- intents ----------
+  // v75.20 (the chat mockup, 'What I can do' proposed): grouped examples, each one a button that sends it
+  var HELP_GROUPS = [
+    ['Ask', ['How much is free?', 'Kaya ko ba 15k next month?', 'What’s due this week?', 'When is payday?', 'Food this month vs last']],
+    ['Log', ['lunch 180 maya cc', 'got 500 from mom', 'undo']],
+    ['Plans', ['pay rent', 'add netflix 549 monthly', 'skip gym this month']],
+    ['Your numbers', ['maya cc balance is 1,250', 'who owes me?']]
+  ];
+  function helpHtml() {
+    var g = HELP_GROUPS.map(function (gr) {
+      return '<div class="fi-grp"><div class="fi-h">' + esc(gr[0]) + '</div><div class="fi-chips">' +
+        gr[1].map(function (x) { return '<button type="button" class="fi-chip" data-try="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') +
+        '</div></div>';
+    }).join('');
+    return '<div class="c-block fi"><div class="c-t">What I can do</div>' +
+      '<div class="ins-line">I’m <b>Fin</b> — your money coach. Say it your way — English, Taglish, typos are fine. Tap an example to try it.</div>' +
+      g +
+      '<div class="ins-line fi-foot">Commands and your numbers work offline. Understanding any wording needs the online coach (Settings → Coach). Anything that changes your data is a draft you confirm.</div></div>';
+  }
   function intentHelp(t) {
     if (!/^(help|\?+|what can you do|what do you do|what can i ask|how do you work|commands|abilities)\b/.test(t)) return null;
-    // v69: elaborated — Fin introduces himself first; every ability shows a
-    // phrase you can actually type.
-    var h = block('What I can do',
-      line('I’m <b>Fin</b> — your money coach. I work from the numbers stored on this phone, and everything below works offline.') +
-      line('• <b>Status</b> — free cash, liquid cash, cards owed, the 14th prepay: “how much is free?” (or just “hm")') +
-      line('• <b>Details</b> — debt schedules, one-offs, sinking funds, “what’s my cash in Feb?”') +
-      line('• <b>Plans</b> — add / list / remove plans, exactly like the form on the Money tab: “plan: shoes 1,500 on the 20th”') +
-      line('• <b>Charge check</b> — “can I charge 2,500 on Maya?”') +
-      line('• <b>Log expenses</b> — a command or a sentence: “log expense 500 food on maya”, or just tell me what happened — “ate at jollibee 250”') +
-      line('• <b>Urgent expense</b> — tell me something unplanned and I’ll map the options: “urgent: car repair 8,000 this week”') +
-      line('• <b>Spending</b> — what you’ve logged in this app this week / month') +
-      line('• <b>Account balances</b> — “i have landbank 600” updates (or adds) a bank account; debit is the default kind, so “landbank debit 600” and “landbank 600” land in the same place') +
-      line('• <b>Story mode</b> — tell me changes in plain words: “my salary in october is 25k, food budget up 10%, water in december same as last month +500”. I draft every change and you confirm before anything is written — and each story has a one-tap undo.') +
-      line('• <b>Open questions</b> — when I’m connected to the online coach (Settings), I can also reason about your numbers in my own words; that part needs signal'),
-      'Try: “urgent: car repair 8,000 this week”', 'good');
-    return { html: h };
+    return { html: helpHtml() };
   }
 
   // v68 (Jan add-on) → v69: the rotating examples under the chat header — each
@@ -1001,6 +1006,7 @@
   }
 
   // v75.19: a logged entry with a bare month-day lands in the past ('spent 1,250 on nov 17' became Nov 17 NEXT year)
+  function whenShort(iso) { return iso === todayISO() ? 'today' : fmtDate(iso); } // v75.20
   function pastDate(iso, t) {
     if (!iso || iso <= todayISO() || /\b20\d\d\b/.test(t) || /\b(tomorrow|tmr|next)\b/.test(t)) return iso;
     var y = Number(iso.slice(0, 4)) - 1, back = y + iso.slice(4);
@@ -1071,11 +1077,10 @@
     var from = (t.match(/\bfrom ([a-z][a-z' ]{1,30}?)(?: (?:today|yesterday|via|on|in|to)\b|$)/) || [])[1] || '';
     var note = from ? 'from ' + from : (p.what || '');
     var date = pastDate(p.date, t) || todayISO();
-    var h = block('Log money in',
-      kv(esc(acct.name || 'Cash'), '+ ' + money(p.amt)) +
-      (note ? kv('What', esc(note)) : '') +
-      kv('Date', esc(fmtDate(date))),
-      'Tap to log it — it adds to ' + esc(acct.name || 'Cash') + ' and to your free cash.', 'good');
+    var h = block('Log ' + money(p.amt) + ' in?', // v75.20
+      kv(esc(acct.name || 'Cash') + ' · ' + esc(whenShort(date)), '<span class="pos">+ ' + money(p.amt) + '</span>') +
+      (note ? line('<span class="note">' + esc(note) + '</span>') : ''),
+      null);
     return {
       html: h + freshness(ctx),
       actions: [{ label: 'Log + ' + esc(money(p.amt)) + (acct.name ? ' · ' + esc(acct.name) : ''), act: 'log_expense',
@@ -1112,13 +1117,10 @@
     var cat = p.cat || '';
     var date = pastDate(p.date, t) || todayISO(); // v75.19
     var learned = p.catSource === 'learned'; // v68 item 1: filed by the learned merchant map
-    var h = block('Log expense',
-      kv(esc(acct.name || 'Cash'), money(A)) +
-      kv('Category', esc(cat || 'Unsorted') + (learned ? ' <span class="note">(learned from your log)</span>' : '')) +
-      kv('Date', esc(fmtDate(date))),
-      learned
-        ? 'Filed under ' + esc(cat) + ' — that’s what I learned from your logs. Tap to log it.'
-        : 'Tap to log it — it lands in the Ledger on this phone.', 'good');
+    var h = block('Log ' + money(A) + '?', // v75.20: the card asks; the button answers (no how-to box)
+      kv(esc(acct.name || 'Cash') + ' · ' + esc(whenShort(date)), money(A)) +
+      kv('Category', esc(cat || 'Unsorted') + (learned ? ' <span class="note">(learned from your log)</span>' : '')),
+      null);
     return {
       html: h + freshness(ctx),
       actions: [{
@@ -1949,18 +1951,9 @@
         : null;
       return { html: hq + freshness(ctx), actions: [], storyLines: [], storyRaw: t, storyAsk: asks.join(' · ') };
     }
-    var rows = changes.map(function (l, i) {
-      return '<div class="ins-line"><b>' + (i + 1) + '.</b> ' + esc(l.label) + ' — ' + esc(storyRowVal(l)) + '</div>';
-    }).join('');
-    var actions = changes.map(function (l, i) {
-      return { label: '✕ ' + l.label, act: 'story_drop_line', payload: { i: i } };
-    });
-    actions.push({ label: 'Confirm ' + changes.length + ' change' + (changes.length > 1 ? 's' : ''), act: 'confirm_story', payload: { lines: changes } });
-    actions.push({ label: 'Discard', act: 'discard_story' });
+    var actions = draftActions(changes); // v75.20
     var askNote = asks.length ? line('<span class="note">also missing: ' + esc(asks.join(' — ')) + '</span>') : '';
-    var h = block('Draft: base-data changes',
-      rows + askNote + line('<span class="note">nothing is written yet — tap ✕ to drop a line, or confirm to apply</span>'),
-      null);
+    var h = draftHtml(changes, ctx, askNote);
     return { html: h + freshness(ctx), actions: actions, storyLines: changes, storyRaw: t, storyAsk: asks.join(' · ') };
   }
 
@@ -2252,6 +2245,53 @@
   // v56: what a draft row shows — money by default; raw text for a custom
   // detail, "(remove)" for a detail deletion, and the limit alongside the
   // balance when a card change carries both.
+  // v75.20 (the chat mockup): a draft says what it changes, as a question
+  function storySubject(l) {
+    var parts = String(l.label || '').split(' · ');
+    if (parts.length < 2) return String(l.label || 'it');
+    var kind = parts[0], rest = parts.slice(1).join(' · ');
+    if (kind === 'Account') return rest.replace(/ \((?:card|debit|debt|loan)\)$/, '');
+    return rest + ' ' + kind.toLowerCase();
+  }
+  function storyOldVal(l, ctx) {
+    var c = l.change || {}, nm = String(c.name || '').toLowerCase();
+    try {
+      if (c.type === 'account') {
+        var cd = ((ctx && ctx.eff && ctx.eff.cards) || []).filter(function (x) { return String(x.name).toLowerCase() === nm; })[0];
+        if (cd) return Number(cd.balance) || 0;
+        var rdx = F.reconData ? F.reconData() : null, live = null;
+        ((rdx && rdx.debits) || []).forEach(function (x) { if (String(x.name).toLowerCase() === nm) live = x.live; });
+        return live;
+      }
+      if (c.type === 'budget') {
+        var bg = (ctx && ctx.base && ctx.base.budgets) || {};
+        for (var k in bg) if (bg.hasOwnProperty(k) && k.toLowerCase() === nm) return Number(bg[k]) || 0;
+      }
+      if (c.type === 'salary_base' && ctx && ctx.base) return Number(ctx.base.salary) || 0;
+    } catch (e) {}
+    return null;
+  }
+  function draftHtml(lines, ctx, extra) {
+    var note = '<span class="note">Nothing changes until you confirm.</span>';
+    if (lines.length === 1) {
+      var l = lines[0], val = storyRowVal(l), old = storyOldVal(l, ctx);
+      var body = (old != null && l.change && l.change.type !== 'field' && l.change.limit == null)
+        ? kv('Now', money(old) + ' → ' + esc(val))
+        : kv(esc(l.label), esc(val));
+      return block('Update ' + storySubject(l) + ' to ' + val + '?', body + (extra || '') + line(note), null);
+    }
+    var rows = lines.map(function (x, i) {
+      return '<div class="ins-line"><b>' + (i + 1) + '.</b> ' + esc(x.label) + ' — ' + esc(storyRowVal(x)) + '</div>';
+    }).join('');
+    return block('Confirm ' + lines.length + ' changes?', rows + (extra || '') + line('<span class="note">Tap ✕ to drop a line. Nothing changes until you confirm.</span>'), null);
+  }
+  function draftActions(lines) {
+    var a = [];
+    if (lines.length > 1) lines.forEach(function (l, i) { a.push({ label: '✕ ' + l.label, act: 'story_drop_line', payload: { i: i } }); });
+    a.push({ label: lines.length > 1 ? 'Confirm ' + lines.length + ' changes' : 'Confirm', act: 'confirm_story', payload: { lines: lines } });
+    a.push({ label: 'Discard', act: 'discard_story' });
+    return a;
+  }
   function storyRowVal(l) {
     var c = l.change;
     var v = c.amount != null ? c.amount : c.value;
@@ -2684,7 +2724,29 @@
   }
   // v68 item 9: alert-driven chips — the active coach alerts pick the first
   // slots; with nothing active, the state-derived standing four stand in.
+  // v75.20 (the chat mockup): the chips follow the situation - late dues, a late salary, money owed to you - then free cash
+  function situationChips() {
+    var out = [];
+    try {
+      var hn = heroNums(), pp = hn && hn.p, today = todayISO();
+      var late = ((pp && pp.planItems) || []).filter(function (x) { return x.date < today; }).length;
+      if (late) out.push({ t: 'What\u2019s due \u00b7 ' + late + ' late', say: 'what\u2019s due this week', warn: true });
+      else if (pp && pp.planCount) out.push({ t: 'What\u2019s due', say: 'what\u2019s due this week' });
+      var cd = F.cycleData ? F.cycleData() : null;
+      if (cd && cd.pending && !cd.received && F.salaryRowChip) {
+        var sd = Number(String(cd.start || '').slice(8, 10)) || 15; // the cycle starts on the salary day
+        out.push({ t: 'Log salary', fn: function () { closeChat(); F.salaryRowChip([cd.expected || 0, todayISO(), sd].join('|')); } });
+      }
+      var oh = F.owedHeroData ? F.owedHeroData() : null;
+      if (oh && oh.owedIn > 0.004) out.push({ t: 'Who owes me?', say: 'who owes me?' });
+      var ca = F.coachAlerts ? F.coachAlerts() : null;
+      if (ca && ca.recurring) out.push('Add plan: ' + capFirst(ca.recurring.merchant) + ' ' + fmtNum(ca.recurring.amount) + (ca.recurring.repeat === 'weekly' ? ' weekly' : ' monthly'));
+    } catch (e) {}
+    out.push({ t: 'How much is free?', say: 'how much is free?' });
+    return out.slice(0, 4);
+  }
   function dynamicChips() {
+    if (F && F.insightsData) { var sc = situationChips(); if (sc.length) return sc; } // v75.20
     var ca = (typeof window !== 'undefined' && window.FinApp && window.FinApp.coachAlerts) ? window.FinApp.coachAlerts() : null;
     if (!ca) return CHIPS;
     var stand = standingChips(ca);
@@ -2708,7 +2770,7 @@
   function saveMsg(m) { return F.idbPut(F.STORE_CHAT, m); }
   function actionsHtml(m) {
     if (m.who !== 'bot' || !m.actions || !m.actions.length) return '';
-    if (m.done) return '<div class="a-row"><span class="c-done">✓ done</span></div>';
+    if (m.done) return doneRowHtml(m);
     var h = '<div class="a-row">';
     m.actions.forEach(function (a, i) { h += '<button type="button" class="c-act" data-ai="' + i + '">' + esc(a.label) + '</button>'; }); // escaped: labels can carry coach (LLM) text
     return h + '</div>';
@@ -2717,11 +2779,20 @@
     var d = document.createElement('div');
     d.className = 'msg ' + (m.who === 'user' ? 'user' : 'bot');
     d.setAttribute('data-cid', m.id);
-    d.innerHTML = (m.who === 'user' ? '<div class="c-tx">' + esc(m.text) + '</div>' : m.html) + actionsHtml(m);
+    d.innerHTML = (m.who === 'user' ? '<div class="c-tx">' + esc(m.text) + '</div>' : pesoHtml(m.html)) + actionsHtml(m);
     return d;
   }
   function scrollBottom() { if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight; }
   function bindActions(el, m) {
+    var ub = el.querySelector('[data-undo]'); // v75.20: Undo on a logged card
+    if (ub) ub.onclick = function () {
+      if (!m.undoId || !F.deleteTxn) return;
+      ub.disabled = true;
+      F.deleteTxn(m.undoId).then(function () {
+        m.undone = true; saveMsg(m);
+        var a2 = el.querySelector('.a-row'); if (a2) a2.outerHTML = doneRowHtml(m);
+      });
+    };
     var btns = el.querySelectorAll('[data-ai]');
     for (var i = 0; i < btns.length; i++) {
       btns[i].onclick = (function (idx) {
@@ -2739,13 +2810,18 @@
     msgsEl.innerHTML = '';
     rows.slice(-100).forEach(function (m) { appendMsg(m); });
   }
+  function doneRowHtml(m) { // v75.20
+    if (m.undone) return '<div class="a-row"><span class="c-done c-undone">Undone \u2014 nothing logged</span></div>';
+    return '<div class="a-row c-done-row"><span class="c-done">' + esc(m.doneNote || '\u2713 done') + '</span>' +
+      (m.undoId ? '<button type="button" class="c-act c-undo" data-undo="1">Undo</button>' : '') + '</div>';
+  }
   function markDone(m) {
     m.done = true;
     saveMsg(m);
     var el = msgsEl ? msgsEl.querySelector('[data-cid="' + m.id + '"]') : null;
     if (el) {
       var a = el.querySelector('.a-row');
-      if (a) a.innerHTML = '<span class="c-done">✓ done</span>';
+      if (a) { a.outerHTML = doneRowHtml(m); bindActions(el, m); }
     }
   }
   function pushBot(textHtml) {
@@ -2819,10 +2895,11 @@
         category: pl.category || '',
         amount: pl.amount,
         note: pl.note || ''
-      }).then(function () {
+      }).then(function (newId) {
+        // v75.20 (the chat mockup): the card itself confirms, with Undo (no second 'Logged ...' message)
+        m.doneNote = '\u2713 Logged to ' + (pl.account || 'Cash');
+        m.undoId = newId || null;
         markDone(m);
-        pushBot('Logged <b>' + (pl.kind === 'cash_in' ? '+ ' : '') + esc(money(pl.amount)) + '</b> · ' + esc(pl.kind === 'card_payment' ? 'CC Payment' : (pl.category || (pl.kind === 'cash_in' ? 'Money in' : 'Unsorted'))) + ' · ' + esc(pl.account || 'cash') +
-          '. It’s in the Ledger on this phone.');
       });
       return;
     }
@@ -2841,11 +2918,7 @@
         if (el) { var ar0 = el.querySelector('.a-row'); if (ar0) ar0.innerHTML = '<span class="c-done">✓ discarded</span>'; }
         pushBot('Nothing left in the draft — discarded, nothing was changed.');
       } else {
-        var na = [];
-        sl.forEach(function (l2, i2) { na.push({ label: '✕ ' + l2.label, act: 'story_drop_line', payload: { i: i2 } }); });
-        na.push({ label: 'Confirm ' + sl.length + ' change' + (sl.length > 1 ? 's' : ''), act: 'confirm_story', payload: { lines: sl } });
-        na.push({ label: 'Discard', act: 'discard_story' });
-        m.actions = na;
+        m.actions = draftActions(sl); // v75.20
         saveMsg(m);
         if (el) { var ar2 = el.querySelector('.a-row'); if (ar2) { ar2.innerHTML = actionsHtml(m); bindActions(el, m); } }
       }
@@ -2922,24 +2995,16 @@
         var draft = FAI.lastSource() === 'remote' ? parseCoachDraft(txt, ctx) : null;
         if (draft && draft.changes.length) {
           var lines = draft.changes.map(function (ch) { return { label: coachChangeLabel(ch), change: ch }; });
-          var rowsHtml = lines.map(function (l, i) {
-            return '<div class="ins-line"><b>' + (i + 1) + '.</b> ' + esc(l.label) + ' — ' + esc(storyRowVal(l)) + '</div>';
-          }).join('');
           sm.storyLines = lines;
           openDraft = { say: draft.say || '', lines: lines.map(function (l) { return l.label; }) }; // v55: open draft for correction
-          sm.actions = lines.map(function (l, i) { return { label: '✕ ' + l.label, act: 'story_drop_line', payload: { i: i } }; });
-          sm.actions.push({ label: 'Confirm ' + lines.length + ' change' + (lines.length > 1 ? 's' : ''), act: 'confirm_story', payload: { lines: lines } });
-          sm.actions.push({ label: 'Discard', act: 'discard_story' });
-          sm.html = (draft.say ? '<div class="c-block"><div class="ins-line">' + esc(draft.say) + '</div></div>' : '') +
-            block('Draft: base-data changes',
-              rowsHtml + line('<span class="note">nothing is written yet — tap ✕ to drop a line, or confirm to apply</span>'),
-              null);
+          sm.actions = draftActions(lines); // v75.20
+          sm.html = (draft.say ? '<div class="c-block"><div class="ins-line">' + esc(draft.say) + '</div></div>' : '') + draftHtml(lines, ctx, '');
         } else {
           sm.html = aiAnswerHtml(draft && draft.say ? draft.say : (txt || ''), ctx, null, FAI.lastSource());
         }
         return saveMsg(sm).then(function () {
           var el2 = msgsEl && msgsEl.querySelector('[data-cid="' + sm.id + '"]');
-          if (el2) { el2.innerHTML = sm.html + actionsHtml(sm); bindActions(el2, sm); }
+          if (el2) { el2.innerHTML = pesoHtml(sm.html) + actionsHtml(sm); bindActions(el2, sm); }
           scrollBottom();
         });
       })['catch'](function (err) {
@@ -2947,7 +3012,7 @@
         sm.html = aiAnswerHtml('', ctx, String((err && err.message) || err), FAI.lastSource());
         return saveMsg(sm).then(function () {
           var el3 = msgsEl && msgsEl.querySelector('[data-cid="' + sm.id + '"]');
-          if (el3) el3.innerHTML = sm.html;
+          if (el3) el3.innerHTML = pesoHtml(sm.html);
         });
       });
     });
@@ -3055,9 +3120,9 @@
     dynamicChips().forEach(function (c) {
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = 'chip';
-      b.textContent = c;
-      b.onclick = function () { send(c); };
+      b.className = 'chip' + (c && c.warn ? ' warn' : '');
+      b.textContent = (c && c.t) || c;
+      b.onclick = function () { if (c && c.fn) c.fn(); else send((c && c.say) || c); };
       el.appendChild(b);
     });
   }
@@ -3070,6 +3135,14 @@
     // tap it again to close (no "Back to chat" button; scrim / Esc still work)
     var inf = byId('chatInfo');
     if (inf) inf.onclick = toggleInfoView;
+    var tryTap = function (ev) { // v75.20: the help examples are buttons
+      var b = ev.target && ev.target.closest ? ev.target.closest('[data-try]') : null;
+      if (!b) return;
+      closeInfoView();
+      send(b.getAttribute('data-try'));
+    };
+    msgsEl.addEventListener('click', tryTap);
+    var ib = byId('chatInfoBody'); if (ib) ib.addEventListener('click', tryTap);
     var tip = byId('chatTip');
     if (tip) {
       renderTip(TIPS[tipIdx]);
@@ -3095,6 +3168,7 @@
     URGENT_RX: URGENT_RX,
     extractStory: extractStory,
     coachHist: coachHist, // v72.5: exported for the Node smoke
+    pesoHtml: pesoHtml, draftHtml: draftHtml, draftActions: draftActions, situationChips: situationChips, helpHtml: helpHtml, // v75.20
     parseRoute: parseRoute, routeWanted: routeWanted, routeAnswer: routeAnswer, routerPrompt: routerPrompt, // v75.16
     storyMonth: storyMonth,
     fuzzyNameIn: fuzzyNameIn,

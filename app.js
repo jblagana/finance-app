@@ -13391,12 +13391,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.19, live: new Date(2026, 10, 19, 22, 8) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.20, live: new Date(2026, 10, 19, 22, 36) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.20': [
+      'Coach Fin looks cleaner: the header is just Coach Fin and its dot (green = the online coach is on), the rotating TRY bar and the \u201cas of\u201d time are gone, and the input says \u201cAsk or log \u2014 understands Taglish too\u201d.',
+      'A log card asks (\u201cLog \u20b11,000 in?\u201d) and confirms on the card itself \u2014 \u201c\u2713 Logged to LandBank\u201d with Undo \u2014 instead of a second message. A one-line draft reads \u201cUpdate Maya CC to \u20b11,250?\u201d with the old \u2192 new amount and just Confirm / Discard. Amounts use \u20b1.',
+      'The chips follow what is going on (late dues, a late salary, money owed to you), and What I can do is a short list of examples you can tap.'
+    ],
     '75.19': [
       'Coach Fin, after a wider test on the real model: two questions in one message get both answers; \u201cchange rent to 3500\u201d and \u201cskip gym this month\u201d open that plan\u2019s edit sheet filled in; \u201ci owe ana 300\u201d points you to Owed; a transfer between your own accounts is no longer logged as spending.',
       'Spending answers: \u201con grab\u201d looks in your notes, a category with no time named means this cycle (not every entry ever), \u201cfood vs last month\u201d compares food only, and \u201cspent 1,250 on nov 17\u201d is dated this year.'
@@ -15005,6 +15010,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     owedSettleAmount: owedSettleAmount, owedFormSections: owedFormSections, // v74.95
     fileOwedLeg: fileOwedLeg, owedLegacyLeft: owedLegacyLeft, owedLegacyDebtLeft: owedLegacyDebtLeft, friendOwedNow: friendOwedNow, owedLegDir: owedLegDir, // v74.94
     owedHeroData: owedHeroData, cbWhenHTML: cbWhenHTML, cbDaysTo: cbDaysTo, // v74.93
+    salaryRowChip: salaryRowChip, // v75.20: the chat's 'Log salary' chip opens the same prefilled Add sheet
     potDates: potDates, // v74.87: a pot's own date list (the smoke checks the auto top-ups)
     planAllDates: planAllDates, // v73.57: the whole series (the smoke builds the expected drop dates)
     planLinkSuggestion: planLinkSuggestion, // v73.17: the fuzzy SUGGESTION (pure — the smoke drives it)

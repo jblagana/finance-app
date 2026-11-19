@@ -394,3 +394,31 @@ v70hm('how much → status', 'how much');
   console.log('--- v75.19 "can i charge 8k on maya cc" is a question (not a log); the help pick shows help ' + (aOk && hOk ? 'OK' : 'FAIL ' + (a && a.__path) + ' / ' + (h && h.__path)));
   if (!(aOk && hOk)) process.exitCode = 1;
 })();
+
+// v75.20: the chat mockup build (cards, drafts, peso sign, help)
+(function v7520() {
+  var ctx = {
+    eff: { cards: [{ name: 'Maya CC', balance: 900, limit: 10000, util_pct: 9, prepay: 0 }], total_prepay: 0, card_owed: 900, cash: { total: 5000, free: 4000, accounts: [{ name: 'LandBank', value: 5000 }] }, floor: 0, prepay_day: 14, month: '2026-11', obligations: { debts: [], one_offs: [] } },
+    base: { budgets: { Food: 3000 }, salary: 25000, salary_overrides: {}, budget_overrides: {}, one_offs: {}, debts: {}, accounts: [{ name: 'Maya CC', kind: 'card', value: 900, limit: 10000 }, { name: 'LandBank', kind: 'debit', value: 5000 }] },
+    txns: [], plans: [], at: new Date().toISOString()
+  };
+  var a = fc.handle('lunch 180 landbank', ctx);
+  var aOk = !!a && /Log PHP 180\.00\?/.test(a.html) && a.html.indexOf('Tap to log it') < 0;
+  console.log('--- v75.20 the log card asks ("Log PHP 180.00?"), no how-to box ' + (aOk ? 'OK' : 'FAIL ' + (a ? a.html.replace(/<[^>]+>/g, ' ').slice(0, 120) : '')));
+  if (!aOk) process.exitCode = 1;
+  var one = [{ label: 'Account · Maya CC', change: { type: 'account', name: 'Maya CC', kind: 'card', value: 1250 } }];
+  var h1 = fc.draftHtml(one, ctx, ''), a1 = fc.draftActions(one);
+  var bOk = /Update Maya CC to PHP 1,250\.00\?/.test(h1) && h1.indexOf('900.00') >= 0 && a1.length === 2 && a1[0].label === 'Confirm' && a1[1].label === 'Discard';
+  var two = one.concat([{ label: 'Budget · Food', change: { type: 'budget', name: 'Food', amount: 3500 } }]);
+  var a2 = fc.draftActions(two);
+  bOk = bOk && a2.length === 4 && a2[2].label === 'Confirm 2 changes' && /Confirm 2 changes\?/.test(fc.draftHtml(two, ctx, ''));
+  console.log('--- v75.20 a one-line draft = "Update Maya CC to ...?" (was 900) + Confirm / Discard; two lines keep the drop buttons ' + (bOk ? 'OK' : 'FAIL'));
+  if (!bOk) process.exitCode = 1;
+  var pOk = fc.pesoHtml('<b>PHP 1,250.00</b> and PHP -5,006.64 · Credit Limit (PHP)') === '<b>₱1,250.00</b> and −₱5,006.64 · Credit Limit (PHP)';
+  console.log('--- v75.20 the chat shows the peso sign (negatives too; a bare "(PHP)" label stays) ' + (pOk ? 'OK' : 'FAIL ' + fc.pesoHtml('<b>PHP 1,250.00</b> and PHP -5,006.64 · Credit Limit (PHP)')));
+  if (!pOk) process.exitCode = 1;
+  var hh = fc.handle('help', ctx);
+  var hOk = !!hh && hh.html.indexOf('data-try="undo"') >= 0 && hh.html.indexOf('Money tab') < 0 && hh.html.indexOf('Taglish') >= 0;
+  console.log('--- v75.20 What I can do = tappable examples (no Money tab) ' + (hOk ? 'OK' : 'FAIL'));
+  if (!hOk) process.exitCode = 1;
+})();

@@ -268,7 +268,7 @@ def main():
           and "function forceOnline" in aijs
           and "localStorage.getItem(FORCE_KEY) !== '0'" in aijs)
     check("chat input placeholder is short; owed name placeholder is back",
-          'placeholder="Ask the coach…"' in html and 'placeholder="e.g. Vhal"' in html)
+          'placeholder="Ask or log — understands Taglish too"' in html and 'placeholder="e.g. Vhal"' in html)  # v75.20: the input hint
 
     print("\n== Add expense sheet (v50 layout) ==")
     check("Amount, then Category, then the Paid with + Date row",
@@ -1680,7 +1680,7 @@ def main():
           and "if (mlFilterCat === '__unsorted__') return e.k !== 'p' && (!e.c || e.c === 'Unsorted'); // v75.07" in js
           and 'value="__ccpay__">CC Payment' in js
           and "t.kind === 'card_payment' ? 'CC Payment'" in js
-          and "pl.kind === 'card_payment' ? 'CC Payment'" in chatjs
+          and "m.doneNote = " in chatjs  # v75.20 (the chat mockup): the chat's 'Logged …' message became the on-card confirmation
           and "if (!a) return; // v72.47" in js
           and "if (!amt) continue; // v72.47" in chatjs
           and "'72.47': [" in js)  # v72.48: per-release stamp pins live in the generic gate (sw cache + footer + running-version note); only the SHELL_NOTES entry is permanent
@@ -2720,6 +2720,12 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.20 (boss-approved chat mockup https://claude.ai/artifact/CyEyTAUr7Se5by6meyWrgx): header = Coach Fin + the LED (no 'as of', no TRY bar), the input hint, log cards ask + confirm on the card with Undo (no second message), one-line drafts = 'Update X to Y?' + Confirm / Discard, the peso sign, situation chips, What I can do = tappable groups. Chat smoke v75.20",
+          "#chatFresh,#chatTip{display:none!important}" in html and "function helpHtml() {" in rd("chat.js")
+          and "function draftHtml(lines, ctx, extra) {" in rd("chat.js") and "function doneRowHtml(m) {" in rd("chat.js")
+          and "function situationChips() {" in rd("chat.js") and "function pesoHtml(h) {" in rd("chat.js")
+          and "Draft: base-data changes" not in rd("chat.js") and "salaryRowChip: salaryRowChip," in js
+          and "v75.20" in rd(os.path.join("tools", "smoke", "smoke_v68.js")) and "'75.20': [" in js)
     check("v75.19 (wider real-model run): two questions, plan edit / skip opens the sheet, transfer logs nothing, owed points to Owed, spend by merchant word / this cycle, compare per category, log dates in the past. Chat smoke v75.19",
           "function intentPlanEdit(t, ctx, p) {" in rd("chat.js") and "function intentTransfer(t, ctx, p) {" in rd("chat.js")
           and "function intentOwedAdd(t, ctx, p) {" in rd("chat.js") and "function pastDate(iso, t) {" in rd("chat.js")

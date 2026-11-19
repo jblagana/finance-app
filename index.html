@@ -1771,6 +1771,20 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 .cn-steps b{color:var(--txt)}
 #connPasteIn{width:100%;box-sizing:border-box}
 .c-via{margin:6px 2px 0;color:var(--mut);font-size:12px;font-style:italic}
+/* v75.20 (the chat mockup): no 'as of' line, no TRY bar (the hint lives in the input); the chips wrap; help examples are buttons; a log confirms on its own card */
+#chatFresh,#chatTip{display:none!important}
+#chatChips{flex-wrap:wrap;overflow:visible}
+#chatChips .chip.warn{border-color:var(--warnLine);background:var(--warnSoft);color:var(--warn)}
+.c-block .pos{color:var(--ok)}
+.fi .fi-grp{margin-top:12px}
+.fi .fi-h{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:7px}
+.fi .fi-chips{display:flex;flex-wrap:wrap;gap:7px}
+.fi .fi-chip{cursor:pointer;min-height:36px;padding:0 12px;border-radius:18px;border:1px solid var(--line);background:var(--card2);color:var(--ink);font:500 13px/1.2 inherit;font-family:inherit}
+.fi .fi-foot{margin-top:14px;padding-top:10px;border-top:1px solid var(--line);color:var(--mut);font-size:12.5px}
+.c-done-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:10px;background:var(--accSoft);border:1px solid var(--accLine)}
+.c-done-row .c-done{padding:0}
+.c-undo{min-height:32px!important;background:var(--card2)!important;border-color:var(--line)!important;color:var(--ink)!important}
+.c-undone{color:var(--mut)!important}
 #connSheet .pos,.cn-r .pos{color:var(--ok)}#connSheet .neg,.cn-r .neg{color:var(--bad)}
 /* v75.11: the coach's earlier-cycles line under Plans */
 .grp-early{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--warn);padding:0 2px 8px 2px;margin-top:-4px;cursor:pointer}
@@ -2249,7 +2263,7 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
   <div id="chatMsgs"></div>
   <div id="chatChips"></div>
   <div id="chatInRow">
-    <input id="chatInput" type="text" placeholder="Ask the coach…" autocomplete="off" spellcheck="false">
+    <input id="chatInput" type="text" placeholder="Ask or log — understands Taglish too" autocomplete="off" spellcheck="false">
     <button id="chatSend" type="button">Send</button>
   </div>
   <div id="chatInfoView" hidden>
