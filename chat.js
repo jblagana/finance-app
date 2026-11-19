@@ -842,7 +842,9 @@
   }
 
   function intentPlanAdd(t, ctx) {
-    var lead = t.match(/^(?:add|make|log|new)\s+(?:a\s+|an\s+)?plan\b\s*/) || t.match(/^plan\b\s*:?\s*/) || t.match(/^\bplanning\b\s*/);
+    var lead = t.match(/^(?:add|make|log|new)\s+(?:a\s+|an\s+)?plan\b\s*/) || t.match(/^plan\b\s*:?\s*/) || t.match(/^\bplanning\b\s*/) ||
+      // v75.14: 'add netflix 549 monthly on the 10th' — a cadence word makes it a plan without saying 'plan'
+      (/\b(?:monthly|weekly|yearly|annually|every (?:week|month|year)|each (?:week|month|year)|per (?:week|month))\b/.test(t) ? t.match(/^(?:add|new|set up|start)\s+/) : null);
     if (!lead) return null;
     var rest = t.slice(lead[0].length);
     var dm = findDateSpan(rest);
@@ -882,15 +884,23 @@
     if (!plans.length) {
       return { html: block('Plans', line('Nothing planned yet.'), 'Try: “plan: shoes 1,500 on the 20th”', 'good') + freshness(ctx) };
     }
-    var total = plans.reduce(function (s, p) { return s + (Number(p.amount) || 0); }, 0);
-    var monthP = (ctx.eff && ctx.eff.month) || todayISO().slice(0, 7);
-    var thisM = plans.filter(function (p) { return String(p.date).slice(0, 7) === monthP; })
-      .reduce(function (s, p) { return s + (Number(p.amount) || 0); }, 0);
-    var h = block('Your plans',
-      plans.map(function (p) { return kv(whenLabel(p.date) + ' · ' + esc(p.name), money(p.amount)); }).join('') +
-      kv('Total', money(total) + ' <span class="note" style="font-size:11px">' + money(thisM) + ' in ' + monthLabel(monthP) + '</span>'),
+    // v75.14: each plan by its NEXT date and the amount it is now (it listed the first-ever date, Sep 15 for a Nov due),
+    // repeats named; the total is what this cycle's plans still need (the same number as Committed)
+    var hnP = heroNums(), pP = hnP && hnP.p, todayP = todayISO();
+    var rowsP = plans.map(function (p) {
+      var occ = (p.repeat && F.planOccurrences) ? (F.planOccurrences(p) || []) : [String(p.date)];
+      var nd = occ[0] || String(p.date);
+      ((pP && pP.planItems) || []).forEach(function (x) { if (x.name === p.name && x.date < nd) nd = x.date; }); // an unpaid past due this cycle comes first
+      var lateP = nd < todayP;
+      var cur = F.planCurrent ? F.planCurrent(p) : { name: p.name, amount: p.amount };
+      var per = p.repeat ? ({ daily: 'daily', weekly: 'weekly', annual: 'yearly' }[p.repeat] || 'monthly') : 'one-off';
+      return { d: nd, html: kv(whenLabel(nd) + ' · ' + esc(cur.name || p.name) + ' <span class="note" style="font-size:11px">' + per + (p.kind === 'goal' ? ' · saving for' : '') + (lateP ? ' · overdue' : '') + '</span>', money(cur.amount)) };
+    }).sort(function (a, b) { return a.d < b.d ? -1 : (a.d > b.d ? 1 : 0); });
+    var h = block('Your plans · ' + plans.length,
+      rowsP.map(function (x) { return x.html; }).join('') +
+      (pP ? kv('Still to pay this cycle', money(pP.planShare) + ' <span class="note" style="font-size:11px">' + pP.planCount + ' due</span>') : ''),
       null, null);
-    return { html: h + freshness(ctx) };
+    return { html: h + freshness(ctx), actions: [{ label: 'Open Committed', act: 'open_tab', payload: { tab: 'money' } }] };
   }
 
   var URGENT_RX = /\b(urgent|emergency|emergencies|unexpected|unplanned|unforeseen|unbudgeted|came up|just (?:got|received|found out|found|hit|been told)|oops|ugh|yikes)\b|\bneed(?:s|ed)? (?:to )?pay\b/;
@@ -1007,6 +1017,219 @@
         payload: { amount: A, kind: acct.kind === 'card' ? 'card_charge' : 'cash_out', account: acct.name || '', category: cat, note: p.what || '' } // v68 item 1: keep the merchant word — the map learns from it
       }]
     };
+  }
+
+
+  // ---------- v75.14 (boss: 'assess the bot' -> item 4): the everyday questions, answered on the phone ----------
+  // Every answer reads Home's own numbers (heroNums / cycleProjection / cycleData / owedHeroData / reconData), so
+  // the chat, Home and Committed never disagree. Offline, instant; the online coach only gets what is left.
+  function peso(v) { return money(v); }
+  function dShort(iso) { return fmtDate(iso); }
+  function daysTo(iso) { return Math.round((parseISO(iso) - parseISO(todayISO())) / 86400000); }
+  function inDays(n) { return n < 0 ? (-n) + ' day' + (n === -1 ? '' : 's') + ' late' : (n === 0 ? 'today' : (n === 1 ? 'tomorrow' : 'in ' + n + ' days')); }
+  function cardBills(ctx) {
+    var out = [], e = ctx.eff || {}, accs = (ctx.base && ctx.base.accounts) || [], today = todayISO();
+    var dueDef = Math.round(Number(ctx.base && ctx.base.due_day) || 5);
+    (e.cards || []).forEach(function (c) {
+      var bal = Number(c.balance) || 0; if (!(bal > 0.004)) return;
+      var a0 = accs.filter(function (a) { return a && a.kind === 'card' && a.name === c.name; })[0];
+      var day = Math.round(Number(a0 && a0.due_day) || dueDef); if (day < 1 || day > 31) day = 5;
+      var d = parseISO(today), iso = null;
+      for (var k = 0; k < 3 && !iso; k++) {
+        var y = d.getFullYear(), m = d.getMonth() + k, dim = new Date(y, m + 1, 0).getDate();
+        var cand = new Date(y, m, Math.min(day, dim));
+        var ci = cand.getFullYear() + '-' + pad2(cand.getMonth() + 1) + '-' + pad2(cand.getDate());
+        if (ci >= today) iso = ci;
+      }
+      out.push({ name: c.name + ' bill', date: iso, amount: r2(bal), card: true });
+    });
+    return out;
+  }
+  function intentAfford(t, ctx, p) {
+    var save = /\b(save|set aside|put aside|ipon)\b/.test(t);
+    if (!save && !/\b(afford|can i (?:buy|get|spend|splurge)|is it (?:ok|okay|fine|safe) to (?:buy|get|spend)|should i (?:buy|get)|ok to (?:buy|spend))\b/.test(t)) return null;
+    var A = p.amt;
+    if (!A || A <= 0) return { html: block(save ? 'Save how much?' : 'How much is it?', line(save ? 'Tell me the amount — e.g. “can I save 5,000 this cycle?”' : 'Tell me the price — e.g. “can I afford 3,000 shoes?”'), null, 'good') + freshness(ctx) };
+    var next = /\bnext (?:cycle|month|payday)\b|\bafter (?:pay ?day|salary)\b/.test(t);
+    var hn = heroNums();
+    if (!hn) return null;
+    if (next && F.cycleProjection) {
+      var pn = F.cycleProjection('next', 'with'), pw = F.cycleProjection('next', 'without');
+      var endN = pn ? pn.net : null;
+      if (endN == null) return null;
+      var fitsN = A <= endN;
+      return { html: block((save ? 'Save ' : 'Buy ') + peso(A) + ' next cycle?',
+        kv('Next cycle ' + dShort(pn.start) + ' → ' + dShort(pn.end), 'ends with ' + peso(endN)) +
+        kv('After ' + (save ? 'saving' : 'buying') + ' it', peso(r2(endN - A))) +
+        (pw ? kv('If the salary is late', 'ends with ' + peso(r2(pw.net - A))) : ''),
+        fitsN ? (endN - A < pn.salary * 0.1 ? 'It fits, but it leaves little room next cycle.' : 'Yes — it fits next cycle after its dues.') : 'Not next cycle — it is ' + peso(r2(A - endN)) + ' more than next cycle leaves.',
+        fitsN ? (endN - A < pn.salary * 0.1 ? 'warn' : 'good') : 'bad') + freshness(ctx) };
+    }
+    var after = r2(hn.free - A), perDay = hn.days > 0 ? r2(Math.max(0, after) / hn.days) : 0;
+    var fits = after >= 0, tight = fits && hn.daily > 0 && perDay < hn.daily * 0.5;
+    return { html: block((save ? 'Save ' : 'Afford ') + peso(A) + '?',
+      kv('Free cash now', peso(hn.free)) + kv('After it', peso(after)) +
+      (hn.days ? kv('Per day after', peso(perDay) + ' <span class="note" style="font-size:11px">was ' + peso(hn.daily) + ' · ' + hn.days + ' days to payday</span>') : ''),
+      !fits ? 'Not this cycle — it is ' + peso(r2(A - hn.free)) + ' more than your free cash. Ask about next cycle instead.'
+        : (tight ? 'You can, but it more than halves your daily amount until payday.' : 'Yes — it fits this cycle after your dues and Saving for.'),
+      !fits ? 'bad' : (tight ? 'warn' : 'good')) + freshness(ctx) };
+  }
+  function intentSalaryWhatIf(t, ctx) {
+    if (!/\b(what if|if|suppose)\b/.test(t) || !/\b(salary|sweldo|pay ?check|pay)\b/.test(t) || !/\b(late|doesn'?t|don'?t|didn'?t|no|not|delayed|miss|never|skip)\b/.test(t)) return null;
+    if (!F.cycleProjection) return null;
+    var hn = heroNums(), pw = F.cycleProjection('next', 'without'), pn = F.cycleProjection('next', 'with');
+    if (!hn || !pw) return null;
+    var cd = F.cycleData ? F.cycleData() : null;
+    var pend = cd && cd.pending;
+    return { html: block('If the salary doesn’t come',
+      kv('This cycle', peso(hn.free) + (pend && pend.active ? ' <span class="note" style="font-size:11px">counts the late salary until ' + dShort(pend.graceEnd) + '</span>' : '')) +
+      kv('Next cycle without it', 'ends with ' + peso(pw.net)) + kv('Next cycle with it', 'ends with ' + peso(pn.net)),
+      pw.net < 0 ? 'Without the salary next cycle ends ' + peso(Math.abs(pw.net)) + ' short — the dues there are more than you would have.' : 'Without it you still get through next cycle’s dues with ' + peso(pw.net) + ' left.',
+      pw.net < 0 ? 'bad' : 'good') + freshness(ctx) };
+  }
+  function intentDue(t, ctx) {
+    if (!/\b(due|bills?|dues|coming up|upcoming|to pay|need to pay|have to pay|payables?)\b/.test(t)) return null;
+    if (/\b(spend|spent|log|paid|bought)\b/.test(t) && !/\bdue\b/.test(t)) return null;
+    if (/\bplans?\b/.test(t) && !/\bdue\b/.test(t)) return null; // 'show my plans' stays the plan list
+    var today = todayISO(), to = null, scope = 'this cycle';
+    var hn = heroNums(), pp = hn && hn.p;
+    if (/\btoday\b/.test(t)) { to = today; scope = 'today'; }
+    else if (/\btomorrow\b/.test(t)) { to = addDaysISO(today, 1); scope = 'by tomorrow'; }
+    else if (/\b(this|next 7 days|7 days)\s*week\b|\bweek\b/.test(t)) { to = addDaysISO(today, 6); scope = 'the next 7 days'; }
+    else if (pp) to = pp.end;
+    var items = ((pp && pp.planItems) || []).map(function (x) { return { name: x.name, date: x.date, amount: x.amount }; }).concat(cardBills(ctx));
+    items = items.filter(function (x) { return x.date && (x.date < today || !to || x.date <= to); });
+    items.sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+    if (!items.length) return { html: block('Due ' + scope, line('Nothing due ' + scope + '.'), null, 'good') + freshness(ctx) };
+    var total = 0, rows = '';
+    items.forEach(function (x) { total += x.amount; rows += kv(esc(x.name) + ' <span class="note" style="font-size:11px">' + dShort(x.date) + ' · ' + inDays(daysTo(x.date)) + '</span>', peso(x.amount)); });
+    var late = items.filter(function (x) { return x.date < today; }).length;
+    return { html: block('Due ' + scope + ' · ' + items.length, rows + kv('Total', '<b>' + peso(r2(total)) + '</b>'),
+      late ? late + ' of these ' + (late === 1 ? 'is' : 'are') + ' already past due.' : 'Card bills are your whole card balance; plan dues are what is still unpaid.',
+      late ? 'warn' : 'good') + freshness(ctx), actions: [{ label: 'Open Committed', act: 'open_tab', payload: { tab: 'money' } }] };
+  }
+  function intentPayday(t, ctx) {
+    if (!/\b(pay ?day|salary|sweldo|pay ?check)\b/.test(t) || !/\b(when|next|how (?:many|long)|days|until|till)\b/.test(t)) return null;
+    var cd = F.cycleData ? F.cycleData() : null;
+    if (!cd || !(cd.expected > 0)) return null;
+    var nextPay = addDaysISO(cd.end, 1), n = daysTo(nextPay);
+    var rows = kv('Next payday', dShort(nextPay) + ' · ' + inDays(n)) + kv('Expected', peso(cd.expected));
+    var verdict = 'Your cycle runs ' + dShort(cd.start) + ' → ' + dShort(cd.end) + '.', cls = 'good';
+    if (cd.received) rows += kv('This cycle’s salary', 'in on ' + dShort(cd.received.date) + ' · ' + peso(cd.received.amount));
+    else if (cd.pending) {
+      rows += kv('This cycle’s salary', 'not logged yet · ' + cd.pending.daysLate + ' day' + (cd.pending.daysLate === 1 ? '' : 's') + ' late');
+      verdict = cd.pending.active ? 'Home still counts it until ' + dShort(cd.pending.graceEnd) + '. Log it when it lands.' : 'Home no longer counts it — log it when it lands.';
+      cls = 'warn';
+    }
+    return { html: block('Payday', rows, verdict, cls) + freshness(ctx) };
+  }
+  function intentTrack(t, ctx) {
+    if (!/\b(on track|daily (?:budget|limit|allowance)|per day|a day|budget (?:for )?today|left (?:for )?today|how am i doing|how'?s (?:my|this) cycle|can i spend today|spend today)\b/.test(t)) return null;
+    if (/\b(spent|spend)\b.*\b(yesterday|week|month)\b/.test(t)) return null;
+    var hn = heroNums(); if (!hn) return null;
+    var d = F.insightsData ? F.insightsData() : null, spent = d ? (Number(d.todaySpend) || 0) : 0;
+    var left = r2(hn.daily - spent);
+    return { html: block(hn.free < 0 ? 'Not on track' : (left < 0 ? 'Over today' : 'On track'),
+      kv('Per day until payday', peso(hn.daily) + ' <span class="note" style="font-size:11px">' + hn.days + ' days</span>') +
+      kv('Spent today', peso(spent)) + kv('Left today', peso(left)) + kv('Free cash', peso(hn.free)),
+      hn.free < 0 ? 'Free cash is below zero — this cycle’s dues are more than you have.' : (left < 0 ? 'You are ' + peso(Math.abs(left)) + ' over today’s amount; tomorrow’s shrinks a little.' : 'You can still spend ' + peso(left) + ' today.'),
+      hn.free < 0 ? 'bad' : (left < 0 ? 'warn' : 'good')) + freshness(ctx) };
+  }
+  function intentOwed(t, ctx) {
+    if (!/\b(owe|owes|owed|owing|utang|lent|borrowed)\b/.test(t)) return null;
+    if (/\b(cards?|cc|credit)\b/.test(t)) return null; // 'how much do I owe on my cards' stays the card status
+    var oh = F.owedHeroData ? F.owedHeroData() : null; if (!oh) return null;
+    var rows = '';
+    (oh.ins || []).forEach(function (x) { rows += kv(esc(x.name) + ' owes you', '<span class="pos">' + peso(x.b) + '</span>'); });
+    (oh.outs || []).forEach(function (x) { rows += kv('You owe ' + esc(x.name), peso(x.b)); });
+    if (!rows) return { html: block('Owed', line('Nobody owes you and you owe nobody — all settled.'), null, 'good') + freshness(ctx) };
+    return { html: block('Owed', rows,
+      (oh.owedIn > 0.004 ? peso(oh.owedIn) + ' owed to you (not in your free cash)' : '') + (oh.owedIn > 0.004 && oh.owedOut > 0.004 ? ' · ' : '') + (oh.owedOut > 0.004 ? peso(oh.owedOut) + ' you owe (already off your free cash)' : '') + '.',
+      'good') + freshness(ctx), actions: [{ label: 'Open Owed', act: 'open_tab', payload: { tab: 'owed' } }] };
+  }
+  function spendRange(ctx, from, to) {
+    var by = {}, total = 0;
+    (ctx.txns || []).forEach(function (x) {
+      if (!(x.kind === 'cash_out' || x.kind === 'card_charge')) return;
+      var d = String(x.date || ''); if (d < from || d > to) return;
+      var a = Number(x.amount) || 0; if (!(a > 0)) return;
+      var c = x.category || 'Unsorted'; by[c] = (by[c] || 0) + a; total += a;
+    });
+    var list = Object.keys(by).map(function (c) { return { c: c, a: r2(by[c]) }; }).sort(function (a, b) { return b.a - a.a; });
+    return { total: r2(total), list: list };
+  }
+  function intentTopSpend(t, ctx) {
+    if (!(/\b(spend|spent|spending|expenses?|money go)\b/.test(t) && /\b(most|biggest|top|where|which categor|largest|highest)\b/.test(t))) return null;
+    var today = todayISO(), from, scope;
+    if (/\blast month\b/.test(t)) { var lp = monthPrev(today.slice(0, 7)); from = lp + '-01'; var lt = new Date(Number(lp.slice(0, 4)), Number(lp.slice(5, 7)), 0); today = lp + '-' + pad2(lt.getDate()); scope = monthLabel(lp); }
+    else if (/\bthis month\b|\bmonth\b/.test(t)) { from = today.slice(0, 7) + '-01'; scope = 'this month'; }
+    else { var cd = F.cycleData ? F.cycleData() : null; from = cd ? cd.start : today.slice(0, 7) + '-01'; scope = cd ? 'this cycle (' + dShort(cd.start) + ' →)' : 'this month'; }
+    var r = spendRange(ctx, from, today);
+    if (!r.list.length) return { html: block('Top spending · ' + scope, line('Nothing spent ' + scope + ' yet.'), null, 'good') + freshness(ctx) };
+    var rows = r.list.slice(0, 5).map(function (x) { return kv(esc(x.c), peso(x.a) + ' <span class="note" style="font-size:11px">' + Math.round(x.a / r.total * 100) + '%</span>'); }).join('');
+    return { html: block('Top spending · ' + scope, rows + kv('Total', '<b>' + peso(r.total) + '</b>'), esc(r.list[0].c) + ' is where most of it went.', 'good') + freshness(ctx) };
+  }
+  function intentCompare(t, ctx) {
+    if (!/\b(compare|compared|vs\.?|versus|than last|from last|difference)\b/.test(t)) return null;
+    if (!/\b(month|cycle|spend|spent|spending)\b/.test(t)) return null;
+    var today = todayISO(), dom = Number(today.slice(8, 10));
+    var cm = today.slice(0, 7), lm = monthPrev(cm);
+    var lEnd = new Date(Number(lm.slice(0, 4)), Number(lm.slice(5, 7)), 0).getDate();
+    var a = spendRange(ctx, cm + '-01', today), b = spendRange(ctx, lm + '-01', lm + '-' + pad2(Math.min(dom, lEnd))), bAll = spendRange(ctx, lm + '-01', lm + '-' + pad2(lEnd));
+    var diff = r2(a.total - b.total);
+    return { html: block(monthLabel(cm) + ' vs ' + monthLabel(lm),
+      kv(monthLabel(cm) + ' so far (to the ' + ordinal(dom) + ')', peso(a.total)) +
+      kv(monthLabel(lm) + ' to the same day', peso(b.total)) + kv(monthLabel(lm) + ' whole month', peso(bAll.total)),
+      Math.abs(diff) < 1 ? 'About the same as last month by this day.' : (diff > 0 ? peso(diff) + ' more than last month by this day.' : peso(Math.abs(diff)) + ' less than last month by this day.'),
+      diff > 0 ? 'warn' : 'good') + freshness(ctx) };
+  }
+  function intentBalance(t, ctx, p) {
+    var acc = p.exactAcct || (p.fa && p.fa.words && p.fa.words.length === 1 ? p.fa.words[0] : null);
+    if (!acc || !acc.name || p.amt) return null;
+    if (!/\b(how much|balance|what'?s in|left in|have in|in my|on my|available)\b/.test(t)) return null;
+    if (/\b(pre-?pay|util|utiliz|due|bill|spend|spent)\b/.test(t)) return null; // those have their own answers
+    if (acc.kind === 'card') {
+      var c = ((ctx.eff && ctx.eff.cards) || []).filter(function (x) { return x.name === acc.name; })[0];
+      if (!c) return null;
+      var lim = Number(c.limit) || 0, bal = Number(c.balance) || 0;
+      return { html: block(esc(c.name), kv('Owed', peso(bal)) + (lim ? kv('Limit', peso(lim)) + kv('Available', peso(r2(lim - bal))) + kv('Utilization', Math.round(bal / lim * 100) + '%') : ''),
+        lim && bal > lim ? 'Over the limit.' : 'Live balance — includes everything logged on this phone.', lim && bal > lim ? 'bad' : 'good') + freshness(ctx) };
+    }
+    var rd = F.reconData ? F.reconData() : null, live = null;
+    ((rd && rd.debits) || []).forEach(function (x) { if (x.name === acc.name) live = x.live; });
+    if (live == null) return null;
+    return { html: block(esc(acc.name), kv('Balance now', peso(live)), 'Live — your set balance plus everything logged from ' + esc(acc.name) + ' since.', 'good') + freshness(ctx) };
+  }
+  function lastTxn(ctx) {
+    // an Owed entry's Ledger leg is removed from the Owed card (deleting it here would leave Owed out of step)
+    var l = (ctx.txns || []).filter(function (x) { return !/(^|· )Owed · /.test(String(x.note || '')); }).slice().sort(function (a, b) { var x = String(a.created || a.date || ''), y = String(b.created || b.date || ''); return x < y ? -1 : (x > y ? 1 : 0); });
+    return l[l.length - 1] || null;
+  }
+  function intentUndoLast(t, ctx) {
+    if (!/^(?:undo(?: (?:that|it|last|the last(?: one| entry| expense)?))?|delete (?:the |my )?last (?:entry|expense|one|log)|remove (?:the |my )?last (?:entry|expense|one|log)|undo my last (?:entry|expense|log))[\s.!]*$/.test(t)) return null;
+    var x = lastTxn(ctx);
+    if (!x) return { html: block('Nothing to undo', line('There are no entries yet.'), null, 'good') };
+    return { html: block('Delete the last entry?',
+      kv(esc(x.category || (x.kind === 'card_payment' ? 'CC Payment' : 'Unsorted')) + (x.note ? ' · ' + esc(x.note) : '') + ' <span class="note" style="font-size:11px">' + dShort(x.date) + ' · ' + esc(x.account || 'Cash') + '</span>', peso(x.amount)),
+      'Tap to delete it — the toast has an Undo if you change your mind.', 'warn'),
+      actions: [{ label: 'Delete it', act: 'undo_last', payload: { id: x.id, amount: x.amount, label: x.category || x.note || 'entry' } }] };
+  }
+  function intentPayPlan(t, ctx, p) {
+    var m = t.match(/^(?:pay|paid|mark (?:as )?paid|i paid)\s+(?:the |my |for )?(.+?)[\s.!]*$/);
+    if (!m || p.amt) return null;
+    var plans = ctx.plans || [], hit = null;
+    for (var i = 0; i < plans.length && !hit; i++) if (plans[i].name && mentionOf(plans[i].name, m[1])) hit = plans[i];
+    if (!hit) return null;
+    var hn = heroNums(), item = null;
+    ((hn && hn.p && hn.p.planItems) || []).forEach(function (x) { if (!item && x.name === hit.name) item = x; });
+    if (!item && F.planOccurrences) {
+      var occ = F.planOccurrences(hit) || [];
+      if (occ.length) { var ro = F.resolveOccurrence ? F.resolveOccurrence(hit, occ[0]) : null; item = { name: (ro && ro.name) || hit.name, date: occ[0], amount: Number(ro && ro.amount != null ? ro.amount : hit.amount) || 0 }; }
+    }
+    if (!item) return { html: block(esc(hit.name), line('Nothing left to pay on it.'), null, 'good') + freshness(ctx) };
+    return { html: block('Pay ' + esc(item.name) + '?', kv(dShort(item.date) + ' · ' + inDays(daysTo(item.date)), peso(item.amount)),
+      'Tap to log the payment — the Add sheet opens filled in and linked to the plan.', 'good') + freshness(ctx),
+      actions: [{ label: 'Pay ' + esc(item.name) + ' · ' + peso(item.amount), act: 'pay_plan', payload: { id: hit.id, date: item.date, name: item.name, amount: item.amount } }] };
   }
 
   function intentFallback(t) {
@@ -2153,8 +2376,9 @@
         actions: []
       };
     }
-    var order = [intentHelp, intentGreet, intentPlanRemove, intentPlanAdd, intentPlanList,
-      intentUrgent, intentLog, intentDeficit, intentSpend, intentStory,
+    var order = [intentHelp, intentGreet, intentUndoLast, intentPayPlan, intentPlanRemove, intentPlanAdd, intentDue, intentPlanList,
+      intentUrgent, intentLog, intentAfford, intentDeficit, intentSalaryWhatIf, intentPayday, intentTrack, intentOwed,
+      intentTopSpend, intentCompare, intentBalance, intentSpend, intentStory,
       intentDebt, intentOneOff, intentSinking, intentFuture, intentStatus];
     for (var i = 0; i < order.length; i++) {
       var r = order[i](t, ctx, p);
@@ -2301,6 +2525,18 @@
       F.deletePlan(pl.id).then(function () {
         markDone(m);
         pushBot('Removed <b>' + esc(pl.name) + '</b> from your plans — ' + esc(money(pl.amount)) + ' is free again on Home.');
+      });
+      return;
+    }
+    if (a.act === 'pay_plan') { // v75.14: the Add sheet opens filled in and linked (the coach card's chip)
+      markDone(m);
+      if (F.payPlanChip) { closeChat(); F.payPlanChip([pl.id, pl.date, pl.name, pl.amount].join('|')); }
+      return;
+    }
+    if (a.act === 'undo_last') { // v75.14
+      F.deleteTxn(pl.id).then(function () {
+        markDone(m);
+        pushBot('Deleted the last entry (' + esc(money(pl.amount)) + ' · ' + esc(pl.label) + '). The toast has an Undo.');
       });
       return;
     }

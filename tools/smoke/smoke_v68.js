@@ -210,3 +210,32 @@ v70hm('how much → status', 'how much');
   console.log('--- v75.13 "yesterday" = yesterday, spending only (no salary) ' + (cOk ? 'OK' : 'FAIL got=' + (c ? c.html.replace(/<[^>]+>/g, ' ').slice(0, 200) : 'null')));
   if (!cOk) process.exitCode = 1;
 })();
+
+// v75.14 (bot item 4): the everyday questions get rule answers (this harness has no app numbers, so the ones that
+// read Home's figures step aside; the ones that read the context answer)
+(function v7514() {
+  function iso(d) { return d.getFullYear() + '-' + (d.getMonth() < 9 ? '0' : '') + (d.getMonth() + 1) + '-' + (d.getDate() < 10 ? '0' : '') + d.getDate(); }
+  var today = iso(new Date());
+  var ctx = {
+    eff: { cards: [], total_prepay: 0, card_owed: 0, cash: { total: 5000, free: 4000, accounts: [{ name: 'LandBank', value: 5000 }] }, floor: 0, prepay_day: 14, month: today.slice(0, 7), obligations: { debts: [], one_offs: [] } },
+    base: { budgets: { Food: 0 }, salary: 25000, salary_overrides: {}, budget_overrides: {}, one_offs: {}, debts: {}, accounts: [{ name: 'LandBank', kind: 'debit', value: 5000 }] },
+    txns: [
+      { id: 't1', date: today, kind: 'cash_out', amount: 300, category: 'Food', account: 'LandBank', created: '2026-01-01T00:00:00Z' },
+      { id: 't2', date: today, kind: 'cash_out', amount: 120, category: 'Transpo', account: 'LandBank', created: '2026-01-02T00:00:00Z' },
+      { id: 't3', date: today, kind: 'cash_out', amount: 50, category: 'Food', account: 'Cash', note: 'Owed · Ana', created: '2026-01-03T00:00:00Z' }
+    ],
+    plans: [], at: new Date().toISOString()
+  };
+  var a = fc.handle('add netflix 549 monthly on the 10th', ctx);
+  var aOk = !!a && a.__path === 'rule:intentPlanAdd' && a.actions && a.actions[0].payload.repeat === 'monthly' && a.actions[0].payload.amount === 549;
+  console.log('--- v75.14 "add netflix 549 monthly on the 10th" drafts a monthly plan ' + (aOk ? 'OK' : 'FAIL path=' + (a && a.__path)));
+  if (!aOk) process.exitCode = 1;
+  var b = fc.handle('what did i spend the most on this month', ctx);
+  var bOk = !!b && b.__path === 'rule:intentTopSpend' && b.html.indexOf('Food') >= 0 && b.html.indexOf('350.00') >= 0;
+  console.log('--- v75.14 top spending this month ' + (bOk ? 'OK' : 'FAIL got=' + (b ? b.html.replace(/<[^>]+>/g, ' ').slice(0, 160) : 'null')));
+  if (!bOk) process.exitCode = 1;
+  var c = fc.handle('undo', ctx);
+  var cOk = !!c && c.__path === 'rule:intentUndoLast' && c.actions && c.actions[0].payload.id === 't2';
+  console.log('--- v75.14 "undo" offers the last entry, never an Owed leg ' + (cOk ? 'OK' : 'FAIL got=' + JSON.stringify(c && c.actions)));
+  if (!cOk) process.exitCode = 1;
+})();

@@ -13319,12 +13319,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.13, live: new Date(2026, 10, 19, 15, 9) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.14, live: new Date(2026, 10, 19, 15, 17) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.14': [
+      'Coach Fin now answers the everyday questions itself, with Home\'s numbers: can I afford X (this cycle or next), can I save X, what\'s due (today, this week, this cycle), next payday, am I on track, who owes me, top spending, an account\'s balance, this month vs last, what if the salary doesn\'t come.',
+      'It also does: add netflix 549 monthly on the 10th, pay rent (opens Add, linked to the plan), undo (deletes the last entry, with Undo). Show my plans lists each plan by its next date.'
+    ],
     '75.13': [
       'Coach Fin: \u201chow much is free?\u201d now gives the same number as Home (it quoted free cash before this cycle\'s dues), plus the daily amount; \u201cwhy is it low?\u201d shows the breakdown.',
       'Coach Fin: \u201clunch 180 maya cc\u201d logs an expense on Maya CC (it used to offer to set the card\'s balance to 180); spending questions know yesterday and last week, and no longer count your salary as spending.',

@@ -2720,6 +2720,13 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.14 (bot item 4): rule answers for afford / save / due / payday / on track / owed / top spending / compare / balance / salary what-if / pay a plan / undo / plain-words recurring plan, all from Home's numbers. Chat smoke v75.14",
+          "function intentAfford(t, ctx, p) {" in rd("chat.js") and "function intentDue(t, ctx) {" in rd("chat.js")
+          and "function intentPayday(t, ctx) {" in rd("chat.js") and "function intentOwed(t, ctx) {" in rd("chat.js")
+          and "function intentUndoLast(t, ctx) {" in rd("chat.js") and "a.act === 'pay_plan'" in rd("chat.js")
+          and "intentTopSpend, intentCompare, intentBalance, intentSpend, intentStory," in rd("chat.js")
+          and "v75.14" in rd(os.path.join("tools", "smoke", "smoke_v68.js"))
+          and "'75.14': [" in js)
     check("v75.13 (boss: 'assess the bot' -> 'fix 1-3'): the chat's free cash = Home's (heroNums), the coach snapshot carries Home's numbers + dues + Saving for + Owed + live balances + card bills; 'lunch 180 maya cc' logs (shorthand), spend answers know yesterday / last week and count spending only. Chat smoke v75.13",
           "function heroNums() {" in rd("chat.js")
           and "FREE CASH (what Home shows" in rd("chat.js")
