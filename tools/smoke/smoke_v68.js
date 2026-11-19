@@ -276,3 +276,20 @@ v70hm('how much → status', 'how much');
   console.log('--- v75.16 commands stay instant; questions route only while the coach is online ' + (dOk ? 'OK' : 'FAIL'));
   if (!dOk) process.exitCode = 1;
 })();
+
+// v75.17: 'kaya' is not Maya - a short name's typo keeps its first letter; everyday words never count as typos
+(function v7517() {
+  var ctx = {
+    eff: { cards: [{ name: 'Maya CC', balance: 900, limit: 10000, util_pct: 9, prepay: 0 }], total_prepay: 0, card_owed: 900, cash: { total: 5000, free: 4000, accounts: [{ name: 'LandBank', value: 5000 }] }, floor: 0, prepay_day: 14, month: '2026-11', obligations: { debts: [], one_offs: [] } },
+    base: { budgets: { Food: 0 }, salary: 25000, salary_overrides: {}, budget_overrides: {}, one_offs: {}, debts: {}, accounts: [{ name: 'Maya CC', kind: 'card', value: 900, limit: 10000 }, { name: 'LandBank', kind: 'debit', value: 5000 }] },
+    txns: [], plans: [], at: new Date().toISOString()
+  };
+  var a = fc.handle('kaya ko ba yung 15k na phone next month', ctx);
+  var aOk = !(a && a.storyLines && a.storyLines.some(function (l) { return /Maya/.test(l.label); }));
+  console.log('--- v75.17 "kaya ko ba 15k" no longer drafts a Maya CC balance ' + (aOk ? 'OK' : 'FAIL path=' + (a && a.__path)));
+  if (!aOk) process.exitCode = 1;
+  var b = fc.handle('mayaa cc balance is 900', ctx);
+  var bOk = !!(b && b.storyLines && b.storyLines.some(function (l) { return /Maya/.test(l.label); }));
+  console.log('--- v75.17 a real typo ("mayaa cc balance is 900") still finds Maya CC ' + (bOk ? 'OK' : 'FAIL path=' + (b && b.__path)));
+  if (!bOk) process.exitCode = 1;
+})();

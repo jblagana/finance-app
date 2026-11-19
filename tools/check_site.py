@@ -2720,6 +2720,9 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.17 (boss: 'Yes, fix it'): 'kaya' is not Maya - a short name's typo keeps its first letter, FUZZY_NEVER words never fuzzy-match. Chat smoke v75.17",
+          "var FUZZY_NEVER = {" in rd("chat.js") and "tk.charAt(0) !== w.charAt(0)" in rd("chat.js")
+          and "v75.17" in rd(os.path.join("tools", "smoke", "smoke_v68.js")) and "'75.17': [" in js)
     check("v75.16 (boss: 'upgrade Coach Fin'): the meaning router - a question goes to the online coach, which picks one answer + rewrites it; the app runs it with Home's numbers; commands stay instant; a new number is refused; any failure = the rules. Chat smoke v75.16",
           "var ROUTE_TOOLS = {" in rd("chat.js") and "function parseRoute(txt, v, hist) {" in rd("chat.js")
           and "if (routeWanted(res, ctx)) {" in rd("chat.js") and "function handleCore(raw, ctx, force) {" in rd("chat.js")

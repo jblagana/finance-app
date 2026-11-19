@@ -1,3 +1,8 @@
+## 2026-11-19 - "Yes, fix it" (offline, 'kaya ko ba 15k' drafted a Maya CC balance of 15,000) -> "the rules stop reading everyday words as a typo of a short name"
+-> mid-task "also ill provide the api key to ur browser copy of the app so u can test it" -> the boss pastes a bring-your-own key into the preview (Settings -> Worker & your own key); Claude never types it; a small batch of real questions, then the key is removed
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.17 (chat.js fuzzyTokIn: a name under 6 letters only matches a typo with the same first letter; FUZZY_NEVER (kaya, para, pera, have, save, ...) never count as a typo; an exact name still matches. Chat smoke v75.17 2/2)
+
 ## 2026-11-19 - "assess the app overall if its ready for production or is it too tailored for me, can we make specific features opt-able like maybe transferring between own accounts etc" -> answered (ready for the boss, not for others: the Worker + key, PHP only, one monthly salary, the card-prepay routine as everyone's default, no own-account transfer, Owed on a hardcoded Cash wallet, a bare first run, 244 personal release notes; proposed a 'What do you use?' picker + Settings -> Features, in 3 phases) -> "park all of it"
 Status: **parked** (the readiness plan: currency, Move between own accounts, the Cash wallet, income types, first-run picker; Features page; the shared-server decision)
 

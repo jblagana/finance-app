@@ -158,6 +158,9 @@
   }
   function cleanTok(s) { return String(s == null ? '' : s).replace(/[^a-z0-9]/g, ''); }
   // true if any token in toks is word-equal or a close typo of word (word is a name word, >= 3 chars)
+  // v75.17: everyday words that sit one letter from a short name ('kaya' / Maya, 'have' / Ave,
+  // 'pera' / Vera) - they never count as a typo of it (an exact name still matches)
+  var FUZZY_NEVER = { kaya: 1, kasi: 1, para: 1, pero: 1, sana: 1, wala: 1, yung: 1, lang: 1, naman: 1, bayad: 1, pera: 1, gastos: 1, ilan: 1, saan: 1, bakit: 1, have: 1, many: 1, much: 1, make: 1, take: 1, save: 1, card: 1, cash: 1, bank: 1, back: 1, paid: 1, said: 1, each: 1, more: 1, maybe: 1, today: 1, month: 1, week: 1, next: 1, last: 1 };
   function fuzzyTokIn(word, toks) {
     var w = cleanTok(String(word || '').toLowerCase());
     if (w.length < 3) return false;
@@ -165,7 +168,9 @@
       var tk = cleanTok(toks[i]);
       if (!tk) continue;
       if (tk === w) return true;
+      if (FUZZY_NEVER[tk]) continue;
       var max = w.length >= 6 ? 2 : 1;
+      if (w.length < 6 && tk.charAt(0) !== w.charAt(0)) continue; // v75.17: a short name's typo keeps its first letter
       if (tk.length >= 3 && Math.abs(tk.length - w.length) <= max && lev(tk, w) <= max) return true;
     }
     return false;
