@@ -319,3 +319,78 @@ v70hm('how much → status', 'how much');
   console.log('--- v75.18 thanks / salamat answered on the phone ' + (cOk ? 'OK' : 'FAIL'));
   if (!cOk) process.exitCode = 1;
 })();
+
+// v75.19: the wider real-model run's misses
+(function v7519() {
+  function iso(d) { return d.getFullYear() + '-' + (d.getMonth() < 9 ? '0' : '') + (d.getMonth() + 1) + '-' + (d.getDate() < 10 ? '0' : '') + d.getDate(); }
+  var now = new Date(), today = iso(now), lmD = new Date(now.getFullYear(), now.getMonth() - 1, 1), lm = iso(lmD);
+  var two = new Date(now.getTime() - 2 * 86400000), twoISO = iso(two);
+  var mon = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'][two.getMonth()];
+  var ctx = {
+    eff: { cards: [{ name: 'Maya CC', balance: 900, limit: 10000, util_pct: 9, prepay: 0 }], total_prepay: 0, card_owed: 900, cash: { total: 5000, free: 4000, accounts: [{ name: 'LandBank', value: 5000 }] }, floor: 0, prepay_day: 14, month: today.slice(0, 7), obligations: { debts: [], one_offs: [] } },
+    base: { budgets: { Food: 3000, Transpo: 1000 }, salary: 25000, salary_overrides: {}, budget_overrides: {}, one_offs: {}, debts: {}, accounts: [{ name: 'Maya CC', kind: 'card', value: 900, limit: 10000 }, { name: 'LandBank', kind: 'debit', value: 5000 }] },
+    txns: [
+      { id: 'a1', date: today, kind: 'cash_out', amount: 300, category: 'Food', account: 'LandBank', note: 'jollibee' },
+      { id: 'a2', date: today, kind: 'cash_out', amount: 120, category: 'Transpo', account: 'LandBank', note: 'grab to work' },
+      { id: 'a3', date: lm, kind: 'cash_out', amount: 50, category: 'Transpo', account: 'LandBank', note: 'jeep' }
+    ],
+    plans: [{ id: 'pR', name: 'Rent', amount: 3000, date: today, repeat: 'monthly' }], at: now.toISOString()
+  };
+  var a = fc.handle('transpo this month vs last month', ctx);
+  var aOk = !!a && a.__path === 'rule:intentCompare' && a.html.indexOf('Transpo') >= 0 && a.html.indexOf('120.00') >= 0 && a.html.indexOf('300.00') < 0;
+  console.log('--- v75.19 compare follows the category asked ' + (aOk ? 'OK' : 'FAIL'));
+  if (!aOk) process.exitCode = 1;
+  var b = fc.handle('how much did i spend on grab this week', ctx);
+  var bOk = !!b && b.html.indexOf('120.00') >= 0 && b.html.indexOf('420.00') < 0 && b.html.indexOf('grab') >= 0;
+  console.log('--- v75.19 a merchant word filters the notes ("grab") ' + (bOk ? 'OK' : 'FAIL ' + (b ? b.html.replace(/<[^>]+>/g, ' ').slice(0, 160) : '')));
+  if (!bOk) process.exitCode = 1;
+  var c = fc.handle('spent 1,250 at sm on ' + mon + ' ' + two.getDate() + ' using maya cc', ctx);
+  var cOk = !!c && c.actions && c.actions[0].payload.date === twoISO;
+  console.log('--- v75.19 a logged month-day lands in the past (not next year) ' + (cOk ? 'OK' : 'FAIL ' + JSON.stringify(c && c.actions && c.actions[0].payload)));
+  if (!cOk) process.exitCode = 1;
+  var d = fc.handle('transfer 5000 from landbank to maya cc', ctx), e = fc.handle('i owe ana 300 for dinner', ctx);
+  var dOk = !!d && d.__path === 'rule:intentTransfer' && !(d.actions && d.actions.length) && !!e && e.__path === 'rule:intentOwedAdd';
+  console.log('--- v75.19 a transfer logs nothing; "i owe ana 300" points to Owed ' + (dOk ? 'OK' : 'FAIL ' + (d && d.__path) + ' / ' + (e && e.__path)));
+  if (!dOk) process.exitCode = 1;
+  var f = fc.handle('change rent to 3500', ctx), g = fc.handle('skip rent this month', ctx);
+  var fOk = !!f && f.__path === 'rule:intentPlanEdit' && f.actions[0].act === 'edit_plan' && f.actions[0].payload.amount === 3500 && f.actions[0].payload.mode === 'plan'
+    && !!g && g.__path === 'rule:intentPlanEdit' && g.actions[0].payload.amount === null;
+  console.log('--- v75.19 "change rent to 3500" / "skip rent" open the plan (no budget draft, no removal) ' + (fOk ? 'OK' : 'FAIL ' + (f && f.__path) + ' / ' + (g && g.__path)));
+  if (!fOk) process.exitCode = 1;
+  var h = fc.routeAnswer('whats due today and how much is free', ctx, '{"tool":"due","q":"whats due today","also":{"tool":"status","q":"how much is free"}}');
+  var r2 = fc.parseRoute('{"tool":"due","q":"whats due today","also":{"tool":"afford","q":"can i afford 77777"}}', 'whats due today and can i afford the tv', []);
+  var hOk = !!h && h.__path === 'rule:intentDue' && h.html.split('read as').length >= 2 && !!r2 && r2.also === null;
+  console.log('--- v75.19 two questions in one message: both answered; the second is number-checked too ' + (hOk ? 'OK' : 'FAIL'));
+  if (!hOk) process.exitCode = 1;
+})();
+// v75.19 (batch 3): the kind word settles 'maya'; a dated amount is a plan
+(function v7519b() {
+  function iso(d) { return d.getFullYear() + '-' + (d.getMonth() < 9 ? '0' : '') + (d.getMonth() + 1) + '-' + (d.getDate() < 10 ? '0' : '') + d.getDate(); }
+  var now = new Date();
+  var ctx = {
+    eff: { cards: [{ name: 'Maya CC', balance: 900, limit: 10000, util_pct: 9, prepay: 0 }], total_prepay: 0, card_owed: 900, cash: { total: 5000, free: 4000, accounts: [{ name: 'Maya', value: 2000 }, { name: 'LandBank', value: 3000 }] }, floor: 0, prepay_day: 14, month: iso(now).slice(0, 7), obligations: { debts: [], one_offs: [] } },
+    base: { budgets: { Food: 3000 }, salary: 25000, salary_overrides: {}, budget_overrides: {}, one_offs: {}, debts: {}, accounts: [{ name: 'Maya CC', kind: 'card', value: 900, limit: 10000 }, { name: 'Maya', kind: 'debit', value: 2000 }, { name: 'LandBank', kind: 'debit', value: 3000 }] },
+    txns: [], plans: [], at: now.toISOString()
+  };
+  var a = fc.handle('can i charge 8k on maya', ctx);
+  var aOk = !!a && !/Which maya/i.test(a.html);
+  console.log('--- v75.19 "charge 8k on maya" means the card (no which-one ask) ' + (aOk ? 'OK' : 'FAIL ' + a.html.replace(/<[^>]+>/g, ' ').slice(0, 90)));
+  if (!aOk) process.exitCode = 1;
+  var b = fc.handle('add meralco 2500 on the 28th', ctx);
+  var bOk = !!b && b.__path === 'rule:intentPlanAdd';
+  console.log('--- v75.19 "add meralco 2500 on the 28th" drafts a plan ' + (bOk ? 'OK' : 'FAIL path=' + (b && b.__path)));
+  if (!bOk) process.exitCode = 1;
+})();
+(function v7519c() {
+  var ctx = {
+    eff: { cards: [{ name: 'Maya CC', balance: 900, limit: 10000, util_pct: 9, prepay: 0 }], total_prepay: 0, card_owed: 900, cash: { total: 5000, free: 4000, accounts: [{ name: 'LandBank', value: 5000 }] }, floor: 0, prepay_day: 14, month: '2026-11', obligations: { debts: [], one_offs: [] } },
+    base: { budgets: { Food: 3000 }, salary: 25000, salary_overrides: {}, budget_overrides: {}, one_offs: {}, debts: {}, accounts: [{ name: 'Maya CC', kind: 'card', value: 900, limit: 10000 }, { name: 'LandBank', kind: 'debit', value: 5000 }] },
+    txns: [], plans: [], at: new Date().toISOString()
+  };
+  var a = fc.handle('can i charge 8k on maya cc', ctx);
+  var aOk = !!a && a.__path !== 'rule:intentLog';
+  var h = fc.routeAnswer('paano mag log ng gastos', ctx, '{"tool":"help","q":"how do i log an expense"}');
+  var hOk = !!h && h.__path === 'rule:intentHelp';
+  console.log('--- v75.19 "can i charge 8k on maya cc" is a question (not a log); the help pick shows help ' + (aOk && hOk ? 'OK' : 'FAIL ' + (a && a.__path) + ' / ' + (h && h.__path)));
+  if (!(aOk && hOk)) process.exitCode = 1;
+})();

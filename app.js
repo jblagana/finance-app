@@ -13391,12 +13391,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.18, live: new Date(2026, 10, 19, 21, 53) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.19, live: new Date(2026, 10, 19, 22, 8) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.19': [
+      'Coach Fin, after a wider test on the real model: two questions in one message get both answers; \u201cchange rent to 3500\u201d and \u201cskip gym this month\u201d open that plan\u2019s edit sheet filled in; \u201ci owe ana 300\u201d points you to Owed; a transfer between your own accounts is no longer logged as spending.',
+      'Spending answers: \u201con grab\u201d looks in your notes, a category with no time named means this cycle (not every entry ever), \u201cfood vs last month\u201d compares food only, and \u201cspent 1,250 on nov 17\u201d is dated this year.'
+    ],
     '75.18': [
       'Coach Fin, after a test on the real model: \u201ci just got 500 from mom\u201d now offers to log \u20b1500 money in (it was treated as an urgent expense), \u201clog 300 taxi\u201d logs an expense, and the urgent-expense card uses the same free cash as Home.',
       'If the coach picks an answer that cannot read your request, you get Fin\u2019s own answer (it no longer drifted into a different draft). The coach no longer calls a card\u2019s used limit \u201cinterest\u201d. \u201cThanks\u201d / \u201csalamat\u201d is answered on the phone.'

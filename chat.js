@@ -778,13 +778,23 @@
     var dmS = findDateSpan(t); // v75.13: 'on nov 3', 'last friday' — a single named day
     if (dmS && dmS.iso && !/\b(today|yesterday|week|month)\b/.test(t)) hasTime = true;
     var hasCat = mentionedCategory(t, ctx.txns);
-    if (!hasTime && !hasCat) return null;
+    // v75.19: 'spent on grab this week' - a word that is not a category is looked for in the notes (it was ignored)
+    var SPEND_SKIP = { today: 1, yesterday: 1, week: 1, month: 1, last: 1, this: 1, the: 1, my: 1, average: 1, total: 1, it: 1, that: 1, what: 1 };
+    var mwM = hasCat ? null : t.match(/\b(?:on|at|sa|for|in) ([a-z][a-z0-9]{2,})\b/);
+    var merch = mwM && !SPEND_SKIP[mwM[1]] && !MOKEY[mwM[1].slice(0, 3)] ? mwM[1] : '';
+    if (!hasTime && !hasCat && !merch) return null;
     // v75.13: spending = what went out (a cash spend or a card charge); money in and card payments are not
     // spending (the old filter counted the salary, so 'yesterday' answered PHP 179,766 — every entry ever)
     var txns = (ctx.txns || []).filter(function (x) { return (Number(x.amount) || 0) > 0 && (x.kind === 'cash_out' || x.kind === 'card_charge'); });
     var today = todayISO();
     var monthP = today.slice(0, 7);
     var sel = txns, scope = 'all entries';
+    if (!hasTime) { // v75.19: no time named = this cycle (it summed every entry ever: 'food' = PHP 17,742)
+      var cdS = F.cycleData ? F.cycleData() : null;
+      var c0 = (cdS && cdS.start) || (monthP + '-01');
+      sel = txns.filter(function (x) { return x.date >= c0 && x.date <= today; });
+      scope = 'this cycle (' + fmtDate(c0) + ' →)';
+    }
     if (/\btoday\b/.test(t)) { sel = txns.filter(function (x) { return x.date === today; }); scope = 'today'; }
     else if (/\byesterday\b/.test(t)) { var yd = addDaysISO(today, -1); sel = txns.filter(function (x) { return x.date === yd; }); scope = 'yesterday'; } // v75.13
     else if (/\blast week\b/.test(t)) { // v75.13
@@ -815,6 +825,9 @@
         return xc === cl || xc.indexOf(cl) >= 0 || cl.indexOf(xc) >= 0;
       });
       scope += ' · ' + cat;
+    } else if (merch) {
+      sel = sel.filter(function (x) { return (String(x.note || '') + ' ' + String(x.category || '')).toLowerCase().indexOf(merch) >= 0; });
+      scope += ' · \u201c' + esc(merch) + '\u201d';
     }
     var total = sel.reduce(function (s, x) { return s + (Number(x.amount) || 0); }, 0);
     var h = block('Logged in this app',
@@ -852,7 +865,9 @@
   function intentPlanAdd(t, ctx) {
     var lead = t.match(/^(?:add|make|log|new)\s+(?:a\s+|an\s+)?plan\b\s*/) || t.match(/^plan\b\s*:?\s*/) || t.match(/^\bplanning\b\s*/) ||
       // v75.14: 'add netflix 549 monthly on the 10th' — a cadence word makes it a plan without saying 'plan'
-      (/\b(?:monthly|weekly|yearly|annually|every (?:week|month|year)|each (?:week|month|year)|per (?:week|month))\b/.test(t) ? t.match(/^(?:add|new|set up|start)\s+/) : null);
+      (/\b(?:monthly|weekly|yearly|annually|every (?:week|month|year)|each (?:week|month|year)|per (?:week|month))\b/.test(t) ? t.match(/^(?:add|new|set up|start)\s+/) : null) ||
+      // v75.19: 'add meralco 2500 on the 25th' / 'remind me to pay meralco 2,500 on the 25th' - an amount on a coming date is a plan
+      (function () { var dF = findDateSpan(t); return dF && dF.iso > todayISO() && /\d/.test(t) ? t.match(/^(?:add|schedule|remind me to pay|remind me to|remind me)\s+/) : null; })();
     if (!lead) return null;
     var rest = t.slice(lead[0].length);
     var dm = findDateSpan(rest);
@@ -985,6 +1000,67 @@
     return { html: h + freshness(ctx), actions: actions };
   }
 
+  // v75.19: a logged entry with a bare month-day lands in the past ('spent 1,250 on nov 17' became Nov 17 NEXT year)
+  function pastDate(iso, t) {
+    if (!iso || iso <= todayISO() || /\b20\d\d\b/.test(t) || /\b(tomorrow|tmr|next)\b/.test(t)) return iso;
+    var y = Number(iso.slice(0, 4)) - 1, back = y + iso.slice(4);
+    return back <= todayISO() ? back : iso;
+  }
+  // v75.19: moving money between your own accounts is not in the app yet (it logged a 5,000 expense)
+  function intentTransfer(t, ctx, p) {
+    if (!/\b(transfer(?:red|ring)?|moved?|lipat|nilipat|ilipat)\b/.test(t)) return null;
+    if (!/\bfrom\b.*\bto\b|\bto my\b|\bpapunta\b|\bsa\b.*\bpapunta\b/.test(t) && !(p.fa && p.fa.words && p.fa.words.length >= 2)) return null;
+    if (/\b(plan|date|due|payday)\b/.test(t)) return null;
+    return { html: block('Moving money between your accounts',
+      line('Fin.AI doesn\u2019t log transfers between your own accounts yet, so I won\u2019t record it as spending.') +
+      line('Your free cash doesn\u2019t change. To keep both balances right, tell me each new balance \u2014 e.g. <b>\u201clandbank balance is 20,000\u201d</b> \u2014 or set them in Settings \u2192 All numbers.'),
+      'Nothing was logged.', 'warn') + freshness(ctx) };
+  }
+  // v75.19: 'i owe ana 300 for dinner' is an Owed entry (it logged an expense)
+  function intentOwedAdd(t, ctx, p) {
+    if (!(p.amt > 0)) return null;
+    var iOwe = /\b(i owe|i still owe|utang ko(?: kay| sa)?|may utang ako)\b/.test(t);
+    var theyOwe = /\b(owes me|owe me|utang (?:ni|niya|nila)|may utang (?:si|sakin))\b/.test(t) || /\b(?:i )?(?:paid|covered|lent|nilibre ko|inabonohan ko)\b.*\bfor (?!me\b)\w+/.test(t);
+    var tpf = /\b(paid for me|covered me|lent me|nilibre ako|inabonohan ako)\b/.test(t);
+    if (!iOwe && !theyOwe && !tpf) return null;
+    var people = ((F.state && F.state.owed && F.state.owed.people) || []).map(function (x) { return x.name; });
+    var who = '';
+    for (var i = 0; i < people.length; i++) if (mentionOf(people[i], t)) { who = people[i]; break; }
+    var dirTxt = (iOwe || tpf) ? 'You owe ' + (who ? esc(who) : 'them') : (who ? esc(who) : 'They') + ' owe' + (who ? 's' : '') + ' you';
+    return { html: block('That goes in Owed',
+      kv(dirTxt, money(p.amt)) +
+      line('Open Owed, then tap <b>+ entry</b> on ' + (who ? '<b>' + esc(who) + '</b>' : 'their card (or add them)') + ' \u2014 choose <b>' + ((iOwe || tpf) ? 'They paid for me' : 'I paid for them') + '</b>. Owed keeps it out of your spending and your free cash.'),
+      'Nothing was logged.', 'good') + freshness(ctx),
+      actions: [{ label: 'Open Owed', act: 'open_tab', payload: { tab: 'owed' } }] };
+  }
+  // v75.19: 'change rent to 3500' / 'skip gym this month' open that plan's edit sheet (it drafted a budget / offered removal)
+  function planNextDate(pl) {
+    var occ = (pl.repeat && F.planOccurrences) ? (F.planOccurrences(pl) || []) : [String(pl.date)];
+    var nd = occ[0] || String(pl.date);
+    var hn = heroNums(), pp = hn && hn.p;
+    ((pp && pp.planItems) || []).forEach(function (x) { if (x.name === pl.name && x.date < nd) nd = x.date; });
+    return nd;
+  }
+  function intentPlanEdit(t, ctx, p) {
+    var skip = /\b(skip|laktaw|wag muna|not this month|pause)\b/.test(t);
+    var move = /\b(move|moved|resched\w*|postpone|delay|ilipat)\b/.test(t);
+    var change = /\b(change|edit|update|adjust|raise|lower|increase|decrease|make)\b/.test(t);
+    if (!skip && !move && !change) return null;
+    if (/\b(budget|balance|salary|limit)\b/.test(t)) return null;
+    var plans = ctx.plans || [], hit = null;
+    for (var i = 0; i < plans.length; i++) if (mentionOf(plans[i].name, t)) { hit = plans[i]; break; }
+    if (!hit) return null;
+    if (change && !skip && !move && !(p.amt > 0)) return null;
+    var nd = planNextDate(hit), cur = F.planCurrent ? F.planCurrent(hit) : { amount: hit.amount, name: hit.name };
+    var nm = esc(cur.name || hit.name);
+    var body = kv('Next', esc(fmtDate(nd)) + ' · ' + money(cur.amount));
+    var label, mode = null;
+    if (skip) { label = 'Open ' + nm + ' · ' + fmtDate(nd); body += line('The sheet has <b>Skip this occurrence</b> \u2014 the next one still comes.'); }
+    else if (move) { label = 'Open ' + nm + ' · ' + fmtDate(nd); body += line('Change the date in the sheet' + (p.date ? ' to <b>' + esc(fmtDate(p.date)) + '</b>' : '') + '.'); }
+    else { label = 'Change to ' + money(p.amt); mode = hit.repeat ? 'plan' : null; body += kv('New amount', money(p.amt)) + line(hit.repeat ? 'From ' + esc(fmtDate(nd)) + ' on \u2014 the sheet opens filled in; Save to apply.' : 'The sheet opens filled in; Save to apply.'); }
+    return { html: block((skip ? 'Skip ' : move ? 'Move ' : 'Change ') + nm + '?', body, 'Nothing changes until you save it.', 'good') + freshness(ctx),
+      actions: [{ label: label, act: 'edit_plan', payload: { id: hit.id, date: nd, mode: mode, amount: (change && !skip && !move) ? p.amt : null, date2: move ? p.date : null } }] };
+  }
   // v75.18 (real-model test: 'i just got 500 from mom' had nowhere to go): money that came in -> a Money in draft
   var RX_MONEY_IN = /\b(received|receive|got|natanggap|binigyan|gave me|sent me|paid me|refund(?:ed)?|bonus|allowance|money in|income|cash ?in)\b/;
   function intentMoneyIn(t, ctx, p) {
@@ -994,7 +1070,7 @@
     var acct = (p.exactAcct && p.exactAcct.kind !== 'card' ? p.exactAcct : null) || p.cashAcct || biggestCash(ctx) || { name: '', kind: 'debit' };
     var from = (t.match(/\bfrom ([a-z][a-z' ]{1,30}?)(?: (?:today|yesterday|via|on|in|to)\b|$)/) || [])[1] || '';
     var note = from ? 'from ' + from : (p.what || '');
-    var date = p.date || todayISO();
+    var date = pastDate(p.date, t) || todayISO();
     var h = block('Log money in',
       kv(esc(acct.name || 'Cash'), '+ ' + money(p.amt)) +
       (note ? kv('What', esc(note)) : '') +
@@ -1017,6 +1093,8 @@
     var shorthand = false;
     var accS = p.exactAcct || p.cardAcct || p.cashAcct;
     if (!cmd && !casual && p.amt > 0 && accS && accS.name && !/[?]/.test(t) &&
+        !/^(?:can|could|should|shall|is|am|are|do|does|will|would|what|how|pwede|puwede|kaya|paano|ano|magkano)\b/.test(t) && // v75.19: a question is never a log
+        !/\b(can i|should i|pwede ba|kaya ko)\b/.test(t) &&
         !/\b(balance|balances|is|are|was|now|has|have|limit|owe|owes|owed|set|update|salary|budget|total|left|credit|debit|account|new)\b/.test(t)) {
       var accToks = norm(accS.name).split(' ');
       var first = t.split(' ')[0];
@@ -1032,7 +1110,7 @@
     }
     var acct = p.exactAcct || p.cashAcct || p.cardAcct || biggestCash(ctx) || { name: '', kind: 'debit' }; // v65
     var cat = p.cat || '';
-    var date = p.date || todayISO();
+    var date = pastDate(p.date, t) || todayISO(); // v75.19
     var learned = p.catSource === 'learned'; // v68 item 1: filed by the learned merchant map
     var h = block('Log expense',
       kv(esc(acct.name || 'Cash'), money(A)) +
@@ -1046,7 +1124,7 @@
       actions: [{
         label: 'Log ' + esc(money(A)) + (acct.name ? ' · ' + esc(acct.name) : ''),
         act: 'log_expense',
-        payload: { amount: A, kind: acct.kind === 'card' ? 'card_charge' : 'cash_out', account: acct.name || '', category: cat, note: p.what || '' } // v68 item 1: keep the merchant word — the map learns from it
+        payload: { amount: A, kind: acct.kind === 'card' ? 'card_charge' : 'cash_out', account: acct.name || '', category: cat, note: p.what || '', date: date } // v68 item 1: keep the merchant word — the map learns from it
       }]
     };
   }
@@ -1179,10 +1257,11 @@
       (oh.owedIn > 0.004 ? peso(oh.owedIn) + ' owed to you (not in your free cash)' : '') + (oh.owedIn > 0.004 && oh.owedOut > 0.004 ? ' · ' : '') + (oh.owedOut > 0.004 ? peso(oh.owedOut) + ' you owe (already off your free cash)' : '') + '.',
       'good') + freshness(ctx), actions: [{ label: 'Open Owed', act: 'open_tab', payload: { tab: 'owed' } }] };
   }
-  function spendRange(ctx, from, to) {
-    var by = {}, total = 0;
+  function spendRange(ctx, from, to, onlyCat) {
+    var by = {}, total = 0, oc = onlyCat ? String(onlyCat).toLowerCase() : '';
     (ctx.txns || []).forEach(function (x) {
       if (!(x.kind === 'cash_out' || x.kind === 'card_charge')) return;
+      if (oc && String(x.category || '').toLowerCase() !== oc) return; // v75.19: 'food this month vs last'
       var d = String(x.date || ''); if (d < from || d > to) return;
       var a = Number(x.amount) || 0; if (!(a > 0)) return;
       var c = x.category || 'Unsorted'; by[c] = (by[c] || 0) + a; total += a;
@@ -1207,9 +1286,10 @@
     var today = todayISO(), dom = Number(today.slice(8, 10));
     var cm = today.slice(0, 7), lm = monthPrev(cm);
     var lEnd = new Date(Number(lm.slice(0, 4)), Number(lm.slice(5, 7)), 0).getDate();
-    var a = spendRange(ctx, cm + '-01', today), b = spendRange(ctx, lm + '-01', lm + '-' + pad2(Math.min(dom, lEnd))), bAll = spendRange(ctx, lm + '-01', lm + '-' + pad2(lEnd));
+    var catC = mentionedCategory(t, ctx.txns); // v75.19: the category asked about (it compared everything)
+    var a = spendRange(ctx, cm + '-01', today, catC), b = spendRange(ctx, lm + '-01', lm + '-' + pad2(Math.min(dom, lEnd)), catC), bAll = spendRange(ctx, lm + '-01', lm + '-' + pad2(lEnd), catC);
     var diff = r2(a.total - b.total);
-    return { html: block(monthLabel(cm) + ' vs ' + monthLabel(lm),
+    return { html: block((catC ? esc(catC) + ' · ' : '') + monthLabel(cm) + ' vs ' + monthLabel(lm),
       kv(monthLabel(cm) + ' so far (to the ' + ordinal(dom) + ')', peso(a.total)) +
       kv(monthLabel(lm) + ' to the same day', peso(b.total)) + kv(monthLabel(lm) + ' whole month', peso(bAll.total)),
       Math.abs(diff) < 1 ? 'About the same as last month by this day.' : (diff > 0 ? peso(diff) + ' more than last month by this day.' : peso(Math.abs(diff)) + ' less than last month by this day.'),
@@ -2395,6 +2475,18 @@
     }
     // v68 item 3: "maya" is several different kinds and the message doesn't
     // say which — ask. The bare kind answer ("card", "cash") completes it.
+    // v75.19: the message already says which kind ('charge 8k on maya' = the card) - no need to ask
+    if (p.fa && p.fa.ambiguous) {
+      var kh = /\b(charge|charged|swipe|swiped|card|cc|credit|prepay|limit|util\w*)\b/.test(t) ? 'card'
+        : (/\b(cash|debit|wallet|withdraw\w*|atm|savings)\b/.test(t) ? 'debit' : '');
+      var pick = kh ? p.fa.ambiguous.cands.filter(function (c) { return (c.kind === 'card') === (kh === 'card'); }) : [];
+      if (pick.length === 1) {
+        var pc = pick[0];
+        p.exactAcct = pc;
+        if (pc.kind === 'card') p.cardAcct = pc; else p.cashAcct = pc;
+        p.fa.ambiguous = null;
+      }
+    }
     if (p.fa && p.fa.ambiguous) {
       var amb = p.fa.ambiguous;
       var opts = amb.cands.map(function (c) {
@@ -2408,8 +2500,8 @@
         actions: []
       };
     }
-    var order = [intentHelp, intentGreet, intentUndoLast, intentPayPlan, intentPlanRemove, intentPlanAdd, intentDue, intentPlanList,
-      intentUrgent, intentMoneyIn, intentLog, intentAfford, intentDeficit, intentSalaryWhatIf, intentPayday, intentTrack, intentOwed,
+    var order = [intentHelp, intentGreet, intentUndoLast, intentPayPlan, intentPlanRemove, intentPlanAdd, intentPlanEdit, intentDue, intentPlanList,
+      intentUrgent, intentTransfer, intentOwedAdd, intentMoneyIn, intentLog, intentAfford, intentDeficit, intentSalaryWhatIf, intentPayday, intentTrack, intentOwed,
       intentTopSpend, intentCompare, intentBalance, intentSpend, intentStory,
       intentDebt, intentOneOff, intentSinking, intentFuture, intentStatus];
     if (force) { // v75.16: the router's pick; v75.18: only that one - no falling through to a rule that writes something else
@@ -2462,11 +2554,12 @@
     top_spend: intentTopSpend, compare: intentCompare, balance: intentBalance, spend: intentSpend,
     debt: intentDebt, one_off: intentOneOff, sinking: intentSinking, future: intentFuture, urgent: intentUrgent,
     log: intentLog, plan_add: intentPlanAdd, plan_remove: intentPlanRemove, pay_plan: intentPayPlan,
-    undo: intentUndoLast, help: intentHelp, story: intentStory, money_in: intentMoneyIn
+    undo: intentUndoLast, help: intentHelp, story: intentStory, money_in: intentMoneyIn,
+    plan_edit: intentPlanEdit, transfer: intentTransfer, owed_add: intentOwedAdd
   };
   // the commands the rules read for sure - these never wait for the router
   var ROUTE_SURE = /^rule:(intentHelp|intentGreet|intentUndoLast|intentPayPlan|intentPlanRemove|intentPlanAdd|intentLog)$/; // a balance / salary story is read by the router too ('kaya ko ba 15k' is not Maya)
-  var ROUTE_SYSTEM = 'You route messages for Coach Fin, a personal money app. Pick the ONE tool that answers the message and rewrite the message as a short plain-English request that tool understands. Reply with ONLY a JSON object, nothing else: {"tool":"<name>","q":"<rewritten request>"}. ' +
+  var ROUTE_SYSTEM = 'You route messages for Coach Fin, a personal money app. Pick the ONE tool that answers the message and rewrite the message as a short plain-English request that tool understands. Reply with ONLY a JSON object, nothing else: {"tool":"<name>","q":"<rewritten request>"}; if the message asks two different things, add "also":{"tool":"<name>","q":"<the second request>"}. ' +
     'Rules: keep every amount, name, account and date exactly as the user gave them; use the recent conversation only to fill in what a follow-up leaves out ("what about next month?"); never add a number the user did not give; translate Tagalog / Taglish to English; when no tool fits, or the user wants advice, an explanation, an opinion or small talk, use "coach" with q = the message. ' +
     'Tools (name - what it answers - example q): ' +
     'status - free cash, left to spend, how much per day, why free cash is low - "how much is free" / "why is free cash low"; ' +
@@ -2490,10 +2583,13 @@
     'log - record an expense (money going out) - "lunch 180 maya cc" / "log 300 taxi"; ' +
     'money_in - record money received (a gift, refund, allowance, side income) - "received 500 from mom"; ' +
     'plan_add - add a recurring or dated plan - "add netflix 549 monthly on the 10th"; ' +
-    'plan_remove - remove a plan - "remove netflix plan"; ' +
+    'plan_remove - delete a plan for good - "remove netflix plan"; ' +
+    'plan_edit - change a plan amount, skip one date, or move it - "change rent to 3500" / "skip gym this month" / "move rent to the 20th"; ' +
+    'transfer - move money between my own accounts - "transfer 5000 from landbank to maya"; ' +
+    'owed_add - someone owes me, or I owe someone, an amount - "i owe ana 300 for dinner" / "ben owes me 500"; ' +
     'pay_plan - pay a planned bill now - "pay rent"; ' +
     'undo - undo the last entry - "undo"; ' +
-    'help - what can you do - "help"; ' +
+    'help - what can you do, how do I use the app or the chat, how to log something - "help"; ' +
     'story - the user states new numbers: a balance, salary, budget or bill amount - "maya cc balance is 900" / "my salary in october is 25000"; ' +
     'coach - anything else.';
   function routerPrompt(v, hist) {
@@ -2530,7 +2626,14 @@
     var said = routeNums(String(v || '') + ' ' + (hist || []).map(function (x) { return x.txt || ''; }).join(' '));
     var asked = routeNums(q);
     for (var k in asked) if (asked.hasOwnProperty(k) && !said[k]) return null; // a number the user never said
-    return { tool: tool, q: q };
+    var also = null; // v75.19: a second question in the same message
+    if (o.also && typeof o.also.tool === 'string') {
+      var t2 = o.also.tool.trim().toLowerCase(), q2 = String(o.also.q == null ? '' : o.also.q).replace(/\s+/g, ' ').trim().slice(0, 200);
+      var ok2 = ROUTE_TOOLS.hasOwnProperty(t2) && !!q2, asked2 = routeNums(q2);
+      for (var k2 in asked2) if (asked2.hasOwnProperty(k2) && !said[k2]) ok2 = false;
+      if (ok2) also = { tool: t2, q: q2 };
+    }
+    return { tool: tool, q: q, also: also };
   }
   function routeWanted(res, ctx) {
     var FAI = typeof window !== 'undefined' ? window.FinAI : null;
@@ -2549,9 +2652,16 @@
       if (!r) return null;
     } else {
       pendingAsk = null; // the first read's question (if any) is not the one being answered
-      r = handleCore(rt.q, ctx, ROUTE_TOOLS[rt.tool]);
+      r = handleCore(rt.tool === 'help' ? 'help' : rt.q, ctx, ROUTE_TOOLS[rt.tool]); // v75.19: the help pick always shows the help card
       if (!r) return null;
-      if (r.html && !r.llm && norm(rt.q) !== norm(v)) r.html += '<div class="c-via">read as “' + esc(rt.q) + '”</div>';
+      if (r.html && !r.llm && norm(rt.q) !== norm(v)) r.html += '<div class="c-via">read as \u201c' + esc(rt.q) + '\u201d</div>';
+      if (rt.also && r.html && !r.llm) { // v75.19: answer the second question too, under the first
+        var r2b = handleCore(rt.also.q, ctx, ROUTE_TOOLS[rt.also.tool]);
+        if (r2b && r2b.html && !r2b.llm && !(r2b.storyLines && r2b.storyLines.length)) {
+          r.html += r2b.html + '<div class="c-via">read as \u201c' + esc(rt.also.q) + '\u201d</div>';
+          if (r2b.actions && r2b.actions.length) r.actions = (r.actions || []).concat(r2b.actions);
+        }
+      }
     }
     r.__route = rt.tool;
     try {
@@ -2676,6 +2786,19 @@
       });
       return;
     }
+    if (a.act === 'edit_plan') { // v75.19: the plan's own edit sheet, filled in
+      markDone(m);
+      if (F.openPlanEdit) {
+        closeChat();
+        F.openPlanEdit(pl.id, pl.date, pl.mode || undefined);
+        setTimeout(function () {
+          var pa = byId('pe_amount'); if (pa && pl.amount) pa.value = String(pl.amount);
+          var pd = byId('pe_date'); if (pd && pl.date2) pd.value = pl.date2;
+        }, 60);
+      }
+      return;
+    }
+    if (a.act === 'open_tab' && pl.tab === 'owed') { closeChat(); F.setTab('owed'); markDone(m); return; } // v75.19
     if (a.act === 'pay_plan') { // v75.14: the Add sheet opens filled in and linked (the coach card's chip)
       markDone(m);
       if (F.payPlanChip) { closeChat(); F.payPlanChip([pl.id, pl.date, pl.name, pl.amount].join('|')); }

@@ -2720,6 +2720,11 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.19 (wider real-model run): two questions, plan edit / skip opens the sheet, transfer logs nothing, owed points to Owed, spend by merchant word / this cycle, compare per category, log dates in the past. Chat smoke v75.19",
+          "function intentPlanEdit(t, ctx, p) {" in rd("chat.js") and "function intentTransfer(t, ctx, p) {" in rd("chat.js")
+          and "function intentOwedAdd(t, ctx, p) {" in rd("chat.js") and "function pastDate(iso, t) {" in rd("chat.js")
+          and "a.act === 'edit_plan'" in rd("chat.js") and "var also = null;" in rd("chat.js")
+          and "v75.19" in rd(os.path.join("tools", "smoke", "smoke_v68.js")) and "'75.19': [" in js)
     check("v75.18 (real-model test): urgent is routed + uses Home's free cash, 'just got' is not urgent, a routed pick runs alone (no drift), no invented interest, thanks answered locally. Chat smoke v75.18",
           "var hnU = heroNums();" in rd("chat.js") and "var RX_THANKS = " in rd("chat.js")
           and "of the limit used" in rd("chat.js") and "var fr = force(t, ctx, p);" in rd("chat.js") and "function intentMoneyIn(t, ctx, p) {" in rd("chat.js")
