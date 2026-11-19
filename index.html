@@ -926,7 +926,7 @@ header{padding:44px 16px 10px;gap:10px;max-width:640px;margin:0 auto}
 header>h1{display:none}
 .hd-t{flex:1;min-width:0}
 .hd-k{font-size:13px;color:var(--mut);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:19px}
-.hd-h{margin:2px 0 0;font-size:26px;line-height:1.15;font-weight:600;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd-h{margin:2px 0 0;font-size:clamp(20px,6.4vw,26px);/* v75.10: 'Good afternoon, Jan!' cut to 'J…' at 375px (2px over) */line-height:1.15;font-weight:600;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hwrap{gap:8px}
 .hd-b{position:relative;width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);
  display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;flex:0 0 auto;-webkit-tap-highlight-color:transparent}
@@ -997,6 +997,8 @@ button.gear:active{border-color:var(--accLine);color:var(--acc)}
 .pace .p .v{font-size:15px;font-weight:650;margin-top:2px}
 .pace .p .v.sm{font-size:13.5px}
 .pace .p .v .unit{font-size:11px}
+/* v75.10: at 375px the Spent today value broke as 'PHP / 0.00' — values stay on one line and shrink a little */
+.pace .p{padding:10px 9px}.pace .p .v{white-space:nowrap;font-size:clamp(12.5px,3.7vw,15px)}.pace .p .v.sm{font-size:clamp(12px,3.5vw,13.5px)}
 /* v74.77: Spent today opens today's breakdown under the strip */
 .pace .p-tap{font:inherit;color:inherit;width:100%;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .pace .p-tap .k::after{content:" \203A";opacity:.7}
@@ -1709,6 +1711,7 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 .ml-acts .mini{min-height:34px;padding:0 12px;margin:0;border-radius:8px;font-size:13px;font-weight:600}
 .ml-acts [data-ml-del],.ml-acts [data-adj-del]{background:var(--badSoft);color:var(--bad);border-color:transparent}
 .ml-row.del .ml-main{opacity:.85}
+.ml-row.del .ml-up,.ml-row.del .ml-down{color:var(--mut)} /* v75.10: a deleted entry's take-back read as green money in */
 /* v74.35: the coach card = one header + one paragraph (the AI note hides the rule line) */
 #coach.has-note #coachHead,#coach.has-note #coachSub{display:none}
 #coach .coach-h{font-size:15px;font-weight:400;line-height:1.55;margin:0 0 4px}

@@ -3937,6 +3937,9 @@
     if ((Number(b0.salary) || 0) !== (Number(b1.salary) || 0)) parts.push('Salary ' + pesoShort(b0.salary) + ' → ' + pesoShort(b1.salary));
     if ((b0.salary_day || 0) !== (b1.salary_day || 0)) parts.push('Payday the ' + ordinal(Number(b1.salary_day) || 15));
     if (salaryGraceOf(b0) !== salaryGraceOf(b1)) parts.push('Salary grace ' + salaryGraceOf(b1) + ' day' + (salaryGraceOf(b1) === 1 ? '' : 's')); // v74.78
+    // v75.10 (full simulation pass 4): Count it 3 more days / End now wrote a bare 'Changed your numbers' in History
+    var gc0 = b0.salary_grace_cycle || null, gc1 = b1.salary_grace_cycle || null;
+    if (JSON.stringify(gc0) !== JSON.stringify(gc1)) parts.push(!gc1 ? 'Salary: back to the usual grace' : (gc1.ended ? 'Stopped counting the late salary' : 'Counting the late salary until ' + dayMonth(isoAdd(gc1.start, gc1.days))));
     var cA = Object.keys(b0.budgets || {}), cB = Object.keys(b1.budgets || {});
     cB.filter(function (c) { return cA.indexOf(c) < 0; }).forEach(function (c) { parts.push('Added category ' + hN(c)); });
     cA.filter(function (c) { return cB.indexOf(c) < 0; }).forEach(function (c) { parts.push('Removed category ' + hN(c)); });
@@ -5068,7 +5071,7 @@
         '<span class="sa-tile"><span class="k">Salary</span><span class="n">' + ((Number(b.salary) || 0) > 0 ? money0(b.salary) : 'not set') + '</span></span>' +
       '</span><span class="sa-line">' + esc(line0) + '</span></button>';
     var ea = byId('setNumAll'); if (ea) ea.onclick = openNumFromSet;
-    function money0(x) { return money(Math.round(Number(x) || 0)).replace(/\.00$/, ''); } // the tiles: whole pesos
+    function money0(x) { return money(Math.round(Number(x) || 0)).replace(/\.00$/, '').replace('PHP ', '₱'); } // the tiles: whole pesos; v75.10: '₱' (at 375px 'PHP 65,6…' was cut)
     return;
   }
   // v74.44: the Settings pages + the small values on their rows
@@ -13191,7 +13194,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
               parts.push(impTxns.length + ' entries' + (skippedT > 0 ? ' (' + skippedT + ' unreadable skipped)' : ''));
             }
             if (hasSec('plans')) parts.push(state.plans.length + ' plans');
-            if (hasSec('owed')) parts.push(state.owed.people.length + ' owed people');
+            if (hasSec('owed')) parts.push(state.owed.people.length + (state.owed.people.length === 1 ? ' person' : ' people') + ' in Owed'); // v75.10: was '1 owed people'
             if (hasSec('base') && (state.base.migrated_from_snapshot || (data.base && data.base.accounts))) parts.push('numbers restored');
             histMuteUntil = 0; histTakeSnap(); // v74.74
             if (parts.length) { histAdd({ k: 'data', t: 'Imported a backup', s: esc(parts.join(' \u00b7 ')) }); histSave(); }
@@ -13210,12 +13213,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.09, live: new Date(2026, 10, 19, 14, 18) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.10, live: new Date(2026, 10, 19, 14, 26) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.10': [
+      'On a phone: the greeting shows your whole name, Spent today stays on one line, and the Settings tiles show the full amounts (₱65,695, not PHP 65,6…).',
+      'Ledger: a deleted entry\'s amount is grey (it read as green money in). Restore says 1 person in Owed; History names Count it 3 more days / End now.'
+    ],
     '75.09': [
       'Fixed: a recurring plan with unpaid past dates no longer drops out of the Next cycle view and the graph (Gym and Home Utils were missing, so next cycle looked PHP 4,700 better than it is).'
     ],

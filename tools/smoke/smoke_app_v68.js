@@ -4334,6 +4334,14 @@ waitReady().then(async function (F) {
       ok(occ87.indexOf('2026-12-04') >= 0 && occ87.indexOf('2027-01-04') >= 0 && occ87.indexOf('2027-02-04') >= 0, 'v75.09: three unpaid past months still leave three dates ahead (' + occ87.join(',') + ')');
       ok(F.planAllDates(p87).indexOf('2026-09-04') >= 0, 'v75.09: the unpaid past dates stay (overdue)');
       st.plans.length = 0; plans87.forEach(function (x) { st.plans.push(x); });
+      // ============ PART 88: v75.10 - full simulation pass 4 (Settings + data, layout at 375px) ============
+      console.log('\n== PART 88: v75.10 - layout + data wording ==');
+      var src88 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'app.js'), 'utf8');
+      var html88 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
+      ok(html88.indexOf('.hd-h{margin:2px 0 0;font-size:clamp(20px,6.4vw,26px);') >= 0, 'v75.10: the greeting shrinks a little on a narrow phone (no Good afternoon, J…)');
+      ok(html88.indexOf('.pace .p .v{white-space:nowrap;font-size:clamp(12.5px,3.7vw,15px)}') >= 0, 'v75.10: the strip values stay on one line');
+      ok(src88.indexOf(" in Owed'); // v75.10") >= 0 && src88.indexOf("' owed people'") < 0, 'v75.10: the import toast says 1 person in Owed');
+      ok(src88.indexOf("'Counting the late salary until '") >= 0, 'v75.10: History names a salary grace change');
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

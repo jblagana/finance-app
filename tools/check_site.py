@@ -2720,6 +2720,12 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.10 (full simulation pass 4 - Settings + data + layout at 375px): greeting clamp, strip one-line values, Settings tiles in ₱, deleted amounts grey, import toast wording, History salary grace. Smoke PART 88",
+          ".hd-h{margin:2px 0 0;font-size:clamp(20px,6.4vw,26px);" in html
+          and ".ml-row.del .ml-up,.ml-row.del .ml-down{color:var(--mut)}" in html
+          and ".replace('PHP ', '₱'); } // the tiles: whole pesos; v75.10" in js
+          and "PART 88: v75.10" in smoke
+          and "'75.10': [" in js)
     check("v75.09 (full simulation pass 3 - Salary + cycle): a count-less series held at an unpaid past due still reaches `win` dates from today (planGridDates). Smoke PART 87",
           "while (futW < win && guardW < 400)" in js
           and "PART 87: v75.09" in smoke
