@@ -7253,9 +7253,12 @@
         // above the manual due) is a separate thing — the row's amt is
         // still due now (it counts in the total), only the roll-over is
         // next cycle.
-        var total = 0, nextN = 0, dueN = 0, nextAmt = 0;
+        var total = 0, nextN = 0, dueN = 0, nextAmt = 0, earlyN = 0, earlyAmt = 0;
         grow.forEach(function (rw) {
           if (rw.nextCycle) { nextN++; return; }
+          // v75.11 (boss: the coach said 'Plans · 17 due · 62,523' while the hero / Committed say '7 due · 25,469'): dues
+          // still unpaid from earlier cycles get their own line, the header counts this cycle like everywhere else
+          if (rw.earlier) { earlyN++; earlyAmt += Number(rw.amt) || 0; return; }
           total += Number(rw.amt) || 0;
           dueN++;
           nextAmt += Number(rw.nextAmt) || 0; // v73.29: the roll-over (cards)
@@ -7263,12 +7266,13 @@
         nextAmt = r2(nextAmt);
         var open = coachGroupOpen[g] === true; // v73.25: default CLOSED (boss: collapse by default)
         var sub = isPlans
-          ? dueN + ' due' + (nextN ? ' this cycle' : '') + (nextN ? ' · ' + nextN + ' next' : '')
+          ? dueN + ' due' + ((nextN || earlyN) ? ' this cycle' : '') + (nextN ? ' · ' + nextN + ' next' : '')
           : (dueN || grow.length) + ' due'; // v75.00 (boss: 'change that to just "2 due"'): the Cards header is just the count — the rows say what and when
         var gLabel = isPlans ? 'Plans' : 'Cards';
         html += '<button type="button" class="grp' + (open ? ' open' : '') + '" data-coachgrp="' + g + '" aria-expanded="' + open + '">' +
           '<span class="g-l"><span class="grp-tag">' + gLabel + '</span>' + sub + '<span class="chev">▾</span></span>' +
           '<span class="g-r">' + money(r2(total)) + '</span></button>';
+        if (isPlans && earlyN) html += '<div class="grp-early" data-coachgrp="' + g + '"><span>+ ' + earlyN + ' unpaid from earlier cycles</span><span>' + money(r2(earlyAmt)) + '</span></div>'; // v75.11
         html += '<div class="grp-body' + (open ? ' open' : '') + '" data-coachgrpbody="' + g + '">';
         var sawNext = false;
         // v73.68: the plans group collapses to its first 4 rows + a tappable
@@ -7442,7 +7446,7 @@
       if (it) it.textContent = 'Early salary \u00b7 ' + dayMonth(hwT.start) + ' \u2192 ' + dayMonth(hwT.end);
     } else {
       var it2 = byId('insTitle');
-      if (it2) it2.textContent = d.cycle && d.cycle.start && d.cycle.end ? 'This cycle \u00b7 ' + dayMonth(d.cycle.start) + ' \u2192 ' + dayMonth(d.cycle.end) : 'This cycle';
+      if (it2) it2.textContent = 'Today'; // v75.11 (boss: the hero right above already says 'This cycle \u00b7 15 Nov \u2192 14 Dec'): this card is today's numbers
     }
     wrap.style.display = '';
     var s = d.s, daysLeft = d.daysLeft, meal = d.meal;
@@ -8735,6 +8739,7 @@
     // cycle (past the current cycle's end) is flagged nextCycle — the
     // render dims + badges it and the group header's total excludes it.
     var cycEnd = (d.cycle && d.cycle.end) || null;
+    var cycStartC = (d.cycle && d.cycle.start) || null; // v75.11: dues from before this cycle are flagged 'earlier'
     var urgent = [];
     state.plans.forEach(function (p) {
       if (isGoalPlan(p)) return; // v74.65: Saving-for rows live in Committed's Saving for (pots top up by themselves, v74.87), not the due rows
@@ -8771,6 +8776,7 @@
       var ua = u.am != null ? u.am : u.p.amount;
       var paid = findPaidTxn(d, { planId: u.p.id, date: u.date, name: un, amount: ua });
       var uNext = !!(cycEnd && u.date > cycEnd);
+      var uEarlier = !!(cycStartC && u.date < cycStartC); // v75.11
       // v73.26 (boss-approved mockup) + v73.27 (overdue stays): four states.
       //  1. paid sum >= 100% → NO ROW (done; the Coming-up pill + edit sheet
       //     carry the proof).
@@ -8786,7 +8792,7 @@
       } else if (paidAmt > 0) {
         var rem = r2(Number(ua) - paidAmt);
         var cnt = Number(paid.count) || 0;
-        rows.push({ cls: 'warn', group: 'plans', kind: 'plan', amt: rem, nextCycle: uNext,
+        rows.push({ cls: 'warn', group: 'plans', kind: 'plan', amt: rem, nextCycle: uNext, earlier: uEarlier,
           tag: 'Plan · ' + (u.p.name || 'Plan'),
           text: 'Partly handled — ' + money(paidAmt) + ' logged on ' + planWhen(paid.date) +
             (cnt > 1 ? ' (' + cnt + ' entries)' : '') + ' — ' + money(rem) + ' still owed.',
@@ -8797,7 +8803,7 @@
       } else if (u.dd < 0) {
         // v73.27: overdue (past due, nothing logged) — stays visible.
         var odays = -u.dd;
-        rows.push({ cls: 'bad', group: 'plans', kind: 'plan', amt: ua, nextCycle: uNext,
+        rows.push({ cls: 'bad', group: 'plans', kind: 'plan', amt: ua, nextCycle: uNext, earlier: uEarlier,
           tag: 'Overdue',
           text: (un || 'Plan') + ' is ' + odays + ' day' + (odays === 1 ? '' : 's') + ' past due.',
           r: money(ua),
@@ -8809,7 +8815,7 @@
         shown++;
       } else {
         var pw2 = u.dd === 0 ? 'today' : (u.dd === 1 ? 'tomorrow' : 'in ' + u.dd + ' days');
-        rows.push({ cls: u.dd <= 2 ? 'bad' : 'warn', group: 'plans', kind: 'plan', amt: ua, nextCycle: uNext,
+        rows.push({ cls: u.dd <= 2 ? 'bad' : 'warn', group: 'plans', kind: 'plan', amt: ua, nextCycle: uNext, earlier: uEarlier,
           tag: 'Plan due',
           text: (un || 'Plan') + ' is due ' + pw2 + '.',
           r: money(ua),
@@ -13213,12 +13219,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.10, live: new Date(2026, 10, 19, 14, 26) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.11, live: new Date(2026, 10, 19, 14, 56) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.11': [
+      'Home: the card under the hero is titled Today (the hero above already shows this cycle\'s dates).',
+      'Coach: Plans counts this cycle\'s dues like the hero and Committed (7 due), and a second line shows the ones still unpaid from earlier cycles.'
+    ],
     '75.10': [
       'On a phone: the greeting shows your whole name, Spent today stays on one line, and the Settings tiles show the full amounts (₱65,695, not PHP 65,6…).',
       'Ledger: a deleted entry\'s amount is grey (it read as green money in). Restore says 1 person in Owed; History names Count it 3 more days / End now.'

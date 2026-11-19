@@ -2720,6 +2720,13 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.11 (boss: 'only do and ship 3 and 4'): the strip card is titled Today; the coach Plans header counts this cycle and a grp-early line carries the dues unpaid from earlier cycles. Smoke PART 89",
+          "if (it2) it2.textContent = 'Today';" in js
+          and "earlier: uEarlier," in js
+          and "unpaid from earlier cycles</span>" in js
+          and ".grp-early{" in html
+          and "PART 89: v75.11" in smoke
+          and "'75.11': [" in js)
     check("v75.10 (full simulation pass 4 - Settings + data + layout at 375px): greeting clamp, strip one-line values, Settings tiles in ₱, deleted amounts grey, import toast wording, History salary grace. Smoke PART 88",
           ".hd-h{margin:2px 0 0;font-size:clamp(20px,6.4vw,26px);" in html
           and ".ml-row.del .ml-up,.ml-row.del .ml-down{color:var(--mut)}" in html

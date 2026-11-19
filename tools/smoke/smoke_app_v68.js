@@ -2912,7 +2912,7 @@ waitReady().then(async function (F) {
       ok(ins38.indexOf('class="v sm"') >= 0, 'v73.95: the Headroom value uses the .sm size (fits one row)');
       // the dynamic title names the cycle window
       var dcy38 = d38.cycle;
-      var title38 = dcy38 && dcy38.start && dcy38.end ? 'This cycle \u00b7 ' + F.dayMonth(dcy38.start) + ' \u2192 ' + F.dayMonth(dcy38.end) : 'This cycle';
+      var title38 = 'Today'; // v75.11: the hero above names the cycle window; this card is today's numbers (dcy38 kept for the early-salary check)
       ok(String(byIdStub('insTitle').textContent || '') === title38,
         'v73.94: the card title names the cycle window (got ' + JSON.stringify(String(byIdStub('insTitle').textContent || '')) + ', want ' + JSON.stringify(title38) + ')');
       // the old block copy is GONE (no more details)
@@ -4342,6 +4342,16 @@ waitReady().then(async function (F) {
       ok(html88.indexOf('.pace .p .v{white-space:nowrap;font-size:clamp(12.5px,3.7vw,15px)}') >= 0, 'v75.10: the strip values stay on one line');
       ok(src88.indexOf(" in Owed'); // v75.10") >= 0 && src88.indexOf("' owed people'") < 0, 'v75.10: the import toast says 1 person in Owed');
       ok(src88.indexOf("'Counting the late salary until '") >= 0, 'v75.10: History names a salary grace change');
+      // ============ PART 89: v75.11 - Home repeats 3 + 4 ============
+      console.log('\n== PART 89: v75.11 - Today title + the coach earlier-cycles line ==');
+      F.renderInsights && F.renderInsights();
+      var it89 = byIdStub('insTitle');
+      ok(!it89 || String(it89.textContent) === 'Today' || /^Early salary/.test(String(it89.textContent)), 'v75.11: the strip card is titled Today (got ' + (it89 && it89.textContent) + ')');
+      F.renderCoach();
+      var dig89 = String((byIdStub('digBody') || {}).innerHTML || '');
+      var src89 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'app.js'), 'utf8');
+      ok(src89.indexOf("if (rw.earlier) { earlyN++; earlyAmt += Number(rw.amt) || 0; return; }") >= 0, 'v75.11: dues from earlier cycles leave the Plans header count and total');
+      ok(dig89.indexOf('grp-early') < 0 || dig89.indexOf('unpaid from earlier cycles') >= 0, 'v75.11: the earlier-cycles line names them');
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
