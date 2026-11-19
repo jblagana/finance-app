@@ -1677,7 +1677,7 @@ def main():
     check("v72.47 (user: 'u did not update this log as completed — rename the prepays and future cc payments from Unsorted to CC Payment'): the v72.44 reco's label half finally ships — (1) every card-payment money-log row (k 'p') reads 'CC Payment' in the ledger: a logged prepay AND a future-dated one (the chip prefills the 14th, so an early log lands in the future) — row label + the edit toast + the chat 'Logged …' confirmation; (2) the category filter gets its own CC Payment option and the Unsorted filter no longer swallows prepays; (3) a prepay contributes zero spend, so it can no longer leave a phantom 'Unsorted 0' slice in the by-category donut or a 'Unsorted 0.00' line in the coach-note breakdown; (4) the v72.47 SHELL_NOTES entry (its stamp pins are the generic gate's — they move with every release)",
           "lab = e.k === 'p' ? 'CC Payment' : (e.c || 'Unsorted');" in js
           and "if (mlFilterCat === '__ccpay__') return e.k === 'p';" in js
-          and "if (mlFilterCat === '__unsorted__') return e.k !== 'p' && !e.c;" in js
+          and "if (mlFilterCat === '__unsorted__') return e.k !== 'p' && (!e.c || e.c === 'Unsorted'); // v75.07" in js
           and 'value="__ccpay__">CC Payment' in js
           and "t.kind === 'card_payment' ? 'CC Payment'" in js
           and "pl.kind === 'card_payment' ? 'CC Payment'" in chatjs
@@ -2381,7 +2381,7 @@ def main():
     check("v74.33 (boss: 'remove same as the hero number and salary follows ... amount.'): the Free cash row has no sub-label and the cycle footnote is just 'Estimate — pace & one-offs excluded.'",
           '<div class="lab ind">Free cash</div>' in js
           and "Salary follows the target cycle" not in js
-          and "'<p class=\"cbnote\">Estimate — pace &amp; one-offs excluded.</p>'" in js
+          and "'<p class=\"cbnote\">Estimate — daily spending not included.</p>'" in js  # v75.07: one-offs are in the estimate
           and "'74.33': [" in js)
     check("v74.32 (boss: 'in hero card, remove all cards; Plan dues · N due on one row'): the This-cycle Cards owed row has no 'all cards' sub-label and the Plan dues row reads 'Plan dues · N due' (no sub-label)",
           "Cards owed' + (p.cardOwed > 0.004 ? '' : '<small>no cards</small>') + '</div>" in js
@@ -2720,6 +2720,15 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.07 (boss: 'in the full simulation, include parts/ui that looks weird, obsolete, useless, looks off etc'): pass 1 - Ledger deleted rows labelled (goneLater), one Unsorted, coach headroom line not repeated, This-cycle plans button, hero note, Settings 'live' + Liquid, countUp lands when hidden. Smoke PART 85",
+          "var goneLater = add && e.tid && !mlTxn" in js
+          and "if (e.c && e.c !== 'Unsorted')" in js
+          and "See this cycle\\'s plans" in js
+          and "Estimate — daily spending not included." in js
+          and '<span class="k">Liquid</span>' in js
+          and "document.hidden)) { el.textContent = fmt(to); return; }" in js
+          and "PART 85: v75.07" in smoke
+          and "'75.07': [" in js)
     check("v75.06 (boss: 'simulate under all possible scenarios the planned recurring expenses and saving for, and make sure the ui and texts are logical wherever they are'): labels read the plan as it is now (planCurrent), one 'left' rule (planLeftCount), a skipped rule date keeps its rule (planRuleAt reads was), 'edited' = differs from now. Smoke PART 84",
           "function planCurrent(p) {" in js and "function planLeftCount(p, fromISO) {" in js and "function planRuleAt(p, dateISO, raw) {" in js
           and "if (e && e.skip && e.was && e.was.applyFrom) e = e.was;" in js

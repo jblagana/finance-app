@@ -264,8 +264,12 @@
   }
   function countUp(el, from, to, fmt) {
     if (!el) return;
-    if (REDUCED_MOTION || !isFinite(from) || from === to) { el.textContent = fmt(to); return; }
+    // v75.07 (full simulation): a hidden page runs no animation frames, so the hero sat on the OLD number until the
+    // app came back to the front — a hidden page takes the number at once, and a timer lands it whatever happens
+    if (REDUCED_MOTION || !isFinite(from) || from === to || (typeof document !== 'undefined' && document.hidden)) { el.textContent = fmt(to); return; }
     if (el.__countRaf) cancelAnimationFrame(el.__countRaf);
+    clearTimeout(el.__countEnd);
+    el.__countEnd = setTimeout(function () { if (el.__countRaf) cancelAnimationFrame(el.__countRaf); el.__countRaf = null; el.textContent = fmt(to); }, 700);
     var t0 = null;
     function step(ts) {
       if (t0 === null) t0 = ts;
@@ -3269,7 +3273,7 @@
     log.forEach(function (e) {
       if (!e) return;
       if (e.k === 'p') { hasCcpay = true; return; } // v72.47: a prepay is "CC Payment", never Unsorted
-      if (e.c) { if (cats.indexOf(e.c) < 0) cats.push(e.c); }
+      if (e.c && e.c !== 'Unsorted') { if (cats.indexOf(e.c) < 0) cats.push(e.c); } // v75.07: an Owed leg files 'Unsorted' by name — one Unsorted, not two
       else hasUnsorted = true;
     });
     cats.sort();
@@ -3406,7 +3410,7 @@
     var shown = log.slice().reverse().filter(function (e) {
       if (mlFilterCat) {
         if (mlFilterCat === '__ccpay__') return e.k === 'p'; // v72.47: the CC Payment filter
-        if (mlFilterCat === '__unsorted__') return e.k !== 'p' && !e.c;
+        if (mlFilterCat === '__unsorted__') return e.k !== 'p' && (!e.c || e.c === 'Unsorted'); // v75.07
         if (e.c !== mlFilterCat) return false;
       }
       if (mlFilterM) { // v73.70: the payment-method filter (ANDs with the category)
@@ -3532,9 +3536,13 @@
         var cyclePill = txnCyclePill(mlTxn);
         // v73.75: the row is NO LONGER a tap target — each editable entry
         // carries its own ✎ (opens the edit sheet) beside the ✕ (delete).
-        var editBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-edit="' + esc(e.tid) +
+        // v75.07 (full simulation: a deleted entry read as two identical rows, one '−' and one '+', and the '−' one
+        // still offered Edit / Delete on an entry that no longer exists): the take-back row says 'Deleted', the
+        // original says 'deleted later' and loses its buttons
+        var goneLater = add && e.tid && !mlTxn && !e.ro && e.k !== 'a' && e.k !== 'r';
+        var editBtn = (add && e.tid && !goneLater) ? '<button type="button" class="mini" data-ml-edit="' + esc(e.tid) +
           '" aria-label="Edit this entry" title="Edit this entry">Edit \u270e</button>' : '';
-        var delBtn = (add && e.tid) ? '<button type="button" class="mini" data-ml-del="' + esc(e.tid) +
+        var delBtn = (add && e.tid && !goneLater) ? '<button type="button" class="mini" data-ml-del="' + esc(e.tid) +
           '" aria-label="Delete this expense" title="Delete this expense">Delete \u2715</button>' : '';
         // v72.31: Adjustment rows (no txn behind them) get their own ✕ — it
         // removes the record and reverses the override in Settings. The key is
@@ -3565,6 +3573,8 @@
         var noteTxt = ow ? ow.note : p.note;
         var subTxt = noteTxt || (ow ? (ow.mine ? 'Your share with ' + ow.name : ow.leg === 'tmb' ? 'Paid back by ' + ow.name : ow.leg === 'tpf' ? ow.name + ' paid for you' : ow.leg === 'itb' ? 'Paid back to ' + ow.name : ow.name + '’s share')
           : ((e.k === 'p' && e.w) ? (p.m || 'card') + ' from ' + e.w : (p.m || '')));
+        if (!add) subTxt = 'Deleted' + (subTxt ? ' · ' + subTxt : ''); // v75.07
+        else if (goneLater) subTxt = (subTxt ? subTxt + ' · ' : '') + 'deleted later';
         var badge = ow ? '<span class="ml-badge" style="--bb:' + ow.av.bg + ';--bf:' + ow.av.fg + '">' + esc(ow.av.ch) + '</span>' : '';
         // v74.83 (boss: 'make the chip visible from the main entry view so its easy to see which ones have
         // toggles'): the bill chip sits on the ROW itself (under the amount), not inside the details — a sibling
@@ -5035,9 +5045,9 @@
       nBud0 + ' categor' + (nBud0 === 1 ? 'y' : 'ies'), nPl0 + ' plan' + (nPl0 === 1 ? '' : 's') + ' in Committed'].join(' · ');
     var asof0 = String(fmtDate(b.as_of) || '').replace(/,? \d{4}$/, '');
     host.innerHTML = '<button type="button" class="set-all" id="setNumAll">' +
-      '<span class="sa-top"><span class="sa-t">All numbers</span><span class="sa-asof">as of ' + esc(asof0) + '</span>' + CHEV + '</span>' +
+      '<span class="sa-top"><span class="sa-t">All numbers</span><span class="sa-asof" title="' + esc('Balances set as of ' + asof0) + '">live</span>' + CHEV + '</span>' + // v75.07: the tiles are LIVE since v74.51 — 'as of Oct 11' read as stale numbers
       '<span class="sa-tiles">' +
-        '<span class="sa-tile"><span class="k">Cash</span><span class="n">' + money0(cash0) + '</span></span>' +
+        '<span class="sa-tile"><span class="k">Liquid</span><span class="n">' + money0(cash0) + '</span></span>' +
         '<span class="sa-tile"><span class="k">Cards owe</span><span class="n warn">' + money0(owed0) + '</span></span>' +
         '<span class="sa-tile"><span class="k">Salary</span><span class="n">' + ((Number(b.salary) || 0) > 0 ? money0(b.salary) : 'not set') + '</span></span>' +
       '</span><span class="sa-line">' + esc(line0) + '</span></button>';
@@ -7063,7 +7073,9 @@
       // The treat check (the meal line) is gone with the detail blocks.
       var hDaysSub = d.cycleDaysLeft || d.daysLeft;
       var hDailySub = hDaysSub > 0 ? r2(Math.max(0, freeN) / hDaysSub) : 0; // freeN = the net free (line above)
-      sub = 'You still have ' + money(r2(Math.max(0, hDailySub - d.todaySpend))) + ' left of today’s headroom — spend it. Go on, the app is watching.';
+      // v75.07 (full simulation: with nothing spent yet the line repeated the head's number word for word): the
+      // remainder line only shows once something was spent today
+      sub = d.todaySpend > 0.004 ? 'Spent ' + money(d.todaySpend) + ' so far — ' + money(r2(Math.max(0, hDailySub - d.todaySpend))) + ' left of today’s headroom. Go on, the app is watching.' : 'Go on, the app is watching.';
     }
     // v74.35 (boss: 'too verbose'): the card shows only this core line — the
     // "On repeat" and "Since your last check" add-ons below still compute
@@ -7382,10 +7394,11 @@
     if (acts) {
       var ah = '';
       var hasPlanRow = rows.some(function (rw) { return rw.tag === 'Plan due'; });
-      if (hasPlanRow) ah += '<button type="button" class="cbtn ghost" id="actPlans">See this week\'s plans</button>';
+      // v75.07: Committed has no week view — the button opens its This cycle view
+      if (hasPlanRow) ah += '<button type="button" class="cbtn ghost" id="actPlans">See this cycle\'s plans</button>';
       acts.innerHTML = ah;
       var aa = byId('actPlans');
-      if (aa) aa.onclick = function () { setTab('money'); };
+      if (aa) aa.onclick = function () { setCmView('cyc'); setTab('money'); renderPlans(); };
     }
     // ---- persist coach memory (only when it changed) ----
     var newMem = { d: d.today, free: r2(d.free), spentM: r2(d.spentM), alerts: info.alerts.slice(0, 5) };
@@ -8181,7 +8194,7 @@
       '</div></div>' : '') +
       '<div class="cbrows">' + rows + '</div>' +
       (mode === 'next' ? '<div class="cbnet"><span class="nl">Free at end of next cycle</span><span class="nv ' + netCls + '">' + netTxt + '</span></div>' : '') +
-      '<p class="cbnote">Estimate — pace &amp; one-offs excluded.</p>'; // v74.33: the salary sentence is gone
+      '<p class="cbnote">Estimate — daily spending not included.</p>'; // v74.33: the salary sentence is gone; v75.07: one-offs ARE in it since v73.63 (the old line said excluded)
     // re-wire the switches (innerHTML wiped the old listeners — the v73.20
     // chip pattern: the element is rebuilt, so the handler must be re-bound)
     var segC = byId('cbSegCycle');
@@ -9344,7 +9357,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var w = cmWhen(x.d, today);
         var st = done ? 'paid' : (x.paid > 0.004 ? money(x.paid).replace('PHP ', '₱') + ' of ' + money(x.am).replace('PHP ', '₱') : w.t);
         var left = '';
-        if (x.p.repeat && x.p.count) left = ' · ' + planLeftCount(x.p, x.d) + ' of ' + x.p.count + ' left'; // v75.06: skipped dates are not 'left'
+        if (x.p.repeat && x.p.count) left = ' · ' + planLeftCount(x.p) + ' of ' + x.p.count + ' left'; // v75.06: skipped dates are not 'left'; v75.07: the plan's whole count (same as All plans — counting from this date hid an older unpaid one)
         html += cmRow({ cls: 'cmcyc' + (done ? ' done' : ''), attr: ' data-cmplan="' + esc(x.p.id) + '"',
           tile: done ? 't-g' : 't-a', tileTxt: done ? '✓' : cmInitial(x.nm), name: esc(x.nm || 'Plan'), rec: !!x.p.repeat,
           sub: dayMonth(x.d) + ' · ' + (x.p.repeat ? (left ? left.slice(3) : ({ daily: 'daily', weekly: 'weekly', annual: 'yearly' }[x.p.repeat] || 'monthly')) : 'one-off'),
@@ -13181,12 +13194,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.06, live: new Date(2026, 10, 19, 13, 42) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.07, live: new Date(2026, 10, 19, 14, 0) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.07': [
+      'Ledger: a deleted entry now says Deleted (and the original says deleted later, without Edit / Delete); Unsorted shows once in the category filter.',
+      'Home: the coach no longer repeats today\'s number twice; the coach\'s plans button opens Committed\'s This cycle; the hero note no longer says one-offs are left out (they are in).',
+      'Settings: All numbers says live (the numbers are live) and calls the total Liquid, like the hero. The big number updates even if the app was in the background.'
+    ],
     '75.06': [
       'Committed: after Edit plan, the new amount shows everywhere (the plan\'s sheet, the rows, the totals, a pot\'s line and its Full by date); later dates no longer all say changed.',
       'Payments left counts the same in every view (an unpaid overdue date counts, a skipped one does not); a date paid ahead says paid; a shifted plan names its real day.',

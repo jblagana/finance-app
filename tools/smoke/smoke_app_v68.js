@@ -2929,7 +2929,8 @@ waitReady().then(async function (F) {
       var coachSub38 = String(byIdStub('coachSub').textContent || '');
       var hDailySub38 = hDays38 > 0 ? Math.round(Math.max(0, freeN38) / hDays38 * 100) / 100 : 0;
       var remain38 = Math.round(Math.max(0, hDailySub38 - d38.todaySpend) * 100) / 100;
-      ok(coachSub38.indexOf('left of today\u2019s headroom') >= 0 && coachSub38.indexOf(money22(remain38)) >= 0,
+      // v75.07: with nothing spent today the remainder IS the head's number, so the sub no longer repeats it
+      ok(d38.todaySpend > 0.004 ? (coachSub38.indexOf('left of today\u2019s headroom') >= 0 && coachSub38.indexOf(money22(remain38)) >= 0) : (coachSub38.indexOf(money22(remain38)) < 0 && coachSub38.length > 0),
         'v73.94: the coach sub quotes the headroom REMAINDER (' + money22(remain38) + ' = ' + money22(hDailySub38) + ' - ' + money22(d38.todaySpend) + ') \u2014 got: ' + JSON.stringify(coachSub38));
 
       // ============ PART 39: v73.96 - the Committed tab (sections + summary) ============
@@ -4304,6 +4305,22 @@ waitReady().then(async function (F) {
       wp84.overrides = { '2026-10-15': { shiftFrom: '2026-10-15', shiftDays: 4, applyFrom: '2026-10-15' } };
       ok(F.cmPer(wp84) === 'monthly on the 19th', 'v75.06: a shifted series names its real day (' + F.cmPer(wp84) + ')');
       st.plans.length = 0; plans84.forEach(function (x) { st.plans.push(x); });
+      // ============ PART 85: v75.07 - full simulation pass 1 (Home / Ledger / Settings) ============
+      console.log('\n== PART 85: v75.07 - Ledger rows + Home copy ==');
+      var log85 = (st.moneyLog || []).slice();
+      st.moneyLog = log85.concat([
+        { at: 1, a: 'add', tid: 'gone85', l: 'Food · Lunch85', c: 'Food', nt: 'Lunch85', m: 'Cash', n: 85, k: 'x', f: 1, q: 1, s: 1 },
+        { at: 2, a: 'del', tid: 'gone85', l: 'Food · Lunch85', c: 'Food', nt: 'Lunch85', m: 'Cash', n: 85, k: 'x', f: 1, q: 1, s: 1 },
+        { at: 3, a: 'add', tid: 'x85', l: 'Unsorted · Owed85', c: 'Unsorted', nt: 'Owed85', m: 'Cash', n: 5, k: 'x', f: 1, q: 1, s: 1 },
+        { at: 4, a: 'add', tid: 'y85', l: 'NoCat85', nt: 'NoCat85', m: 'Cash', n: 5, k: 'x', f: 1, q: 1, s: 1 }
+      ]);
+      F.renderMoneyLog();
+      var sel85 = elMap['mlFilter'] ? String(elMap['mlFilter'].innerHTML) : '';
+      ok((sel85.match(/>Unsorted</g) || []).length === 1, 'v75.07: the category filter lists Unsorted once (a no-category entry and an entry filed as Unsorted)');
+      var body85 = elMap['mlBody'] ? String(elMap['mlBody'].innerHTML) : '';
+      ok(body85.indexOf('Deleted · Lunch85') >= 0 && body85.indexOf('Lunch85 · deleted later') >= 0, 'v75.07: a deleted entry says Deleted, its original says deleted later');
+      ok(body85.indexOf('data-ml-del="gone85"') < 0, 'v75.07: no Delete button on an entry that is already gone');
+      st.moneyLog = log85; F.renderMoneyLog();
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
