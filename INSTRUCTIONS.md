@@ -1,3 +1,7 @@
+## 2026-11-20 - "here, can u bake it into the app" (pasted the Firebase web config for project coach-fin) -> "the cloud account works out of the box: config baked into CLOUD_CFG, no pasting"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.24 (app.js CLOUD_CFG = the coach-fin web config (public identifiers, not a secret); the paste box stays only as a fallback. Needs, in the Firebase console: Google sign-in on, jblagana.github.io authorized, Firestore rules published)
+
 ## 2026-11-20 - "how can i make the app something that requires a signin and syncs across devices, like facebook? is it free" then "go" -> "optional Google sign-in + automatic cross-device sync through a free Firebase account, reusing the encrypted merge"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.23 (app.js: syncBuildObj + syncApplyRemote extracted from the gist sync; cloud account module (Firebase compat SDK loaded lazily, Google sign-in popup/redirect, Firestore finai/{uid} holding only the AES-GCM envelope, auto sync on open / focus / 8s after a change); Settings > Cloud account page; cloud/firestore.rules + cloud/README.md. Needs the owner's Firebase project config - cannot be created by Claude)

@@ -424,7 +424,7 @@ v70hm('how much → status', 'how much');
 })();
 (function () { // v75.23: the cloud account is wired but inert without a config
   var src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'app.js'), 'utf8');
-  var ok = /function cloudParseCfg/.test(src) && /finai/.test(src) && !/apiKey\s*:\s*['"]AIza/.test(src);
-  console.log('--- v75.23 cloud sync present, no key baked in ' + (ok ? 'OK' : 'FAIL'));
+  var ok = /function cloudParseCfg/.test(src) && /finai/.test(src) && /projectId: 'coach-fin'/.test(src);
+  console.log('--- v75.23 cloud sync present, config baked in ' + (ok ? 'OK' : 'FAIL'));
   if (!ok) process.exitCode = 1;
 })();

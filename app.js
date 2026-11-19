@@ -13300,7 +13300,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   }
   // ---------- v75.23: cloud account (Google sign-in + Firestore, same encrypted merge as the gist) ----------
   // The server only ever holds the AES-GCM envelope (key from your passphrase), under users' own uid; rules in cloud/firestore.rules.
-  var CLOUD_CFG = null; // bake the Firebase web config object in here for everyone; otherwise it is pasted in Settings
+  // v75.24: the project's web config (public by design - it only names the project; the Firestore rules + passphrase protect the data)
+  var CLOUD_CFG = { apiKey: 'AIzaSyCXtofJPQOxuz8K7JmW1W5E0goldqt2WA0', authDomain: 'coach-fin.firebaseapp.com', projectId: 'coach-fin', appId: '1:550840334102:web:ad1f22292f6f709c134237' };
   var CLOUD_LS = 'fin.cloud.v1';
   var CLOUD_SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
   var cloudFb = null, cloudUser = null, cloudBusy = false, cloudTimer = null, cloudSig = '', cloudReady = null;
@@ -13531,12 +13532,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.23, live: new Date(2026, 10, 20, 0, 37) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.24, live: new Date(2026, 10, 20, 0, 57) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.24': [
+      'Cloud account is ready to use: Settings › Cloud account › Continue with Google. Nothing to paste.'
+    ],
     '75.23': [
       'Optional cloud account: sign in with Google and your numbers sync across your devices automatically (Settings \u203a Cloud account). Still encrypted on the phone with your passphrase, still merges newest-record-wins, and the app works the same without signing in.'
     ],
