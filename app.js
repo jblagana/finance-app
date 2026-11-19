@@ -13391,12 +13391,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.20, live: new Date(2026, 10, 19, 22, 36) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.21, live: new Date(2026, 10, 19, 22, 44) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.21': [
+      'Coach Fin: a button that takes you somewhere (Open Committed, Open Owed, Settings, a plan, Add) now closes the chat and opens it, so you land right on it.'
+    ],
     '75.20': [
       'Coach Fin looks cleaner: the header is just Coach Fin and its dot (green = the online coach is on), the rotating TRY bar and the \u201cas of\u201d time are gone, and the input says \u201cAsk or log \u2014 understands Taglish too\u201d.',
       'A log card asks (\u201cLog \u20b11,000 in?\u201d) and confirms on the card itself \u2014 \u201c\u2713 Logged to LandBank\u201d with Undo \u2014 instead of a second message. A one-line draft reads \u201cUpdate Maya CC to \u20b11,250?\u201d with the old \u2192 new amount and just Confirm / Discard. Amounts use \u20b1.',

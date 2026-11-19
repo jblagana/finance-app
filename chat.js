@@ -899,7 +899,7 @@
     return {
       html: block('New plan',
         kv(whenLabel(date) + ' · ' + esc(name) + (repM ? ' · ' + repLabel : ''), money(am.amt)),
-        'It goes to your plans (Money tab) and feeds the Home insights.', 'good'),
+        'It goes to your plans (Committed) and feeds the Home insights.', 'good'),
       actions: [{ label: (repM ? 'Add ' + repLabel + ' plan: ' : 'Add plan: ') + esc(name), act: 'add_plan', payload: { name: name, amount: am.amt, date: date, repeat: repM ? repW : null } }]
     };
   }
@@ -2833,14 +2833,18 @@
     pendingAsk = null; // v38: any explicit action closes a pending question
     if (!a || a.act === 'noop') { markDone(m); return; }
     var pl = a.payload || {};
+    // v75.21 (boss: 'when it recommend to open a tab or anything, the app should open it and close the bot'):
+    // every button that takes you somewhere closes the chat first, then opens that place
     if (a.act === 'open_tab') {
-      F.setTab(pl.tab);
       markDone(m);
+      closeChat();
+      F.setTab(pl.tab);
       return;
     }
     if (a.act === 'open_settings') {
-      if (F.openSettings) F.openSettings(); else F.setTab('home');
       markDone(m);
+      closeChat();
+      if (F.openSettings) F.openSettings(); else F.setTab('home');
       return;
     }
     if (a.act === 'start_setup') {
@@ -2851,7 +2855,7 @@
     if (a.act === 'add_plan') {
       F.addPlan({ name: pl.name, amount: pl.amount, date: pl.date, repeat: pl.repeat || null }).then(function () { // v68 item 5: monthly plans from chat
         markDone(m);
-        pushBot('Added to your plans: <b>' + esc(pl.name) + '</b> · ' + esc(fmtDate(pl.date)) + ' · ' + esc(money(pl.amount)) + '. It shows on Home and the Money tab.');
+        pushBot('Added to your plans: <b>' + esc(pl.name) + '</b> · ' + esc(fmtDate(pl.date)) + ' · ' + esc(money(pl.amount)) + '. It shows on Home and in Committed.');
       });
       return;
     }
@@ -2874,7 +2878,6 @@
       }
       return;
     }
-    if (a.act === 'open_tab' && pl.tab === 'owed') { closeChat(); F.setTab('owed'); markDone(m); return; } // v75.19
     if (a.act === 'pay_plan') { // v75.14: the Add sheet opens filled in and linked (the coach card's chip)
       markDone(m);
       if (F.payPlanChip) { closeChat(); F.payPlanChip([pl.id, pl.date, pl.name, pl.amount].join('|')); }

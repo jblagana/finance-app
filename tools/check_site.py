@@ -2720,6 +2720,10 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.21 (boss: 'when it recommend to open a tab or anything, the app should open it and close the bot'): open_tab / open_settings close the chat first (edit_plan, pay_plan and the salary chip already did); no 'Money tab' left in the chat",
+          "      markDone(m);\n      closeChat();\n      F.setTab(pl.tab);" in rd("chat.js")
+          and "      markDone(m);\n      closeChat();\n      if (F.openSettings) F.openSettings();" in rd("chat.js")
+          and "Money tab" not in rd("chat.js") and "'75.21': [" in js)
     check("v75.20 (boss-approved chat mockup https://claude.ai/artifact/CyEyTAUr7Se5by6meyWrgx): header = Coach Fin + the LED (no 'as of', no TRY bar), the input hint, log cards ask + confirm on the card with Undo (no second message), one-line drafts = 'Update X to Y?' + Confirm / Discard, the peso sign, situation chips, What I can do = tappable groups. Chat smoke v75.20",
           "#chatFresh,#chatTip{display:none!important}" in html and "function helpHtml() {" in rd("chat.js")
           and "function draftHtml(lines, ctx, extra) {" in rd("chat.js") and "function doneRowHtml(m) {" in rd("chat.js")
