@@ -1,3 +1,7 @@
+## 2026-11-20 - "done but passphrase page is not working" (sync said 'Missing or insufficient permissions' after sign-in worked in the preview) -> "fix the cloud sync permissions and the sign-in flow"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.25 (cloud/firestore.rules: reads/deletes split from writes - request.resource is null on a read so the old combined rule denied every read; app.js sign-in is popup-first (the redirect came back signed out cross-origin). Owner must re-publish the rules in the Firebase console)
+
 ## 2026-11-20 - "here, can u bake it into the app" (pasted the Firebase web config for project coach-fin) -> "the cloud account works out of the box: config baked into CLOUD_CFG, no pasting"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.24 (app.js CLOUD_CFG = the coach-fin web config (public identifiers, not a secret); the paste box stays only as a fallback. Needs, in the Firebase console: Google sign-in on, jblagana.github.io authorized, Firestore rules published)

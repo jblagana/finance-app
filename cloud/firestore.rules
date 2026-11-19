@@ -3,8 +3,9 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // each signed-in user can read and write ONLY their own document; the content is already encrypted on the phone
     match /finai/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid
-                         && (request.method == 'delete' || request.resource.data.env is string && request.resource.data.env.size() < 900000);
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+                            && request.resource.data.env is string && request.resource.data.env.size() < 900000;
     }
     match /{document=**} { allow read, write: if false; }
   }

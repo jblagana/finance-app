@@ -13351,10 +13351,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     cloudNote('Opening Google…');
     return cloudLoad().then(function () {
       var prov = new window.firebase.auth.GoogleAuthProvider();
-      var standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
-      if (standalone) return cloudFb.auth.signInWithRedirect(prov); // a popup is unreliable in an installed app
+      // popup first, even in an installed app: a redirect comes back signed-out when the auth domain differs from the app's (storage partitioning)
       return cloudFb.auth.signInWithPopup(prov)['catch'](function (e) {
-        if (e && /popup/.test(e.code || '')) return cloudFb.auth.signInWithRedirect(prov);
+        if (e && /popup-blocked|operation-not-supported/.test(e.code || '')) return cloudFb.auth.signInWithRedirect(prov);
         throw e;
       });
     }).then(function () { cloudNote('Signed in. Set the passphrase below, then Sync now.'); })['catch'](function (e) { cloudNote('Sign-in failed: ' + (e && e.message ? e.message : e), true); });
@@ -13532,12 +13531,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.24, live: new Date(2026, 10, 20, 0, 57) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.25, live: new Date(2026, 10, 20, 1, 4) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.25': [
+      'Cloud account: Google sign-in now opens a popup (the full-page redirect came back signed out), and the sync rules were fixed so reading your own record works.'
+    ],
     '75.24': [
       'Cloud account is ready to use: Settings › Cloud account › Continue with Google. Nothing to paste.'
     ],

@@ -2720,6 +2720,8 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.25 (boss: 'passphrase page is not working'): firestore.rules splits read/delete from create/update (no request.resource on a read); sign-in is popup-first",
+          "allow read, delete: if request.auth != null" in rd("cloud/firestore.rules") and "popup first, even in an installed app" in js and "'75.25': [" in js)
     check("v75.24 (boss: 'bake it into the app'): CLOUD_CFG holds the coach-fin web config (projectId only names the project; no service/secret key)",
           "projectId: 'coach-fin'" in js and "'75.24': [" in js)
     check("v75.23 (boss: 'signin and syncs across devices'): optional Google + Firestore cloud sync reuses syncBuildObj/syncApplyRemote (the gist merge), holds only the encrypted envelope, never pushes after a failed decrypt, has a Settings page and firestore.rules",
