@@ -1466,7 +1466,7 @@ def main():
           and "function hasSec(n) { return !secs || secs.indexOf(n) >= 0; }" in js
           and "if (hasSec('txns')) state.txns = impTxns;" in js  # v74.05 successor: the sanitized array (was data.txns raw)
           and "if (hasSec('owed')) saveOwed({ asIs: true });" in js  # v74.06 successor: imported as-is (no sync stamp)
-          and "if (id === 'setSheet') { setPage(''); renderBaseStatus(); backupSelSync(); renderSetMeta(); }" in js  # v74.44 successor: Settings opens on its main page
+          and "renderBaseStatus(); backupSelSync(); renderSetMeta(); setPage('', rtn ? { restore: true } : { fresh: true }); }" in js  # v75.22: + the scroll memory  # v74.44 successor: Settings opens on its main page
           and "backupSelRead: backupSelRead" in js)
     check("ledger edits stay in place (v72.9): the edit rewrites the txn at its OWN index (no re-file at the end), keeps the money-log row's ORIGINAL timestamp, and rebases that row + every later row by the constant delta (month lines by each row's own txn month); Undo is the exact inverse (un-rebase + original row at its position, no delete+re-add)",
           "state.txns[oIdx] = t; // in place — position preserved" in js
@@ -2279,8 +2279,8 @@ def main():
           and all(('id="' + i + '"') in html for i in ["aiRemoteToggle", "aiForceOnline", "aiRemoteUrl", "aiRemoteTest", "aiByoProvider", "aiByoKey", "aiByoBase", "aiByoModel", "aiRemoteNote", "themeSeg", "expJson", "expCsv", "impBtn", "impFile", "bkBase", "bkTxns", "bkPlans", "bkOwed", "bkLog", "bkChat", "syncUrl", "syncToken", "syncPass", "syncPush", "syncPull", "syncNote", "setRestart", "setRestartNote", "wnTitle", "wnSec", "wnList", "setFoot", "setNumRows", "setNumCoach", "numSetBack"])
           and "function openNumFromSet() { openSheet('numSheet'); numFromSet = true; numBackLabel(); }" in js
           and "function numBackTap() { numGo(null); }" in js
-          and "if (nsb) nsb.onclick = function () { closeSheets(); openSheet('setSheet'); };" in js
-          and "function setPage(p) {" in js and "function renderSetMeta() {" in js
+          and "if (nsb) nsb.onclick = function () { closeSheets(); setReturning = true; openSheet('setSheet'); };" in js  # v75.22
+          and "function setPage(p, opt) {" in js  # v75.22 and "function renderSetMeta() {" in js
           and "function openNumAt(" not in js
           and ".replace(/\\.00$/, '')" in js
           and "'74.44': [" in js)
@@ -2304,7 +2304,7 @@ def main():
           and "'<div class=\"bblk accblk\" data-sec=\"acc\" data-orig=\"'" in js  # v74.51 successor: the block remembers its original name
           and "function accCcRow(a) {" in js
           and "main.insertAdjacentHTML('afterend', accCcRow(" in js
-          and "if (id === 'numSheet') { numView = null; numFromSet = false; numBackLabel(); renderBaseEditor(); }" in js  # v74.43 adds the Settings-back flag
+          and "if (id === 'numSheet') { numView = null; numFromSet = false; numScroll = {}; numBackLabel(); renderBaseEditor(); }" in js  # v75.22  # v74.43 adds the Settings-back flag
           and "'74.42': [" in js)
     check("v74.41 (boss: 'when i click restart and update, it does update but theres a toast that says new version and when i click that toast, the shell reverts to the previous version'): the sw precache fetches every shell file with cache:'reload' (never the HTTP cache, so a new version can't be cached with old files); the New-version banner shows only when an older version controls the page (not on the first install after a restart); the footer prints the version with two decimals",
           "c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))" in sw
@@ -2720,6 +2720,11 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.22 (boss: 'add a previous state memory ... not scrolled back to top'): Settings pages (spScroll; back from All numbers via setReturning), All numbers levels (numScroll by depth) and tabs (tabScroll; the same tab = top) restore their scroll when you go back; a fresh Settings open starts at the top",
+          "var spScroll = {};" in js and "setPage('', rtn ? { restore: true } : { fresh: true });" in js
+          and "setReturning = true; openSheet('setSheet');" in js and "var numScroll = {};" in js
+          and "var back = numDepth(numView) < numDepth(oldV)" in js and "var tabScroll = {};" in js
+          and "var tyBack = (!sameTab && tabScroll[name] != null) ? tabScroll[name] : 0;" in js and "'75.22': [" in js)
     check("v75.21 (boss: 'when it recommend to open a tab or anything, the app should open it and close the bot'): open_tab / open_settings close the chat first (edit_plan, pay_plan and the salary chip already did); no 'Money tab' left in the chat",
           "      markDone(m);\n      closeChat();\n      F.setTab(pl.tab);" in rd("chat.js")
           and "      markDone(m);\n      closeChat();\n      if (F.openSettings) F.openSettings();" in rd("chat.js")

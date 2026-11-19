@@ -3714,7 +3714,7 @@
     var el = openSheetEl;
     if (el && el.id === 'numSheet') {
       if (numView) { numGo(null); return; }
-      if (numFromSet) { closeSheets(); openSheet('setSheet'); return; }
+      if (numFromSet) { closeSheets(); setReturning = true; openSheet('setSheet'); return; } // v75.22: back to where Settings was
     }
     if (el && el.id === 'setSheet' && el.getAttribute('data-sp')) { setPage(''); return; }
     closeSheets();
@@ -3722,14 +3722,18 @@
   function openSheet(id) {
     var sh = byId(id), sc = byId('scrim');
     if (!sh || !sc) return;
+    if (openSheetEl && openSheetEl.id === 'setSheet' && openSheetEl.querySelector) { // v75.22: Settings remembers its place
+      var sbS = openSheetEl.querySelector('.sheet-b');
+      if (sbS) spScroll[openSheetEl.getAttribute('data-sp') || ''] = sbS.scrollTop;
+    }
     closeSheets();
     lastFocus = document.activeElement;
     sc.classList.add('show');
     sh.classList.add('show');
     openSheetEl = sh;
     syncScrollLock(); // v74.59: the page behind stays put
-    if (id === 'numSheet') { numView = null; numFromSet = false; numBackLabel(); renderBaseEditor(); } // v74.42: opens on the overview
-    else if (id === 'setSheet') { setPage(''); renderBaseStatus(); backupSelSync(); renderSetMeta(); } // v72.23: show the stored "what to include"; v74.44: opens on the main page
+    if (id === 'numSheet') { numView = null; numFromSet = false; numScroll = {}; numBackLabel(); renderBaseEditor(); } // v74.42: opens on the overview
+    else if (id === 'setSheet') { var rtn = setReturning; setReturning = false; renderBaseStatus(); backupSelSync(); renderSetMeta(); setPage('', rtn ? { restore: true } : { fresh: true }); } // v72.23: show the stored "what to include"; v74.44: opens on the main page
     else if (id === 'addSheet') { renderAddChips(); addAmtEq(byId('f_amount') || { value: '' }); } // v74.24 chips; v74.43: the "= ₱…" hint follows the CURRENT amount (no stale "= ₱500")
     // a11y: move focus into the sheet (first field, else first control).
     // The Settings and Your-numbers sheets are skipped: they hold many text
@@ -4435,11 +4439,18 @@
   // carries the one-month salary, Budgets the one-month budget, and "From before"
   // the old debts / savings goals / one-offs (shown only while any exist).
   var NUM_GRP_WITH = { basics: ['sal'], bud: ['bov'], legacy: ['debt', 'sink', 'one'] };
+  // v75.22: going back in All numbers (an account -> its group -> the overview) lands where you were
+  var numScroll = {};
+  function numKey(v) { return v ? v.grp + '|' + (v.i == null ? '' : v.i) : ''; }
+  function numDepth(v) { return v ? (v.i == null ? 1 : 2) : 0; }
   function numGo(grp, i) {
+    var sb = document.querySelector ? document.querySelector('#numSheet .sheet-b') : null;
+    var oldV = numView;
+    if (sb) numScroll[numKey(oldV)] = sb.scrollTop;
     numView = grp ? { grp: grp, i: (i == null ? null : i) } : null;
     applyNumView();
-    var sb = document.querySelector ? document.querySelector('#numSheet .sheet-b') : null;
-    if (sb) sb.scrollTop = 0;
+    var back = numDepth(numView) < numDepth(oldV), k = numKey(numView);
+    if (sb) scrollBack(sb, back && numScroll[k] != null ? numScroll[k] : 0);
   }
   // v74.42: class on/off without relying on classList.toggle (the smoke's shim DOM has none)
   function nvCls(el, name, on) {
@@ -5075,14 +5086,27 @@
     return;
   }
   // v74.44: the Settings pages + the small values on their rows
-  function setPage(p) {
+  // v75.22 (boss: 'add a previous state memory so that when i click something like in settings that opens a page
+  // or something then i go back a page prior, the screen will be like before i clicked it and not scrolled back to
+  // top'): each Settings page remembers where it was scrolled; going back lands there. A fresh open starts at the top.
+  var spScroll = {};
+  var setReturning = false; // back from a sheet Settings opened (All numbers)
+  function scrollBack(el, y) {
+    if (!el) return;
+    el.scrollTop = y;
+    if (y && typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { el.scrollTop = y; }); // after layout
+  }
+  function setPage(p, opt) {
     var sh = byId('setSheet'); if (!sh) return;
-    sh.setAttribute('data-sp', p || '');
     var sb = sh.querySelector ? sh.querySelector('.sheet-b') : null;
-    if (sb) sb.scrollTop = 0;
+    var from = sh.getAttribute('data-sp') || '';
+    if (opt && opt.fresh) spScroll = {};
+    else if (sb && !(opt && opt.restore)) spScroll[from] = sb.scrollTop;
+    sh.setAttribute('data-sp', p || '');
     if (p === 'news') renderWhatNew();
     if (p === 'hist') renderHistory(); // v74.74
     if (!p) renderSetMeta();
+    scrollBack(sb, (!p && spScroll[''] != null) ? spScroll[''] : 0);
   }
   function renderSetMeta() {
     var v = function (id) { var e = byId(id); return e ? String(e.value || '').trim() : ''; };
@@ -13391,12 +13415,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.21, live: new Date(2026, 10, 19, 22, 44) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.22, live: new Date(2026, 10, 19, 23, 34) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.22': [
+      'Going back keeps your place: a Settings page (Worker, Backup, History, What\u2019s new, All numbers) returns you to where you were in Settings, an account in All numbers goes back to the same spot in the list, and each tab remembers its scroll when you switch away and back. Tapping the tab you are on still goes to the top, and opening Settings starts at the top.'
+    ],
     '75.21': [
       'Coach Fin: a button that takes you somewhere (Open Committed, Open Owed, Settings, a plan, Add) now closes the chat and opens it, so you land right on it.'
     ],
@@ -14321,6 +14348,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   var TABS = ['home', 'money', 'ledger', 'owed'];
   var TAB_MIGRATE = { overview: 'money', add: 'ledger', coach: 'home' };
   var shownTab = null;        // pane currently on screen
+  var tabScroll = {};         // v75.22: where each tab was scrolled
   // v51: home welcome — time-of-day greeting + today's full date.
   // Re-rendered every time the Home tab is shown, so a midnight crossing (or
   // the next day's open) always lands on a fresh greeting.
@@ -14341,6 +14369,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   function setTab(name) {
     if (TAB_MIGRATE[name]) name = TAB_MIGRATE[name];
     if (TABS.indexOf(name) < 0) name = 'home';
+    // v75.22: each tab keeps its place - switch away and back and it is where you left it; tapping the tab you are on goes to the top
+    var sameTab = shownTab === name;
+    if (shownTab && !sameTab) tabScroll[shownTab] = window.scrollY || window.pageYOffset || 0;
     shownTab = name;
     var panes = { home: byId('tab-home'), money: byId('tab-money'), ledger: byId('tab-ledger'), owed: byId('tab-owed') };
     Object.keys(panes).forEach(function (k) {
@@ -14351,7 +14382,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       btns[i].className = btns[i].getAttribute('data-tab') === name ? 'tab active' : 'tab';
     }
     try { localStorage.setItem(LS_TAB, name); } catch (e) {}
-    window.scrollTo(0, 0);
+    var tyBack = (!sameTab && tabScroll[name] != null) ? tabScroll[name] : 0;
+    window.scrollTo(0, tyBack);
+    if (tyBack && typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { window.scrollTo(0, tyBack); });
     if (name === 'home') renderGreet();
     renderHead();
   }
@@ -15013,6 +15046,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     owedSettleAmount: owedSettleAmount, owedFormSections: owedFormSections, // v74.95
     fileOwedLeg: fileOwedLeg, owedLegacyLeft: owedLegacyLeft, owedLegacyDebtLeft: owedLegacyDebtLeft, friendOwedNow: friendOwedNow, owedLegDir: owedLegDir, // v74.94
     owedHeroData: owedHeroData, cbWhenHTML: cbWhenHTML, cbDaysTo: cbDaysTo, // v74.93
+    setPage: setPage, numGo: numGo, spScrollMem: function () { return spScroll; }, // v75.22 (smoke)
     salaryRowChip: salaryRowChip, // v75.20: the chat's 'Log salary' chip opens the same prefilled Add sheet
     potDates: potDates, // v74.87: a pot's own date list (the smoke checks the auto top-ups)
     planAllDates: planAllDates, // v73.57: the whole series (the smoke builds the expected drop dates)
@@ -15676,7 +15710,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var nbk = byId('numBack'); // v74.42: drill-in -> back to the Your-numbers overview
     if (nbk) nbk.onclick = numBackTap; // v74.44: a section -> All numbers
     var nsb = byId('numSetBack'); // v74.44: All numbers -> Settings
-    if (nsb) nsb.onclick = function () { closeSheets(); openSheet('setSheet'); };
+    if (nsb) nsb.onclick = function () { closeSheets(); setReturning = true; openSheet('setSheet'); }; // v75.22: back to where Settings was
     // v74.44: the Settings pages (Worker & key / backup contents / Sync / What's new)
     var spg = document.querySelectorAll ? document.querySelectorAll('#setSheet [data-spgo]') : [];
     for (var spi = 0; spi < spg.length; spi++) spg[spi].onclick = function () { setPage(this.getAttribute('data-spgo')); };
