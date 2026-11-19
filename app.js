@@ -558,23 +558,65 @@
         if (planDateAt(p, g) === dateISO) exact = ov[g];
       });
     }
-    var best = null, bestKey = '';
-    Object.keys(ov).forEach(function (k) {
-      var e = ov[k];
-      if (!e || k > dateISO) return;
-      if (e.applyFrom) {
-        var f = e.applyFrom;
-        if (f > dateISO) return;
-        if (!best || f > bestKey) { best = e; bestKey = f; }
-      }
-    });
-    var e = exact || best;
-    if (!e) return res;
-    if (e.skip) { res.skip = true; return res; }
-    if (e.name != null) res.name = e.name;
-    if (e.amount != null) res.amount = e.amount;
-    res.edited = true;
+    var best = planRuleAt(p, dateISO, true);
+    if (!exact && !best) return res;
+    if (exact && exact.skip) { res.skip = true; return res; }
+    // v75.06: the rule ('this one and after' / 'all') sets the values, an exact-date fork sits on top of it (a moved
+    // date keeps the rule's amount; before, a fork without its own amount fell back to the plan's first amount)
+    if (best) { if (best.name != null) res.name = best.name; if (best.amount != null) res.amount = best.amount; }
+    if (exact) { if (exact.name != null) res.name = exact.name; if (exact.amount != null) res.amount = exact.amount; }
+    // v75.06: 'edited' = this date differs from what the plan is now (its current name / amount), not 'has an override':
+    // after Edit plan every later date carried the new amount and every one of them said 'changed'
+    var cur = planCurrent(p);
+    res.edited = res.name !== cur.name || Math.abs((Number(res.amount) || 0) - (Number(cur.amount) || 0)) > 0.004;
     return res;
+  }
+  // v75.06: the rule in force on a date - the latest 'this one and after' / 'all' entry starting on or before it. A
+  // skipped rule date keeps its rule for the dates after it (the skip record carries it in `was`; before, skipping
+  // the first date of a new amount sent every later date back to the old amount until the skip was undone).
+  function planRuleAt(p, dateISO, raw) {
+    var ov = p && p.overrides, best = null, bestKey = '';
+    if (ov) Object.keys(ov).forEach(function (k) {
+      var e = ov[k];
+      if (e && e.skip && e.was && e.was.applyFrom) e = e.was;
+      if (!e || k > dateISO || !e.applyFrom) return;
+      var f = e.applyFrom;
+      if (f > dateISO) return;
+      if (!best || f > bestKey) { best = e; bestKey = f; }
+    });
+    if (raw) return best;
+    return { name: best && best.name != null ? best.name : p.name, amount: best && best.amount != null ? best.amount : p.amount };
+  }
+  // v75.06: what a recurring plan is NOW - the rule at its next date (the last date when it has ended). Every label
+  // that names the plan's amount reads this (the plan's sheet, the Committed rows and totals, a pot's line), so an
+  // Edit plan shows at once everywhere. Memo per tick, keyed by what it depends on.
+  var planCurMemo = null;
+  function planCurrent(p) {
+    if (!p) return { name: '', amount: 0 };
+    if (!p.repeat || !p.overrides) return { name: p.name, amount: p.amount };
+    var sig = JSON.stringify(p.overrides) + '|' + p.name + '|' + p.amount + '|' + p.date + '|' + p.count + '|' + p.repeat + '|' + todayISO() + '|' + (state.txns || []).length;
+    if (!planCurMemo) { planCurMemo = {}; Promise.resolve().then(function () { planCurMemo = null; }); }
+    var mk = String(p.id), hit = planCurMemo[mk];
+    if (hit && hit.sig === sig) return hit.v;
+    var occ = planOccurrences(p), d0 = occ[0];
+    if (!d0) { var all = planAllDates(p); d0 = all.length ? all[all.length - 1] : String(p.date); }
+    var v = planRuleAt(p, d0);
+    planCurMemo[mk] = { sig: sig, v: v };
+    return v;
+  }
+  // v75.06: payments still to make on a plan - not skipped, not fully paid (an overdue unpaid date counts), from
+  // `fromISO` on when given. Every 'N of M left' reads this, so the Committed views and the sheet agree.
+  function planLeftCount(p, fromISO) {
+    var n = 0;
+    planAllDates(p).forEach(function (d) {
+      if (fromISO && d < fromISO) return;
+      var r = resolveOccurrence(p, d); if (r && r.skip) return;
+      var a = Number(r && r.amount != null ? r.amount : p.amount) || 0;
+      var pp = findPaidTxn({}, { planId: p.id, date: d, name: r ? r.name : p.name, amount: a });
+      if ((Number(pp && pp.amount) || 0) >= a - 0.005) return;
+      n++;
+    });
+    return n;
   }
   // v73.17 (the plan-link chip): the FUZZY suggestion engine — the exact
   // findPaidTxn plan-branch rules (±2 days, a 4+ letter name word in the
@@ -8046,10 +8088,10 @@
       if (p.savingHeld > 0.004) { // v74.65; v74.98: no sub-label, tap for the pots
         var sItems = (savingData().items || []).filter(function (it) { return (Number(it.held) || 0) > 0.004; });
         var sOpen = !!state.cbSaveOpen;
-        rows += '<div class="cbrow cbsave" id="cbSaveRow" role="button" tabindex="0" aria-expanded="' + (sOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (sOpen ? ' open' : '') + '">▸</span>Saving for' + (sItems.length ? ' · ' + sItems.length + (sItems.length === 1 ? ' pot' : ' pots') : '') + '</div><div class="amt goalv">− ' + money(p.savingHeld) + '</div></div>';
+        rows += '<div class="cbrow cbsave" id="cbSaveRow" role="button" tabindex="0" aria-expanded="' + (sOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (sOpen ? ' open' : '') + '">▸</span>Saving for' + (sItems.length ? ' · ' + sItems.length : '') + '</div><div class="amt goalv">− ' + money(p.savingHeld) + '</div></div>';
         if (sOpen) rows += '<div class="cbsubwrap">' + sItems.map(function (it) {
           var nd = it.type === 'pot' ? (it.next && it.next.date) : it.date;
-          return '<div class="cbsub"><span class="sl">' + esc((it.p && it.p.name) || 'Saving') + (nd ? ' · next ' + dayMonth(nd) : '') + '</span><span class="sv">' + money(it.held) + '</span></div>';
+          return '<div class="cbsub"><span class="sl">' + esc((it.p && it.p.name) || 'Saving') + (nd ? (it.type === 'pot' ? ' · next ' : ' · ') + dayMonth(nd) : '') + '</span><span class="sv">' + money(it.held) + '</span></div>';
         }).join('') + '</div>';
       }
       var dInner = rows.slice(dStart), dTotal = r2(p.liquid + (p.salaryPending || 0) - p.net); // the group's total = exactly what the rows inside take off
@@ -9094,14 +9136,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     // v74.66: the old head row (with its ↺ / ✎ / ✕) is gone — the tidy row below + the plan's sheet replace it
     // v74.66: the collapsed row is the tidy row (no ↺ / ✎ / ✕ — they live on the plan's sheet)
     var overdueN = past.filter(function (x) { return !x.skip && !x.paid; }).length;
-    var subR = cmPer(p) + (p.count ? ' · ' + shown.length + ' of ' + p.count + ' left' : '') + (skipTotal ? ' · ' + skipTotal + ' skipped' : '');
+    var leftN = p.count ? planLeftCount(p) : 0; // v75.06: one rule for 'left' (overdue unpaid counts, skipped / paid don't)
+    var subR = cmPer(p) + (p.count ? ' · ' + leftN + ' of ' + p.count + ' left' : '') + (skipTotal ? ' · ' + skipTotal + ' skipped' : '');
     var stR, stcR;
     if (p.kind === 'goal') { var itR = null; savingData().items.forEach(function (x) { if (String(x.p.id) === String(p.id)) itR = x; }); stR = money(itR ? itR.held : 0).replace('PHP ', '₱') + ' in pot'; stcR = 'info'; }
     else if (overdueN) { stR = overdueN + ' overdue'; stcR = 'late'; }
-    else if (shown.length) { stR = 'next ' + dayMonth(shown[0].d); stcR = 'mut'; }
+    else if (shown.some(function (x) { return !planPaidFull(p, x.d, x.ro); })) { stR = 'next ' + dayMonth(shown.filter(function (x) { return !planPaidFull(p, x.d, x.ro); })[0].d); stcR = 'mut'; } // v75.06: a date paid ahead is not 'next'
     else { stR = paidCount ? 'all paid' : 'nothing left'; stcR = paidCount ? 'ok' : 'mut'; }
     if (!opts.open) return cmRow({ cls: 'plrow grp', attr: ' data-grp="' + esc(p.id) + '"', tile: p.kind === 'goal' ? 't-b' : 't-a', tileTxt: cmInitial(p.name),
-      name: esc(p.name || 'Plan') + (anyEdited ? ' <span class="cmedit">edited</span>' : ''), sub: subR, amt: '₱ ' + amt(p.amount), goal: p.kind === 'goal', st: stR, stCls: stcR });
+      name: esc(planCurrent(p).name || p.name || 'Plan') + (anyEdited ? ' <span class="cmedit">edited</span>' : ''), sub: subR, amt: '₱ ' + amt(planCurrent(p).amount), goal: p.kind === 'goal', st: stR, stCls: stcR });
     // v73.59: the expanded state is the mockup's shape — the NEXT due gets
     // one emphasized row (the ✎ target, the skip/move chooser lives on the
     // coach card), and everything before today compresses into the history
@@ -9112,7 +9155,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var nx = shown[0];
       sub += '<div class="plrow next" data-editp="' + p.id + '" data-editd="' + nx.d + '" title="Tap to edit this occurrence">' +
         '<span class="oc-d">' + fmtDate(nx.d) + '<span class="nxt-tag">NEXT DUE</span></span>' +
-        '<span class="oc-n">' + (nx.ro.name !== p.name ? esc(nx.ro.name) : '') + (nx.ro.edited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') + planPaidPill(p.id, nx.d, nx.ro.name, nx.ro.amount) + '</span>' +
+        '<span class="oc-n">' + (nx.ro.name !== planCurrent(p).name ? esc(nx.ro.name) : '') + (nx.ro.edited ? ' <span class="pill" style="font-size:10px;background:rgba(255,196,92,.15);color:#ffc45c">edited</span>' : '') + planPaidPill(p.id, nx.d, nx.ro.name, nx.ro.amount) + '</span>' +
         '<span class="oc-a">₱ ' + amt(nx.ro.amount) + '</span>' +
         '<button class="mini oc-x" data-editp="' + p.id + '" data-editd="' + nx.d + '" title="Edit this occurrence">✎</button></div>';
     }
@@ -9144,7 +9187,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     }
     if (!shown.length && !records.length) sub += '<div class="occwrap"><div class="occ"><span class="oc-d">nothing left</span></div></div>';
     // v74.66: the plan's sheet — the meta line (cadence · left · N paid · N skipped) + the dates
-    var meta = '<div class="pdmeta" data-grp="' + esc(p.id) + '">₱ ' + amt(p.amount) + ' ' + cmPer(p) + (p.count ? ' · ' + shown.length + ' of ' + p.count + ' left' : '') +
+    var meta = '<div class="pdmeta" data-grp="' + esc(p.id) + '">₱ ' + amt(planCurrent(p).amount) + ' ' + cmPer(p) + (p.count ? ' · ' + leftN + ' of ' + p.count + ' left' : '') +
       (paidCount ? ' · ' + paidCount + ' paid' : '') + (skipTotal ? ' · ' + skipTotal + ' skipped' : '') + (p.category ? ' · ' + esc(p.category) : '') + '</div>';
     var editD = shown.length ? shown[0].d : (firstSkip || (occ[0] || String(p.date)));
     if (opts.parts) return { meta: meta, sub: sub, editD: editD };
@@ -9154,6 +9197,11 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // (the resolved, post-move date — a moved due re-orders the list), a
   // one-off by its own date. The old anchor-date sort drifted out of sync
   // with reality (a moved due never moved its row).
+  function planPaidFull(p, d, ro) { // v75.06
+    var a = Number(ro && ro.amount != null ? ro.amount : p.amount) || 0;
+    var pp = findPaidTxn({}, { planId: p.id, date: d, name: ro ? ro.name : p.name, amount: a });
+    return (Number(pp && pp.amount) || 0) >= a - 0.005;
+  }
   function planSortKey(p) {
     if (p.repeat) {
       var occ = planOccurrences(p);
@@ -9179,10 +9227,14 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   }
   function cmInitial(n) { var c = String(n || '').trim().charAt(0).toUpperCase(); return c ? esc(c) : '·'; }
   function cmPer(p) {
-    var d = parseISO(String(p.date));
+    // v75.06: the day comes from the series as it is now (a 'this one and after' date change shifts it; a single
+    // moved date does not) - Home Wifi shifted from the 15th to the 19th still said 'on the 15th'
+    var dd = String(p.date), ovC = p.overrides || {}, todayC = todayISO();
+    if (p.repeat) planGridDates(p).some(function (g) { var r = planDateAt(p, g); if (r < todayC || (ovC[g] && ovC[g].move)) return false; dd = r; return true; });
+    var d = parseISO(dd);
     if (p.repeat === 'daily') return 'daily';
     if (p.repeat === 'weekly') return 'weekly on ' + ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
-    if (p.repeat === 'annual') return 'yearly on ' + dayMonth(String(p.date));
+    if (p.repeat === 'annual') return 'yearly on ' + dayMonth(dd);
     return 'monthly on the ' + ordinal(d.getDate());
   }
   function cmWhen(d, today) {
@@ -9225,8 +9277,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     set('committedSumV', money(committed), true);
     var bEl = byId('committedBar'); if (bEl) bEl.style.width = (tot > 0 ? Math.round(paid / tot * 100) : 0) + '%';
     set('committedPaid', money(paid) + ' paid');
-    set('committedCnt', items.length ? '· ' + nPaid + ' of ' + items.length : '');
-    set('committedOf', (items.length - nPaid) + ' left' + (cyc && cyc.cd ? ' · ends ' + dayMonth(cyc.cd.end) : ''));
+    set('committedCnt', ''); // v75.06: '· 0 of 9' beside '9 left' read as '0 of 99 left' - one count, on the right
+    set('committedOf', (items.length - nPaid) + ' of ' + items.length + ' left' + (cyc && cyc.cd ? ' · ends ' + dayMonth(cyc.cd.end) : ''));
     var w = byId('committedSumSub');
     if (w) {
       if (freeN < -0.004) { w.style.display = ''; w.innerHTML = 'That’s <b>' + money(-freeN) + '</b> more than your free cash right now.'; }
@@ -9258,7 +9310,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     function sectionHTML(list, kind) {
       if (!list.length) return '';
       var total = 0;
-      list.forEach(function (p) { total += Number(p.amount) || 0; });
+      list.forEach(function (p) { total += Number(planCurrent(p).amount) || 0; }); // v75.06: the amount each plan is now
       var lab = kind === 'goal' ? 'Saving for' : 'Expenses';
       var tot = list.length + ' · <b>₱ ' + (Math.round(total * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</b>';
       return '<div class="sect' + (kind === 'goal' ? ' goal' : '') + '"><span class="lab">' + lab + '</span><span class="tot">' + tot + '</span></div>';
@@ -9292,7 +9344,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var w = cmWhen(x.d, today);
         var st = done ? 'paid' : (x.paid > 0.004 ? money(x.paid).replace('PHP ', '₱') + ' of ' + money(x.am).replace('PHP ', '₱') : w.t);
         var left = '';
-        if (x.p.repeat && x.p.count) { var occL = planOccurrences(x.p).filter(function (o) { return o >= x.d; }).length; left = ' · ' + occL + ' of ' + x.p.count + ' left'; }
+        if (x.p.repeat && x.p.count) left = ' · ' + planLeftCount(x.p, x.d) + ' of ' + x.p.count + ' left'; // v75.06: skipped dates are not 'left'
         html += cmRow({ cls: 'cmcyc' + (done ? ' done' : ''), attr: ' data-cmplan="' + esc(x.p.id) + '"',
           tile: done ? 't-g' : 't-a', tileTxt: done ? '✓' : cmInitial(x.nm), name: esc(x.nm || 'Plan'), rec: !!x.p.repeat,
           sub: dayMonth(x.d) + ' · ' + (x.p.repeat ? (left ? left.slice(3) : ({ daily: 'daily', weekly: 'weekly', annual: 'yearly' }[x.p.repeat] || 'monthly')) : 'one-off'),
@@ -9319,7 +9371,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           return;
         }
         var per = { daily: 'daily', weekly: 'weekly', annual: 'yearly' }[p.repeat] || 'monthly';
-        var sub = money(Number(p.amount) || 0).replace('PHP ', '₱') + ' ' + per + (it.goal ? ' · goal ' + money(it.goal).replace('PHP ', '₱') : '');
+        var sub = money(Number(planCurrent(p).amount) || 0).replace('PHP ', '₱') + ' ' + per + (it.goal ? ' · goal ' + money(it.goal).replace('PHP ', '₱') : ''); // v75.06: the top-up it is now
         html += '<div class="cmpot">' + cmRow({ cls: 'cmsv', attr: ' data-cmplan="' + esc(p.id) + '"', tile: 't-b', tileTxt: cmInitial(p.name), name: esc(p.name || 'Pot'), rec: true,
           sub: sub, amt: cmAmt(it.held), goal: true, st: it.full ? 'full' : 'in the pot', stCls: it.full ? 'ok' : 'mut' });
         if (it.goal > 0) html += '<div class="cmpbar"><i style="width:' + Math.min(100, Math.round(it.held / it.goal * 100)) + '%"></i></div>';
@@ -9418,12 +9470,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var it = null; savingData().items.forEach(function (x) { if (String(x.p.id) === String(p.id)) it = x; });
       it = it || { held: 0, goal: 0, pending: [], added: 0, used: 0 };
       var per = { daily: 'daily', weekly: 'weekly', annual: 'yearly' }[p.repeat] || 'monthly';
-      h += pdHead(p, 'Saving for · ' + pesoShort(p.amount) + ' ' + cmPer(p) + (p.category ? ' · ' + esc(p.category) : ''), 't-b');
+      var potNow = Number(planCurrent(p).amount) || 0; // v75.06: the top-up it is now (an Edit plan shows at once)
+      h += pdHead(p, 'Saving for · ' + pesoShort(potNow) + ' ' + cmPer(p) + (p.category ? ' · ' + esc(p.category) : ''), 't-b');
       var side = it.goal > 0 ? 'of ' + amtOf(it.goal) + ' goal' : 'no goal';
       var est = '';
-      if (it.goal > 0 && !it.full && p.repeat === 'monthly' && Number(p.amount) > 0) {
-        var mo = Math.ceil((it.goal - it.held) / Number(p.amount)), dd = new Date(); dd.setMonth(dd.getMonth() + mo);
-        est = ' Full by about ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dd.getMonth()] + ' ' + dd.getFullYear() + ' at ' + amtOf(p.amount) + ' a month.';
+      if (it.goal > 0 && !it.full && p.repeat === 'monthly' && potNow > 0) {
+        var mo = Math.ceil((it.goal - it.held) / potNow), dd = new Date(); dd.setMonth(dd.getMonth() + mo);
+        est = ' Full by about ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dd.getMonth()] + ' ' + dd.getFullYear() + ' at ' + amtOf(potNow) + ' a month.';
       }
       h += '<div class="pdnext"><div class="k">In the pot</div><div class="v"><b>' + amtOf(it.held) + '</b><span class="goalv">' + side + '</span></div>' +
         (it.goal > 0 ? '<div class="cmpbar wide"><i style="width:' + Math.min(100, Math.round(it.held / it.goal * 100)) + '%"></i></div>' : '') +
@@ -9451,7 +9504,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       editD = String(p.date);
       h += pdHead(p, (isGoalPlan(p) ? 'Saving for · ' : '') + pesoShort(am) + ' one-off · ' + wdShort(od) + (p.category ? ' · ' + esc(p.category) : ''), isGoalPlan(p) ? 't-b' : 't-a');
       if (ro && ro.skip) {
-        h += pdCard('Skipped', amtOf(am), wdShort(od), 'mut', '<button type="button" class="act ghost" data-unskip="' + esc(p.id) + '|' + od + '">Unskip</button>');
+        h += pdCard(isGoalPlan(p) ? 'Not paying for it' : 'Skipped', amtOf(am), wdShort(od), 'mut', '<button type="button" class="act ghost" data-unskip="' + esc(p.id) + '|' + od + '">' + (isGoalPlan(p) ? 'Undo' : 'Unskip') + '</button>'); // v75.06: says what you tapped
       } else if (isGoalPlan(p)) {
         var it1 = null; savingData().items.forEach(function (x) { if (String(x.p.id) === String(p.id)) it1 = x; });
         if (it1 && it1.bought) h += pdCard('Paid', amtOf(it1.spent), it1.buy ? 'on ' + wdShort(it1.buy.date) : '', 'ok', '');
@@ -9491,7 +9544,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var occA = planOccurrences(p);
       var unsk = occA.filter(function (d) { var r = resolveOccurrence(p, d); return !(r && r.skip); });
       editD = unsk[0] || occA[0] || String(p.date);
-      h += pdHead(p, pesoShort(p.amount) + ' ' + cmPer(p) + (p.count ? ' · ' + unsk.length + ' of ' + p.count + ' left' : '') + (p.category ? ' · ' + esc(p.category) : ''), 't-a');
+      h += pdHead(p, pesoShort(planCurrent(p).amount) + ' ' + cmPer(p) + (p.count ? ' · ' + planLeftCount(p) + ' of ' + p.count + ' left' : '') + (p.category ? ' · ' + esc(p.category) : ''), 't-a'); // v75.06: the amount it is now
       var tgt = null;
       planAllDates(p).forEach(function (d) {
         if (tgt) return;
@@ -9516,7 +9569,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           if (r && r.skip) {
             h += '<div class="pdocc"><span>' + mdShort(d) + '</span><span class="pdr"><button type="button" class="cmpill sk" data-unskip="' + esc(p.id) + '|' + d + '">skipped · ↺ undo</button><s class="mut">' + pesoShort(a) + '</s></span></div>';
           } else {
-            h += '<div class="pdocc tap" data-editp="' + esc(p.id) + '" data-editd="' + d + '" role="button" tabindex="0"><span>' + mdShort(d) + (r && r.edited ? ' <span class="cmedit">changed</span>' : '') + '</span><span>' + pesoShort(a) + '</span></div>';
+            var paidUp = planPaidFull(p, d, r); // v75.06: a date paid ahead says so (it sat in Coming up as if still due)
+            h += '<div class="pdocc tap" data-editp="' + esc(p.id) + '" data-editd="' + d + '" role="button" tabindex="0"><span>' + mdShort(d) + (r && r.edited ? ' <span class="cmedit">changed</span>' : '') + '</span><span' + (paidUp ? ' class="ok"' : '') + '>' + (paidUp ? '✓ paid · ' : '') + pesoShort(a) + '</span></div>';
           }
         });
       }
@@ -9806,8 +9860,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     // the old entry at that grid date (may hold a prior move/shift + name/amount)
     var old = ov[gridDate] || {};
     var entry = {};
-    if (name !== p.name) entry.name = name;
-    if (amount !== p.amount) entry.amount = amount;
+    var baseR = planRuleAt(p, gridDate); // v75.06: a 'just this one' edit is a difference from the rule in force there
+    if (name !== baseR.name) entry.name = name;
+    if (amount !== baseR.amount) entry.amount = amount;
     // --- the DATE (v73.41: it is now editable; the old code ignored it) ---
     var newDate = byId('pe_date').value || dateISO;
     var dateChanged = newDate !== dateISO;
@@ -9847,13 +9902,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     }
     // --- name/amount keep the 3-scope model (v73.14) ---
     if (!dateChanged) {
+      // v75.06: nothing changed from the rule in force = leave the rules alone (deleting here dropped an Edit plan's
+      // amount when only Payments left / Goal / the category changed); a change writes a rule carrying both values
       if (scope === 'all') {
         var first = planOccurrences(p)[0] || dateISO;
-        delete ov[first];
-        if (Object.keys(entry).length) ov[first] = { name: entry.name != null ? entry.name : p.name, amount: entry.amount != null ? entry.amount : p.amount, applyFrom: first };
+        if (Object.keys(entry).length) { delete ov[first]; ov[first] = { name: name, amount: amount, applyFrom: first }; }
       } else if (scope === 'following') {
-        delete ov[dateISO]; // an exact entry at this date would shadow the rule
-        if (Object.keys(entry).length) ov[dateISO] = { name: entry.name != null ? entry.name : p.name, amount: entry.amount != null ? entry.amount : p.amount, applyFrom: dateISO };
+        if (Object.keys(entry).length) { delete ov[dateISO]; ov[dateISO] = { name: name, amount: amount, applyFrom: dateISO }; } // an exact entry at this date would shadow the rule
       } else {
         if (Object.keys(entry).length) ov[dateISO] = entry; else delete ov[dateISO];
       }
@@ -9865,16 +9920,14 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       } else if (scope === 'following') {
         // tail shift + name/amount ride applyFrom at this grid date
         var eF = { shiftFrom: gridDate, shiftDays: (Number(old.shiftDays) || 0) + days, applyFrom: gridDate };
-        if (name !== p.name) eF.name = name;
-        if (amount !== p.amount) eF.amount = amount;
+        eF.name = name; eF.amount = amount; // v75.06: a rule carries both (it replaces an earlier rule, it doesn't add to it)
         ov[gridDate] = eF;
       } else { // all — re-anchor the series; name/amount apply to the whole
         var fg = planGridDates(p)[0];
         var eAll = ov[fg] || {};
         eAll.shiftFrom = fg;
         eAll.shiftDays = (Number(eAll.shiftDays) || 0) + daysAll;
-        if (name !== p.name) eAll.name = name;
-        if (amount !== p.amount) eAll.amount = amount;
+        eAll.name = name; eAll.amount = amount; // v75.06
         eAll.applyFrom = fg;
         ov[fg] = eAll;
       }
@@ -13128,12 +13181,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.05, live: new Date(2026, 10, 19, 13, 18) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.06, live: new Date(2026, 10, 19, 13, 42) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.06': [
+      'Committed: after Edit plan, the new amount shows everywhere (the plan\'s sheet, the rows, the totals, a pot\'s line and its Full by date); later dates no longer all say changed.',
+      'Payments left counts the same in every view (an unpaid overdue date counts, a skipped one does not); a date paid ahead says paid; a shifted plan names its real day.',
+      'Fixed: skipping the date a new amount starts no longer puts the later dates back to the old amount; a one-date edit back to the old amount now sticks.'
+    ],
     '75.05': [
       'Committed: Edit plan now edits the whole plan from its next date on, and can change how often it repeats, how many payments are left and, for a Saving for pot, its goal.',
       'Tapping a date under Coming up still edits just that date. A Saving for one-off changes its date with Move; pots skip from their history.'
@@ -14615,6 +14673,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
 
   // ---------- bridge for chat.js (the chat writes through the app's own actions) ----------
   window.FinApp = {
+    planCurrent: planCurrent, planLeftCount: planLeftCount, planRuleAt: planRuleAt, cmPer: cmPer, // v75.06 (smoke)
     // v75.02: Owed connections (smoke drives the pieces without a relay)
     connApply: connApply, connConfirm: connConfirm, connReject: connReject, connPreBal: connPreBal,
     connOpenAdjust: connOpenAdjust, connParseJoin: connParseJoin, connSeal: connSeal, connOpenMsg: connOpenMsg,

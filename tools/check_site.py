@@ -1042,7 +1042,7 @@ def main():
           # the old gate is GONE from the deduction
           and "var ro = p.repeat ? resolveOccurrence(p, od) : null;" not in js
           # the skipped one-off's record pill + unskip path in the plans list
-          and "Unskip</button>" in js  # v74.66 retarget: a skipped one-off's unskip lives on its sheet
+          and "(isGoalPlan(p) ? 'Undo' : 'Unskip') + '</button>'" in js  # v74.66 retarget: a skipped one-off's unskip lives on its sheet; v75.06: a Saving-for one-off says Undo
           # the notes
           and "'73.63': [" in js)
     check("v73.64 (boss: 'the amber partial chip disappeared with no trace, i no longer have access to unskip'): a skip is a RELOCATION, not a deletion — the grid's advance loop keeps the skipped occurrence's resolved date in the window (same semantics as a moved-to-future due), so the history strip renders its 'skipped' chip with data-unskip and the header's ↺ + 'N skipped' count cover PAST skips too (they only saw future ones before — the boss's Rent was a past skip: count 0, no button, no chip). unskipPlanOccurrence's was-restore is untouched (never deletes a fork).",
@@ -2720,6 +2720,13 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.06 (boss: 'simulate under all possible scenarios the planned recurring expenses and saving for, and make sure the ui and texts are logical wherever they are'): labels read the plan as it is now (planCurrent), one 'left' rule (planLeftCount), a skipped rule date keeps its rule (planRuleAt reads was), 'edited' = differs from now. Smoke PART 84",
+          "function planCurrent(p) {" in js and "function planLeftCount(p, fromISO) {" in js and "function planRuleAt(p, dateISO, raw) {" in js
+          and "if (e && e.skip && e.was && e.was.applyFrom) e = e.was;" in js
+          and "res.edited = res.name !== cur.name" in js
+          and "set('committedCnt', '');" in js
+          and "PART 84: v75.06" in smoke
+          and "'75.06': [" in js)
     check("v75.05 (boss: 'check the current edit behavior for saving for and expenses' -> 'Fix editing first'): Edit plan edits the whole plan (Repeats / Payments left / a pot's Goal, This one and after picked); a Coming-up date stays a one-date edit; a Saving-for one-off has no date field; a pot has no Skip",
           'id="peWhole"' in html and 'id="pe_repeat"' in html and 'id="pe_left"' in html and 'id="pe_goal"' in html and 'id="pe_dateWrap"' in html
           and 'data-editmode="plan">Edit plan</button>' in js

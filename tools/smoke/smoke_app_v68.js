@@ -4272,6 +4272,38 @@ waitReady().then(async function (F) {
       ok(elMap['pe_dateWrap'].style.display === 'none', 'v75.05: a Saving-for one-off has no date field (Move does that)');
       F.closeSheets && F.closeSheets();
       st.plans.length = 0; plans83.forEach(function (x) { st.plans.push(x); });
+      // ============ PART 84: v75.06 - every plan label reads the plan as it is now ============
+      console.log('\n== PART 84: v75.06 - plan labels after edits / skips / payments ==');
+      var plans84 = st.plans.slice();
+      var a84 = await F.addPlan({ name: 'Probe84', amount: 1000, date: '2026-11-20', repeat: 'monthly', kind: 'expense' });
+      var p84 = st.plans.filter(function (x) { return x.id === a84; })[0];
+      F.openPlanEdit(a84, '2026-11-20', 'plan'); await sleep(20);
+      elMap['pe_amount'].value = '1300'; await F.savePlanOccurrence(); await sleep(30);
+      ok(F.planCurrent(p84).amount === 1300, 'v75.06: after Edit plan the plan is 1,300 now (planCurrent)');
+      ok(F.resolveOccurrence(p84, '2026-12-20').amount === 1300 && !F.resolveOccurrence(p84, '2026-12-20').edited, 'v75.06: a later date carries 1,300 and is not marked changed');
+      var h84 = F.planHTML(p84, {});
+      ok(h84.indexOf('1,300.00') >= 0 && h84.indexOf('cmedit') < 0, 'v75.06: the All plans row shows 1,300, no edited tag');
+      F.openPlanEdit(a84, '2026-12-20'); await sleep(20);
+      elMap['pe_amount'].value = '1000'; await F.savePlanOccurrence(); await sleep(30);
+      ok(F.resolveOccurrence(p84, '2026-12-20').amount === 1000 && F.resolveOccurrence(p84, '2026-12-20').edited, 'v75.06: just this one back to 1,000 sticks (compared with the rule, not the first amount) and says changed');
+      F.openPlanEdit(a84, '2026-11-20', 'plan'); await sleep(20);
+      elMap['pe_left'].value = '3'; await F.savePlanOccurrence(); await sleep(30);
+      ok(p84.count === 3 && F.planCurrent(p84).amount === 1300, 'v75.06: saving only Payments left keeps the 1,300');
+      ok(F.planLeftCount(p84) === 3, 'v75.06: 3 of 3 left');
+      F.skipPlanChip(a84 + '|2026-11-20'); await sleep(30);
+      ok(F.resolveOccurrence(p84, '2027-01-20').amount === 1300, 'v75.06: skipping the date a new amount starts keeps it for the dates after');
+      ok(F.planLeftCount(p84) === 2, 'v75.06: a skipped date is not left');
+      var g84 = await F.addPlan({ name: 'Probe84pot', amount: 500, date: '2026-11-20', repeat: 'monthly', kind: 'goal', goal: 6000 });
+      var gp84 = st.plans.filter(function (x) { return x.id === g84; })[0];
+      F.openPlanEdit(g84, '2026-11-20', 'plan'); await sleep(20);
+      elMap['pe_amount'].value = '1500'; await F.savePlanOccurrence(); await sleep(30);
+      var gh84 = F.planHTML(gp84, {});
+      ok(F.planCurrent(gp84).amount === 1500 && gh84.indexOf('1,500.00') >= 0, 'v75.06: a pot edited to 1,500 shows 1,500 on its row');
+      var w84 = await F.addPlan({ name: 'Probe84wifi', amount: 749, date: '2026-10-15', repeat: 'monthly', kind: 'expense' });
+      var wp84 = st.plans.filter(function (x) { return x.id === w84; })[0];
+      wp84.overrides = { '2026-10-15': { shiftFrom: '2026-10-15', shiftDays: 4, applyFrom: '2026-10-15' } };
+      ok(F.cmPer(wp84) === 'monthly on the 19th', 'v75.06: a shifted series names its real day (' + F.cmPer(wp84) + ')');
+      st.plans.length = 0; plans84.forEach(function (x) { st.plans.push(x); });
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
