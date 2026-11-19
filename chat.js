@@ -561,8 +561,35 @@
     return { html: h + freshness(ctx) };
   }
 
+  // v75.13 (boss: 'assess the bot' -> 'fix 1-3'): the chat quoted the raw snapshot free (PHP 57,931 — before this
+  // cycle's dues and Saving for) while Home said PHP 32,462. Every free-cash answer and the online coach's numbers
+  // now read the hero's own figures (insightsData / cycleProjection), so the bot and Home can't disagree.
+  function heroNums() {
+    try {
+      var d = F.insightsData ? F.insightsData() : null;
+      if (!d) return null;
+      var p = F.cycleProjection ? F.cycleProjection('this', 'with') : null;
+      var days = d.cycleDaysLeft || d.daysLeft || 0;
+      var free = d.freeNet != null ? d.freeNet : d.free;
+      return { free: r2(free), daily: days > 0 ? r2(Math.max(0, free) / days) : 0, days: days,
+        end: d.cycle && d.cycle.end, p: p };
+    } catch (eH) { return null; }
+  }
+  function heroBridge(hn) {
+    var p = hn && hn.p; if (!p) return '';
+    var h = kv('Liquid', money(p.liquid));
+    if (p.salaryPending > 0.004) h += kv('Salary · not in yet', '+ ' + money(p.salaryPending));
+    if (p.cardOwed > 0.004) h += kv('Cards owed', '− ' + money(p.cardOwed));
+    if (p.friendOwed > 0.004) h += kv('To pay back', '− ' + money(p.friendOwed));
+    if (p.otherOut > 0.004) h += kv('Other outflows', '− ' + money(p.otherOut));
+    if (p.planShare > 0.004) h += kv('Plan dues · ' + p.planCount + ' this cycle', '− ' + money(p.planShare));
+    if (p.savingHeld > 0.004) h += kv('Saving for', '− ' + money(p.savingHeld));
+    return h;
+  }
   function intentStatus(t, ctx) {
     var e = ctx.eff;
+    var hn = heroNums();
+    var heroFree = hn ? hn.free : e.cash.free;
     var want = {
       free: /\bfree\b|\bunallocated\b|\bheadroom\b|\bhow much (?:can i |do i )?spend\b|\bcan i spend\b/.test(t),
       cash: /\b(?:liquid )?cash\b|\bbalances?\b|\bhow much (?:money|cash)(?: do i | i )?have\b/.test(t),
@@ -580,17 +607,22 @@
     if (want.all) {
       var h = block('Where you stand',
         kv('Liquid cash', money(e.cash.total) + ' <span class="note" style="font-size:11px">floor ' + money(floor) + '</span>') +
-        kv('Free / unallocated', money(e.cash.free)) +
+        kv('Free cash · after Committed', money(heroFree)) +
+        (hn && hn.days ? kv('Per day until payday', money(hn.daily) + ' <span class="note" style="font-size:11px">' + hn.days + ' days</span>') : '') +
         kv('Cards owed', money(e.card_owed)) +
         kv(ordinal(e.prepay_day || 14) + ' prepay', money(e.total_prepay) + ' <span class="note" style="font-size:11px">before the ' + (e.cutoff_day || 15) + '</span>'),
-        e.cash.free < 0 ? 'Free cash is negative — back the cards before anything new.'
+        heroFree < 0 ? 'Free cash is negative — the dues this cycle are more than you have.'
           : (e.cash.total < floor ? 'You’re under the liquidity floor.' : 'On track — free cash is positive.'),
-        e.cash.free < 0 ? 'bad' : (e.cash.total < floor ? 'warn' : 'good'));
+        heroFree < 0 ? 'bad' : (e.cash.total < floor ? 'warn' : 'good'));
       return { html: h + freshness(ctx) };
     }
     var lines = '';
-    if (want.free) lines += kv('Free / unallocated', money(e.cash.free));
-    if (want.cash) lines += kv('Liquid cash', money(e.cash.total));
+    if (want.free) {
+      lines += kv('Free cash · after Committed', money(heroFree));
+      // v75.13: 'why is it low' / 'where does it go' gets the same bridge as the hero rows
+      if (/\b(why|low|where|how come|breakdown|explain)\b/.test(t)) lines += heroBridge(hn);
+    }
+    if (want.cash && !(want.free && /\b(why|low|where|how come|breakdown|explain)\b/.test(t))) lines += kv('Liquid cash', money(e.cash.total)); // v75.13: the bridge already starts with Liquid
     if (want.card) lines += kv('Cards owed', money(e.card_owed));
     if (want.prepay) {
       // v72.33: a prepay question about a specific card answers with THAT
@@ -607,8 +639,8 @@
     });
     var vcls = 'good', vtxt = '';
     if (want.free) {
-      if (e.cash.free < 0) { vcls = 'bad'; vtxt = 'Free cash is negative — back the cards before new charges.'; }
-      else vtxt = money(e.cash.free) + ' available for new charges this month.';
+      if (heroFree < 0) { vcls = 'bad'; vtxt = 'Free cash is negative — the dues this cycle are more than you have.'; }
+      else vtxt = hn && hn.days ? money(hn.daily) + ' a day for the ' + hn.days + ' days to payday — the same number as Home.' : money(heroFree) + ' left to spend this cycle — the same number as Home.';
     } else if (want.cash) {
       if (e.cash.total < floor) { vcls = 'warn'; vtxt = 'Under your ' + money(floor) + ' floor — protect the buffer.'; }
       else vtxt = 'Floor is ' + money(floor) + '.';
@@ -735,13 +767,23 @@
     if (!/\b(spend|spent|spending)\b/.test(t)) return null;
     // “how much can I spend” is a status question — the ledger needs a time or category cue
     var hasTime = /\b(today|yesterday|week|month)\b/.test(t);
+    var dmS = findDateSpan(t); // v75.13: 'on nov 3', 'last friday' — a single named day
+    if (dmS && dmS.iso && !/\b(today|yesterday|week|month)\b/.test(t)) hasTime = true;
     var hasCat = mentionedCategory(t, ctx.txns);
     if (!hasTime && !hasCat) return null;
-    var txns = (ctx.txns || []).filter(function (x) { return (Number(x.amount) || 0) > 0; });
+    // v75.13: spending = what went out (a cash spend or a card charge); money in and card payments are not
+    // spending (the old filter counted the salary, so 'yesterday' answered PHP 179,766 — every entry ever)
+    var txns = (ctx.txns || []).filter(function (x) { return (Number(x.amount) || 0) > 0 && (x.kind === 'cash_out' || x.kind === 'card_charge'); });
     var today = todayISO();
     var monthP = today.slice(0, 7);
     var sel = txns, scope = 'all entries';
     if (/\btoday\b/.test(t)) { sel = txns.filter(function (x) { return x.date === today; }); scope = 'today'; }
+    else if (/\byesterday\b/.test(t)) { var yd = addDaysISO(today, -1); sel = txns.filter(function (x) { return x.date === yd; }); scope = 'yesterday'; } // v75.13
+    else if (/\blast week\b/.test(t)) { // v75.13
+      var lw0 = addDaysISO(today, -13), lw1 = addDaysISO(today, -7);
+      sel = txns.filter(function (x) { return x.date >= lw0 && x.date <= lw1; });
+      scope = 'the 7 days before that';
+    }
     else if (/\bthis week\b|\bweek\b/.test(t)) {
       var d7 = addDaysISO(today, -6);
       sel = txns.filter(function (x) { return x.date >= d7 && x.date <= today; });
@@ -756,6 +798,7 @@
       sel = txns.filter(function (x) { return String(x.date).slice(0, 7) === monthP; });
       scope = 'this month';
     }
+    if (dmS && dmS.iso && !/\b(today|yesterday|week|month)\b/.test(t)) { sel = txns.filter(function (x) { return x.date === dmS.iso; }); scope = fmtDate(dmS.iso); }
     var cat = mentionedCategory(t, txns);
     if (cat) {
       var cl = cat.toLowerCase();
@@ -928,7 +971,19 @@
     // v69: the subject can be dropped ("ate at jollibee 250") and "ate" counts
     var cmd = /^(log|record|add|note)\b/.test(t);
     var casual = /^(?:(?:i|we)\s+(?:(?:just|already|did)\s+)?)?(?:paid|bought|spent|ate|charged|gave|sent|swiped|used)\b/.test(t);
-    if ((!cmd && !casual) || (!casual && !/\b(expense|spend|spent|charge|paid|payment|bought)\b/.test(t))) return null;
+    // v75.13 (the bot read 'lunch 180 maya cc' as 'set Maya CC to 180'): THING + AMOUNT + ACCOUNT, starting with the
+    // thing (not the account), with no balance words, is an expense on that account. 'maya cc 180' (account first)
+    // and 'maya cc balance is 180' stay balance updates for the story flow.
+    var shorthand = false;
+    var accS = p.exactAcct || p.cardAcct || p.cashAcct;
+    if (!cmd && !casual && p.amt > 0 && accS && accS.name && !/[?]/.test(t) &&
+        !/\b(balance|balances|is|are|was|now|has|have|limit|owe|owes|owed|set|update|salary|budget|total|left|credit|debit|account|new)\b/.test(t)) {
+      var accToks = norm(accS.name).split(' ');
+      var first = t.split(' ')[0];
+      var thing = t.replace(/[\d,.]+(?:k\b)?/g, ' ').split(' ').filter(function (w) { return w && accToks.indexOf(w) < 0 && !/^(on|at|with|via|using|from|php|p|pesos?|for|the|my)$/.test(w); });
+      if (thing.length && accToks.indexOf(first) < 0 && !/^\d/.test(first)) { shorthand = true; if (!p.what) p.what = thing.join(' '); }
+    }
+    if (!shorthand && ((!cmd && !casual) || (!casual && !/\b(expense|spend|spent|charge|paid|payment|bought)\b/.test(t)))) return null;
     var A = p.amt;
     if (!A || A <= 0) {
       return { html: block('Log an expense', line('How much, paid with what?'), 'e.g. “log expense 500 food maya” or “log 8,000 car repair cash”', 'good') + freshness(ctx) };
@@ -1606,7 +1661,25 @@
     if (!e) return { text: '', fp: '' };
     var L = [];
     L.push('My numbers on this phone (as of ' + (ctx.at ? new Date(ctx.at).toLocaleDateString() : 'today') + '):');
-    L.push('- liquid cash ' + money(e.cash.total) + ', free ' + money(e.cash.free) + ', floor ' + money(e.floor || 0));
+    // v75.13: the same numbers as Home — free cash AFTER this cycle's dues and Saving for (the hero), the daily
+    // amount, the dues themselves, Saving for, Owed, the live account balances (the Cash wallet too) and each card's bill
+    var hnS = heroNums(), pS = hnS && hnS.p;
+    L.push('- liquid cash ' + money(e.cash.total) + '; FREE CASH (what Home shows, after this cycle\'s dues and Saving for) ' + money(hnS ? hnS.free : e.cash.free) +
+      (hnS && hnS.days ? ' = ' + money(hnS.daily) + ' a day for ' + hnS.days + ' days until payday' : '') + '; floor ' + money(e.floor || 0));
+    if (pS) {
+      L.push('- this cycle ' + pS.start + ' to ' + pS.end + ': liquid ' + money(pS.liquid) + (pS.salaryPending > 0.004 ? ' + salary not in yet ' + money(pS.salaryPending) : '') +
+        ' − cards owed ' + money(pS.cardOwed) + (pS.friendOwed > 0.004 ? ' − to pay back friends ' + money(pS.friendOwed) : '') + (pS.otherOut > 0.004 ? ' − other ' + money(pS.otherOut) : '') +
+        ' − plan dues ' + money(pS.planShare) + (pS.savingHeld > 0.004 ? ' − Saving for ' + money(pS.savingHeld) : '') + ' = free cash ' + money(pS.net));
+      var todS = todayISO();
+      if ((pS.planItems || []).length) L.push('- plan dues this cycle (unpaid): ' + pS.planItems.slice(0, 12).map(function (x) { return x.name + ' ' + money(x.amount) + ' ' + (x.date < todS ? 'OVERDUE since ' + x.date : 'on ' + x.date); }).join('; '));
+    }
+    try {
+      var sdS = F.savingData ? F.savingData() : null;
+      var heldS = sdS ? sdS.items.filter(function (x) { return (Number(x.held) || 0) > 0.004; }) : [];
+      if (heldS.length) L.push('- Saving for (held back from free cash): ' + heldS.map(function (x) { return x.p.name + ' ' + money(x.held) + (x.goal ? ' of ' + money(x.goal) : ''); }).join('; '));
+      var ohS = F.owedHeroData ? F.owedHeroData() : null;
+      if (ohS && ((ohS.ins || []).length || (ohS.outs || []).length)) L.push('- Owed: ' + (ohS.ins || []).map(function (x) { return x.name + ' owes me ' + money(x.b); }).concat((ohS.outs || []).map(function (x) { return 'I owe ' + x.name + ' ' + money(Math.abs(x.b)); })).join('; '));
+    } catch (eS) {}
     // v72.33: the per-card prepay breakdown, so a single-card prepay question
     // is answered with that card's number, not the total
     var ppList = (e.cards || []).filter(function (c) { return (Number(c.prepay) || 0) > 0; })
@@ -1617,7 +1690,15 @@
     // The coach can now answer "how much is due on the 5th" with the number.
     if (typeof F.ccDue === 'function') {
       var du6 = F.ccDue();
-      if (du6) {
+      // v75.13: a PHP 0.00 statement window read as 'nothing due' while the cards owe money — each card's bill instead
+      var owedCards = (e.cards || []).filter(function (c) { return (Number(c.balance) || 0) > 0.004; });
+      if (du6 && !(du6.due > 0.004) && owedCards.length) {
+        var accsB = (ctx.base && ctx.base.accounts) || [], dueDef = Number(ctx.base && ctx.base.due_day) || du6.due_day || 5;
+        L.push('- card bills: ' + owedCards.map(function (c) {
+          var a0 = accsB.filter(function (a) { return a && a.kind === 'card' && a.name === c.name; })[0];
+          return c.name + ' ' + money(c.balance) + ' due on the ' + ordinal(Math.round(Number(a0 && a0.due_day) || dueDef));
+        }).join('; '));
+      } else if (du6) {
         L.push('- cc due on the ' + ordinal(du6.due_day) + ' (' + (du6.dueIn <= 0 ? 'today' : du6.dueIn + 'd from now') + '): ' + money(du6.due) + ' — ' + money(du6.charges) + ' charged since the ' + du6.windowStart + ' cutoff, ' + money(du6.prepays) + ' already prepaid');
       }
     }
@@ -1652,7 +1733,17 @@
       }
       return a.name + ' (' + a.kind + ') ' + money(a.value || 0) + detTxt(a.kind + ':' + a.name);
     });
-    if (accs.length) L.push('- accounts: ' + accs.slice(0, 8).join('; '));
+    // v75.13: the debit rows carry their LIVE balance (reconData — the base 'as of' value was weeks old) and the
+    // Cash wallet row when entries were logged from Cash with no Cash account behind them
+    try {
+      var rdS = F.reconData ? F.reconData() : null;
+      if (rdS && rdS.debits) {
+        var liveBy = {}; rdS.debits.forEach(function (x) { liveBy[x.name] = x.live; });
+        accs = accs.map(function (row) { var nm = row.split(' (')[0]; return (liveBy[nm] != null && row.indexOf('(card)') < 0) ? nm + ' (debit) ' + money(liveBy[nm]) : row; });
+        rdS.debits.forEach(function (x) { if (x.isCash && !x.real && Math.abs(x.live) > 0.004) accs.push('Cash wallet (no account set up) ' + money(x.live)); });
+      }
+    } catch (eR) {}
+    if (accs.length) L.push('- accounts (live): ' + accs.slice(0, 9).join('; '));
     // v72.45: the salary cycle (the 15th) — expected / already in + the cycle
     // spend, so the bot can answer "did my salary come in?" and "how's this
     // cycle?" from the same numbers the Home card shows.
@@ -1667,7 +1758,9 @@
         }
       } catch (cyErr) {}
     }
-    if (sn.budgets.length) L.push('- budgets: ' + sn.budgets.slice(0, 6).map(function (n) {
+    var anyBud = sn.budgets.some(function (n) { return (Number(((ctx.base && ctx.base.budgets) || {})[n]) || 0) > 0; }); // v75.13
+    if (sn.budgets.length && !anyBud) L.push('- categories (no budget amounts set): ' + sn.budgets.slice(0, 10).join(', '));
+    else if (sn.budgets.length) L.push('- budgets: ' + sn.budgets.slice(0, 6).map(function (n) {
       return n + ' ' + money(((ctx.base && ctx.base.budgets) || {})[n] || 0) + detTxt('budget:' + n);
     }).join('; '));
     var debts = (e.obligations && e.obligations.debts) || [];

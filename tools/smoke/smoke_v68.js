@@ -175,3 +175,38 @@ v70hm('how much → status', 'how much');
   console.log('--- v72.33 the coach numbers carry the per-card breakdown ' + (snapOk ? 'OK' : 'FAIL got=' + snap.slice(0, 240)));
   if (!snapOk) process.exitCode = 1;
 })();
+
+// v75.13 (boss: 'assess the bot' -> 'fix 1-3'): shorthand expenses log (never a balance set), spend answers count
+// spending only and know 'yesterday'
+(function v7513() {
+  function iso(d) { return d.getFullYear() + '-' + (d.getMonth() < 9 ? '0' : '') + (d.getMonth() + 1) + '-' + (d.getDate() < 10 ? '0' : '') + d.getDate(); }
+  var y = new Date(); y.setDate(y.getDate() - 1);
+  var ctx = {
+    eff: {
+      cards: [{ name: 'Maya CC', balance: 900, limit: 10000, util_pct: 9, prepay: 0 }],
+      total_prepay: 0, card_owed: 900,
+      cash: { total: 5000, free: 4000, accounts: [{ name: 'LandBank', value: 5000 }] },
+      floor: 0, prepay_day: 14, cutoff_day: 15, month: iso(new Date()).slice(0, 7), obligations: { debts: [], one_offs: [] }
+    },
+    base: { budgets: { Food: 0 }, salary: 25000, salary_overrides: {}, budget_overrides: {}, one_offs: {}, debts: {},
+      accounts: [{ name: 'Maya CC', kind: 'card', value: 900, limit: 10000 }, { name: 'LandBank', kind: 'debit', value: 5000 }] },
+    txns: [
+      { date: iso(y), kind: 'cash_out', amount: 150, category: 'Food', account: 'LandBank' },
+      { date: iso(y), kind: 'cash_in', amount: 46615, category: 'Salary', account: 'LandBank' }
+    ],
+    at: new Date().toISOString()
+  };
+  var a = fc.handle('lunch 180 maya cc', ctx);
+  var act = a && a.actions && a.actions[0];
+  var aOk = !!a && a.__path === 'rule:intentLog' && act && act.payload && act.payload.account === 'Maya CC' && act.payload.amount === 180 && act.payload.kind === 'card_charge';
+  console.log('--- v75.13 "lunch 180 maya cc" logs a card charge (not a balance) ' + (aOk ? 'OK' : 'FAIL path=' + (a && a.__path)));
+  if (!aOk) process.exitCode = 1;
+  var b = fc.handle('maya cc 180', ctx);
+  var bOk = !!b && b.__path !== 'rule:intentLog';
+  console.log('--- v75.13 "maya cc 180" (account first) stays a balance update ' + (bOk ? 'OK' : 'FAIL path=' + (b && b.__path)));
+  if (!bOk) process.exitCode = 1;
+  var c = fc.handle('how much did i spend yesterday', ctx);
+  var cOk = !!c && c.html.indexOf('150.00') >= 0 && c.html.indexOf('46,615') < 0 && c.html.indexOf('yesterday') >= 0;
+  console.log('--- v75.13 "yesterday" = yesterday, spending only (no salary) ' + (cOk ? 'OK' : 'FAIL got=' + (c ? c.html.replace(/<[^>]+>/g, ' ').slice(0, 200) : 'null')));
+  if (!cOk) process.exitCode = 1;
+})();

@@ -13319,12 +13319,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.12, live: new Date(2026, 10, 19, 15, 6) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.13, live: new Date(2026, 10, 19, 15, 9) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.13': [
+      'Coach Fin: \u201chow much is free?\u201d now gives the same number as Home (it quoted free cash before this cycle\'s dues), plus the daily amount; \u201cwhy is it low?\u201d shows the breakdown.',
+      'Coach Fin: \u201clunch 180 maya cc\u201d logs an expense on Maya CC (it used to offer to set the card\'s balance to 180); spending questions know yesterday and last week, and no longer count your salary as spending.',
+      'The online coach is told the same numbers as Home: free cash after this cycle\'s dues, the dues themselves, Saving for, Owed, live balances and each card\'s bill.'
+    ],
     '75.12': [
       'Home: the graph is the hero\'s own math over time — it starts at your Liquid, steps down on each due date (unpaid past dues this cycle drop today), and ends exactly at your free cash, marked by a dashed line.',
       'It shows the cycle you pick (This cycle / Next cycle), starts from zero, and the steps have soft corners. Tap a step to see what it was, how much, and what is left after.'

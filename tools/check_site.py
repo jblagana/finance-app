@@ -2720,6 +2720,13 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.13 (boss: 'assess the bot' -> 'fix 1-3'): the chat's free cash = Home's (heroNums), the coach snapshot carries Home's numbers + dues + Saving for + Owed + live balances + card bills; 'lunch 180 maya cc' logs (shorthand), spend answers know yesterday / last week and count spending only. Chat smoke v75.13",
+          "function heroNums() {" in rd("chat.js")
+          and "FREE CASH (what Home shows" in rd("chat.js")
+          and "var shorthand = false;" in rd("chat.js")
+          and "(x.kind === 'cash_out' || x.kind === 'card_charge')" in rd("chat.js")
+          and "v75.13" in rd(os.path.join("tools", "smoke", "smoke_v68.js"))
+          and "'75.13': [" in js)
     check("v75.12 (boss: 'build the hero graph from the mockup'): heroSteps lays the hero's bridge out in time - starts at Liquid (next: the carry), steps on dates (this cycle's unpaid past dues drop today), ends exactly at free cash (residual step); renderSpark draws soft S-curve steps from zero, the dashed free cash line, a Payday pill, tap a step for the panel; the cycle switch re-renders it. Smoke PART 90",
           "function heroSteps(mode) {" in js
           and "if (Math.abs(diff) > 0.5) { add(x0, 'Other', diff); steps = build(); }" in js
