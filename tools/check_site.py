@@ -2720,6 +2720,8 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.26 (boss: 'add live updates'): a Firestore listener (cloudWatch) merges another device's push at once and ignores our own write",
+          "function cloudWatch()" in js and ".onSnapshot(function (snap)" in js and "snap.metadata.hasPendingWrites" in js and "env === cloudEnv" in js and "'75.26': [" in js)
     check("v75.25 (boss: 'passphrase page is not working'): firestore.rules splits read/delete from create/update (no request.resource on a read); sign-in is popup-first",
           "allow read, delete: if request.auth != null" in rd("cloud/firestore.rules") and "popup first, even in an installed app" in js and "'75.25': [" in js)
     check("v75.24 (boss: 'bake it into the app'): CLOUD_CFG holds the coach-fin web config (projectId only names the project; no service/secret key)",

@@ -1,3 +1,7 @@
+## 2026-11-20 - "yes, add live updates" -> "a change on another device appears within seconds while the app is open (Firestore listener)"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.26 (app.js cloudWatch: onSnapshot on finai/{uid}; a new envelope that is not our own push triggers cloudSoon(600) -> pull + merge; ignores pending local writes and the copy we just pushed)
+
 ## 2026-11-20 - "done but passphrase page is not working" (sync said 'Missing or insufficient permissions' after sign-in worked in the preview) -> "fix the cloud sync permissions and the sign-in flow"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.25 (cloud/firestore.rules: reads/deletes split from writes - request.resource is null on a read so the old combined rule denied every read; app.js sign-in is popup-first (the redirect came back signed out cross-origin). Owner must re-publish the rules in the Firebase console)

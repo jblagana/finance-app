@@ -13304,7 +13304,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   var CLOUD_CFG = { apiKey: 'AIzaSyCXtofJPQOxuz8K7JmW1W5E0goldqt2WA0', authDomain: 'coach-fin.firebaseapp.com', projectId: 'coach-fin', appId: '1:550840334102:web:ad1f22292f6f709c134237' };
   var CLOUD_LS = 'fin.cloud.v1';
   var CLOUD_SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
-  var cloudFb = null, cloudUser = null, cloudBusy = false, cloudTimer = null, cloudSig = '', cloudReady = null;
+  var cloudFb = null, cloudUnsub = null, cloudEnv = '', cloudUser = null, cloudBusy = false, cloudTimer = null, cloudSig = '', cloudReady = null;
   function cloudRead() { try { return JSON.parse(localStorage.getItem(CLOUD_LS) || 'null') || {}; } catch (e) { return {}; } }
   function cloudWrite(patch) {
     var c = cloudRead(); Object.keys(patch).forEach(function (k) { if (patch[k] == null) delete c[k]; else c[k] = patch[k]; });
@@ -13335,9 +13335,21 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       .then(function () { return cloudScript(CLOUD_SDK + 'firebase-firestore-compat.js'); }).then(function () {
         window.firebase.initializeApp(cfg);
         cloudFb = { auth: window.firebase.auth(), db: window.firebase.firestore() };
-        cloudFb.auth.onAuthStateChanged(function (u) { cloudUser = u || null; cloudPaint(); if (u) cloudSoon(1500); });
+        cloudFb.auth.onAuthStateChanged(function (u) { cloudUser = u || null; cloudPaint(); cloudWatch(); if (u) cloudSoon(1500); });
       })['catch'](function (e) { cloudReady = null; throw e; });
     return cloudReady;
+  }
+  // v75.23+: live updates - another device's push arrives through a Firestore listener and is merged at once
+  function cloudWatch() {
+    if (cloudUnsub) { try { cloudUnsub(); } catch (e) {} cloudUnsub = null; }
+    if (!cloudUser || !cloudFb) return;
+    cloudUnsub = cloudFb.db.collection('finai').doc(cloudUser.uid).onSnapshot(function (snap) {
+      if (snap.metadata.hasPendingWrites || !snap.exists) return; // our own write in flight
+      var env = snap.data().env;
+      if (!env || env === cloudEnv) return; // nothing new (or it is the copy we just pushed)
+      cloudEnv = env;
+      if (cloudRead().pass) cloudSoon(600); // pulls + merges; nothing is pushed back when the merge equals the cloud copy
+    }, function () {});
   }
   function cloudPaint() {
     var cfg = cloudCfg(), c = cloudRead(), st = byId('cloudStatus'), v = byId('setCloudV');
@@ -13375,7 +13387,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var obj = syncBuildObj(), sig = cloudSigNow();
       var same = pulled && JSON.stringify([pulled.base, pulled.txns, pulled.plans, pulled.owed, pulled.moneyLog]) === sig;
       if (same) return;
-      return syncEncrypt(obj, pass).then(function (env) { return ref.set({ env: JSON.stringify(env), at: window.firebase.firestore.FieldValue.serverTimestamp() }); });
+      return syncEncrypt(obj, pass).then(function (env) { cloudEnv = JSON.stringify(env); return ref.set({ env: cloudEnv, at: window.firebase.firestore.FieldValue.serverTimestamp() }); });
     }).then(function () {
       cloudSig = cloudSigNow(); cloudWrite({ last: Date.now() }); cloudPaint();
       cloudNote('Synced — ' + state.txns.length + ' entries, ' + state.plans.length + ' plans. Only scrambled data is stored online.');
@@ -13383,7 +13395,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   }
   function cloudSoon(ms) {
     if (!cloudUser || cloudTimer) return;
-    cloudTimer = setTimeout(function () { cloudTimer = null; if (cloudSigNow() !== cloudSig || ms === 1500) cloudSync(); }, ms || 8000);
+    cloudTimer = setTimeout(function () { cloudTimer = null; if (cloudSigNow() !== cloudSig || ms === 1500 || ms === 600) cloudSync(); }, ms || 8000);
   }
   function cloudInit() {
     var cfg = cloudCfg(); cloudPaint();
@@ -13402,7 +13414,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var bn = byId('cloudNow'); if (bn) bn.onclick = function () { cloudSync(); };
     var bo = byId('cloudOutBtn'); if (bo) bo.onclick = function () {
       cloudWrite({ on: null, pass: null, last: null }); cloudSig = '';
-      if (cloudFb) cloudFb.auth.signOut(); cloudUser = null; cloudPaint(); cloudNote('Signed out. Your data stays on this phone.');
+      if (cloudFb) cloudFb.auth.signOut(); cloudUser = null; cloudEnv = ''; cloudWatch(); cloudPaint(); cloudNote('Signed out. Your data stays on this phone.');
     };
   }
   function importData(file) {
@@ -13531,12 +13543,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.25, live: new Date(2026, 10, 20, 1, 4) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.26, live: new Date(2026, 10, 20, 1, 17) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.26': [
+      'Cloud account is live: a change made on another device shows up here within a few seconds while the app is open, no tap needed.'
+    ],
     '75.25': [
       'Cloud account: Google sign-in now opens a popup (the full-page redirect came back signed out), and the sync rules were fixed so reading your own record works.'
     ],
