@@ -2720,6 +2720,11 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.15 (boss: 'Yes, fix it' - the Owed invite): a browser tab (not the installed app) says so + Copy invite + 'use it here' (the link stays until then); Owed has 'Got an invite link? Paste it'; the invite note tells the sender. Smoke PART 91",
+          "function connInstalled() {" in js and "function connShowBrowser(j) {" in js and "function connShowPaste() {" in js
+          and "if (!connInstalled()) { connShowBrowser(j); return; }" in js
+          and 'id="owedPasteInv"' in html and "PART 91" in rd(os.path.join("tools", "smoke", "smoke_app_v68.js"))
+          and "'75.15': [" in js)
     check("v75.14 (bot item 4): rule answers for afford / save / due / payday / on track / owed / top spending / compare / balance / salary what-if / pay a plan / undo / plain-words recurring plan, all from Home's numbers. Chat smoke v75.14",
           "function intentAfford(t, ctx, p) {" in rd("chat.js") and "function intentDue(t, ctx) {" in rd("chat.js")
           and "function intentPayday(t, ctx) {" in rd("chat.js") and "function intentOwed(t, ctx) {" in rd("chat.js")

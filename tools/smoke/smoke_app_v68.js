@@ -4369,6 +4369,11 @@ waitReady().then(async function (F) {
       var sp90 = String((byIdStub('sparkBox') || {}).innerHTML || '');
       ok(sp90.indexOf('hs-panel') >= 0 && sp90.indexOf('Left after') >= 0, 'v75.12: a tapped step shows what it was and what is left after');
       F.state.heroStepSel = null; F.renderSpark();
+      // ============ PART 91: v75.15 - an invite opened in a browser tab is joined in the app ============
+      console.log('\n== PART 91: v75.15 - invite links land in the installed app ==');
+      var inv91 = 'https://jblagana.github.io/finance-app/#join=0123456789abcdef0123456789abcdef.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.aHR0cHM6Ly94LndvcmtlcnMuZGV2';
+      ok(!!F.connJoinFromText('Connect our Owed record in Fin.AI ' + inv91 + ' ') && !F.connJoinFromText('hello') && !F.connJoinFromText('#join=zz'), 'v75.15: a pasted message with the invite link in it parses');
+      ok(F.connInstalled() === false, 'v75.15: a browser tab (display-mode not standalone) is not the installed app');
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();

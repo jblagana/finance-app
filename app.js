@@ -11715,7 +11715,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (!c) return '';
     if (c.st === 'invited') {
       var expired = Date.now() > (c.exp || 0);
-      return '<p class="note" style="margin:0 0 12px">' + (expired ? 'The invite link expired before ' + nm + ' opened it. Make a new one.' : 'Send this to ' + nm + '. When they open it in Fin.AI, the card links. The link works for 24 hours.') + '</p>' +
+      return '<p class="note" style="margin:0 0 12px">' + (expired ? 'The invite link expired before ' + nm + ' opened it. Make a new one.' : 'Send this to ' + nm + '. Ask them to open it in their Fin.AI app. If it opens in the browser instead, they tap Copy invite there and paste it in the app (Owed \u2192 Got an invite link?). The link works for 24 hours.') + '</p>' +
         (expired ? '' : '<div class="cn-qrbox">' + qrSvg(connInviteLink(c, p.id)) + '</div>' +
           '<div class="cn-acts"><button type="button" class="act" data-cn-share="' + esc(p.id) + '">Share link</button>' +
           '<button type="button" class="act ghost" data-cn-copy="' + esc(p.id) + '">Copy link</button></div>') +
@@ -11762,7 +11762,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     connSheetPid = null;
     t.textContent = 'Connect';
     b.innerHTML = '<p class="note">Opening the invite…</p>';
-    openSheet('connSheet');
+    if (!byId('connSheet').classList.contains('show')) openSheet('connSheet');
     connReadInvite(j).then(function (inv) {
       if (!inv) { b.innerHTML = '<p class="note">This invite has expired or was already used. Ask for a new link.</p>'; return; }
       connJoinPending = { j: j, inv: inv };
@@ -11785,16 +11785,62 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       b.innerHTML = '<p class="note">Could not open the invite: ' + esc((er && er.message) || 'offline') + '. Try the link again when you are online.</p>';
     });
   }
+  // v75.15: the installed app and a browser tab keep separate books, so an invite must be joined in the app
+  function connInstalled() {
+    try {
+      if (window.navigator && window.navigator.standalone === true) return true;
+      if (!window.matchMedia) return true;
+      return ['standalone', 'fullscreen', 'minimal-ui', 'window-controls-overlay'].some(function (m) { return window.matchMedia('(display-mode: ' + m + ')').matches; });
+    } catch (e) { return true; }
+  }
+  function connJoinFromText(txt) {
+    var m = /#join=[0-9a-f]{32}\.[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]+/.exec(String(txt || ''));
+    return m ? connParseJoin(m[0]) : null;
+  }
+  function connClearHash() {
+    if (String(location.hash || '').indexOf('#join=') !== 0) return;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  }
+  function connOpenJoin(j) {
+    var dupe = (state.owed.people || []).some(function (x) { return x.conn && x.conn.pair === j.pair && x.conn.st !== 'ended'; });
+    if (dupe) { closeSheets(); snack('You are already connected through that link.'); return false; }
+    try { setTab('owed'); } catch (e) {}
+    connShowJoin(j);
+    return true;
+  }
+  var connBrowserJ = null;
+  function connShowBrowser(j) {
+    var t = byId('connTitle'), b = byId('connBody');
+    if (!t || !b) return;
+    connSheetPid = null; connBrowserJ = j;
+    t.textContent = 'Open it in your Fin.AI app';
+    b.innerHTML = '<p class="note" style="margin:0 0 12px">This invite opened in the browser. The browser keeps its own book, separate from your Fin.AI app, so connecting here would link the wrong one.</p>' +
+      '<ol class="cn-steps"><li>Tap <b>Copy invite</b></li><li>Open your <b>Fin.AI app</b> \u2192 <b>Owed</b></li><li>Tap <b>Got an invite link? Paste it</b></li></ol>' +
+      '<div class="cn-acts"><button type="button" class="act" data-cn-bcopy="1">Copy invite</button></div>' +
+      '<div class="cn-acts"><button type="button" class="act ghost" data-cn-here="1">I don\u2019t have the app \u2014 use it here</button></div>' +
+      '<p class="note" style="margin:10px 0 0">The invite works for 24 hours from when it was made.</p>';
+    openSheet('connSheet');
+  }
+  function connShowPaste() {
+    var t = byId('connTitle'), b = byId('connBody');
+    if (!t || !b) return;
+    connSheetPid = null;
+    t.textContent = 'Paste an invite';
+    b.innerHTML = '<p class="note" style="margin:0 0 12px">Paste the Fin.AI invite link your friend sent you.</p>' +
+      '<label class="fl" for="connPasteIn">Invite link</label>' +
+      '<input id="connPasteIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://\u2026#join=\u2026">' +
+      '<div class="cn-acts">' + (navigator.clipboard && navigator.clipboard.readText ? '<button type="button" class="act ghost" data-cn-paste="1">Paste</button>' : '') +
+      '<button type="button" class="act" data-cn-pastego="1">Open invite</button></div>';
+    openSheet('connSheet');
+  }
   function connCheckHash() {
     var h = location.hash || '';
     if (h.indexOf('#join=') !== 0) return;
     var j = connParseJoin(h);
-    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
-    if (!j) { snack('That invite link is broken — ask for a new one.'); return; }
-    var dupe = (state.owed.people || []).some(function (x) { return x.conn && x.conn.pair === j.pair && x.conn.st !== 'ended'; });
-    if (dupe) { snack('You are already connected through that link.'); return; }
-    try { setTab('owed'); } catch (e) {}
-    connShowJoin(j);
+    if (!j) { connClearHash(); snack('That invite link is broken — ask for a new one.'); return; }
+    if (!connInstalled()) { connShowBrowser(j); return; } // the link stays in the address bar until it is used here
+    connClearHash();
+    connOpenJoin(j);
   }
   // the inbox + the starting-balance status on a linked card
   function connCardHTML(p) {
@@ -11892,10 +11938,36 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         connReject(x.pid, x.cid, x.k, rb3 && rb3.querySelector('.cn-why') ? rb3.querySelector('.cn-why').value : '');
       }
     }, true);
+    var pasteBtn = byId('owedPasteInv'); // v75.15
+    if (pasteBtn) pasteBtn.addEventListener('click', connShowPaste);
     if (sheet) sheet.addEventListener('click', function (ev) {
       var t = ev.target && ev.target.closest ? ev.target.closest('button') : null;
       if (!t) return;
       if (t.id === 'connClose' || t.hasAttribute('data-cn-notnow')) { closeSheets(); connJoinPending = null; return; }
+      if (t.hasAttribute('data-cn-bcopy')) { // v75.15: the browser tab hands the invite to the app
+        var bl = location.href;
+        var bdone = function () { snack('Invite copied \u2014 now paste it in your Fin.AI app'); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(bl).then(bdone, function () { prompt('Copy this invite', bl); });
+        else prompt('Copy this invite', bl);
+        return;
+      }
+      if (t.hasAttribute('data-cn-here')) {
+        var hj = connBrowserJ; connBrowserJ = null;
+        if (!hj) return;
+        connClearHash();
+        connOpenJoin(hj);
+        return;
+      }
+      if (t.hasAttribute('data-cn-paste')) {
+        navigator.clipboard.readText().then(function (txt) { var pi = byId('connPasteIn'); if (pi) pi.value = String(txt || '').trim(); }, function () { snack('Could not read the clipboard \u2014 long-press the box and paste'); });
+        return;
+      }
+      if (t.hasAttribute('data-cn-pastego')) {
+        var pin = byId('connPasteIn'), pj = connJoinFromText(pin ? pin.value : '');
+        if (!pj) { alert('That is not a Fin.AI invite link. Copy the whole link your friend sent and paste it again.'); return; }
+        connOpenJoin(pj);
+        return;
+      }
       var pid = connSheetPid;
       if (t.hasAttribute('data-cn-make')) {
         var me = byId('connMe');
@@ -13319,12 +13391,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.14, live: new Date(2026, 10, 19, 15, 17) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.15, live: new Date(2026, 10, 19, 21, 17) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.15': [
+      'Owed invites: a link opened in the browser (not your Fin.AI app) now says so and gives you Copy invite, because the browser keeps a separate book. In the app, Owed \u2192 \u201cGot an invite link? Paste it\u201d connects it. Use it in the browser only if you don\u2019t have the app.',
+      'The invite screen tells you to ask your friend to open it in their Fin.AI app.'
+    ],
     '75.14': [
       'Coach Fin now answers the everyday questions itself, with Home\'s numbers: can I afford X (this cycle or next), can I save X, what\'s due (today, this week, this cycle), next payday, am I on track, who owes me, top spending, an account\'s balance, this month vs last, what if the salary doesn\'t come.',
       'It also does: add netflix 549 monthly on the 10th, pay rent (opens Add, linked to the plan), undo (deletes the last entry, with Undo). Show my plans lists each plan by its next date.'
@@ -14847,7 +14923,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     planCurrent: planCurrent, planLeftCount: planLeftCount, planRuleAt: planRuleAt, cmPer: cmPer, // v75.06 (smoke)
     // v75.02: Owed connections (smoke drives the pieces without a relay)
     connApply: connApply, connConfirm: connConfirm, connReject: connReject, connPreBal: connPreBal,
-    connOpenAdjust: connOpenAdjust, connParseJoin: connParseJoin, connSeal: connSeal, connOpenMsg: connOpenMsg,
+    connOpenAdjust: connOpenAdjust, connParseJoin: connParseJoin, connJoinFromText: connJoinFromText, connInstalled: connInstalled, connCheckHash: connCheckHash, connSeal: connSeal, connOpenMsg: connOpenMsg,
     connCardHTML: connCardHTML, connRowStatus: connRowStatus, connEntryMsg: connEntryMsg, qrEncode: qrEncode, qrSvg: qrSvg,
     connCreateInvite: connCreateInvite, connReadInvite: connReadInvite, connJoin: connJoin, connSync: connSync,
     connDisconnect: connDisconnect, connInviteLink: connInviteLink, connOpenSheet: connOpenSheet,
