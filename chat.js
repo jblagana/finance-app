@@ -554,11 +554,14 @@
     else openInfoView();
   }
 
+  var RX_THANKS = /^(?:ok(?:ay)?|okie|sige|noted|got it|nice|cool|great)?[ ,!.]*(?:thanks?|thank you|ty|tnx|thx|salamat(?: po)?)(?: (?:fin|coach|so much|po))*[ !.]*$|^(?:ok(?:ay)?|sige|noted|got it|cool)[ !.]*$/;
   function intentGreet(t, ctx) {
     if (!/^(hi|hiya|hey|hello|yo|um|sup)([!.? ,]*)$/.test(t)
       && !/^good (morning|afternoon|evening)\b/.test(t)
-      && !/^(what'?s up|how'?s it going|how are you(?: doing)?|hey there)\b/.test(t)) return null;
+      && !/^(what'?s up|how'?s it going|how are you(?: doing)?|hey there)\b/.test(t)
+      && !RX_THANKS.test(t)) return null;
     var n = coachName();
+    if (RX_THANKS.test(t)) return { html: block('Anytime', line('Ask me again whenever you need to.'), null, 'good') }; // v75.18: no call for a thank-you
     var h = block(n ? 'Hey ' + esc(n) : 'Hey',
       line('I’m <b>Fin</b> — your money coach. Ask for <b>status</b>, <b>plans</b>, <b>debt</b> details, a <b>charge check</b>, or tell me about an <b>urgent expense</b> — it works offline.') +
       line('Type <b>help</b> for the full list.'),
@@ -908,7 +911,7 @@
     return { html: h + freshness(ctx), actions: [{ label: 'Open Committed', act: 'open_tab', payload: { tab: 'money' } }] };
   }
 
-  var URGENT_RX = /\b(urgent|emergency|emergencies|unexpected|unplanned|unforeseen|unbudgeted|came up|just (?:got|received|found out|found|hit|been told)|oops|ugh|yikes)\b|\bneed(?:s|ed)? (?:to )?pay\b/;
+  var URGENT_RX = /\b(urgent|emergency|emergencies|unexpected|unplanned|unforeseen|unbudgeted|came up|just (?:found out|hit|been told)|oops|ugh|yikes)\b|\bneed(?:s|ed)? (?:to )?pay\b/;
 
   function intentUrgent(t, ctx, p) {
     if (!URGENT_RX.test(t)) return null;
@@ -917,7 +920,8 @@
       return { html: block('Urgent expense', line('Ouch. How much is it — and what’s it for?'), 'e.g. “urgent: car repair 8,000 this week”', 'warn') + freshness(ctx) };
     }
     var e = ctx.eff;
-    var free = e.cash.free, total = e.cash.total, floor = e.floor || 0;
+    var hnU = heroNums(); // v75.18: Home's free cash (after this cycle's dues), not the raw snapshot
+    var free = hnU ? hnU.free : e.cash.free, total = e.cash.total, floor = e.floor || 0;
     var card = p.cardAcct || ((e.cards || [])[0] || null);
     var afterCash = r2(total - A);
     var h = '';
@@ -981,6 +985,27 @@
     return { html: h + freshness(ctx), actions: actions };
   }
 
+  // v75.18 (real-model test: 'i just got 500 from mom' had nowhere to go): money that came in -> a Money in draft
+  var RX_MONEY_IN = /\b(received|receive|got|natanggap|binigyan|gave me|sent me|paid me|refund(?:ed)?|bonus|allowance|money in|income|cash ?in)\b/;
+  function intentMoneyIn(t, ctx, p) {
+    if (!RX_MONEY_IN.test(t) || !(p.amt > 0)) return null;
+    if (/\b(is|are|was|will be|balance|limit|salary in|budget|owe|owes|plan)\b/.test(t) || /[?]/.test(t)) return null;
+    if (/\b(spent|paid for|bought|charged)\b/.test(t)) return null;
+    var acct = (p.exactAcct && p.exactAcct.kind !== 'card' ? p.exactAcct : null) || p.cashAcct || biggestCash(ctx) || { name: '', kind: 'debit' };
+    var from = (t.match(/\bfrom ([a-z][a-z' ]{1,30}?)(?: (?:today|yesterday|via|on|in|to)\b|$)/) || [])[1] || '';
+    var note = from ? 'from ' + from : (p.what || '');
+    var date = p.date || todayISO();
+    var h = block('Log money in',
+      kv(esc(acct.name || 'Cash'), '+ ' + money(p.amt)) +
+      (note ? kv('What', esc(note)) : '') +
+      kv('Date', esc(fmtDate(date))),
+      'Tap to log it — it adds to ' + esc(acct.name || 'Cash') + ' and to your free cash.', 'good');
+    return {
+      html: h + freshness(ctx),
+      actions: [{ label: 'Log + ' + esc(money(p.amt)) + (acct.name ? ' · ' + esc(acct.name) : ''), act: 'log_expense',
+        payload: { amount: p.amt, kind: 'cash_in', account: acct.name || '', category: p.cat || '', note: note, date: date } }]
+    };
+  }
   function intentLog(t, ctx, p) {
     // v35: casual past tense ("i paid for spaylater today 1828 pesos") logs like a command does
     // v69: the subject can be dropped ("ate at jollibee 250") and "ate" counts
@@ -998,7 +1023,9 @@
       var thing = t.replace(/[\d,.]+(?:k\b)?/g, ' ').split(' ').filter(function (w) { return w && accToks.indexOf(w) < 0 && !/^(on|at|with|via|using|from|php|p|pesos?|for|the|my)$/.test(w); });
       if (thing.length && accToks.indexOf(first) < 0 && !/^\d/.test(first)) { shorthand = true; if (!p.what) p.what = thing.join(' '); }
     }
-    if (!shorthand && ((!cmd && !casual) || (!casual && !/\b(expense|spend|spent|charge|paid|payment|bought)\b/.test(t)))) return null;
+    // v75.18: 'log 99999 food' / 'record 300 taxi' - log / record + an amount is an expense (not a budget change)
+    var logAmt = /^(log|record)\b/.test(t) && p.amt > 0 && !RX_MONEY_IN.test(t) && !/\b(balance|budget|salary|limit|plan)\b/.test(t);
+    if (!shorthand && !logAmt && ((!cmd && !casual) || (!casual && !/\b(expense|spend|spent|charge|paid|payment|bought)\b/.test(t)))) return null;
     var A = p.amt;
     if (!A || A <= 0) {
       return { html: block('Log an expense', line('How much, paid with what?'), 'e.g. “log expense 500 food maya” or “log 8,000 car repair cash”', 'good') + freshness(ctx) };
@@ -1957,7 +1984,7 @@
         var bal = c ? (Number(c.balance) || 0) : (Number(a.value) || 0);
         var lim = (c && c.limit) ? Number(c.limit) : (Number(a.limit) || 0);
         var util = lim > 0 ? Math.round((bal / lim) * 100) + '%' : '';
-        return a.name + ' (card) ' + money(bal) + (lim > 0 ? ' [limit ' + money(lim) + (util ? ' · ' + util : '') + ']' : '');
+        return a.name + ' (card) ' + money(bal) + (lim > 0 ? ' [limit ' + money(lim) + (util ? ' · ' + util + ' of the limit used' : '') + ']' : '');
       }
       return a.name + ' (' + a.kind + ') ' + money(a.value || 0) + detTxt(a.kind + ':' + a.name);
     });
@@ -2064,7 +2091,7 @@
   // drafted immediately; the user confirms by tapping the Confirm button on
   // the draft card. A missing detail is asked for in text; the next short
   // message completes that same request.
-  var AI_REMOTE_SYSTEM = 'You are Coach Fin, the personal money coach of the Fin.AI app. Answer only from the numbers given, in 1-3 short plain sentences (under 60 words), no lists, no markdown, at most one emoji and only where it genuinely fits (a JSON draft reply carries none). Never invent numbers. ' +
+  var AI_REMOTE_SYSTEM = 'You are Coach Fin, the personal money coach of the Fin.AI app. Never state an interest rate, fee or APR unless a row in the numbers lists one (a % after a card limit is how much of the limit is used). Answer only from the numbers given, in 1-3 short plain sentences (under 60 words), no lists, no markdown, at most one emoji and only where it genuinely fits (a JSON draft reply carries none). Never invent numbers. ' +
     'The numbers list is current as of now: it supersedes anything said in earlier turns of this conversation — never repeat a number the numbers list has already updated (a card balance, a utilization, anything). ' +
     'Personality (v72.3): light and funny - dry wit, at most one short quip per reply, like a friendly coach who gently teases about the pizza budget. The humor never overrides accuracy: the numbers, the ask-for-missing-detail flow, and the draft JSON below always win, and a JSON draft reply carries no quip at all. ' +
     'When the user tells you a change to their money (a new or updated number, or a story of several changes): if every detail you need is present (amount, month, which account), reply with ONLY the JSON draft of that change - it becomes a draft card with a Confirm button that the user presses, so do not ask "shall I record that?" and never wait for a yes. changes holds ONLY that change (a story means its lines, a single update means one line): never pad it with current balances, limits, or details of other accounts from the numbers list, they are already on the phone, and a card credit-limit update is a single field change (entity card, key credit_limit) on that card, not an account change. If a needed detail (which account, amount, month) is missing, reply {"say":"ask for the missing detail"} with no changes; the user\'s next short message (an amount, an account name, a corrected number) completes that same request - never drop it or start a different topic unless the user explicitly names one. ' +
@@ -2382,10 +2409,14 @@
       };
     }
     var order = [intentHelp, intentGreet, intentUndoLast, intentPayPlan, intentPlanRemove, intentPlanAdd, intentDue, intentPlanList,
-      intentUrgent, intentLog, intentAfford, intentDeficit, intentSalaryWhatIf, intentPayday, intentTrack, intentOwed,
+      intentUrgent, intentMoneyIn, intentLog, intentAfford, intentDeficit, intentSalaryWhatIf, intentPayday, intentTrack, intentOwed,
       intentTopSpend, intentCompare, intentBalance, intentSpend, intentStory,
       intentDebt, intentOneOff, intentSinking, intentFuture, intentStatus];
-    if (force) order = [force].concat(order.filter(function (fn) { return fn !== force; })); // v75.16: the router's pick first
+    if (force) { // v75.16: the router's pick; v75.18: only that one - no falling through to a rule that writes something else
+      var fr = force(t, ctx, p);
+      if (fr) fr.__path = 'rule:' + (force.name || 'intent');
+      return fr;
+    }
     for (var i = 0; i < order.length; i++) {
       var r = order[i](t, ctx, p);
       if (r) { r.__path = 'rule:' + (order[i].name || 'intent'); return r; } // v68 item 11: shadow tag
@@ -2431,10 +2462,10 @@
     top_spend: intentTopSpend, compare: intentCompare, balance: intentBalance, spend: intentSpend,
     debt: intentDebt, one_off: intentOneOff, sinking: intentSinking, future: intentFuture, urgent: intentUrgent,
     log: intentLog, plan_add: intentPlanAdd, plan_remove: intentPlanRemove, pay_plan: intentPayPlan,
-    undo: intentUndoLast, help: intentHelp, story: intentStory
+    undo: intentUndoLast, help: intentHelp, story: intentStory, money_in: intentMoneyIn
   };
   // the commands the rules read for sure - these never wait for the router
-  var ROUTE_SURE = /^rule:(intentHelp|intentGreet|intentUndoLast|intentPayPlan|intentPlanRemove|intentPlanAdd|intentLog|intentUrgent)$/; // a balance / salary story is read by the router too ('kaya ko ba 15k' is not Maya)
+  var ROUTE_SURE = /^rule:(intentHelp|intentGreet|intentUndoLast|intentPayPlan|intentPlanRemove|intentPlanAdd|intentLog)$/; // a balance / salary story is read by the router too ('kaya ko ba 15k' is not Maya)
   var ROUTE_SYSTEM = 'You route messages for Coach Fin, a personal money app. Pick the ONE tool that answers the message and rewrite the message as a short plain-English request that tool understands. Reply with ONLY a JSON object, nothing else: {"tool":"<name>","q":"<rewritten request>"}. ' +
     'Rules: keep every amount, name, account and date exactly as the user gave them; use the recent conversation only to fill in what a follow-up leaves out ("what about next month?"); never add a number the user did not give; translate Tagalog / Taglish to English; when no tool fits, or the user wants advice, an explanation, an opinion or small talk, use "coach" with q = the message. ' +
     'Tools (name - what it answers - example q): ' +
@@ -2456,7 +2487,8 @@
     'sinking - savings goals - "my savings goals"; ' +
     'future - worst case, borrowing, emergency - "worst case"; ' +
     'urgent - an urgent unplanned expense - "urgent: car repair 8000 this week"; ' +
-    'log - record an expense or money received - "lunch 180 maya cc"; ' +
+    'log - record an expense (money going out) - "lunch 180 maya cc" / "log 300 taxi"; ' +
+    'money_in - record money received (a gift, refund, allowance, side income) - "received 500 from mom"; ' +
     'plan_add - add a recurring or dated plan - "add netflix 549 monthly on the 10th"; ' +
     'plan_remove - remove a plan - "remove netflix plan"; ' +
     'pay_plan - pay a planned bill now - "pay rent"; ' +
@@ -2666,7 +2698,7 @@
         note: pl.note || ''
       }).then(function () {
         markDone(m);
-        pushBot('Logged <b>' + esc(money(pl.amount)) + '</b> · ' + esc(pl.kind === 'card_payment' ? 'CC Payment' : (pl.category || 'Unsorted')) + ' · ' + esc(pl.account || 'cash') +
+        pushBot('Logged <b>' + (pl.kind === 'cash_in' ? '+ ' : '') + esc(money(pl.amount)) + '</b> · ' + esc(pl.kind === 'card_payment' ? 'CC Payment' : (pl.category || (pl.kind === 'cash_in' ? 'Money in' : 'Unsorted'))) + ' · ' + esc(pl.account || 'cash') +
           '. It’s in the Ledger on this phone.');
       });
       return;

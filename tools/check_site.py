@@ -2720,6 +2720,10 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.18 (real-model test): urgent is routed + uses Home's free cash, 'just got' is not urgent, a routed pick runs alone (no drift), no invented interest, thanks answered locally. Chat smoke v75.18",
+          "var hnU = heroNums();" in rd("chat.js") and "var RX_THANKS = " in rd("chat.js")
+          and "of the limit used" in rd("chat.js") and "var fr = force(t, ctx, p);" in rd("chat.js") and "function intentMoneyIn(t, ctx, p) {" in rd("chat.js")
+          and "v75.18" in rd(os.path.join("tools", "smoke", "smoke_v68.js")) and "'75.18': [" in js)
     check("v75.17 (boss: 'Yes, fix it'): 'kaya' is not Maya - a short name's typo keeps its first letter, FUZZY_NEVER words never fuzzy-match. Chat smoke v75.17",
           "var FUZZY_NEVER = {" in rd("chat.js") and "tk.charAt(0) !== w.charAt(0)" in rd("chat.js")
           and "v75.17" in rd(os.path.join("tools", "smoke", "smoke_v68.js")) and "'75.17': [" in js)
