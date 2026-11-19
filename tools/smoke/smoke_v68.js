@@ -422,3 +422,9 @@ v70hm('how much → status', 'how much');
   console.log('--- v75.20 What I can do = tappable examples (no Money tab) ' + (hOk ? 'OK' : 'FAIL'));
   if (!hOk) process.exitCode = 1;
 })();
+(function () { // v75.23: the cloud account is wired but inert without a config
+  var src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'app.js'), 'utf8');
+  var ok = /function cloudParseCfg/.test(src) && /finai/.test(src) && !/apiKey\s*:\s*['"]AIza/.test(src);
+  console.log('--- v75.23 cloud sync present, no key baked in ' + (ok ? 'OK' : 'FAIL'));
+  if (!ok) process.exitCode = 1;
+})();

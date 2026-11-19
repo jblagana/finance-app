@@ -1617,8 +1617,9 @@ html.modal-open,html.modal-open body{overflow:hidden;overscroll-behavior:none} /
 .set-bk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 /* v74.44: Settings = one main page of row cards + small pages (data-sp), the All numbers look */
 #setSheet .sp-page{display:none}
-#setSheet[data-sp="worker"] .sp-page[data-sp="worker"],#setSheet[data-sp="bk"] .sp-page[data-sp="bk"],#setSheet[data-sp="sync"] .sp-page[data-sp="sync"],#setSheet[data-sp="news"] .sp-page[data-sp="news"],#setSheet[data-sp="hist"] .sp-page[data-sp="hist"]{display:block}
-#setSheet[data-sp="worker"] .sp-main,#setSheet[data-sp="bk"] .sp-main,#setSheet[data-sp="sync"] .sp-main,#setSheet[data-sp="news"] .sp-main,#setSheet[data-sp="hist"] .sp-main{display:none}
+#setSheet[data-sp="worker"] .sp-page[data-sp="worker"],#setSheet[data-sp="bk"] .sp-page[data-sp="bk"],#setSheet[data-sp="sync"] .sp-page[data-sp="sync"],#setSheet[data-sp="news"] .sp-page[data-sp="news"],#setSheet[data-sp="hist"] .sp-page[data-sp="hist"],#setSheet[data-sp="cloud"] .sp-page[data-sp="cloud"]{display:block}
+#setSheet[data-sp="worker"] .sp-main,#setSheet[data-sp="bk"] .sp-main,#setSheet[data-sp="sync"] .sp-main,#setSheet[data-sp="news"] .sp-main,#setSheet[data-sp="hist"] .sp-main,#setSheet[data-sp="cloud"] .sp-main{display:none}
+#setSheet .sp-page textarea{width:100%;box-sizing:border-box;border-radius:11px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:13px;padding:10px 12px;resize:vertical}
 /* v74.74: Settings -> History */
 .hchips{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 4px}
 button.hchipf{height:32px;min-height:0;width:auto;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
@@ -2457,6 +2458,7 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
       <button class="set-row" id="impBtn" type="button"><span class="k grow">Restore from a backup</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V9M7 14l5-5 5 5M5 4h14"/></svg></button>
       <button class="set-row" id="expCsv" type="button"><span class="k grow">Export the ledger (CSV)</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
       <button class="set-row" type="button" data-spgo="bk"><span class="k">What goes in the backup</span><span class="v" id="setBkV"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      <button class="set-row" type="button" data-spgo="cloud"><span class="k">Cloud account (sign in &amp; sync)</span><span class="v" id="setCloudV"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
       <button class="set-row" type="button" data-spgo="sync"><span class="k">Sync with your GitHub gist</span><span class="v" id="setSyncV"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
     </section>
     <input id="impFile" type="file" accept="application/json,.json" style="display:none">
@@ -2512,6 +2514,30 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
         <label class="set-sw"><span>Coach chat<small>your conversation with Fin</small></span><input type="checkbox" id="bkChat" checked style="width:auto"></label>
       </section>
       <p class="note" style="margin:10px 4px 0">Restore only replaces what the file holds; the rest stays as it is. The CSV holds the ledger only.</p>
+    </div>
+
+    <!-- ===== page: Cloud account (v75.23) ===== -->
+    <div class="sp-page" data-sp="cloud">
+      <button type="button" class="numback sp-back"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Settings</button>
+      <h2 class="numnav-t sp-t">Cloud account</h2>
+      <p class="note" style="margin:6px 4px 10px">Sign in with Google and your numbers follow you to every device. They are locked on this phone with your passphrase first (AES-GCM), so the server only ever stores scrambled data. Optional: the app works the same signed out.</p>
+      <p id="cloudStatus" class="note" style="margin:0 4px 10px;color:var(--ink)"></p>
+      <div id="cloudCfgBox">
+        <label class="fl" for="cloudCfgTxt">Firebase web config <span style="font-weight:400">(from your Firebase project: Project settings &rsaquo; Your apps &rsaquo; Web)</span></label>
+        <textarea id="cloudCfgTxt" rows="5" placeholder='{ "apiKey": "...", "authDomain": "...", "projectId": "...", "appId": "..." }' autocomplete="off" spellcheck="false"></textarea>
+        <div style="margin-top:10px"><button class="act" id="cloudSaveCfg" type="button">Save config</button></div>
+      </div>
+      <div style="margin-top:10px"><button class="act" id="cloudInBtn" type="button">Continue with Google</button></div>
+      <div id="cloudOnBox">
+        <label class="fl" for="cloudPass">Passphrase <span style="font-weight:400">(same on every device; kept on this phone so sync can run by itself)</span></label>
+        <input type="password" id="cloudPass" placeholder="the lock for the data" autocomplete="off" spellcheck="false">
+        <div class="row" style="margin-top:14px">
+          <div><button class="act ghost" id="cloudSavePass" type="button">Save passphrase</button></div>
+          <div><button class="act" id="cloudNow" type="button">Sync now</button></div>
+        </div>
+        <div style="margin-top:12px"><button class="act ghost" id="cloudOutBtn" type="button">Sign out</button></div>
+      </div>
+      <p id="cloudNote" class="note" style="margin:10px 4px 0" aria-live="polite"></p>
     </div>
 
     <!-- ===== page: Sync ===== -->

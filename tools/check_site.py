@@ -2720,6 +2720,10 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.23 (boss: 'signin and syncs across devices'): optional Google + Firestore cloud sync reuses syncBuildObj/syncApplyRemote (the gist merge), holds only the encrypted envelope, never pushes after a failed decrypt, has a Settings page and firestore.rules",
+          "function syncApplyRemote(remote)" in js and "function syncBuildObj()" in js and "function cloudSync()" in js
+          and "wrong passphrase for this account (nothing was changed)" in js and 'data-sp="cloud"' in rd("index.html")
+          and "request.auth.uid == uid" in rd("cloud/firestore.rules") and "'75.23': [" in js)
     check("v75.22 (boss: 'add a previous state memory ... not scrolled back to top'): Settings pages (spScroll; back from All numbers via setReturning), All numbers levels (numScroll by depth) and tabs (tabScroll; the same tab = top) restore their scroll when you go back; a fresh Settings open starts at the top",
           "var spScroll = {};" in js and "setPage('', rtn ? { restore: true } : { fresh: true });" in js
           and "setReturning = true; openSheet('setSheet');" in js and "var numScroll = {};" in js

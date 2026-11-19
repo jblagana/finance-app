@@ -5114,6 +5114,7 @@
     var wv = byId('setWorkerV'); if (wv) wv.textContent = (v('aiRemoteUrl') || v('aiByoKey')) ? 'set up' : 'not set';
     var nb = ['bkBase', 'bkTxns', 'bkPlans', 'bkOwed', 'bkLog', 'bkChat'].filter(on).length;
     var bv = byId('setBkV'); if (bv) bv.textContent = nb === 6 ? 'everything' : nb + ' of 6';
+    if (typeof cloudPaint === 'function') cloudPaint(); // v75.23
     var sv = byId('setSyncV'); if (sv) sv.textContent = (v('syncUrl') && v('syncToken')) ? 'set up' : 'not set up';
     var nv = byId('setNewsV');
     if (nv) { var inf = shellNotesFor(SHELL_RELEASE.v); var n0 = inf && inf.notes[0] ? String(inf.notes[0]) : ''; nv.textContent = inf ? 'v' + inf.v + ' \u00b7 ' + (n0.length > 60 ? n0.slice(0, 58) + '\u2026' : n0) : ''; }
@@ -13161,6 +13162,65 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     });
     if (!empty) Object.keys(was).forEach(function (id) { addAdj(txnAdj(was[id]), -1); });
   }
+  // v75.23: the sync object and the merge-in, shared by the gist and the cloud account
+  function syncBuildObj() {
+    var rm = syncLocalRemoved();
+    return { app: 'finances-pwa', syncedAt: new Date().toISOString(),
+      base: state.base, txns: state.txns, plans: state.plans,
+      owed: state.owed, moneyLog: state.moneyLog,
+      removedTxn: rm.txn, removedPlan: rm.plan, removedOwed: rm.owed,
+      adj: state.adj, adjSig: state.adjSig || '' };
+  }
+  function syncApplyRemote(remote) {
+        // v73.3: the merge — per record, newest wins; a tie keeps LOCAL.
+        // (The design wall the plan warned about: the rule is timestamp
+        //  comparison per record, and it is what the smoke pins below.)
+        // v74.06: this phone's own deletions ride the merge too, so a pull
+        // can't re-add what was deleted here (it used to resurrect them).
+        var rmL = syncLocalRemoved();
+        var local = { base: state.base, txns: state.txns, plans: state.plans,
+          owed: state.owed, moneyLog: state.moneyLog,
+          removedTxn: rmL.txn, removedPlan: rmL.plan, removedOwed: rmL.owed };
+        var merged = syncMerge(local, remote);
+        // v74.06: the overlay must match the base it sits on. Remote base won
+        // and the push carried its overlay -> adopt that overlay and move it
+        // from the REMOTE txns to the merged ones; otherwise keep this phone's
+        // overlay and move it from the local txns. (A pre-v74.06 push has no
+        // adj: the local overlay is kept, as before.)
+        if (remote && remote.adj && (Number(remote.adj.mv) || 0) >= ADJ_MODEL_V && merged.base && merged.base === remote.base && merged.base !== state.base) { // v74.18: only a current-model overlay
+          state.adj = sanitizeAdj(remote.adj);
+          if (typeof remote.adjSig === 'string' && remote.adjSig) state.adjSig = normalizeStoredSig(remote.adjSig);
+          syncApplyAdj(Array.isArray(remote.txns) ? remote.txns : [], merged.txns || []);
+        } else {
+          syncApplyAdj(state.txns, merged.txns || []);
+        }
+        histMuteUntil = Date.now() + 20000; // v74.74: a sync pull is not a list of your changes
+        var prev = { base: cloneObj(state.base || defaultBase()), txns: cloneObj(state.txns || []),
+          plans: cloneObj(state.plans || []), owed: cloneObj(state.owed || { people: [], sort: 'recent' }),
+          moneyLog: cloneObj(state.moneyLog || []) };
+        var puts = [];
+        // delete what the merge dropped (tombstoned on the other side)
+        var keepT = {}, keepP = {};
+        (merged.txns || []).forEach(function (t) { keepT[t.id] = true; });
+        (merged.plans || []).forEach(function (p) { keepP[p.id] = true; });
+        state.txns.forEach(function (t) { if (!keepT[t.id]) puts.push(idbDel(STORE_TX, t.id)); });
+        state.plans.forEach(function (p) { if (!keepP[p.id]) puts.push(idbDel(STORE_PLANS, p.id)); });
+        (merged.txns || []).forEach(function (t) { puts.push(idbPut(STORE_TX, t)); });
+        (merged.plans || []).forEach(function (p) { puts.push(idbPut(STORE_PLANS, p)); });
+        state.txns = merged.txns || [];
+        state.plans = merged.plans || [];
+        state.owed = merged.owed || { people: [] };
+        state.moneyLog = merged.moneyLog || [];
+        if (merged.base) state.base = migrateCardDays(migrateBaseKinds(merged.base));
+        migratePlanDrift(); // v74.09: a phone on an older version may push links on drifted plan dates
+        return Promise.all(puts).then(function () {
+          refreshLocalSnapshot();
+          return Promise.all([persistSnapshot(), saveAdj(), saveOwed({ asIs: true }),
+            idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {})]);
+        }).then(function () {
+          render();
+        });
+  }
   function syncPush() {
     var url = (byId('syncUrl').value || '').trim();
     var token = (byId('syncToken').value || '').trim();
@@ -13177,12 +13237,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     // (and no longer present) ride the push, so a pull on the other side
     // drops them too. A record restored by Undo is back in state, so it is
     // excluded here (and its tombstone was removed). v74.06: owed people too.
-    var rm = syncLocalRemoved();
-    var obj = { app: 'finances-pwa', syncedAt: new Date().toISOString(),
-      base: state.base, txns: state.txns, plans: state.plans,
-      owed: state.owed, moneyLog: state.moneyLog,
-      removedTxn: rm.txn, removedPlan: rm.plan, removedOwed: rm.owed,
-      adj: state.adj, adjSig: state.adjSig || '' }; // v74.06: the overlay rides with the base it belongs to
+    var obj = syncBuildObj();
     syncEncrypt(obj, pass).then(function (env) {
       var body = { description: 'Fin.AI encrypted sync (v1)', files: {} };
       body.files[SYNC_FILE] = { content: JSON.stringify(env) };
@@ -13235,59 +13290,120 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       return syncDecrypt(env, pass).then(null, function (e) {
         throw new Error('could not decrypt — wrong passphrase?');
       }).then(function (remote) {
-        // v73.3: the merge — per record, newest wins; a tie keeps LOCAL.
-        // (The design wall the plan warned about: the rule is timestamp
-        //  comparison per record, and it is what the smoke pins below.)
-        // v74.06: this phone's own deletions ride the merge too, so a pull
-        // can't re-add what was deleted here (it used to resurrect them).
-        var rmL = syncLocalRemoved();
-        var local = { base: state.base, txns: state.txns, plans: state.plans,
-          owed: state.owed, moneyLog: state.moneyLog,
-          removedTxn: rmL.txn, removedPlan: rmL.plan, removedOwed: rmL.owed };
-        var merged = syncMerge(local, remote);
-        // v74.06: the overlay must match the base it sits on. Remote base won
-        // and the push carried its overlay -> adopt that overlay and move it
-        // from the REMOTE txns to the merged ones; otherwise keep this phone's
-        // overlay and move it from the local txns. (A pre-v74.06 push has no
-        // adj: the local overlay is kept, as before.)
-        if (remote && remote.adj && (Number(remote.adj.mv) || 0) >= ADJ_MODEL_V && merged.base && merged.base === remote.base && merged.base !== state.base) { // v74.18: only a current-model overlay
-          state.adj = sanitizeAdj(remote.adj);
-          if (typeof remote.adjSig === 'string' && remote.adjSig) state.adjSig = normalizeStoredSig(remote.adjSig);
-          syncApplyAdj(Array.isArray(remote.txns) ? remote.txns : [], merged.txns || []);
-        } else {
-          syncApplyAdj(state.txns, merged.txns || []);
-        }
-        histMuteUntil = Date.now() + 20000; // v74.74: a sync pull is not a list of your changes
-        var prev = { base: cloneObj(state.base || defaultBase()), txns: cloneObj(state.txns || []),
-          plans: cloneObj(state.plans || []), owed: cloneObj(state.owed || { people: [], sort: 'recent' }),
-          moneyLog: cloneObj(state.moneyLog || []) };
-        var puts = [];
-        // delete what the merge dropped (tombstoned on the other side)
-        var keepT = {}, keepP = {};
-        (merged.txns || []).forEach(function (t) { keepT[t.id] = true; });
-        (merged.plans || []).forEach(function (p) { keepP[p.id] = true; });
-        state.txns.forEach(function (t) { if (!keepT[t.id]) puts.push(idbDel(STORE_TX, t.id)); });
-        state.plans.forEach(function (p) { if (!keepP[p.id]) puts.push(idbDel(STORE_PLANS, p.id)); });
-        (merged.txns || []).forEach(function (t) { puts.push(idbPut(STORE_TX, t)); });
-        (merged.plans || []).forEach(function (p) { puts.push(idbPut(STORE_PLANS, p)); });
-        state.txns = merged.txns || [];
-        state.plans = merged.plans || [];
-        state.owed = merged.owed || { people: [] };
-        state.moneyLog = merged.moneyLog || [];
-        if (merged.base) state.base = migrateCardDays(migrateBaseKinds(merged.base));
-        migratePlanDrift(); // v74.09: a phone on an older version may push links on drifted plan dates
-        return Promise.all(puts).then(function () {
-          refreshLocalSnapshot();
-          return Promise.all([persistSnapshot(), saveAdj(), saveOwed({ asIs: true }),
-            idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {})]);
-        }).then(function () {
-          render();
+        return syncApplyRemote(remote).then(function () {
           syncNote('Pulled + merged — ' + state.txns.length + ' entries, ' + state.plans.length + ' plans now on this phone. Newest record won every conflict; ties kept this phone.');
         });
       });
     })['catch'](function (e) {
       syncNote('Pull failed: ' + (e && e.message ? e.message : e), true);
     });
+  }
+  // ---------- v75.23: cloud account (Google sign-in + Firestore, same encrypted merge as the gist) ----------
+  // The server only ever holds the AES-GCM envelope (key from your passphrase), under users' own uid; rules in cloud/firestore.rules.
+  var CLOUD_CFG = null; // bake the Firebase web config object in here for everyone; otherwise it is pasted in Settings
+  var CLOUD_LS = 'fin.cloud.v1';
+  var CLOUD_SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
+  var cloudFb = null, cloudUser = null, cloudBusy = false, cloudTimer = null, cloudSig = '', cloudReady = null;
+  function cloudRead() { try { return JSON.parse(localStorage.getItem(CLOUD_LS) || 'null') || {}; } catch (e) { return {}; } }
+  function cloudWrite(patch) {
+    var c = cloudRead(); Object.keys(patch).forEach(function (k) { if (patch[k] == null) delete c[k]; else c[k] = patch[k]; });
+    try { localStorage.setItem(CLOUD_LS, JSON.stringify(c)); } catch (e) {}
+  }
+  function cloudCfg() { return CLOUD_CFG || cloudRead().cfg || null; }
+  function cloudNote(msg, bad) { var el = byId('cloudNote'); if (el) { el.textContent = msg; el.style.color = bad ? 'var(--bad)' : 'var(--mut)'; } }
+  function cloudSigNow() { return JSON.stringify([state.base, state.txns, state.plans, state.owed, state.moneyLog]); }
+  function cloudParseCfg(txt) {
+    var m = String(txt || '').match(/\{[\s\S]*\}/); if (!m) return null;
+    var o = null, t = m[0];
+    try { o = JSON.parse(t); } catch (e) { // the console shows a JS object (bare keys, single quotes, trailing commas): make it JSON
+      try { o = JSON.parse(t.replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":').replace(/'/g, '"').replace(/,\s*}/g, '}')); } catch (e2) { return null; }
+    }
+    return o && o.apiKey && o.projectId && o.appId ? { apiKey: String(o.apiKey), authDomain: String(o.authDomain || (o.projectId + '.firebaseapp.com')), projectId: String(o.projectId), appId: String(o.appId) } : null;
+  }
+  function cloudScript(src) {
+    return new Promise(function (res, rej) {
+      var el = document.createElement('script'); el.src = src; el.onload = res;
+      el.onerror = function () { rej(new Error('could not load ' + src.split('/').pop() + ' (offline?)')); };
+      document.head.appendChild(el);
+    });
+  }
+  function cloudLoad() {
+    if (cloudReady) return cloudReady;
+    var cfg = cloudCfg(); if (!cfg) return Promise.reject(new Error('Paste your Firebase config first.'));
+    cloudReady = cloudScript(CLOUD_SDK + 'firebase-app-compat.js').then(function () { return cloudScript(CLOUD_SDK + 'firebase-auth-compat.js'); })
+      .then(function () { return cloudScript(CLOUD_SDK + 'firebase-firestore-compat.js'); }).then(function () {
+        window.firebase.initializeApp(cfg);
+        cloudFb = { auth: window.firebase.auth(), db: window.firebase.firestore() };
+        cloudFb.auth.onAuthStateChanged(function (u) { cloudUser = u || null; cloudPaint(); if (u) cloudSoon(1500); });
+      })['catch'](function (e) { cloudReady = null; throw e; });
+    return cloudReady;
+  }
+  function cloudPaint() {
+    var cfg = cloudCfg(), c = cloudRead(), st = byId('cloudStatus'), v = byId('setCloudV');
+    var on = !!cloudUser;
+    if (v) v.textContent = on ? 'signed in' : (cfg ? 'signed out' : 'not set up');
+    if (st) st.textContent = on ? 'Signed in as ' + (cloudUser.email || cloudUser.displayName || 'your Google account') + (c.last ? ' · last synced ' + new Date(c.last).toLocaleString() : '') : (cfg ? 'Signed out.' : 'Not set up yet.');
+    function show(id, yes) { var e = byId(id); if (e) e.style.display = yes ? '' : 'none'; }
+    show('cloudCfgBox', !cfg); show('cloudInBtn', !!cfg && !on); show('cloudOnBox', on);
+  }
+  function cloudSignIn() {
+    cloudNote('Opening Google…');
+    return cloudLoad().then(function () {
+      var prov = new window.firebase.auth.GoogleAuthProvider();
+      var standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+      if (standalone) return cloudFb.auth.signInWithRedirect(prov); // a popup is unreliable in an installed app
+      return cloudFb.auth.signInWithPopup(prov)['catch'](function (e) {
+        if (e && /popup/.test(e.code || '')) return cloudFb.auth.signInWithRedirect(prov);
+        throw e;
+      });
+    }).then(function () { cloudNote('Signed in. Set the passphrase below, then Sync now.'); })['catch'](function (e) { cloudNote('Sign-in failed: ' + (e && e.message ? e.message : e), true); });
+  }
+  function cloudSync() {
+    if (cloudBusy) return Promise.resolve();
+    var pass = cloudRead().pass || '';
+    if (!cloudUser) return Promise.resolve();
+    if (!pass) { cloudNote('Set a passphrase first — it locks your data before it leaves this phone.', true); return Promise.resolve(); }
+    if (!window.crypto || !crypto.subtle) { cloudNote('Encryption needs a secure context (https).', true); return Promise.resolve(); }
+    cloudBusy = true; cloudNote('Syncing…');
+    var ref = cloudFb.db.collection('finai').doc(cloudUser.uid), pulled = null;
+    return ref.get().then(function (snap) {
+      if (!snap.exists || !snap.data().env) return null;
+      return syncDecrypt(JSON.parse(snap.data().env), pass).then(null, function () { throw new Error('wrong passphrase for this account (nothing was changed)'); });
+    }).then(function (remote) {
+      pulled = remote; return remote ? syncApplyRemote(remote) : null;
+    }).then(function () {
+      var obj = syncBuildObj(), sig = cloudSigNow();
+      var same = pulled && JSON.stringify([pulled.base, pulled.txns, pulled.plans, pulled.owed, pulled.moneyLog]) === sig;
+      if (same) return;
+      return syncEncrypt(obj, pass).then(function (env) { return ref.set({ env: JSON.stringify(env), at: window.firebase.firestore.FieldValue.serverTimestamp() }); });
+    }).then(function () {
+      cloudSig = cloudSigNow(); cloudWrite({ last: Date.now() }); cloudPaint();
+      cloudNote('Synced — ' + state.txns.length + ' entries, ' + state.plans.length + ' plans. Only scrambled data is stored online.');
+    })['catch'](function (e) { cloudNote('Sync failed: ' + (e && e.message ? e.message : e), true); })['finally'](function () { cloudBusy = false; });
+  }
+  function cloudSoon(ms) {
+    if (!cloudUser || cloudTimer) return;
+    cloudTimer = setTimeout(function () { cloudTimer = null; if (cloudSigNow() !== cloudSig || ms === 1500) cloudSync(); }, ms || 8000);
+  }
+  function cloudInit() {
+    var cfg = cloudCfg(); cloudPaint();
+    if (cfg && cloudRead().on) cloudLoad()['catch'](function () {}); // restores the sign-in in the background
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && cloudUser) cloudSoon(1500); });
+    var sv = byId('cloudSaveCfg'); if (sv) sv.onclick = function () {
+      var c = cloudParseCfg((byId('cloudCfgTxt') || {}).value);
+      if (!c) { cloudNote('That does not look like the Firebase config (needs apiKey, projectId, appId).', true); return; }
+      cloudWrite({ cfg: c }); cloudNote('Saved. Now sign in.'); cloudPaint();
+    };
+    var bi = byId('cloudInBtn'); if (bi) bi.onclick = function () { cloudWrite({ on: 1 }); cloudSignIn(); };
+    var bp = byId('cloudSavePass'); if (bp) bp.onclick = function () {
+      var v = (byId('cloudPass') || {}).value || ''; if (v.length < 6) { cloudNote('Use at least 6 characters.', true); return; }
+      cloudWrite({ pass: v }); byId('cloudPass').value = ''; cloudNote('Passphrase saved on this phone. Use the same one on every device.'); cloudSync();
+    };
+    var bn = byId('cloudNow'); if (bn) bn.onclick = function () { cloudSync(); };
+    var bo = byId('cloudOutBtn'); if (bo) bo.onclick = function () {
+      cloudWrite({ on: null, pass: null, last: null }); cloudSig = '';
+      if (cloudFb) cloudFb.auth.signOut(); cloudUser = null; cloudPaint(); cloudNote('Signed out. Your data stays on this phone.');
+    };
   }
   function importData(file) {
     var fr = new FileReader();
@@ -13415,12 +13531,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.22, live: new Date(2026, 10, 19, 23, 34) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.23, live: new Date(2026, 10, 20, 0, 37) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.23': [
+      'Optional cloud account: sign in with Google and your numbers sync across your devices automatically (Settings \u203a Cloud account). Still encrypted on the phone with your passphrase, still merges newest-record-wins, and the app works the same without signing in.'
+    ],
     '75.22': [
       'Going back keeps your place: a Settings page (Worker, Backup, History, What\u2019s new, All numbers) returns you to where you were in Settings, an account in All numbers goes back to the same spot in the list, and each tab remembers its scroll when you switch away and back. Tapping the tab you are on still goes to the top, and opening Settings starts at the top.'
     ],
@@ -14971,7 +15090,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       return ((info && info.rows) || []).slice(0, 3).map(function (r) { return r.tag + ': ' + r.text; });
     } catch (e) { return []; }
   }
-  function render() { emit('ui'); renderHead(); if (window.__financeChat && window.__financeChat.refreshChips) window.__financeChat.refreshChips(); }
+  function render() { emit('ui'); renderHead(); if (typeof cloudSoon === 'function') cloudSoon(); if (window.__financeChat && window.__financeChat.refreshChips) window.__financeChat.refreshChips(); }
 
   // ---------- bridge for chat.js (the chat writes through the app's own actions) ----------
   window.FinApp = {
@@ -15697,6 +15816,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var sc0 = syncReadCreds();
     var su = byId('syncUrl'); if (su && sc0.url) su.value = sc0.url;
     var st = byId('syncToken'); if (st && sc0.token) st.value = sc0.token;
+    cloudInit(); // v75.23
     var sp = byId('syncPush'); if (sp) sp.onclick = syncPush;
     var sl = byId('syncPull'); if (sl) sl.onclick = syncPull;
     var ac = byId('addClose');
