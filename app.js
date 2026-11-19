@@ -13391,12 +13391,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.15, live: new Date(2026, 10, 19, 21, 17) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.16, live: new Date(2026, 10, 19, 21, 36) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.16': [
+      'Coach Fin understands what you mean: with the online coach on, a question in any wording (Taglish, typos, \u201cwhat about next month?\u201d) goes to the coach first, which picks the right answer; the numbers still come from this phone, exactly as Home shows them. A small \u201cread as \u2026\u201d line shows how it understood you.',
+      'Commands like \u201clunch 180 maya cc\u201d, \u201cundo\u201d or \u201cpay rent\u201d stay instant and work offline. Offline, or with the coach off, Fin answers with its built-in rules as before. Settings: \u201cUnderstand any wording\u201d (was \u201cLet it answer anything\u201d).'
+    ],
     '75.15': [
       'Owed invites: a link opened in the browser (not your Fin.AI app) now says so and gives you Copy invite, because the browser keeps a separate book. In the app, Owed \u2192 \u201cGot an invite link? Paste it\u201d connects it. Use it in the browser only if you don\u2019t have the app.',
       'The invite screen tells you to ask your friend to open it in their Fin.AI app.'

@@ -2720,6 +2720,12 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.16 (boss: 'upgrade Coach Fin'): the meaning router - a question goes to the online coach, which picks one answer + rewrites it; the app runs it with Home's numbers; commands stay instant; a new number is refused; any failure = the rules. Chat smoke v75.16",
+          "var ROUTE_TOOLS = {" in rd("chat.js") and "function parseRoute(txt, v, hist) {" in rd("chat.js")
+          and "if (routeWanted(res, ctx)) {" in rd("chat.js") and "function handleCore(raw, ctx, force) {" in rd("chat.js")
+          and "Understand any wording" in html
+          and "v75.16" in rd(os.path.join("tools", "smoke", "smoke_v68.js"))
+          and "'75.16': [" in js)
     check("v75.15 (boss: 'Yes, fix it' - the Owed invite): a browser tab (not the installed app) says so + Copy invite + 'use it here' (the link stays until then); Owed has 'Got an invite link? Paste it'; the invite note tells the sender. Smoke PART 91",
           "function connInstalled() {" in js and "function connShowBrowser(j) {" in js and "function connShowPaste() {" in js
           and "if (!connInstalled()) { connShowBrowser(j); return; }" in js

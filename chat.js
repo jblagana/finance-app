@@ -2268,7 +2268,7 @@
   }
 
   // ---------- dispatch ----------
-  function handleCore(raw, ctx) {
+  function handleCore(raw, ctx, force) {
     var t = norm(raw);
     if (!t) { var fb0 = intentFallback(''); fb0.__path = 'fallback'; return fb0; }
     if (!ctx.eff) {
@@ -2380,6 +2380,7 @@
       intentUrgent, intentLog, intentAfford, intentDeficit, intentSalaryWhatIf, intentPayday, intentTrack, intentOwed,
       intentTopSpend, intentCompare, intentBalance, intentSpend, intentStory,
       intentDebt, intentOneOff, intentSinking, intentFuture, intentStatus];
+    if (force) order = [force].concat(order.filter(function (fn) { return fn !== force; })); // v75.16: the router's pick first
     for (var i = 0; i < order.length; i++) {
       var r = order[i](t, ctx, p);
       if (r) { r.__path = 'rule:' + (order[i].name || 'intent'); return r; } // v68 item 11: shadow tag
@@ -2408,6 +2409,116 @@
         else if (r.html) a = String(r.html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
         if (F.shadowLog) F.shadowLog({ at: Date.now(), t: String(raw || ''), path: r.__path || 'rule:flow', a: a });
       }
+    } catch (e) {}
+    return r;
+  }
+
+  // ---------- v75.16: the meaning router ----------
+  // A question (anything that is not a sure command) goes to the online coach
+  // first. It only CHOOSES: one of the answers below + the question rewritten
+  // plainly. The app then runs that answer here, with Home's numbers - the model
+  // never writes a number into the answer, and a rewrite carrying a number the
+  // user did not say is thrown away. Offline / coach off / any failure = the
+  // rules' own answer, as before.
+  var ROUTE_TOOLS = {
+    status: intentStatus, afford: intentAfford, deficit: intentDeficit, salary_whatif: intentSalaryWhatIf,
+    due: intentDue, plans: intentPlanList, payday: intentPayday, track: intentTrack, owed: intentOwed,
+    top_spend: intentTopSpend, compare: intentCompare, balance: intentBalance, spend: intentSpend,
+    debt: intentDebt, one_off: intentOneOff, sinking: intentSinking, future: intentFuture, urgent: intentUrgent,
+    log: intentLog, plan_add: intentPlanAdd, plan_remove: intentPlanRemove, pay_plan: intentPayPlan,
+    undo: intentUndoLast, help: intentHelp, story: intentStory
+  };
+  // the commands the rules read for sure - these never wait for the router
+  var ROUTE_SURE = /^rule:(intentHelp|intentGreet|intentUndoLast|intentPayPlan|intentPlanRemove|intentPlanAdd|intentLog|intentUrgent)$/; // a balance / salary story is read by the router too ('kaya ko ba 15k' is not Maya)
+  var ROUTE_SYSTEM = 'You route messages for Coach Fin, a personal money app. Pick the ONE tool that answers the message and rewrite the message as a short plain-English request that tool understands. Reply with ONLY a JSON object, nothing else: {"tool":"<name>","q":"<rewritten request>"}. ' +
+    'Rules: keep every amount, name, account and date exactly as the user gave them; use the recent conversation only to fill in what a follow-up leaves out ("what about next month?"); never add a number the user did not give; translate Tagalog / Taglish to English; when no tool fits, or the user wants advice, an explanation, an opinion or small talk, use "coach" with q = the message. ' +
+    'Tools (name - what it answers - example q): ' +
+    'status - free cash, left to spend, how much per day, why free cash is low - "how much is free" / "why is free cash low"; ' +
+    'afford - can I afford / buy / save an amount, this cycle or next - "can i afford 15000 next cycle"; ' +
+    'deficit - can I charge an amount on a card - "can i charge 2500 on maya cc"; ' +
+    'salary_whatif - what if the salary is late or does not come - "what if my salary doesnt come"; ' +
+    'due - bills and plans due today / tomorrow / this week / this cycle - "whats due this week"; ' +
+    'plans - list my plans, bills, subscriptions - "show my plans"; ' +
+    'payday - when the next salary is - "when is payday"; ' +
+    'track - am I on track, daily budget, left for today - "am i on track"; ' +
+    'owed - who owes me, who I owe - "who owes me"; ' +
+    'top_spend - where most of my money went - "top spending this month"; ' +
+    'compare - this month against last month - "this month vs last month"; ' +
+    'balance - one account or card balance - "landbank balance"; ' +
+    'spend - how much I spent, optionally on a category or day - "how much did i spend on food yesterday"; ' +
+    'debt - my debts and installments - "my debts"; ' +
+    'one_off - one-off expenses this month - "my one-offs this month"; ' +
+    'sinking - savings goals - "my savings goals"; ' +
+    'future - worst case, borrowing, emergency - "worst case"; ' +
+    'urgent - an urgent unplanned expense - "urgent: car repair 8000 this week"; ' +
+    'log - record an expense or money received - "lunch 180 maya cc"; ' +
+    'plan_add - add a recurring or dated plan - "add netflix 549 monthly on the 10th"; ' +
+    'plan_remove - remove a plan - "remove netflix plan"; ' +
+    'pay_plan - pay a planned bill now - "pay rent"; ' +
+    'undo - undo the last entry - "undo"; ' +
+    'help - what can you do - "help"; ' +
+    'story - the user states new numbers: a balance, salary, budget or bill amount - "maya cc balance is 900" / "my salary in october is 25000"; ' +
+    'coach - anything else.';
+  function routerPrompt(v, hist) {
+    var L = [];
+    var h = (hist || []).slice(-4).map(function (x) { return (x.who === 'user' ? 'User: ' : 'Coach: ') + String(x.txt || '').slice(0, 160); });
+    if (h.length) { L.push('Recent conversation:'); L.push(h.join('\n')); L.push(''); }
+    L.push('Message: ' + String(v || '').slice(0, 400));
+    L.push('/no_think');
+    return [{ role: 'system', content: ROUTE_SYSTEM }, { role: 'user', content: L.join('\n') }];
+  }
+  // every number the user (or the recent conversation) actually said, with 15k = 15000
+  function routeNums(txt) {
+    var out = {}, m, rx = /(\d[\d,]*(?:\.\d+)?)\s*(k\b|thousand)?/gi;
+    var src = String(txt || '');
+    while ((m = rx.exec(src))) {
+      var n = parseFloat(m[1].replace(/,/g, ''));
+      if (!isFinite(n)) continue;
+      out[String(n)] = 1;
+      if (m[2]) out[String(n * 1000)] = 1;
+    }
+    return out;
+  }
+  function parseRoute(txt, v, hist) {
+    var s = String(txt || '').replace(/<think>[\s\S]*?(<\/think>|$)/gi, ' ');
+    var a = s.indexOf('{'), b = s.lastIndexOf('}');
+    if (a < 0 || b <= a) return null;
+    var o = null;
+    try { o = JSON.parse(s.slice(a, b + 1)); } catch (e) { return null; }
+    if (!o || typeof o.tool !== 'string') return null;
+    var tool = o.tool.trim().toLowerCase();
+    if (tool !== 'coach' && !ROUTE_TOOLS.hasOwnProperty(tool)) return null;
+    var q = String(o.q == null ? '' : o.q).replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (tool !== 'coach' && !q) return null;
+    var said = routeNums(String(v || '') + ' ' + (hist || []).map(function (x) { return x.txt || ''; }).join(' '));
+    var asked = routeNums(q);
+    for (var k in asked) if (asked.hasOwnProperty(k) && !said[k]) return null; // a number the user never said
+    return { tool: tool, q: q };
+  }
+  function routeWanted(res, ctx) {
+    var FAI = typeof window !== 'undefined' ? window.FinAI : null;
+    if (!FAI || !ctx || !ctx.eff || !FAI.remoteAvailable || !FAI.remoteAvailable() || !(FAI.forceOnline && FAI.forceOnline())) return false;
+    if (!res) return true;
+    if (!res.__path) return false; // a running flow (a "which one?" ask, a pending answer)
+    return !ROUTE_SURE.test(res.__path);
+  }
+  // the router's reply -> the answer to show (null = keep the rules' own)
+  function routeAnswer(v, ctx, txt) {
+    var rt = parseRoute(txt, v, recentHist);
+    if (!rt) return null;
+    var r;
+    if (rt.tool === 'coach') {
+      r = aiCoach(String(v || ''), ctx);
+      if (!r) return null;
+    } else {
+      pendingAsk = null; // the first read's question (if any) is not the one being answered
+      r = handleCore(rt.q, ctx, ROUTE_TOOLS[rt.tool]);
+      if (!r) return null;
+      if (r.html && !r.llm && norm(rt.q) !== norm(v)) r.html += '<div class="c-via">read as “' + esc(rt.q) + '”</div>';
+    }
+    r.__route = rt.tool;
+    try {
+      if (F.shadowLog) F.shadowLog({ at: Date.now(), t: String(v || ''), path: 'router:' + rt.tool, a: rt.q });
     } catch (e) {}
     return r;
   }
@@ -2700,6 +2811,17 @@
       });
       return pre.then(function (vec) {
         var res = handle(v, ctx);
+        // v75.16: a question goes to the router first; any failure keeps the rules' answer
+        if (routeWanted(res, ctx)) {
+          return window.FinAI.generate(routerPrompt(v, recentHist), { maxNew: 160 }).then(function (txt) {
+            var rr = null;
+            try { rr = routeAnswer(v, ctx, txt); } catch (e) { rr = null; }
+            return showRes(rr || res);
+          }, function () { return showRes(res); });
+        }
+        return showRes(res);
+      });
+      function showRes(res) {
         if (res.llm) return sendLlm(res, ctx, typing);
         var bm = { id: chatId(), who: 'bot', html: res.html, actions: res.actions || [], at: new Date().toISOString() };
         if (res.storyLines) bm.storyLines = res.storyLines; // v35: the draft lives on the message (persisted in the chat store)
@@ -2712,7 +2834,7 @@
           appendMsg(bm);
           updateFresh(ctx);
         });
-      });
+      }
     }).catch(function (err) {
       if (typing.parentNode) typing.parentNode.removeChild(typing);
       pushBot('Something went wrong: ' + esc(String((err && err.message) || err)));
@@ -2813,6 +2935,7 @@
     URGENT_RX: URGENT_RX,
     extractStory: extractStory,
     coachHist: coachHist, // v72.5: exported for the Node smoke
+    parseRoute: parseRoute, routeWanted: routeWanted, routeAnswer: routeAnswer, routerPrompt: routerPrompt, // v75.16
     storyMonth: storyMonth,
     fuzzyNameIn: fuzzyNameIn,
     open: openChat,

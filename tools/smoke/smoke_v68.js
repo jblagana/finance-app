@@ -239,3 +239,40 @@ v70hm('how much → status', 'how much');
   console.log('--- v75.14 "undo" offers the last entry, never an Owed leg ' + (cOk ? 'OK' : 'FAIL got=' + JSON.stringify(c && c.actions)));
   if (!cOk) process.exitCode = 1;
 })();
+
+// v75.16: the meaning router - the coach only picks; the app answers; a new number is refused
+(function v7516() {
+  function iso(d) { return d.getFullYear() + '-' + (d.getMonth() < 9 ? '0' : '') + (d.getMonth() + 1) + '-' + (d.getDate() < 10 ? '0' : '') + d.getDate(); }
+  var today = iso(new Date());
+  var ctx = {
+    eff: { cards: [], total_prepay: 0, card_owed: 0, cash: { total: 5000, free: 4000, accounts: [{ name: 'LandBank', value: 5000 }] }, floor: 0, prepay_day: 14, month: today.slice(0, 7), obligations: { debts: [], one_offs: [] } },
+    base: { budgets: { Food: 0 }, salary: 25000, salary_overrides: {}, budget_overrides: {}, one_offs: {}, debts: {}, accounts: [{ name: 'LandBank', kind: 'debit', value: 5000 }] },
+    txns: [
+      { id: 'r1', date: today, kind: 'cash_out', amount: 300, category: 'Food', account: 'LandBank', created: '2026-01-01T00:00:00Z' },
+      { id: 'r2', date: today, kind: 'cash_out', amount: 120, category: 'Transpo', account: 'LandBank', created: '2026-01-02T00:00:00Z' }
+    ],
+    plans: [], at: new Date().toISOString()
+  };
+  var a = fc.routeAnswer('ano pinakamalaki kong gastos ngayong buwan', ctx, '<think>hmm</think> {"tool":"top_spend","q":"top spending this month"}');
+  var aOk = !!a && a.__path === 'rule:intentTopSpend' && a.__route === 'top_spend' && a.html.indexOf('Food') >= 0 && a.html.indexOf('read as') >= 0;
+  console.log('--- v75.16 Taglish question -> the router picks top_spend, the app answers ' + (aOk ? 'OK' : 'FAIL path=' + (a && a.__path)));
+  if (!aOk) process.exitCode = 1;
+  var b = fc.parseRoute('{"tool":"afford","q":"can i afford 99999 next cycle"}', 'can i buy the phone', []);
+  var b2 = fc.parseRoute('{"tool":"afford","q":"can i afford 15000 next cycle"}', 'kaya ko ba 15k na phone next month', []);
+  var bOk = b === null && !!b2 && b2.tool === 'afford';
+  console.log('--- v75.16 a rewrite with a number the user never said is refused (15k = 15000 kept) ' + (bOk ? 'OK' : 'FAIL'));
+  if (!bOk) process.exitCode = 1;
+  var c = fc.parseRoute('sure! here you go', 'x', []) === null && fc.parseRoute('{"tool":"rm_rf","q":"x"}', 'x', []) === null;
+  console.log('--- v75.16 a broken or unknown router reply keeps the rules\' answer ' + (c ? 'OK' : 'FAIL'));
+  if (!c) process.exitCode = 1;
+  var saved = window.FinAI;
+  window.FinAI = { remoteAvailable: function () { return true; }, forceOnline: function () { return true; } };
+  var cmd = fc.handle('lunch 180 landbank', ctx), q = fc.handle('how much is free', ctx);
+  var st = fc.handle('kaya ko ba yung 15k na phone next month', ctx);
+  var dOk = !fc.routeWanted(cmd, ctx) && fc.routeWanted(q, ctx) && fc.routeWanted(st, ctx);
+  window.FinAI = { remoteAvailable: function () { return false; }, forceOnline: function () { return true; } };
+  dOk = dOk && !fc.routeWanted(q, ctx);
+  window.FinAI = saved;
+  console.log('--- v75.16 commands stay instant; questions route only while the coach is online ' + (dOk ? 'OK' : 'FAIL'));
+  if (!dOk) process.exitCode = 1;
+})();
