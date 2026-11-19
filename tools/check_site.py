@@ -2720,6 +2720,11 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.08 (full simulation pass 2 - Cards + Owed): the All numbers Accounts header is the live Liquid (reconData totalLive) and names the Cash wallet. Smoke PART 86",
+          "var liqHead = rdNv && rdNv.totalLive != null ? rdNv.totalLive : liq;" in js
+          and "entries logged from Cash, which has no account here" in js
+          and "PART 86: v75.08" in smoke
+          and "'75.08': [" in js)
     check("v75.07 (boss: 'in the full simulation, include parts/ui that looks weird, obsolete, useless, looks off etc'): pass 1 - Ledger deleted rows labelled (goneLater), one Unsorted, coach headroom line not repeated, This-cycle plans button, hero note, Settings 'live' + Liquid, countUp lands when hidden. Smoke PART 85",
           "var goneLater = add && e.tid && !mlTxn" in js
           and "if (e.c && e.c !== 'Unsorted')" in js

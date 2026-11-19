@@ -4528,8 +4528,16 @@
           ? '<span class="nv-amt">+' + money(-amt) + '<small>credit</small></span></button>'
           : '<span class="nv-amt' + (card ? ' owe' : '') + '">' + money(amt) + (card ? '<small>owed</small>' : '') + '</span></button>');
     }
-    h += '<div class="nv-labrow"><h2 class="nv-lab">Accounts</h2><span>' + money(r2(liq)) + ' cash · ' + money(r2(owed)) + ' owed</span></div>' +
-      '<section class="nv-card"><div class="nv-accs">' + ah + '</div><button type="button" class="nv-add" data-nvadd="acc">+ Add account</button></section>';
+    // v75.07 (full simulation pass 2): the header summed the rows only, so 'PHP 76,727.79 cash' sat beside a hero
+    // Liquid of 65,695.36 — the gap is the Cash wallet (entries logged from Cash with no Cash account set up), which
+    // has no row here. The header shows the live Liquid and a line names the wallet when it holds anything.
+    var rdNv = null; try { rdNv = reconData(); } catch (eNv) { rdNv = null; }
+    var walletNv = rdNv && rdNv.debits ? rdNv.debits.filter(function (x) { return x.isCash && !x.real; })[0] : null;
+    var liqHead = rdNv && rdNv.totalLive != null ? rdNv.totalLive : liq;
+    h += '<div class="nv-labrow"><h2 class="nv-lab">Accounts</h2><span>' + money(r2(liqHead)) + ' liquid · ' + money(r2(owed)) + ' owed</span></div>' +
+      '<section class="nv-card"><div class="nv-accs">' + ah + '</div>' +
+      (walletNv && Math.abs(walletNv.live) > 0.004 ? '<p class="note" style="margin:8px 12px 0">Cash wallet ' + (walletNv.live < 0 ? '−' : '') + money(Math.abs(walletNv.live)) + ' — entries logged from Cash, which has no account here. Add a Cash account to set its balance.</p>' : '') +
+      '<button type="button" class="nv-add" data-nvadd="acc">+ Add account</button></section>';
     // v74.45: the shared Card rules section is gone — each card's rules live
     // in its own account page (the shared values only seed new cards)
     // Budgets
@@ -13194,12 +13202,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.07, live: new Date(2026, 10, 19, 14, 0) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.08, live: new Date(2026, 10, 19, 14, 13) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.08': [
+      'All numbers: the Accounts total is now your live Liquid (the same number as the hero), and a line shows the Cash wallet when entries logged from Cash have no Cash account behind them.'
+    ],
     '75.07': [
       'Ledger: a deleted entry now says Deleted (and the original says deleted later, without Edit / Delete); Unsorted shows once in the category filter.',
       'Home: the coach no longer repeats today\'s number twice; the coach\'s plans button opens Committed\'s This cycle; the hero note no longer says one-offs are left out (they are in).',

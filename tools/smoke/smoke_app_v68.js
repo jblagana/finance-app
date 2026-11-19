@@ -4321,6 +4321,10 @@ waitReady().then(async function (F) {
       ok(body85.indexOf('Deleted · Lunch85') >= 0 && body85.indexOf('Lunch85 · deleted later') >= 0, 'v75.07: a deleted entry says Deleted, its original says deleted later');
       ok(body85.indexOf('data-ml-del="gone85"') < 0, 'v75.07: no Delete button on an entry that is already gone');
       st.moneyLog = log85; F.renderMoneyLog();
+      // ============ PART 86: v75.08 - full simulation pass 2 (Cards + Owed) ============
+      console.log('\n== PART 86: v75.08 - All numbers header = live Liquid ==');
+      var rd86 = F.reconData();
+      ok(rd86 && Math.abs(rd86.totalLive - F.effectiveSnap().cash.total) < 0.005, 'v75.08: the live account total is the hero Liquid (' + (rd86 && rd86.totalLive) + ')');
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
