@@ -459,6 +459,14 @@
       }
     }
     for (var k = 0; k < n; k++) out.push(step(d, idx + k)); // v74.09: anchored (see above)
+    // v75.09 (full simulation pass 3): a series held at an unpaid past due spent its window on the past — Gym with
+    // two overdue months showed Oct / Nov / Dec, so Jan 4 never reached the Next-cycle peek or the graph (the
+    // boss's next cycle read 4,700 richer than it is). The window always reaches `win` dates from today on.
+    if (!hasCount) {
+      var todayW = todayISO(), futW = 0, kW = idx + n, guardW = 0;
+      out.forEach(function (x) { if (x >= todayW) futW++; });
+      while (futW < win && guardW < 400) { var gW = step(d, kW++); out.push(gW); if (gW >= todayW) futW++; guardW++; }
+    }
     return out;
   }
   // v74.09: the one-time repair for data written while the grid DRIFTED.
@@ -13202,12 +13210,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.08, live: new Date(2026, 10, 19, 14, 13) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.09, live: new Date(2026, 10, 19, 14, 18) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.09': [
+      'Fixed: a recurring plan with unpaid past dates no longer drops out of the Next cycle view and the graph (Gym and Home Utils were missing, so next cycle looked PHP 4,700 better than it is).'
+    ],
     '75.08': [
       'All numbers: the Accounts total is now your live Liquid (the same number as the hero), and a line shows the Cash wallet when entries logged from Cash have no Cash account behind them.'
     ],

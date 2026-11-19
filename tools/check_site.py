@@ -2720,6 +2720,10 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.09 (full simulation pass 3 - Salary + cycle): a count-less series held at an unpaid past due still reaches `win` dates from today (planGridDates). Smoke PART 87",
+          "while (futW < win && guardW < 400)" in js
+          and "PART 87: v75.09" in smoke
+          and "'75.09': [" in js)
     check("v75.08 (full simulation pass 2 - Cards + Owed): the All numbers Accounts header is the live Liquid (reconData totalLive) and names the Cash wallet. Smoke PART 86",
           "var liqHead = rdNv && rdNv.totalLive != null ? rdNv.totalLive : liq;" in js
           and "entries logged from Cash, which has no account here" in js

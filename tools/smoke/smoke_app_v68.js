@@ -4325,6 +4325,15 @@ waitReady().then(async function (F) {
       console.log('\n== PART 86: v75.08 - All numbers header = live Liquid ==');
       var rd86 = F.reconData();
       ok(rd86 && Math.abs(rd86.totalLive - F.effectiveSnap().cash.total) < 0.005, 'v75.08: the live account total is the hero Liquid (' + (rd86 && rd86.totalLive) + ')');
+      // ============ PART 87: v75.09 - full simulation pass 3 (Salary + cycle) ============
+      console.log('\n== PART 87: v75.09 - a plan held at unpaid past dues still reaches the next cycle ==');
+      var plans87 = st.plans.slice();
+      var a87 = await F.addPlan({ name: 'Probe87gym', amount: 1200, date: '2026-09-04', repeat: 'monthly', kind: 'expense' });
+      var p87 = st.plans.filter(function (x) { return x.id === a87; })[0];
+      var occ87 = F.planOccurrences(p87);
+      ok(occ87.indexOf('2026-12-04') >= 0 && occ87.indexOf('2027-01-04') >= 0 && occ87.indexOf('2027-02-04') >= 0, 'v75.09: three unpaid past months still leave three dates ahead (' + occ87.join(',') + ')');
+      ok(F.planAllDates(p87).indexOf('2026-09-04') >= 0, 'v75.09: the unpaid past dates stay (overdue)');
+      st.plans.length = 0; plans87.forEach(function (x) { st.plans.push(x); });
       // cleanup: delete the PART 30/31 probe txns (the overlay + ledger rows go with them)
       await F.deleteTxn(id30);
       await tick();
