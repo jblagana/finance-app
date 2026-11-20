@@ -2720,6 +2720,9 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.37 (boss: 'the ledger histogram, make it show the amount when i click on a bar then highlight it'): each bar is a tap target (data-dday), the tapped one turns amber (.sel, the rest dim) and the hero's hs-panel shows the day + total + categories",
+          "var dailySel = null;" in js and "data-dday=" in js and "dailySel = dailySel === k ? null : k;" in js and "renderDailyBars(w, hi, byDay, grand, byDayCat);" in js
+          and ".dbars .db.sel,.dbars.has-sel .db.sel{background:var(--warn)" in rd("index.html") and "'75.37': [" in js)
     check("v75.36 (boss: 'cleanup those nov18 ghost entries too'): logDropGhosts drops every tid row whose entry is gone (add+del pairs too) and the ledger list skips them at render",
           "return (log || []).filter(function (e) { return !e || !e.tid || live[e.tid]; });" in js and "if (e && e.tid && delT[e.tid] && !liveT[e.tid]) return false;" in js and "'75.36': [" in js)
     check("v75.35 (boss picked option A): the day header = your spend (ml-dmine, ink) + 'of <total>' in grey (ml-dof) only when it differs; no mine:/total: labels",

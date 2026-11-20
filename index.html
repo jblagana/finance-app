@@ -1233,12 +1233,17 @@ button.cmlink.pdnotpay{display:block;margin:10px auto 0;color:var(--bad);font-si
 .dailyTotal:empty{display:none}
 .daily:empty{display:none}
 .dbars{display:flex;align-items:flex-end;gap:2px;height:110px;margin-top:12px}
+.dbars .dbw{flex:1;min-width:0;height:100%;display:flex;align-items:flex-end;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .dbars .db{flex:1;min-width:0;border-radius:5px;background:var(--acc);opacity:.55;min-height:3px}
 .dbars .db.zero{background:var(--s3);opacity:1}
 .dbars .db.today{opacity:1}
 .dlabs{display:flex;gap:2px;margin-top:6px}
 .dlabs .dl{flex:1;min-width:0;text-align:center;font-size:10.5px;color:var(--mut);white-space:nowrap;overflow:visible}
 .dlabs .dl.today{color:var(--ink);font-weight:600}
+.dbars.has-sel .db{opacity:.3}.dbars.has-sel .db.zero{opacity:1}
+.dbars .db.sel,.dbars.has-sel .db.sel{background:var(--warn);opacity:1} /* v75.37: the tapped day (the hero step's amber) */
+.dlabs .dl.sel{color:var(--warn);font-weight:600}
+#dailyBox .hs-panel{margin-top:10px}
 .donutwrap{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 .ml-cat{font-size:14.5px;font-weight:600}
 .ml-note{font-style:normal;font-size:12.5px}

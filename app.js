@@ -9045,8 +9045,13 @@
   // same spend rule + window the donut uses: spendOf, no prepays, no
   // salary), today's bar in full green, the rest softer, a label every 5th
   // day. Display only — nothing is written.
-  function renderDailyBars(w, hi, byDay, grand) {
+  // v75.37 (boss: 'the ledger histogram, make it show the amount when i click on a bar then highlight it, just
+  // like when i click a step in the hero card graph'): a tapped bar turns amber (the rest dim) and the hero's
+  // panel opens under the bars - the day, what was spent, by category. Tap it again (or another) to change.
+  var dailySel = null;
+  function renderDailyBars(w, hi, byDay, grand, byDayCat) {
     var box = byId('dailyBox'); if (!box) return;
+    if (dailySel && (dailySel < w.start || dailySel > hi)) dailySel = null;
     var tot = byId('dailyTotal'); if (tot) tot.textContent = money(grand);
     var days = [], max = 0, cur = parseISO(w.start), endD = parseISO(hi);
     for (var guard = 0; cur <= endD && guard < 40; guard++) {
@@ -9058,11 +9063,31 @@
     var bars = '', labs = '';
     days.forEach(function (x, i) {
       var h = max > 0 ? Math.max(3, Math.round(x.v / max * 100)) : 3;
-      bars += '<span class="db' + (x.last ? ' today' : '') + (x.v > 0 ? '' : ' zero') + '" style="height:' + h + '%" title="' + x.k + ' · ' + money(x.v) + '"></span>';
-      var showLab = x.last || i === 0 || (x.d % 5 === 0 && i < days.length - 2); // a 5th-day label never sits next to today's
-      labs += '<span class="dl' + (x.last ? ' today' : '') + '">' + (showLab ? x.d : '') + '</span>';
+      var isSel = dailySel === x.k;
+      bars += '<span class="dbw" data-dday="' + x.k + '" role="button" tabindex="0" aria-pressed="' + (isSel ? 'true' : 'false') + '" aria-label="' + esc(dayMonth(x.k)) + ' · ' + esc(money(x.v)) + '">' +
+        '<span class="db' + (x.last ? ' today' : '') + (x.v > 0 ? '' : ' zero') + (isSel ? ' sel' : '') + '" style="height:' + h + '%"></span></span>';
+      var showLab = x.last || i === 0 || isSel || (x.d % 5 === 0 && i < days.length - 2); // a 5th-day label never sits next to today's
+      labs += '<span class="dl' + (x.last ? ' today' : '') + (isSel ? ' sel' : '') + '">' + (showLab ? x.d : '') + '</span>';
     });
-    box.innerHTML = '<div class="dbars" role="img" aria-label="Spent per day this cycle">' + bars + '</div><div class="dlabs">' + labs + '</div>';
+    var below = '';
+    if (dailySel) {
+      var v = byDay[dailySel] || 0, cats = (byDayCat && byDayCat[dailySel]) || {};
+      var cn = Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; });
+      below = '<div class="hs-panel"><div class="hs-r"><b>' + esc(dayMonth(dailySel) + (dailySel === hi ? ' · today' : '')) + '</b>' +
+        '<b class="' + (v > 0.004 ? 'neg' : '') + '">' + (v > 0.004 ? '− ' + esc(pesoFull(v)) : 'Nothing spent') + '</b></div>' +
+        (cn.length ? '<div class="hs-p">' + cn.map(function (c) { return esc(c) + ' ' + esc(pesoShort(cats[c])); }).join(' · ') + '</div>' : '') + '</div>';
+    } else below = '<p class="hs-cap">Tap a bar to see that day</p>';
+    box.innerHTML = '<div class="dbars' + (dailySel ? ' has-sel' : '') + '" role="group" aria-label="Spent per day this cycle">' + bars + '</div><div class="dlabs">' + labs + '</div>' + below;
+    var bs = box.querySelectorAll ? box.querySelectorAll('[data-dday]') : [];
+    var pick = function (el) {
+      var k = el.getAttribute('data-dday');
+      dailySel = dailySel === k ? null : k;
+      renderDailyBars(w, hi, byDay, grand, byDayCat);
+    };
+    for (var bi = 0; bi < bs.length; bi++) {
+      bs[bi].onclick = function () { pick(this); };
+      bs[bi].onkeydown = function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(this); } };
+    }
   }
   function renderDonut() {
     var wrap = byId('donut'), svgBox = byId('donutSvg'), leg = byId('donutLegend'), rng = byId('donutRange');
@@ -9072,7 +9097,7 @@
     var w = { start: cd.start, end: cd.end, month: cd.month };
     var hi = todayISO();
     if (w.end < hi) hi = w.end;
-    var totals = {}, grand = 0, byDay = {}; // v74.24 look upgrade: byDay feeds the daily bars
+    var totals = {}, grand = 0, byDay = {}, byDayCat = {}; // v74.24 look upgrade: byDay feeds the daily bars; v75.37: + per category (the tapped bar's panel)
     state.txns.forEach(function (t) {
       var d = String(t.date || '');
       if (d < w.start || d > hi) return; // v72.52: the cycle window, not the calendar month
@@ -9083,12 +9108,14 @@
       totals[c] = (totals[c] || 0) + a;
       grand += a;
       byDay[d] = (byDay[d] || 0) + a;
+      if (!byDayCat[d]) byDayCat[d] = {};
+      byDayCat[d][c] = (byDayCat[d][c] || 0) + a;
     });
     if (rng) rng.textContent = cycleLabelFor(w);
     var names = Object.keys(totals).sort(function (a, b) { return totals[b] - totals[a]; });
     if (!names.length || grand <= 0) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
-    renderDailyBars(w, hi, byDay, grand);
+    renderDailyBars(w, hi, byDay, grand, byDayCat);
     var segs = names.slice(0, 5).map(function (n) { return { name: n, v: totals[n] }; });
     var rest = 0;
     names.slice(5).forEach(function (n) { rest += totals[n]; });
@@ -13715,12 +13742,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.36, live: new Date(2026, 10, 21, 0, 20) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.37, live: new Date(2026, 10, 21, 0, 28) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.37': [
+      'Ledger: tap a bar in the spending chart to see that day. It turns amber like a step on the Home graph, and the day\u2019s total and its categories show underneath. Tap it again to clear.'
+    ],
     '75.36': [
       'Ledger: the leftover pairs from an Owed entry that was undone or changed (a \u201cpaid back\u201d that was added and taken back right after) are cleared. An entry that is gone no longer leaves rows behind.'
     ],

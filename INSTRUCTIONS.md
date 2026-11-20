@@ -1,3 +1,7 @@
+## 2026-11-21 - "the ledger histogram, make it show the amount when i click on a bar then highight it, just like when i click a step in the hero card graph" -> "a tapped day bar turns amber (others dim) and the hero-style panel under it shows the day, the total and its categories; tap again to clear"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.37 (app.js renderDonut collects byDayCat; renderDailyBars: dailySel, bars wrapped in tap targets (data-dday, keyboard too), .sel + .has-sel, hs-panel / hs-cap below; index.html: .dbw, .sel amber, dim the rest)
+
 ## 2026-11-21 - "can u cleanup those nov18 ghost entries too" -> "the Nov 18 add + take-back pairs (Papa 5,000 paid back x2, Vhal 82.50 you paid back) disappear; a gone entry leaves no ledger rows"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.36 (app.js logDropGhosts keeps only rows whose txn is live (or no tid) - add+del pairs from an Owed undo / re-file go at load and on every merge; renderMoneyLog skips gone-entry rows meanwhile. Smoke: v75.27 merge test + v75.07 PART 85 retargeted)
