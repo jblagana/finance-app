@@ -3616,7 +3616,7 @@
           '<span class="ml-tile' + (badge ? ' has-badge' : '') + '" aria-hidden="true" style="background:' + tile.bg + ';color:' + tile.fg + '">' + esc(tile.ch) + badge + '</span>' +
           '<span class="ml-l"><span class="ml-cat">' + esc(p.lab) + (ow ? '<span class="vh"> · owed, ' + esc(ow.name) + '</span>' : '') + '</span>' +
           (subTxt ? '<span class="ml-sub' + (noteTxt ? ' ml-note' : '') + '">' + esc(subTxt) + '</span>' : '') + '</span>' +
-          '<b class="' + (down ? 'ml-down' : 'ml-up') + '">' + amtTxt + '</b></button>' + cycChip +
+          '<b class="' + (down ? 'ml-down' : 'ml-up') + (ow && !ow.mine ? ' ml-notmine' : '') + '"' + (ow && !ow.mine ? ' title="Not your spend - a friend\u2019s share or a payback; it does not count in Spent today"' : '') + '>' + amtTxt + '</b></button>' + cycChip +
           '<div class="ml-more">' +
           '<div class="ml-meta">' + mlDate(e.at) + (wTxt ? wTxt : (p.m ? ' · ' + esc(p.m) : '')) +
           (ow ? ' · Owed · ' + esc(ow.name) + (ow.mine ? '' : ow.leg === 'tmb' ? ' (paid back)' : ow.leg === 'tpf' ? ' (they paid for you)' : ow.leg === 'itb' ? ' (you paid back)' : ' (their share)') : '') + '</div>' + // v74.85: the open row names the friend
@@ -13698,12 +13698,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.32, live: new Date(2026, 10, 20, 23, 52) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.33, live: new Date(2026, 10, 20, 23, 53) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.33': [
+      'Ledger: amounts that are not your own spend (a friend\u2019s share, a payback either way) are greyed out, so the coloured ones are exactly what counts in Spent today.'
+    ],
     '75.32': [
       'Ledger: entries now show up even before you set up your numbers (a friend who uses Fin.AI only for Owed had an empty ledger).',
       'Owed: an entry you reject stays on the card in red, \u201cYou rejected\u201d, until your friend deletes it. If they change it, it comes back for you to confirm.'

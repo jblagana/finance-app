@@ -2720,6 +2720,8 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.33 (boss: 'entries in ledger that are not mine maybe grey out the amount'): an Owed leg row (ow && !ow.mine - not spend) gets ml-notmine (muted amount)",
+          "(ow && !ow.mine ? ' ml-notmine' : '')" in js and ".ml-down.ml-notmine{color:var(--mut)" in rd("index.html") and "'75.33': [" in js)
     check("v75.32 (boss: 'why is panes ledger not populating' + 'the one who rejected should still see the entry'): logMoney writes rows with no numbers (e.nn) + a no-numbers backfill at load; a rejected inbox item stays marked (it.rej) and drops on their delete",
           "var nn = !s;" in js and "if (e.nn) extra = '';" in js and "if (!effectiveSnap() && state.txns.length) {" in js
           and "it.rej = 1; it.why = why;" in js and "function connPending(p)" in js and "'75.32': [" in js)

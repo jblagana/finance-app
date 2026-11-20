@@ -1,3 +1,7 @@
+## 2026-11-20 - "entries in ledger that are not mine maybe grey out the amount so i know which ones are mine and counts in my spent today" -> "Owed legs (a friend's share, paybacks) show a muted amount in the ledger"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.33 (app.js: the ledger amount of an Owed leg row (not mine: theirs / paid back / paid for you / you paid back - the rows spendOf skips) gets ml-notmine + a title; index.html: .ml-notmine = muted color)
+
 ## 2026-11-20 - "why is panes ledger not populating, also when one sends a reject, the one who rejected should still see the entry and says "you rejected" in red and only disappears when it gets deleted" -> "the ledger fills without numbers set up; a rejected entry stays on the rejecter's card in red until deleted"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.32 (app.js: logMoney no longer bails without a snapshot (e.nn rows, no before/after line) + a load-time backfill of rowless txns while there are no numbers; connReject keeps the item marked rej (red 'You rejected - why'), connPending counts only unrejected; the friend's del drops it, their edit replaces it)
