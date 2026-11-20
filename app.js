@@ -11487,17 +11487,29 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     });
   }
   function connFsReady() { return !!(cloudFb && cloudFb.auth.currentUser); }
+  // v75.31 (boss: 'i already added an owed entry from phone but pane's not receiving it'): a message sent
+  // before the cloud SDK was up (the join's hello, the first entries) used to skip the live route; it now
+  // waits for the session (the SDK + an anonymous sign-in when nobody is signed in)
+  function connFsAuth() {
+    if (connFsReady()) return Promise.resolve();
+    if (!window.crypto || !crypto.subtle) return Promise.reject(new Error('no crypto'));
+    return cloudLoad().then(function () {
+      if (cloudFb.auth.currentUser) return;
+      return cloudFb.auth.signInAnonymously();
+    });
+  }
   function connFsSend(c, to, sealed) {
-    if (!connFsReady()) return;
-    connFsBox(c, to).then(function (box) {
+    connFsAuth().then(function () { return connFsBox(c, to); }).then(function (box) {
       return cloudFb.db.collection('connbox').doc(box).collection('m').add({ msg: sealed, at: window.firebase.firestore.FieldValue.serverTimestamp() });
     })['catch'](function () {});
   }
-  function connAnyLive() { return ((state.owed && state.owed.people) || []).some(function (p) { return connLive(p) && p.conn.relay; }); }
+  // v75.31: an invite you made counts too - its card listens for the friend's join (it stayed 'invited' until the Owed tab redrew)
+  function connWaits(p) { return !!(p && p.conn && (p.conn.st === 'linked' || p.conn.st === 'invited')); }
+  function connAnyLive() { return ((state.owed && state.owed.people) || []).some(function (p) { return connWaits(p) && p.conn.relay; }); }
   // the listeners follow the linked cards (idempotent: called on every owed change + sign-in state change)
   function connFsWatch() {
     var want = {};
-    if (connFsReady()) ((state.owed && state.owed.people) || []).forEach(function (p) { if (connLive(p) && p.conn.k) want[p.id] = p.conn.pair; });
+    if (connFsReady()) ((state.owed && state.owed.people) || []).forEach(function (p) { if (connWaits(p) && p.conn.k) want[p.id] = p.conn.pair; });
     Object.keys(connFsUnsub).forEach(function (pid) {
       if (want[pid] !== connFsUnsub[pid].pair) { try { connFsUnsub[pid].off && connFsUnsub[pid].off(); } catch (e) {} delete connFsUnsub[pid]; }
     });
@@ -13666,12 +13678,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.30, live: new Date(2026, 10, 20, 23, 35) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.31, live: new Date(2026, 10, 20, 23, 44) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.31': [
+      'Owed invites: the phone that made the invite now sees the friend join right away, and entries sent just after joining arrive live too. Before, they waited until you reopened the Owed tab.'
+    ],
     '75.30': [
       'Owed: anyone can invite a friend to connect now; you no longer need the coach Worker URL set first.'
     ],

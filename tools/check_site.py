@@ -2720,6 +2720,8 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.31 (boss: 'pane's not receiving it'): an invited card listens too (connWaits) and a message sent before the SDK was up waits for the session (connFsAuth) instead of skipping the live route",
+          "function connWaits(p)" in js and "function connFsAuth()" in js and "connFsAuth().then(function () { return connFsBox(c, to); })" in js and "'75.31': [" in js)
     check("v75.30 (boss: 'am i the only one who can do the invite' -> 'do it'): connRelay falls back to the built-in relay (CONN_RELAY_DEFAULT), so a phone without a Worker URL can invite",
           "return connRelayOk(u) || CONN_RELAY_DEFAULT;" in js and "'75.30': [" in js)
     check("v75.29 (boss: 'cant it be just live even when the screen is static'): friend messages also go through a Firestore mailbox each linked phone listens to (connFsWatch, anonymous session if not signed in); mid dedupes the two routes; the cloud account ignores the anonymous session; rules allow connbox",

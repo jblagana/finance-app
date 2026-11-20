@@ -1,3 +1,7 @@
+## 2026-11-20 - "i already added an owed entry from phone but pane's not receiving it, i alreayd updaed eh firebase" -> "the inviter sees the join and the first entries live"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.31 (app.js: connWaits - an 'invited' card listens on its Firestore box and keeps the fallback poll (it only checked when the Owed tab redrew); connFsAuth - connFsSend waits for the SDK + anonymous session instead of dropping the live copy (the join's hello went relay-only))
+
 ## 2026-11-20 - "am i the only one who can do the invite because im the one witht the worker url?" then "do it" -> "anyone can create a connect invite: the friend-link relay has a built-in default"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.30 (app.js connRelay falls back to CONN_RELAY_DEFAULT (the coach Worker's origin, already public in every invite link); a Worker URL set in Settings still wins; the /conn route never uses the coach token)
