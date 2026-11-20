@@ -2355,8 +2355,8 @@ def main():
           'id="mlChips"' in html
           and ".ml-fbar select+select{display:none}" in html
           and ".ml-row.open .ml-more{display:block}" in html
-          and "body.innerHTML = mlGroupDays(limited, mlRowsH, shown) +" in js
-          and "function mlGroupDays(rows, htmls, all) {" in js
+          and "body.innerHTML = mlGroupDays(limited, mlRowsH, shown, owIdx) +" in js  # v75.34: + owIdx (mine / total)
+          and "function mlGroupDays(rows, htmls, all, owIdx) {" in js
           and "'<button type=\"button\" class=\"ml-main\" data-ml-tog=\"' + mk + '\"" in js
           and "mlOpenKey = mlOpenKey === k ? null : k;" in js
           and "class=\"mlchip' + (on ? ' on' : '')" in js
@@ -2720,6 +2720,9 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.34 (boss: 'the top right maybe should have mine: and total:'): the ledger day header shows mine (no Owed legs) and total only when they differ",
+          "function mlGroupDays(rows, htmls, all, owIdx)" in js and "sumTxt = 'mine: '" in js and "sumTxt += ' · total: −' + money(t);" in js
+          and "mlGroupDays(limited, mlRowsH, shown, owIdx)" in js and "'75.34': [" in js)
     check("v75.33 (boss: 'entries in ledger that are not mine maybe grey out the amount'): an Owed leg row (ow && !ow.mine - not spend) gets ml-notmine (muted amount)",
           "(ow && !ow.mine ? ' ml-notmine' : '')" in js and ".ml-down.ml-notmine{color:var(--mut)" in rd("index.html") and "'75.33': [" in js)
     check("v75.32 (boss: 'why is panes ledger not populating' + 'the one who rejected should still see the entry'): logMoney writes rows with no numbers (e.nn) + a no-numbers backfill at load; a rejected inbox item stays marked (it.rej) and drops on their delete",

@@ -3389,12 +3389,17 @@
       ? DW[d.getDay()] + ', ' + MO[d.getMonth()] + ' ' + d.getDate()
       : MO[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
   }
-  function mlGroupDays(rows, htmls, all) {
-    var tot = {};
+  // v75.34 (boss: 'in ledger entries, the top right maybe should have mine: and total:?, if the total is mine
+  // alone, keep mine:'): the day header splits YOUR spend from the day's total (a friend's share, a payback
+  // you sent - the greyed rows - are in the total only)
+  function mlGroupDays(rows, htmls, all, owIdx) {
+    var tot = {}, mine = {};
     (all || []).forEach(function (e) {
       if (!e || e.ro || !(e.k === 'x' || e.k === 'c' || !e.k)) return;
-      var k = mlDayKey(e.at);
-      tot[k] = r2((tot[k] || 0) + (e.a === 'add' ? 1 : -1) * (Number(e.n) || 0));
+      var k = mlDayKey(e.at), v = (e.a === 'add' ? 1 : -1) * (Number(e.n) || 0);
+      tot[k] = r2((tot[k] || 0) + v);
+      var ow = owIdx ? mlOwedRow(mlParts(e).note, e.tid ? owIdx[e.tid] : null) : null;
+      if (!(ow && !ow.mine)) mine[k] = r2((mine[k] || 0) + v);
     });
     var out = '', cur = null;
     rows.forEach(function (e, i) {
@@ -3402,9 +3407,13 @@
       if (k !== cur) {
         if (cur !== null) out += '</section>';
         cur = k;
-        var t = tot[k] || 0;
-        out += '<section class="ml-grp"><div class="ml-day"><span>' + mlDayLabel(e.at) + '</span><span>' +
-          (t > 0.004 ? '−' + money(t) : '') + '</span></div>';
+        var t = tot[k] || 0, mn = mine[k] || 0;
+        var sumTxt = '';
+        if (t > 0.004 || mn > 0.004) {
+          sumTxt = 'mine: ' + (mn > 0.004 ? '−' + money(mn) : money(0));
+          if (Math.abs(t - mn) > 0.004) sumTxt += ' · total: −' + money(t);
+        }
+        out += '<section class="ml-grp"><div class="ml-day"><span>' + mlDayLabel(e.at) + '</span><span>' + sumTxt + '</span></div>';
       }
       out += htmls[i];
     });
@@ -3624,7 +3633,7 @@
           ((editBtn || delBtn || adjDel) ? '<div class="ml-acts">' + editBtn + delBtn + adjDel + '</div>' : '') +
           '</div></div>';
       });
-    body.innerHTML = mlGroupDays(limited, mlRowsH, shown) +
+    body.innerHTML = mlGroupDays(limited, mlRowsH, shown, owIdx) +
       // v72.30 (user edit: 'see less beside see more'): the buttons share one
       // row — See less re-hides per tap down to the first page (hidden there);
       // v73.92: the first page is 10, the step is 10 (v73.91: 50/20)
@@ -13698,12 +13707,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.33, live: new Date(2026, 10, 20, 23, 53) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.34, live: new Date(2026, 10, 21, 0, 0) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.34': [
+      'Ledger: each day shows \u201cmine:\u201d (your own spend) and, when a friend\u2019s share or a payback is in it too, \u201ctotal:\u201d beside it. If it is all yours, only \u201cmine:\u201d shows.'
+    ],
     '75.33': [
       'Ledger: amounts that are not your own spend (a friend\u2019s share, a payback either way) are greyed out, so the coloured ones are exactly what counts in Spent today.'
     ],

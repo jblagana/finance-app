@@ -1,3 +1,7 @@
+## 2026-11-20 - "in ledger entries, the top right maybe should have mine: and total:?, if the total is mine alone, keep mine:" -> "each ledger day header reads 'mine: -X' and adds ' · total: -Y' only when a friend's share / payback is in the day"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.34 (app.js mlGroupDays takes owIdx: tot = every spend row (as before), mine = the same minus Owed legs (ow && !ow.mine); header 'mine: ...' + ' · total: ...' when they differ)
+
 ## 2026-11-20 - "entries in ledger that are not mine maybe grey out the amount so i know which ones are mine and counts in my spent today" -> "Owed legs (a friend's share, paybacks) show a muted amount in the ledger"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.33 (app.js: the ledger amount of an Owed leg row (not mine: theirs / paid back / paid for you / you paid back - the rows spendOf skips) gets ml-notmine + a title; index.html: .ml-notmine = muted color)
