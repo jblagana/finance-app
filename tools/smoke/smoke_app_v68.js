@@ -3506,6 +3506,10 @@ waitReady().then(async function (F) {
       ok(F.mlIsTpfLeg({ a: 'add', tid: 'o', c: 'Food', nt: 'Owed · Vhal · paid for you' }, ix28) && !F.mlIsTpfLeg({ a: 'add', tid: 'm', c: 'Food', nt: 'Andoks · Owed · Vhal' }, ix28)
         && !F.mlIsTpfLeg({ a: 'add', tid: 't', c: 'Food', nt: 'Owed · Vhal · theirs' }, ix28) && F.mlIsTpfLeg({ a: 'del', tid: 'gone', c: 'Food', nt: 'Owed · Vhal · paid for you' }, {}),
         'v75.28: only the paid-for-you offset row hides (linked or by its tag)');
+      // v75.29: a message that arrives by both routes applies once
+      var p29 = { id: 'p29', name: 'Zed', entries: [], conn: { pair: 'pp29', side: 'a', st: 'linked', in: [], out: [] } };
+      var a1 = F.connApplyOnce(p29, { t: 'oack', st: 'ok', mid: 'm29' }), a2 = F.connApplyOnce(p29, { t: 'oack', st: 'ok', mid: 'm29' });
+      ok(a1 === true && a2 === false && p29.conn.open && p29.conn.open.st === 'ok', 'v75.29: the same mid applies once (the live route + the relay)');
       // (5) the per-person stamp: only a real change stamps; a sync/import save never does
       var owedBk48 = F.state.owed;
       F.setOwed({ people: [{ id: 'p48', name: 'Dee', entries: [], updated: '' }], sort: 'recent' });

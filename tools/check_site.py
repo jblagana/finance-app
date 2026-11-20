@@ -2720,6 +2720,9 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.29 (boss: 'cant it be just live even when the screen is static'): friend messages also go through a Firestore mailbox each linked phone listens to (connFsWatch, anonymous session if not signed in); mid dedupes the two routes; the cloud account ignores the anonymous session; rules allow connbox",
+          "function connFsWatch()" in js and "connFsSend(c, connOther(c), sealed);" in js and "function connApplyOnce(p, m)" in js
+          and "cloudUser = (u && !u.isAnonymous) ? u : null;" in js and "match /connbox/{box}/m/{mid}" in rd("cloud/firestore.rules") and "'75.29': [" in js)
     check("v75.28 (boss: 'my friends app's ledger has - and + too instead of just -'): the tpf Cash offset row is hidden from the ledger list (mlIsTpfLeg) and the mine row says the friend paid",
           "function mlIsTpfLeg(e, owIdx)" in js and "if (mlIsTpfLeg(e, owIdx)) return false;" in js
           and "' paid · your cash did not move</span>'" in js and "'75.28': [" in js)

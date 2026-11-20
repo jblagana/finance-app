@@ -7,6 +7,13 @@ service cloud.firestore {
       allow create, update: if request.auth != null && request.auth.uid == uid
                             && request.resource.data.env is string && request.resource.data.env.size() < 900000;
     }
+    // v75.29: the connected-friend mailbox. The box id comes from the link's secret key, the message
+    // is sealed (AES-GCM) on the phone; any signed-in session (Google or anonymous) may drop or take one.
+    match /connbox/{box}/m/{mid} {
+      allow read, delete: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.keys().hasOnly(['msg', 'at'])
+                    && request.resource.data.msg is string && request.resource.data.msg.size() < 8000;
+    }
     match /{document=**} { allow read, write: if false; }
   }
 }

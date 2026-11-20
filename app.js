@@ -3593,6 +3593,9 @@
         var owLink = e.tid ? owIdx[e.tid] : null;
         if (ow && ow.mine && owLink && owLink.dir === 'tpf' && !e.ro) // v75.28: the offset is hidden - this row tells it
           extra = '<span class="ml-f">' + esc(ow.name) + ' paid · your cash did not move</span>';
+        // v75.29 (boss: 'my card used is not visible to them nor is theirs'): the friend's pay method is never
+        // shared (connEntryMsg carries no account); the row of a they-paid entry names no account either
+        if (ow && ow.mine && owLink && owLink.dir === 'tpf') p.m = '';
         var subTxt = noteTxt || (ow ? (ow.mine ? (owLink && owLink.dir === 'tpf' ? ow.name + ' paid for you' : 'Your share with ' + ow.name) : ow.leg === 'tmb' ? 'Paid back by ' + ow.name : ow.leg === 'tpf' ? ow.name + ' paid for you' : ow.leg === 'itb' ? 'Paid back to ' + ow.name : ow.name + '’s share')
           : ((e.k === 'p' && e.w) ? (p.m || 'card') + ' from ' + e.w : (p.m || '')));
         if (!add) subTxt = 'Deleted' + (subTxt ? ' · ' + subTxt : ''); // v75.07
@@ -11375,6 +11378,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   function connQueue(p, msg) {
     if (!p || !p.conn) return;
     if (!p.conn.out) p.conn.out = [];
+    if (!msg.mid) msg.mid = connHex(connRand(8)); // v75.29: one id per message (it travels two routes)
     p.conn.out.push(msg);
     connSyncSoon(p.id);
   }
@@ -11391,6 +11395,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     connSyncTimers[pid] = setTimeout(function () { connSync(pid); }, 400);
   }
   function connSyncAll(force) {
+    connLiveStart(); // v75.29: the live route follows the linked cards
     var now = Date.now();
     if (!force && now - connLastAll < 20000) return Promise.resolve();
     connLastAll = now;
@@ -11412,6 +11417,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       out.forEach(function (m) {
         step = step.then(function () {
           return connSeal(c, m).then(function (sealed) {
+            connFsSend(c, connOther(c), sealed); // v75.29: the live route (best effort; the relay below is the fallback)
             return connCall(c, { op: 'send', to: connOther(c), msg: sealed });
           }).then(function () { c.out.shift(); changed = true; });
         });
@@ -11424,7 +11430,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       msgs.forEach(function (row) {
         step = step.then(function () {
           ids.push(row.id);
-          return connOpenMsg(c, row.msg).then(function (m) { connApply(p, m); changed = true; }, function () {});
+          return connOpenMsg(c, row.msg).then(function (m) { if (connApplyOnce(p, m)) changed = true; }, function () {});
         });
       });
       return step.then(function () {
@@ -11443,6 +11449,86 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     });
     connSyncing[pid] = run;
     return run;
+  }
+  // ---------- v75.29 (boss: 'when i or my friend files an owed entry, sometimes it shows sometimes never,
+  // also sometimes late and needs refresh, cant it be just live even when the screen is static') ----------
+  // The relay was only read when the Owed tab redrew (at most every 20 s) or the app came back on screen,
+  // its KV store shows a new message up to ~60 s late, and whichever device read the mailbox first
+  // took the message. Now every message also goes to a Firestore mailbox that each linked phone LISTENS
+  // to (signed in to the cloud account, or anonymously): it lands within a second, screen static or not.
+  // The box id is derived from the link's secret key (the relay's pair id alone cannot address it); the
+  // message is the same sealed text. mid makes the two routes apply it once.
+  var CONN_SEEN_LS = 'fin.conn.seen.v1', CONN_SEEN_CAP = 300;
+  var connFsUnsub = {}, connFsOk = false, connPollT = null;
+  var connSeenMem = null; // read once, kept in memory (storage may be unavailable)
+  function connSeenRead() {
+    if (!connSeenMem) { try { connSeenMem = JSON.parse(localStorage.getItem(CONN_SEEN_LS) || '{}') || {}; } catch (e) { connSeenMem = {}; } }
+    return connSeenMem;
+  }
+  function connApplyOnce(p, m) {
+    if (!m || !p || !p.conn) return false;
+    if (m.mid) {
+      var all = connSeenRead(), list = all[p.conn.pair] || [];
+      if (list.indexOf(m.mid) >= 0) return false; // the other route already brought it
+      list.push(m.mid); all[p.conn.pair] = list.slice(-CONN_SEEN_CAP);
+      try { localStorage.setItem(CONN_SEEN_LS, JSON.stringify(all)); } catch (e) {}
+    }
+    connApply(p, m);
+    return true;
+  }
+  function connFsBox(c, side) {
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode('finai-box|' + c.k + '|' + side)).then(function (d) {
+      return connHex(new Uint8Array(d)).slice(0, 40);
+    });
+  }
+  function connFsReady() { return !!(cloudFb && cloudFb.auth.currentUser); }
+  function connFsSend(c, to, sealed) {
+    if (!connFsReady()) return;
+    connFsBox(c, to).then(function (box) {
+      return cloudFb.db.collection('connbox').doc(box).collection('m').add({ msg: sealed, at: window.firebase.firestore.FieldValue.serverTimestamp() });
+    })['catch'](function () {});
+  }
+  function connAnyLive() { return ((state.owed && state.owed.people) || []).some(function (p) { return connLive(p) && p.conn.relay; }); }
+  // the listeners follow the linked cards (idempotent: called on every owed change + sign-in state change)
+  function connFsWatch() {
+    var want = {};
+    if (connFsReady()) ((state.owed && state.owed.people) || []).forEach(function (p) { if (connLive(p) && p.conn.k) want[p.id] = p.conn.pair; });
+    Object.keys(connFsUnsub).forEach(function (pid) {
+      if (want[pid] !== connFsUnsub[pid].pair) { try { connFsUnsub[pid].off && connFsUnsub[pid].off(); } catch (e) {} delete connFsUnsub[pid]; }
+    });
+    Object.keys(want).forEach(function (pid) {
+      if (connFsUnsub[pid]) return;
+      var p0 = connFind(pid), h = { pair: want[pid], off: null };
+      connFsUnsub[pid] = h;
+      connFsBox(p0.conn, p0.conn.side).then(function (box) {
+        if (connFsUnsub[pid] !== h) return;
+        h.off = cloudFb.db.collection('connbox').doc(box).collection('m').onSnapshot(function (snap) {
+          connFsOk = true;
+          snap.docChanges().forEach(function (ch) {
+            if (ch.type !== 'added') return;
+            var doc = ch.doc, p = connFind(pid);
+            if (!p || !p.conn || p.conn.pair !== h.pair) return;
+            connOpenMsg(p.conn, String((doc.data() || {}).msg || '')).then(function (m) {
+              if (connApplyOnce(p, m)) return saveOwed().then(emitOwed);
+            }, function () {}).then(function () { return doc.ref['delete'](); })['catch'](function () {});
+          });
+        }, function () { connFsOk = false; if (connFsUnsub[pid] === h) delete connFsUnsub[pid]; });
+      })['catch'](function () { if (connFsUnsub[pid] === h) delete connFsUnsub[pid]; });
+    });
+  }
+  // a linked card turns the live route on: the cloud SDK loads and, with no account signed in, an
+  // anonymous session opens (it holds nothing - the cloud backup still needs the Google sign-in)
+  function connLiveStart() {
+    if (!connAnyLive()) { connFsWatch(); return; }
+    if (!window.crypto || !crypto.subtle) return;
+    cloudLoad().then(function () {
+      if (!cloudFb.auth.currentUser) return cloudFb.auth.signInAnonymously()['catch'](function () {});
+      connFsWatch();
+    })['catch'](function () {});
+    // no live route (Anonymous sign-in off, offline): the relay is read every 45 s while the app is on screen
+    if (!connPollT) connPollT = setInterval(function () {
+      if (document.visibilityState === 'visible' && !connFsOk && connAnyLive()) connSyncAll(true);
+    }, 45000);
   }
   // a message from the friend (already opened)
   function connApply(p, m) {
@@ -13362,7 +13448,12 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       .then(function () { return cloudScript(CLOUD_SDK + 'firebase-firestore-compat.js'); }).then(function () {
         window.firebase.initializeApp(cfg);
         cloudFb = { auth: window.firebase.auth(), db: window.firebase.firestore() };
-        cloudFb.auth.onAuthStateChanged(function (u) { cloudUser = u || null; cloudPaint(); cloudWatch(); if (u) cloudSoon(1500); });
+        cloudFb.auth.onAuthStateChanged(function (u) {
+          cloudUser = (u && !u.isAnonymous) ? u : null; // v75.29: an anonymous session is only the friend-link mailbox
+          cloudPaint(); cloudWatch(); if (cloudUser) cloudSoon(1500);
+          if (!u && connAnyLive()) cloudFb.auth.signInAnonymously()['catch'](function () {});
+          connFsWatch();
+        });
       })['catch'](function (e) { cloudReady = null; throw e; });
     return cloudReady;
   }
@@ -13570,12 +13661,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.28, live: new Date(2026, 10, 20, 23, 2) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.29, live: new Date(2026, 10, 20, 23, 5) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.29': [
+      'Owed with a connected friend is live: an entry either of you logs, confirms, edits or removes shows on the other phone within a second, even when the screen is just sitting there. No refresh needed. Both phones need this version; until then the old route still works, just slower.'
+    ],
     '75.28': [
       'Ledger: an Owed entry where a friend paid for you (including one a connected friend shared from their card) shows as one \u2212 row, \u201c<name> paid \u00b7 your cash did not move\u201d. The matching + row is no longer listed; your Cash balance is unchanged.'
     ],
@@ -15304,6 +15398,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     syncEncrypt: syncEncrypt, // v73.3: the envelope (the smoke round-trips it)
     syncDecrypt: syncDecrypt, // v73.3: decrypt the envelope (the smoke round-trips it)
     logDropGhosts: logDropGhosts, // v75.27 (smoke)
+    connApplyOnce: connApplyOnce, // v75.29 (smoke)
     mlIsTpfLeg: mlIsTpfLeg, mlOwedIndex: mlOwedIndex, // v75.28 (smoke)
     syncMerge: syncMerge, // v73.3: the merge rule (pure — the smoke drives it)
     migrateCardFundedPayoffs: migrateCardFundedPayoffs, cardEffectOf: cardEffectOf, ADJ_MODEL_V: ADJ_MODEL_V, // v74.18 (smoke)
@@ -16162,6 +16257,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       setTab(currentTab());
       hideBoot(); // v72.53: the first render is in — the splash fades
       connCheckHash(); // v75.02: opened from an invite link (#join=...)
+      connLiveStart(); // v75.29: friend entries arrive live
     }).catch(function (err) {
       console.warn('IDB load failed', err);
       state.base = state.base || defaultBase();
