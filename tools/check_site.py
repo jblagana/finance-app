@@ -2720,6 +2720,9 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.38 (boss: 'make the histogram a rolling window of 15days, but add a division line between cycles'): the bars cover the last 15 days (lo = hi - 14), a dashed .dcut 'new cycle' line before the cycle's first day, .prev bars dimmer; the total + donut stay the cycle's",
+          "lo = localISO(new Date(endD.getFullYear(), endD.getMonth(), endD.getDate() - 14))" in js and "<span class=\"dcut' + (i > days.length - 4 ? ' end' : '') + '\" aria-hidden=\"true\"><i>new cycle</i></span>" in js
+          and ".dbars .dcut::before{" in rd("index.html") and ".dbars .db.prev{opacity:.28}" in rd("index.html") and "'75.38': [" in js)
     check("v75.37 (boss: 'the ledger histogram, make it show the amount when i click on a bar then highlight it'): each bar is a tap target (data-dday), the tapped one turns amber (.sel, the rest dim) and the hero's hs-panel shows the day + total + categories",
           "var dailySel = null;" in js and "data-dday=" in js and "dailySel = dailySel === k ? null : k;" in js and "renderDailyBars(w, hi, byDay, grand, byDayCat);" in js
           and ".dbars .db.sel,.dbars.has-sel .db.sel{background:var(--warn)" in rd("index.html") and "'75.37': [" in js)

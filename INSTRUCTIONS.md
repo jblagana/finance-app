@@ -1,3 +1,7 @@
+## 2026-11-21 - "make the histogram a rolling window of 15days, but add a division line between cycles, mockup first" -> (mockup) -> "Build it" -> "the Ledger bars show the last 15 days with a dashed 'new cycle' line on payday; last cycle's bars dimmer; the total and donut stay this cycle's"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.38 (app.js renderDailyBars builds its own 15-day byDay / byDayCat (spendOf), days < w.start = .prev, a .dcut before w.start, panel says 'last cycle'; index.html: .prev dim, .dcut dashed line + tag, .has-cut room)
+
 ## 2026-11-21 - "the ledger histogram, make it show the amount when i click on a bar then highight it, just like when i click a step in the hero card graph" -> "a tapped day bar turns amber (others dim) and the hero-style panel under it shows the day, the total and its categories; tap again to clear"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.37 (app.js renderDonut collects byDayCat; renderDailyBars: dailySel, bars wrapped in tap targets (data-dday, keyboard too), .sel + .has-sel, hs-panel / hs-cap below; index.html: .dbw, .sel amber, dim the rest)

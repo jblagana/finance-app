@@ -9051,33 +9051,54 @@
   var dailySel = null;
   function renderDailyBars(w, hi, byDay, grand, byDayCat) {
     var box = byId('dailyBox'); if (!box) return;
-    if (dailySel && (dailySel < w.start || dailySel > hi)) dailySel = null;
     var tot = byId('dailyTotal'); if (tot) tot.textContent = money(grand);
-    var days = [], max = 0, cur = parseISO(w.start), endD = parseISO(hi);
-    for (var guard = 0; cur <= endD && guard < 40; guard++) {
+    // v75.38 (boss: 'make the histogram a rolling window of 15days, but add a division line between cycles' ->
+    // mockup -> 'Build it'): the bars are the LAST 15 DAYS (ending today / the cycle's last shown day), not just
+    // this cycle; a dashed 'new cycle' line sits before the cycle's first day, last cycle's bars are dimmer.
+    // The total above and the donut stay this cycle's. Same spend rule (spendOf: no prepays, no income).
+    var endD = parseISO(hi), lo = localISO(new Date(endD.getFullYear(), endD.getMonth(), endD.getDate() - 14));
+    if (dailySel && (dailySel < lo || dailySel > hi)) dailySel = null;
+    byDay = {}; byDayCat = {};
+    state.txns.forEach(function (t) {
+      var d = String(t.date || '');
+      if (d < lo || d > hi) return;
+      var a = spendOf(t);
+      if (!a) return;
+      var c = t.category || 'Unsorted';
+      byDay[d] = (byDay[d] || 0) + a;
+      if (!byDayCat[d]) byDayCat[d] = {};
+      byDayCat[d][c] = (byDayCat[d][c] || 0) + a;
+    });
+    var days = [], max = 0, cur = parseISO(lo);
+    for (var guard = 0; cur <= endD && guard < 20; guard++) {
       var k = localISO(cur), v = byDay[k] || 0;
       if (v > max) max = v;
-      days.push({ k: k, v: v, d: cur.getDate(), last: k === hi });
+      days.push({ k: k, v: v, d: cur.getDate(), last: k === hi, prev: k < w.start });
       cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
     }
-    var bars = '', labs = '';
+    var bars = '', labs = '', hasCut = false;
     days.forEach(function (x, i) {
       var h = max > 0 ? Math.max(3, Math.round(x.v / max * 100)) : 3;
       var isSel = dailySel === x.k;
-      bars += '<span class="dbw" data-dday="' + x.k + '" role="button" tabindex="0" aria-pressed="' + (isSel ? 'true' : 'false') + '" aria-label="' + esc(dayMonth(x.k)) + ' · ' + esc(money(x.v)) + '">' +
-        '<span class="db' + (x.last ? ' today' : '') + (x.v > 0 ? '' : ' zero') + (isSel ? ' sel' : '') + '" style="height:' + h + '%"></span></span>';
-      var showLab = x.last || i === 0 || isSel || (x.d % 5 === 0 && i < days.length - 2); // a 5th-day label never sits next to today's
+      if (i > 0 && x.k === w.start) { // the cycle line (its tag leans left near the right edge)
+        hasCut = true;
+        bars += '<span class="dcut' + (i > days.length - 4 ? ' end' : '') + '" aria-hidden="true"><i>new cycle</i></span>';
+        labs += '<span class="dcut-l" aria-hidden="true"></span>';
+      }
+      bars += '<span class="dbw" data-dday="' + x.k + '" role="button" tabindex="0" aria-pressed="' + (isSel ? 'true' : 'false') + '" aria-label="' + esc(dayMonth(x.k)) + (x.prev ? ' (last cycle)' : '') + ' · ' + esc(money(x.v)) + '">' +
+        '<span class="db' + (x.last ? ' today' : '') + (x.prev ? ' prev' : '') + (x.v > 0 ? '' : ' zero') + (isSel ? ' sel' : '') + '" style="height:' + h + '%"></span></span>';
+      var showLab = x.last || i === 0 || isSel || x.k === w.start || (x.d % 5 === 0 && i < days.length - 2 && i > 1); // a 5th-day label never crowds today's / the first
       labs += '<span class="dl' + (x.last ? ' today' : '') + (isSel ? ' sel' : '') + '">' + (showLab ? x.d : '') + '</span>';
     });
     var below = '';
     if (dailySel) {
       var v = byDay[dailySel] || 0, cats = (byDayCat && byDayCat[dailySel]) || {};
       var cn = Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; });
-      below = '<div class="hs-panel"><div class="hs-r"><b>' + esc(dayMonth(dailySel) + (dailySel === hi ? ' · today' : '')) + '</b>' +
+      below = '<div class="hs-panel"><div class="hs-r"><b>' + esc(dayMonth(dailySel) + (dailySel === hi ? ' · today' : dailySel < w.start ? ' · last cycle' : '')) + '</b>' +
         '<b class="' + (v > 0.004 ? 'neg' : '') + '">' + (v > 0.004 ? '− ' + esc(pesoFull(v)) : 'Nothing spent') + '</b></div>' +
         (cn.length ? '<div class="hs-p">' + cn.map(function (c) { return esc(c) + ' ' + esc(pesoShort(cats[c])); }).join(' · ') + '</div>' : '') + '</div>';
-    } else below = '<p class="hs-cap">Tap a bar to see that day</p>';
-    box.innerHTML = '<div class="dbars' + (dailySel ? ' has-sel' : '') + '" role="group" aria-label="Spent per day this cycle">' + bars + '</div><div class="dlabs">' + labs + '</div>' + below;
+    } else below = '<p class="hs-cap">Last 15 days · tap a bar to see that day</p>';
+    box.innerHTML = '<div class="dbars' + (dailySel ? ' has-sel' : '') + (hasCut ? ' has-cut' : '') + '" role="group" aria-label="Spent per day, last 15 days">' + bars + '</div><div class="dlabs">' + labs + '</div>' + below;
     var bs = box.querySelectorAll ? box.querySelectorAll('[data-dday]') : [];
     var pick = function (el) {
       var k = el.getAttribute('data-dday');
@@ -13742,12 +13763,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.37, live: new Date(2026, 10, 21, 0, 28) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.38, live: new Date(2026, 10, 21, 0, 34) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.38': [
+      'Ledger: the spending chart now always shows the last 15 days. A dashed \u201cnew cycle\u201d line marks payday, and days from the previous cycle are dimmer. The total and the category ring above stay this cycle\u2019s.'
+    ],
     '75.37': [
       'Ledger: tap a bar in the spending chart to see that day. It turns amber like a step on the Home graph, and the day\u2019s total and its categories show underneath. Tap it again to clear.'
     ],

@@ -1241,6 +1241,13 @@ button.cmlink.pdnotpay{display:block;margin:10px auto 0;color:var(--bad);font-si
 .dlabs .dl{flex:1;min-width:0;text-align:center;font-size:10.5px;color:var(--mut);white-space:nowrap;overflow:visible}
 .dlabs .dl.today{color:var(--ink);font-weight:600}
 .dbars.has-sel .db{opacity:.3}.dbars.has-sel .db.zero{opacity:1}
+.dbars .db.prev{opacity:.28}.dbars .db.prev.zero{opacity:1} /* v75.38: last cycle's days, dimmer */
+.dbars.has-cut{margin-top:24px}
+.dbars .dcut{position:relative;flex:0 0 0;width:0;align-self:stretch}
+.dbars .dcut::before{content:'';position:absolute;left:0;top:-14px;bottom:-4px;border-left:1.5px dashed var(--mut)}
+.dbars .dcut i{position:absolute;left:5px;top:-18px;font-size:10px;font-style:normal;color:var(--mut);white-space:nowrap}
+.dbars .dcut.end i{left:auto;right:5px}
+.dlabs .dcut-l{flex:0 0 0;width:0}
 .dbars .db.sel,.dbars.has-sel .db.sel{background:var(--warn);opacity:1} /* v75.37: the tapped day (the hero step's amber) */
 .dlabs .dl.sel{color:var(--warn);font-weight:600}
 #dailyBox .hs-panel{margin-top:10px}
