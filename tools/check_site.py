@@ -2720,6 +2720,8 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.30 (boss: 'am i the only one who can do the invite' -> 'do it'): connRelay falls back to the built-in relay (CONN_RELAY_DEFAULT), so a phone without a Worker URL can invite",
+          "return connRelayOk(u) || CONN_RELAY_DEFAULT;" in js and "'75.30': [" in js)
     check("v75.29 (boss: 'cant it be just live even when the screen is static'): friend messages also go through a Firestore mailbox each linked phone listens to (connFsWatch, anonymous session if not signed in); mid dedupes the two routes; the cloud account ignores the anonymous session; rules allow connbox",
           "function connFsWatch()" in js and "connFsSend(c, connOther(c), sealed);" in js and "function connApplyOnce(p, m)" in js
           and "cloudUser = (u && !u.isAnonymous) ? u : null;" in js and "match /connbox/{box}/m/{mid}" in rd("cloud/firestore.rules") and "'75.29': [" in js)

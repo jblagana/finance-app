@@ -1,3 +1,7 @@
+## 2026-11-20 - "am i the only one who can do the invite because im the one witht the worker url?" then "do it" -> "anyone can create a connect invite: the friend-link relay has a built-in default"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.30 (app.js connRelay falls back to CONN_RELAY_DEFAULT (the coach Worker's origin, already public in every invite link); a Worker URL set in Settings still wins; the /conn route never uses the coach token)
+
 ## 2026-11-20 - "also fix this: when i or my friend files an owed entry, sometimes it shows sometimes never, also sometimes late and needs refresh, cant it be just live even when the screen is static" -> "connected-friend messages arrive live (Firestore listener), never lost to another device, no refresh"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main). Needs in the Firebase console: Authentication > Anonymous ON, and the updated cloud/firestore.rules published.
 - [x] v75.29 (app.js: connFsSend / connFsWatch - each message also goes to Firestore connbox/{sha256(key|side)}/m, every linked phone listens (anonymous session when not signed in; cloudUser ignores it); connApplyOnce dedupes by mid across the two routes; connLiveStart at boot + on owed changes; a 45 s relay poll while visible only when the live route is down. Old relay route unchanged as the fallback)

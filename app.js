@@ -11319,10 +11319,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     } catch (e) {}
     return '';
   }
+  // v75.30 (boss: 'am i the only one who can do the invite because im the one with the worker url?' -> 'do it'):
+  // the friend-link relay has a built-in default, so anyone can create an invite - not only a phone with the
+  // coach Worker URL set. The relay address is not a secret (every invite link carries it) and the /conn
+  // route never uses the coach token; a Worker URL set in Settings still wins.
+  var CONN_RELAY_DEFAULT = 'https://finsmart-coach.jan-rhey-lagana.workers.dev';
   function connRelay() {
     var u = '';
     try { u = (window.FinAI && window.FinAI.remoteUrl) ? window.FinAI.remoteUrl() : ''; } catch (e) {}
-    return connRelayOk(u);
+    return connRelayOk(u) || CONN_RELAY_DEFAULT;
   }
   function connLive(p) { return !!(p && p.conn && p.conn.st === 'linked'); }
   function connKeyOf(c) {
@@ -13661,12 +13666,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.29, live: new Date(2026, 10, 20, 23, 5) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.30, live: new Date(2026, 10, 20, 23, 35) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.30': [
+      'Owed: anyone can invite a friend to connect now; you no longer need the coach Worker URL set first.'
+    ],
     '75.29': [
       'Owed with a connected friend is live: an entry either of you logs, confirms, edits or removes shows on the other phone within a second, even when the screen is just sitting there. No refresh needed. Both phones need this version; until then the old route still works, just slower.'
     ],
