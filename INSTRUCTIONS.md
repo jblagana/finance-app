@@ -1,3 +1,7 @@
+## 2026-11-20 - "why is panes ledger not populating, also when one sends a reject, the one who rejected should still see the entry and says "you rejected" in red and only disappears when it gets deleted" -> "the ledger fills without numbers set up; a rejected entry stays on the rejecter's card in red until deleted"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.32 (app.js: logMoney no longer bails without a snapshot (e.nn rows, no before/after line) + a load-time backfill of rowless txns while there are no numbers; connReject keeps the item marked rej (red 'You rejected - why'), connPending counts only unrejected; the friend's del drops it, their edit replaces it)
+
 ## 2026-11-20 - "i already added an owed entry from phone but pane's not receiving it, i alreayd updaed eh firebase" -> "the inviter sees the join and the first entries live"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.31 (app.js: connWaits - an 'invited' card listens on its Firestore box and keeps the fallback poll (it only checked when the Owed tab redrew); connFsAuth - connFsSend waits for the SDK + anonymous session instead of dropping the live copy (the join's hello went relay-only))

@@ -2720,6 +2720,9 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.32 (boss: 'why is panes ledger not populating' + 'the one who rejected should still see the entry'): logMoney writes rows with no numbers (e.nn) + a no-numbers backfill at load; a rejected inbox item stays marked (it.rej) and drops on their delete",
+          "var nn = !s;" in js and "if (e.nn) extra = '';" in js and "if (!effectiveSnap() && state.txns.length) {" in js
+          and "it.rej = 1; it.why = why;" in js and "function connPending(p)" in js and "'75.32': [" in js)
     check("v75.31 (boss: 'pane's not receiving it'): an invited card listens too (connWaits) and a message sent before the SDK was up waits for the session (connFsAuth) instead of skipping the live route",
           "function connWaits(p)" in js and "function connFsAuth()" in js and "connFsAuth().then(function () { return connFsBox(c, to); })" in js and "'75.31': [" in js)
     check("v75.30 (boss: 'am i the only one who can do the invite' -> 'do it'): connRelay falls back to the built-in relay (CONN_RELAY_DEFAULT), so a phone without a Worker URL can invite",

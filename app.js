@@ -3155,9 +3155,13 @@
   // v73.91: the moneyLog store is INFINITE — the v72.8 ML_CAP=30 truncation is
   // gone from every push site, the export, and the import sanitizer. The only
   // limit is the Ledger pager (ML_PAGE / ML_STEP below), which pages the DOM.
+  // v75.32 (boss: 'why is panes ledger not populating'): no numbers set up yet (a friend who uses Fin.AI
+  // only for Owed) used to log NOTHING - the ledger stayed empty. The row is written anyway (e.nn: no
+  // before/after line, there is no balance to move).
   function logMoney(action, t) {
     var s = effectiveSnap();
-    if (!s) return;
+    var nn = !s;
+    s = s || {};
     var amt = Number(t.amount) || 0;
     var mp = todayISO().slice(0, 7);
     var e = {
@@ -3179,6 +3183,7 @@
     // undo record (deleteTxn's Undo re-pushes from it), and a cashback
     // payoff's overlay rule is different, so the flag must survive.
     if (t.kind === 'card_payment' && t.cashback) e.cb = true;
+    if (nn) e.nn = 1; // v75.32
     if (t.recordOnly) e.ro = true; // v74.15: the row renders "recorded only" (no before/after)
     e.f = r2(s.cash ? s.cash.free : 0);
     e.q = r2(s.cash ? s.cash.total : 0); // v74.17: the LIQUID total after (the hero's "Liquid") — the row's liquid line reads this, never e.f
@@ -3535,6 +3540,7 @@
         if (e.q != null && ccFunded) extra = '<span class="ml-x">' + money(e.n) + ' moved from ' + esc(e.m || 'the card') + ' to ' + esc(e.w) + ' — total card debt unchanged</span>';
         // v74.15: a record-only row moved nothing — no before/after line
         if (e.ro) extra = '<span class="ml-f">recorded only — that balance already included it</span>';
+        if (e.nn) extra = ''; // v75.32: logged before your numbers were set up - no balance moved
         // v73.75 (boss-approved mockup_compact_livenumbers.html): the
         // "month spent X → X" chip is GONE (the v73.9/v73.10 salary guard
         // dies with it — the chip never renders, for any row).
@@ -10518,7 +10524,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       (p.conn ? '<span class="cn-badge' + (p.conn.st === 'linked' ? '' : ' off') + '">' + (p.conn.st === 'linked' ? 'linked' : p.conn.st === 'invited' ? 'invited' : 'unlinked') + '</span>' : '') +
       (p.conn ? '</span>' : '') +
       '<span class="ow-cnt">' + n + (n === 1 ? ' entry' : ' entries') +
-      (p.conn && (p.conn.in || []).length ? ' · <span class="cn-w cn-dot">' + p.conn.in.length + ' to confirm</span>' : '') + '</span></span>' + // v75.02
+      (connPending(p) ? ' · <span class="cn-w cn-dot">' + connPending(p) + ' to confirm</span>' : '') + '</span></span>' + // v75.02; v75.32: rejected ones are not to confirm
       '<span class="ow-balbox"><b class="ow-bv ' + bk + '">' + money(Math.abs(b)) + '</b><span class="ow-bd ' + bk + '">' + bdir + '</span></span>' +
       '<span class="ow-chev" aria-hidden="true">❯</span>' +
       '</div>' +
@@ -11642,7 +11648,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     p.conn.in = p.conn.in.filter(function (x) { return x !== it; });
     why = String(why || '').trim().slice(0, 120);
     if (k === 'open') connQueue(p, { t: 'oack', st: 'no', why: why });
-    else if (k === 'e') connQueue(p, { t: 'no', cid: cid, cv: it.cv, why: why });
+    else if (k === 'e') {
+      connQueue(p, { t: 'no', cid: cid, cv: it.cv, why: why });
+      // v75.32 (boss: 'the one who rejected should still see the entry and says you rejected in red and only
+      // disappears when it gets deleted'): it stays, marked; their edit replaces it, their delete removes it
+      it.rej = 1; it.why = why;
+      p.conn.in.push(it);
+    }
     else if (k === 'del') { // keep it: it stays in your book, no longer shared
       (p.entries || []).forEach(function (e) { if (e.cid === cid) { delete e.cid; delete e.cv; delete e.cst; delete e.cwhy; } });
     }
@@ -11997,6 +12009,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     connClearHash();
     connOpenJoin(j);
   }
+  function connPending(p) { return ((p && p.conn && p.conn.in) || []).filter(function (x) { return !x.rej; }).length; }
   // the inbox + the starting-balance status on a linked card
   function connCardHTML(p) {
     var c = p.conn;
@@ -12004,7 +12017,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var nm = esc(p.name), h = '';
     var items = (c.in || []);
     if (items.length) {
-      h += '<div class="cn-inbox"><div class="cn-ih"><span>Waiting for you · ' + items.length + '</span><span>from ' + nm + '</span></div>';
+      var nPend = connPending(p);
+      h += '<div class="cn-inbox"><div class="cn-ih"><span>' + (nPend ? 'Waiting for you · ' + nPend : 'You rejected · ' + items.length) + '</span><span>from ' + nm + '</span></div>';
       items.forEach(function (it) {
         var key = esc(p.id) + '|' + esc(it.cid) + '|' + it.k;
         if (it.k === 'open') {
@@ -12015,6 +12029,12 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var dl = OWED_DIRS[it.dir] || OWED_DIRS.ipf, sg = dl.sign > 0 ? '+' : '−';
         var say = { ipf: 'You paid for ' + nm, tpf: nm + ' paid for you', itb: 'You paid ' + nm + ' back', tmb: nm + ' paid you back' }[it.dir] || dl.label;
         var sub = it.k === 'del' ? nm + ' removed this entry' : say + ' · ' + esc(fmtDate(it.d)) + (it.old ? ' · changed from ' + money(it.old.amt) : '');
+        if (it.rej) { // v75.32: rejected - shown until they delete or change it
+          h += '<div class="cn-it cn-rejd"><div class="cn-r"><b>' + esc(it.note || dl.label) + '</b><b class="cn-x">' + sg + money(it.amt) + '</b></div>' +
+            '<div class="cn-s">' + say + ' · ' + esc(fmtDate(it.d)) + '</div>' +
+            '<div class="cn-no">You rejected' + (it.why ? ' · \u201c' + esc(it.why) + '\u201d' : '') + ' — it goes away when ' + nm + ' deletes it, or comes back here if they change it</div></div>';
+          return;
+        }
         var pick = '';
         if (it.k === 'e') {
           if (it.dir === 'tpf') pick = '<select class="cn-cat" aria-label="Category">' + owedCatOptions('Unsorted') + '</select>';
@@ -13678,12 +13698,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.31, live: new Date(2026, 10, 20, 23, 44) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.32, live: new Date(2026, 10, 20, 23, 52) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.32': [
+      'Ledger: entries now show up even before you set up your numbers (a friend who uses Fin.AI only for Owed had an empty ledger).',
+      'Owed: an entry you reject stays on the card in red, \u201cYou rejected\u201d, until your friend deletes it. If they change it, it comes back for you to confirm.'
+    ],
     '75.31': [
       'Owed invites: the phone that made the invite now sees the friend join right away, and entries sent just after joining arrive live too. Before, they waited until you reopened the Owed tab.'
     ],
@@ -16262,6 +16286,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       }
       refreshLocalSnapshot();
       if (!hasAdj && !state.adjSig) computeAdjFromTxns();
+      // v75.32: entries filed before the numbers were set up have no ledger row - they get one (only while
+      // there are still no numbers: a set-up phone's older entries predate the ledger on purpose)
+      if (!effectiveSnap() && state.txns.length) {
+        var hasRow = {};
+        (state.moneyLog || []).forEach(function (r) { if (r && r.tid) hasRow[r.tid] = true; });
+        var bf = state.txns.filter(function (t) { return t && t.id && !hasRow[t.id]; });
+        bf.forEach(function (t) { logMoney('add', t); var r = state.moneyLog[state.moneyLog.length - 1]; if (r && r.tid === t.id) r.at = Date.parse(t.created || '') || r.at; });
+        if (bf.length) state.moneyLog.sort(function (x, y) { return (Number(x.at) || 0) - (Number(y.at) || 0); });
+      }
       migratePayoffModel(); // v72.43: one-shot re-derivation of a pre-v72.42 persisted overlay
       migrateCardFundedPayoffs(); // v74.18: the 2 -> 3 step (card-funded payoffs move debt card -> card)
       migratePrepayBy(); // v73.71: one-shot rebuild of the stale per-card prepay split (AFTER the payoff migration — it re-stamps mv)
