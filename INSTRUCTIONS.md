@@ -1,3 +1,7 @@
+## 2026-11-20 - "also, when i filed a shared owed entry using my cc with ipf, my ledger has - and + entries which is fine for mine as is, but that same owed entry in my friends app's ledger has - and + too instead of just -" -> "the friend's side (they paid for you) shows one − row; the Cash offset stays in the data but is not listed"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.28 (app.js renderMoneyLog skips the tpf 'paid for you' leg (mlIsTpfLeg - linked via mlOwedIndex or by its note tag); the mine row's detail says '<name> paid · your cash did not move'. Balances and the stored txns unchanged)
+
 ## 2026-11-20 - "here my latest backup from iphone. see the issues, multiple repeated ledger entries, some undeleteable, also does owed tab handle if i log multiple owed entries that require confirmation for all in a connected friend" -> "find why the ledger repeats / cannot delete rows and fix it; answer the multi-confirm question"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.27 (app.js logDropGhosts: a ledger row whose txn is gone and has no 'del' row (re-added by the money-log union from the other device's copy after a delete / owed re-file) is dropped in syncMerge and once at load. The backup had 6: the unlogged salary, Andoks 173 x2, 'paid for you' 173 / 140, 'theirs' 1)

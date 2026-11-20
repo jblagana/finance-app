@@ -3216,7 +3216,7 @@
     ((state.owed && state.owed.people) || []).forEach(function (p) {
       (p.entries || []).forEach(function (e) {
         if (!e) return;
-        if (e.txnId) ix[e.txnId] = { p: p, mine: true };
+        if (e.txnId) ix[e.txnId] = { p: p, mine: true, dir: e.dir }; // v75.28: the mine row knows its entry's dir
         ipfTheirsTxnIds(e).forEach(function (tid) { ix[tid] = { p: p, mine: false, leg: e.dir }; }); // v74.94: leg = the entry's dir (ipf / tmb / tpf / itb)
       });
     });
@@ -3234,6 +3234,12 @@
     var TAGS = { ' · theirs': 'ipf', ' · paid back': 'tmb', ' · paid for you': 'tpf', ' · you paid back': 'itb' };
     var leg = link ? (link.leg || '') : ((m && TAGS[m[2]]) || '');
     return { name: name, av: owedAvatar(link ? link.p : { name: name }), mine: mine, leg: leg, back: leg === 'tmb', note: s.trim() };
+  }
+  // v75.28: a ledger row that is the Cash offset of a 'they paid for you' entry
+  function mlIsTpfLeg(e, owIdx) {
+    if (!e) return false;
+    var ow = mlOwedRow(mlParts(e).note, e.tid ? owIdx[e.tid] : null);
+    return !!(ow && !ow.mine && ow.leg === 'tpf');
   }
   function mlParts(e) {
     var lab, note = '';
@@ -3421,6 +3427,11 @@
         if (mlFilterCat === '__unsorted__') return e.k !== 'p' && (!e.c || e.c === 'Unsorted'); // v75.07
         if (e.c !== mlFilterCat) return false;
       }
+      // v75.28 (boss: 'that same owed entry in my friends app's ledger has - and + too instead of just -'):
+      // a 'they paid for you' entry files your share (−, the spend) and a Cash offset (+, no money left
+      // you). The offset is bookkeeping, not an event: it stays in the data (Cash stays right) but not in
+      // the list - the one − row says the friend paid.
+      if (mlIsTpfLeg(e, owIdx)) return false;
       if (mlFilterM) { // v73.70: the payment-method filter (ANDs with the category)
         var mv = (e.k === 'p' && !e.m) ? 'CC Payment' : (e.m || '');
         if (mv !== mlFilterM.slice(4)) return false;
@@ -3579,7 +3590,10 @@
         // an Owed row drops its text tag for the friend badge on the tile
         var ow = mlOwedRow(p.note, e.tid ? owIdx[e.tid] : null);
         var noteTxt = ow ? ow.note : p.note;
-        var subTxt = noteTxt || (ow ? (ow.mine ? 'Your share with ' + ow.name : ow.leg === 'tmb' ? 'Paid back by ' + ow.name : ow.leg === 'tpf' ? ow.name + ' paid for you' : ow.leg === 'itb' ? 'Paid back to ' + ow.name : ow.name + '’s share')
+        var owLink = e.tid ? owIdx[e.tid] : null;
+        if (ow && ow.mine && owLink && owLink.dir === 'tpf' && !e.ro) // v75.28: the offset is hidden - this row tells it
+          extra = '<span class="ml-f">' + esc(ow.name) + ' paid · your cash did not move</span>';
+        var subTxt = noteTxt || (ow ? (ow.mine ? (owLink && owLink.dir === 'tpf' ? ow.name + ' paid for you' : 'Your share with ' + ow.name) : ow.leg === 'tmb' ? 'Paid back by ' + ow.name : ow.leg === 'tpf' ? ow.name + ' paid for you' : ow.leg === 'itb' ? 'Paid back to ' + ow.name : ow.name + '’s share')
           : ((e.k === 'p' && e.w) ? (p.m || 'card') + ' from ' + e.w : (p.m || '')));
         if (!add) subTxt = 'Deleted' + (subTxt ? ' · ' + subTxt : ''); // v75.07
         else if (goneLater) subTxt = (subTxt ? subTxt + ' · ' : '') + 'deleted later';
@@ -13556,12 +13570,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.27, live: new Date(2026, 10, 20, 22, 57) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.28, live: new Date(2026, 10, 20, 23, 2) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.28': [
+      'Ledger: an Owed entry where a friend paid for you (including one a connected friend shared from their card) shows as one \u2212 row, \u201c<name> paid \u00b7 your cash did not move\u201d. The matching + row is no longer listed; your Cash balance is unchanged.'
+    ],
     '75.27': [
       'Ledger: entries you deleted or edited no longer come back as repeated rows after a cloud sync, and the leftover copies already there are cleared when the app opens.'
     ],
@@ -15287,6 +15304,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     syncEncrypt: syncEncrypt, // v73.3: the envelope (the smoke round-trips it)
     syncDecrypt: syncDecrypt, // v73.3: decrypt the envelope (the smoke round-trips it)
     logDropGhosts: logDropGhosts, // v75.27 (smoke)
+    mlIsTpfLeg: mlIsTpfLeg, mlOwedIndex: mlOwedIndex, // v75.28 (smoke)
     syncMerge: syncMerge, // v73.3: the merge rule (pure — the smoke drives it)
     migrateCardFundedPayoffs: migrateCardFundedPayoffs, cardEffectOf: cardEffectOf, ADJ_MODEL_V: ADJ_MODEL_V, // v74.18 (smoke)
     budgetCredit: budgetCredit, // v74.16: the budget-already-spent credit (smoke)

@@ -3501,6 +3501,11 @@ waitReady().then(async function (F) {
         { moneyLog: [{ at: 1, a: 'add', tid: 'k' }, { at: 2, a: 'add', tid: 'g' }, { at: 3, a: 'add', l: 'Reconcile' }, { at: 4, a: 'add', tid: 'd' }, { at: 5, a: 'del', tid: 'd' }], txns: [] });
       ok(JSON.stringify(m48.moneyLog.map(function (e) { return e.at; })) === '[1,3,4,5]', 'v75.27: ghost ledger rows are dropped; tid-less rows and add+del pairs stay (got ' + JSON.stringify(m48.moneyLog.map(function (e) { return e.at; })) + ')');
       ok(F.logDropGhosts([{ at: 1, a: 'add', tid: 'x' }], []).length === 0, 'v75.27: logDropGhosts drops an add whose txn is gone');
+      // v75.28: the tpf Cash offset row is not listed; the mine row and other legs are
+      var ix28 = { m: { p: { name: 'Vhal' }, mine: true, dir: 'tpf' }, o: { p: { name: 'Vhal' }, mine: false, leg: 'tpf' }, t: { p: { name: 'Vhal' }, mine: false, leg: 'ipf' } };
+      ok(F.mlIsTpfLeg({ a: 'add', tid: 'o', c: 'Food', nt: 'Owed · Vhal · paid for you' }, ix28) && !F.mlIsTpfLeg({ a: 'add', tid: 'm', c: 'Food', nt: 'Andoks · Owed · Vhal' }, ix28)
+        && !F.mlIsTpfLeg({ a: 'add', tid: 't', c: 'Food', nt: 'Owed · Vhal · theirs' }, ix28) && F.mlIsTpfLeg({ a: 'del', tid: 'gone', c: 'Food', nt: 'Owed · Vhal · paid for you' }, {}),
+        'v75.28: only the paid-for-you offset row hides (linked or by its tag)');
       // (5) the per-person stamp: only a real change stamps; a sync/import save never does
       var owedBk48 = F.state.owed;
       F.setOwed({ people: [{ id: 'p48', name: 'Dee', entries: [], updated: '' }], sort: 'recent' });
