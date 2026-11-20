@@ -1830,7 +1830,11 @@ waitReady().then(async function (F) {
       (async function () {
         var log26 = F.state.moneyLog || [];
         var countM = function (mv) {
+          var live26 = {}, del26 = {}; // v75.36: an add + del pair whose entry is gone is not listed
+          F.state.txns.forEach(function (t) { live26[t.id] = true; });
+          log26.forEach(function (e) { if (e && e.a === 'del' && e.tid) del26[e.tid] = true; });
           return log26.filter(function (e) {
+            if (e && e.tid && del26[e.tid] && !live26[e.tid]) return false;
             var m = (e.k === 'p' && !e.m) ? 'CC Payment' : (e.m || '');
             return m === mv;
           }).length;
@@ -3499,7 +3503,7 @@ waitReady().then(async function (F) {
       // v75.27: a row whose entry was deleted here (no txn, no 'del' row) does not come back from the other copy
       m48 = F.syncMerge({ moneyLog: [{ at: 1, a: 'add', tid: 'k' }], txns: [{ id: 'k' }], removedTxn: ['g'] },
         { moneyLog: [{ at: 1, a: 'add', tid: 'k' }, { at: 2, a: 'add', tid: 'g' }, { at: 3, a: 'add', l: 'Reconcile' }, { at: 4, a: 'add', tid: 'd' }, { at: 5, a: 'del', tid: 'd' }], txns: [] });
-      ok(JSON.stringify(m48.moneyLog.map(function (e) { return e.at; })) === '[1,3,4,5]', 'v75.27: ghost ledger rows are dropped; tid-less rows and add+del pairs stay (got ' + JSON.stringify(m48.moneyLog.map(function (e) { return e.at; })) + ')');
+      ok(JSON.stringify(m48.moneyLog.map(function (e) { return e.at; })) === '[1,3]', 'v75.27/36: ghost ledger rows (and add+del pairs whose entry is gone) are dropped; tid-less rows stay (got ' + JSON.stringify(m48.moneyLog.map(function (e) { return e.at; })) + ')');
       ok(F.logDropGhosts([{ at: 1, a: 'add', tid: 'x' }], []).length === 0, 'v75.27: logDropGhosts drops an add whose txn is gone');
       // v75.28: the tpf Cash offset row is not listed; the mine row and other legs are
       var ix28 = { m: { p: { name: 'Vhal' }, mine: true, dir: 'tpf' }, o: { p: { name: 'Vhal' }, mine: false, leg: 'tpf' }, t: { p: { name: 'Vhal' }, mine: false, leg: 'ipf' } };
@@ -4334,7 +4338,7 @@ waitReady().then(async function (F) {
       var sel85 = elMap['mlFilter'] ? String(elMap['mlFilter'].innerHTML) : '';
       ok((sel85.match(/>Unsorted</g) || []).length === 1, 'v75.07: the category filter lists Unsorted once (a no-category entry and an entry filed as Unsorted)');
       var body85 = elMap['mlBody'] ? String(elMap['mlBody'].innerHTML) : '';
-      ok(body85.indexOf('Deleted · Lunch85') >= 0 && body85.indexOf('Lunch85 · deleted later') >= 0, 'v75.07: a deleted entry says Deleted, its original says deleted later');
+      ok(body85.indexOf('Lunch85') < 0, 'v75.36: an entry that is gone leaves no rows in the ledger (was v75.07: Deleted / deleted later)');
       ok(body85.indexOf('data-ml-del="gone85"') < 0, 'v75.07: no Delete button on an entry that is already gone');
       st.moneyLog = log85; F.renderMoneyLog();
       // ============ PART 86: v75.08 - full simulation pass 2 (Cards + Owed) ============

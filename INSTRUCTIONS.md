@@ -1,3 +1,7 @@
+## 2026-11-21 - "can u cleanup those nov18 ghost entries too" -> "the Nov 18 add + take-back pairs (Papa 5,000 paid back x2, Vhal 82.50 you paid back) disappear; a gone entry leaves no ledger rows"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.36 (app.js logDropGhosts keeps only rows whose txn is live (or no tid) - add+del pairs from an Owed undo / re-file go at load and on every merge; renderMoneyLog skips gone-entry rows meanwhile. Smoke: v75.27 merge test + v75.07 PART 85 retargeted)
+
 ## 2026-11-21 - "the mine and total new look looks unclean, how do u propose" -> (mockup of 2 options) -> "Build A" -> "the day header shows your spend in the row ink and 'of <total>' in grey only when it differs, no labels"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.35 (app.js mlGroupDays sumTxt = <b.ml-dmine> + <span.ml-dof>of total</span>; index.html styles; v75.34 check retargeted)

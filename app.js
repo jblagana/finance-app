@@ -3437,7 +3437,11 @@
         : 'No entries yet — tap + to add your first expense.') + '</p>';
       return;
     }
+    var liveT = {}, delT = {}; // v75.36: an add + 'del' pair whose entry is gone (an Owed undo) is not listed
+    state.txns.forEach(function (t) { if (t && t.id) liveT[t.id] = true; });
+    log.forEach(function (r) { if (r && r.a === 'del' && r.tid) delT[r.tid] = true; });
     var shown = log.slice().reverse().filter(function (e) {
+      if (e && e.tid && delT[e.tid] && !liveT[e.tid]) return false;
       if (mlFilterCat) {
         if (mlFilterCat === '__ccpay__') return e.k === 'p'; // v72.47: the CC Payment filter
         if (mlFilterCat === '__unsorted__') return e.k !== 'p' && (!e.c || e.c === 'Unsorted'); // v75.07
@@ -7784,11 +7788,13 @@
   // by the next pull. Such a ghost has a tid that no txn holds and no 'del' row pairs
   // it; it shows as a duplicate and its Delete finds nothing. Rows without a tid
   // (reconcile / adjust) and add+del pairs stay.
+  // v75.36 (boss: 'can u cleanup those nov18 ghost entries too'): an add + 'del' pair whose entry is gone
+  // (an Owed entry undone / re-filed: Papa 5,000 paid back x2, Vhal 82.50) goes too - a deleted entry
+  // leaves no trace in the ledger (Settings -> History keeps what you delete yourself)
   function logDropGhosts(log, txns) {
-    var live = {}, gone = {};
+    var live = {};
     (txns || []).forEach(function (t) { if (t && t.id) live[t.id] = true; });
-    (log || []).forEach(function (e) { if (e && e.a === 'del' && e.tid) gone[e.tid] = true; });
-    return (log || []).filter(function (e) { return !e || !e.tid || live[e.tid] || gone[e.tid]; });
+    return (log || []).filter(function (e) { return !e || !e.tid || live[e.tid]; });
   }
   function recStamp(r) {
     var a = (r && r.syncAt) ? String(r.syncAt) : '', b = (r && r.updated) ? String(r.updated) : '',
@@ -13709,12 +13715,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.35, live: new Date(2026, 10, 21, 0, 8) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.36, live: new Date(2026, 10, 21, 0, 20) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.36': [
+      'Ledger: the leftover pairs from an Owed entry that was undone or changed (a \u201cpaid back\u201d that was added and taken back right after) are cleared. An entry that is gone no longer leaves rows behind.'
+    ],
     '75.35': [
       'Ledger: the day header is cleaner. Your own spend shows in white; when a friend\u2019s share or a payback is in the day, the day\u2019s total follows in grey (\u201cof \u20b1805\u201d). No more \u201cmine:\u201d / \u201ctotal:\u201d labels.'
     ],
