@@ -1,3 +1,7 @@
+## 2026-11-20 - "here my latest backup from iphone. see the issues, multiple repeated ledger entries, some undeleteable, also does owed tab handle if i log multiple owed entries that require confirmation for all in a connected friend" -> "find why the ledger repeats / cannot delete rows and fix it; answer the multi-confirm question"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.27 (app.js logDropGhosts: a ledger row whose txn is gone and has no 'del' row (re-added by the money-log union from the other device's copy after a delete / owed re-file) is dropped in syncMerge and once at load. The backup had 6: the unlogged salary, Andoks 173 x2, 'paid for you' 173 / 140, 'theirs' 1)
+
 ## 2026-11-20 - "yes, add live updates" -> "a change on another device appears within seconds while the app is open (Firestore listener)"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.26 (app.js cloudWatch: onSnapshot on finai/{uid}; a new envelope that is not our own push triggers cloudSoon(600) -> pull + merge; ignores pending local writes and the copy we just pushed)

@@ -2720,6 +2720,9 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.27 (boss: 'multiple repeated ledger entries, some undeleteable'): the money-log union drops ghost rows (tid with no txn and no del row) on merge and once at load",
+          "function logDropGhosts(log, txns)" in js and "moneyLog: logDropGhosts(mergeLog(local.moneyLog, remote.moneyLog), mTxns)" in js
+          and "state.moneyLog = logDropGhosts(state.moneyLog || [], state.txns);" in js and "'75.27': [" in js)
     check("v75.26 (boss: 'add live updates'): a Firestore listener (cloudWatch) merges another device's push at once and ignores our own write",
           "function cloudWatch()" in js and ".onSnapshot(function (snap)" in js and "snap.metadata.hasPendingWrites" in js and "env === cloudEnv" in js and "'75.26': [" in js)
     check("v75.25 (boss: 'passphrase page is not working'): firestore.rules splits read/delete from create/update (no request.resource on a read); sign-in is popup-first",

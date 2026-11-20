@@ -7744,6 +7744,18 @@
   //    keeps local's copy), sorted by time — before, the side with the newest
   //    row replaced the other's whole log. The rows' before/after balance
   //    lines are each phone's own running numbers; the entries are no longer lost.
+  // v75.27 (boss: 'multiple repeated ledger entries, some undeleteable'): a ledger row
+  // whose entry is gone (deleted / re-filed here) came BACK from the other device's
+  // copy - the money log merges as a union, so a row removed on one phone was re-added
+  // by the next pull. Such a ghost has a tid that no txn holds and no 'del' row pairs
+  // it; it shows as a duplicate and its Delete finds nothing. Rows without a tid
+  // (reconcile / adjust) and add+del pairs stay.
+  function logDropGhosts(log, txns) {
+    var live = {}, gone = {};
+    (txns || []).forEach(function (t) { if (t && t.id) live[t.id] = true; });
+    (log || []).forEach(function (e) { if (e && e.a === 'del' && e.tid) gone[e.tid] = true; });
+    return (log || []).filter(function (e) { return !e || !e.tid || live[e.tid] || gone[e.tid]; });
+  }
   function recStamp(r) {
     var a = (r && r.syncAt) ? String(r.syncAt) : '', b = (r && r.updated) ? String(r.updated) : '',
       c = (r && r.created) ? String(r.created) : '';
@@ -7787,13 +7799,14 @@
     local = local || {}; remote = remote || {};
     var b = (remote.base && ts(remote.base, 'edited') > ts(local.base, 'edited')) ? remote.base : local.base;
     var lOwed = local.owed || { people: [] }, rOwed = remote.owed || { people: [] };
+    var mTxns = mergeById(local.txns, remote.txns, idSet(remote.removedTxn, local.removedTxn));
     return {
       base: b,
-      txns: mergeById(local.txns, remote.txns, idSet(remote.removedTxn, local.removedTxn)),
+      txns: mTxns,
       plans: mergeById(local.plans, remote.plans, idSet(remote.removedPlan, local.removedPlan)),
       owed: { people: mergeById(lOwed.people, rOwed.people, idSet(remote.removedOwed, local.removedOwed)),
         sort: lOwed.sort || rOwed.sort || 'recent' },
-      moneyLog: mergeLog(local.moneyLog, remote.moneyLog)
+      moneyLog: logDropGhosts(mergeLog(local.moneyLog, remote.moneyLog), mTxns) // v75.27: no ghost rows
     };
   }
   // the goal's PACE, as a pure fn (the smoke drives it). The required
@@ -13543,12 +13556,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.26, live: new Date(2026, 10, 20, 1, 17) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.27, live: new Date(2026, 10, 20, 22, 57) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.27': [
+      'Ledger: entries you deleted or edited no longer come back as repeated rows after a cloud sync, and the leftover copies already there are cleared when the app opens.'
+    ],
     '75.26': [
       'Cloud account is live: a change made on another device shows up here within a few seconds while the app is open, no tap needed.'
     ],
@@ -15270,6 +15286,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     goalPace: goalPace, // v73.3: the goal pace (pure — the smoke drives it)
     syncEncrypt: syncEncrypt, // v73.3: the envelope (the smoke round-trips it)
     syncDecrypt: syncDecrypt, // v73.3: decrypt the envelope (the smoke round-trips it)
+    logDropGhosts: logDropGhosts, // v75.27 (smoke)
     syncMerge: syncMerge, // v73.3: the merge rule (pure — the smoke drives it)
     migrateCardFundedPayoffs: migrateCardFundedPayoffs, cardEffectOf: cardEffectOf, ADJ_MODEL_V: ADJ_MODEL_V, // v74.18 (smoke)
     budgetCredit: budgetCredit, // v74.16: the budget-already-spent credit (smoke)
@@ -16100,6 +16117,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           owedSeedSigs(); // v74.06: the baseline the first edit is compared against
         }
       });
+      var ml0 = (state.moneyLog || []).length; // v75.27: ghost rows already on this phone go (idempotent)
+      state.moneyLog = logDropGhosts(state.moneyLog || [], state.txns);
+      if (state.moneyLog.length !== ml0) idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {});
       if (!state.base) {
         // First launch: one-time migration from the last cached sheet snapshot (if any).
         state.base = snapshotToBase(cachedSnap) || defaultBase();

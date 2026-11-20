@@ -3493,8 +3493,14 @@ waitReady().then(async function (F) {
       // (4) money log: a union, not a wholesale replace
       var L48 = [{ at: 1000, a: 'add', tid: 't1', n: 1 }, { at: 3000, a: 'add', tid: 't3', n: 3 }];
       var R48 = [{ at: 1000, a: 'add', tid: 't1', n: 1 }, { at: 2000, a: 'add', tid: 't2', n: 2 }];
-      m48 = F.syncMerge({ moneyLog: L48 }, { moneyLog: R48 });
+      var TX48 = [{ id: 't1' }, { id: 't2' }, { id: 't3' }];
+      m48 = F.syncMerge({ moneyLog: L48, txns: TX48 }, { moneyLog: R48, txns: TX48 });
       ok(JSON.stringify(m48.moneyLog.map(function (e) { return e.tid; })) === '["t1","t2","t3"]', 'v74.06: the money log keeps BOTH phones\' rows, deduped, in time order (got ' + JSON.stringify(m48.moneyLog.map(function (e) { return e.tid; })) + ')');
+      // v75.27: a row whose entry was deleted here (no txn, no 'del' row) does not come back from the other copy
+      m48 = F.syncMerge({ moneyLog: [{ at: 1, a: 'add', tid: 'k' }], txns: [{ id: 'k' }], removedTxn: ['g'] },
+        { moneyLog: [{ at: 1, a: 'add', tid: 'k' }, { at: 2, a: 'add', tid: 'g' }, { at: 3, a: 'add', l: 'Reconcile' }, { at: 4, a: 'add', tid: 'd' }, { at: 5, a: 'del', tid: 'd' }], txns: [] });
+      ok(JSON.stringify(m48.moneyLog.map(function (e) { return e.at; })) === '[1,3,4,5]', 'v75.27: ghost ledger rows are dropped; tid-less rows and add+del pairs stay (got ' + JSON.stringify(m48.moneyLog.map(function (e) { return e.at; })) + ')');
+      ok(F.logDropGhosts([{ at: 1, a: 'add', tid: 'x' }], []).length === 0, 'v75.27: logDropGhosts drops an add whose txn is gone');
       // (5) the per-person stamp: only a real change stamps; a sync/import save never does
       var owedBk48 = F.state.owed;
       F.setOwed({ people: [{ id: 'p48', name: 'Dee', entries: [], updated: '' }], sort: 'recent' });
