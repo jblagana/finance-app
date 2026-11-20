@@ -3408,10 +3408,12 @@
         if (cur !== null) out += '</section>';
         cur = k;
         var t = tot[k] || 0, mn = mine[k] || 0;
+        // v75.35 (boss picked option A: 'the mine and total new look looks unclean'): your spend in the row
+        // amount's ink, the day's total after it in grey ('of X') only when it differs - no labels
         var sumTxt = '';
         if (t > 0.004 || mn > 0.004) {
-          sumTxt = 'mine: ' + (mn > 0.004 ? '−' + money(mn) : money(0));
-          if (Math.abs(t - mn) > 0.004) sumTxt += ' · total: −' + money(t);
+          sumTxt = '<b class="ml-dmine">' + (mn > 0.004 ? '−' + money(mn) : money(0)) + '</b>';
+          if (Math.abs(t - mn) > 0.004) sumTxt += ' <span class="ml-dof">of ' + money(t) + '</span>';
         }
         out += '<section class="ml-grp"><div class="ml-day"><span>' + mlDayLabel(e.at) + '</span><span>' + sumTxt + '</span></div>';
       }
@@ -13707,12 +13709,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.34, live: new Date(2026, 10, 21, 0, 0) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.35, live: new Date(2026, 10, 21, 0, 8) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.35': [
+      'Ledger: the day header is cleaner. Your own spend shows in white; when a friend\u2019s share or a payback is in the day, the day\u2019s total follows in grey (\u201cof \u20b1805\u201d). No more \u201cmine:\u201d / \u201ctotal:\u201d labels.'
+    ],
     '75.34': [
       'Ledger: each day shows \u201cmine:\u201d (your own spend) and, when a friend\u2019s share or a payback is in it too, \u201ctotal:\u201d beside it. If it is all yours, only \u201cmine:\u201d shows.'
     ],

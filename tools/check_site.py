@@ -2720,8 +2720,10 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.35 (boss picked option A): the day header = your spend (ml-dmine, ink) + 'of <total>' in grey (ml-dof) only when it differs; no mine:/total: labels",
+          ".ml-day .ml-dmine{color:var(--ink)" in rd("index.html") and "'75.35': [" in js and "sumTxt = 'mine: '" not in js)
     check("v75.34 (boss: 'the top right maybe should have mine: and total:'): the ledger day header shows mine (no Owed legs) and total only when they differ",
-          "function mlGroupDays(rows, htmls, all, owIdx)" in js and "sumTxt = 'mine: '" in js and "sumTxt += ' · total: −' + money(t);" in js
+          "function mlGroupDays(rows, htmls, all, owIdx)" in js and "sumTxt = '<b class=\"ml-dmine\">'" in js and "sumTxt += ' <span class=\"ml-dof\">of ' + money(t) + '</span>';" in js  # v75.35: option A look
           and "mlGroupDays(limited, mlRowsH, shown, owIdx)" in js and "'75.34': [" in js)
     check("v75.33 (boss: 'entries in ledger that are not mine maybe grey out the amount'): an Owed leg row (ow && !ow.mine - not spend) gets ml-notmine (muted amount)",
           "(ow && !ow.mine ? ' ml-notmine' : '')" in js and ".ml-down.ml-notmine{color:var(--mut)" in rd("index.html") and "'75.33': [" in js)

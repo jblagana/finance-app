@@ -1,3 +1,7 @@
+## 2026-11-21 - "the mine and total new look looks unclean, how do u propose" -> (mockup of 2 options) -> "Build A" -> "the day header shows your spend in the row ink and 'of <total>' in grey only when it differs, no labels"
+Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.35 (app.js mlGroupDays sumTxt = <b.ml-dmine> + <span.ml-dof>of total</span>; index.html styles; v75.34 check retargeted)
+
 ## 2026-11-20 - "in ledger entries, the top right maybe should have mine: and total:?, if the total is mine alone, keep mine:" -> "each ledger day header reads 'mine: -X' and adds ' · total: -Y' only when a friend's share / payback is in the day"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.34 (app.js mlGroupDays takes owIdx: tot = every spend row (as before), mine = the same minus Owed legs (ow && !ow.mine); header 'mine: ...' + ' · total: ...' when they differ)
