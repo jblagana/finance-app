@@ -1,3 +1,6 @@
+## 2026-11-22 - "make an assessment" -> Assess the current Fin.AI app from the repository and release checks, with findings prioritized by impact. Scope inferred from the project context.
+Status: **assessment written**. Findings: cloud sync can acknowledge edits made during an in-flight upload, friend mailbox rules rely on secret box IDs, and the rolling chart has structural coverage. GatesOnly failed the release timestamp freshness check in both structural gate copies. Parser, syntax, smokes, Worker and coach client checks passed. Live phone and Firebase behavior were not tested.
+
 ## 2026-11-21 - "make the histogram a rolling window of 15days, but add a division line between cycles, mockup first" -> (mockup) -> "Build it" -> "the Ledger bars show the last 15 days with a dashed 'new cycle' line on payday; last cycle's bars dimmer; the total and donut stay this cycle's"
 Status: **done** - commit (this one) pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] v75.38 (app.js renderDailyBars builds its own 15-day byDay / byDayCat (spendOf), days < w.start = .prev, a .dcut before w.start, panel says 'last cycle'; index.html: .prev dim, .dcut dashed line + tag, .has-cut room)
