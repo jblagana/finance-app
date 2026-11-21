@@ -1,3 +1,6 @@
+## 2026-11-22 - "re-assess" -> Recheck cloud sync and mailbox access against latest main.
+Status: assessment complete (100%). On main d3250b2, a delayed mock write reproduced the false sync acknowledgement and skipped follow-up upload. Mailbox access rules still rely on a secret box ID. Deployed rules and physical phones unverified.
+
 ## 2026-11-22 - "make an assessment" -> Assess the current Fin.AI app from the repository and release checks, with findings prioritized by impact. Scope inferred from the project context.
 Status: **assessment written**. Findings: cloud sync can acknowledge edits made during an in-flight upload, friend mailbox rules rely on secret box IDs, and the rolling chart has structural coverage. GatesOnly failed the release timestamp freshness check in both structural gate copies. Parser, syntax, smokes, Worker and coach client checks passed. Live phone and Firebase behavior were not tested.
 
