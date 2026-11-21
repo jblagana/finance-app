@@ -13763,12 +13763,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.38, live: new Date(2026, 10, 21, 0, 34) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.39, live: new Date(2026, 10, 21, 15, 54) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.39': [
+      'Take a three-step tour from the empty Home screen, or replay it from Settings. Try the sample Ledger day to see its breakdown.'
+    ],
     '75.38': [
       'Ledger: the spending chart now always shows the last 15 days. A dashed \u201cnew cycle\u201d line marks payday, and days from the previous cycle are dimmer. The total and the category ring above stay this cycle\u2019s.'
     ],
@@ -15230,6 +15233,74 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       window.__financeChat.startSetup();
     }
   }
+  function bindUserTour() {
+    var dialog = byId('userTour');
+    if (!dialog || typeof dialog.showModal !== 'function') return;
+    var step = 0, replay = false, originTab, target;
+    var titles = ['Start with your balances', 'Log an expense', 'Read your ledger'];
+    var card = byId('tourCard'), ring = byId('tourFocus');
+    function position() {
+      if (!dialog.open || !target) return;
+      var rect = target.getBoundingClientRect();
+      ring.style.left = rect.left - 3 + 'px';
+      ring.style.top = rect.top - 3 + 'px';
+      ring.style.width = rect.width + 6 + 'px';
+      ring.style.height = rect.height + 6 + 'px';
+      var height = card.offsetHeight, room = dialog.clientHeight;
+      var below = rect.bottom + 14;
+      card.style.top = Math.max(8, Math.min(room - height - 8,
+        below + height < room - 8 ? below : rect.top - height - 14)) + 'px';
+    }
+    function render() {
+      setTab(step === 2 ? 'ledger' : 'home');
+      var setup = byId('homeOpenSet');
+      target = step === 0 ? (setup.offsetWidth ? setup : byId('setBtn')) :
+        step === 1 ? byId('addBtn') : document.querySelector('[data-tab="ledger"]');
+      target.scrollIntoView({ block: 'nearest' });
+      byId('tourCount').textContent = (step + 1) + ' of 3';
+      byId('tourTitle').textContent = titles[step];
+      byId('tourCopy').textContent = [
+        target === setup ? 'Choose “Add them yourself” to enter your cash and account balances.' : 'Open Settings to review your accounts and balances.',
+        'Tap + to enter an amount and choose how you paid.',
+        'The Ledger shows the last 15 days. Tap today in this example for a spending breakdown.'
+      ][step];
+      byId('tourSample').hidden = step !== 2;
+      byId('tourDetail').hidden = true;
+      byId('tourDay').setAttribute('aria-expanded', 'false');
+      byId('tourBack').textContent = step ? 'Back' : 'Skip tour';
+      byId('tourNext').textContent = step === 2 ? 'Done' : 'Next';
+      position();
+      byId('tourTitle').focus({preventScroll:true});
+    }
+    function start(fromSettings) {
+      if (dialog.open) return;
+      replay = fromSettings;
+      var active = document.querySelector('.tab.active');
+      originTab = active ? active.getAttribute('data-tab') : 'home';
+      if (replay) closeSheets();
+      step = 0;
+      dialog.showModal();
+      render();
+    }
+    byId('tourStart').onclick = function () { start(false); };
+    byId('tourReplay').onclick = function () { start(true); };
+    byId('tourBack').onclick = function () { if (step) { step--; render(); } else dialog.close(); };
+    byId('tourNext').onclick = function () { if (step < 2) { step++; render(); } else dialog.close(); };
+    byId('tourDay').onclick = function () {
+      var detail = byId('tourDetail');
+      detail.hidden = !detail.hidden;
+      this.setAttribute('aria-expanded', String(!detail.hidden));
+      position();
+    };
+    dialog.onclose = function () {
+      setTab(originTab);
+      if (replay) openSheet('setSheet');
+      byId(replay ? 'tourReplay' : 'tourStart').focus();
+    };
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
+  }
+
   function currentTab() {
     if (!state.snapshot) return 'home';
     try {
@@ -16291,6 +16362,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     document.addEventListener('touchmove', lockTouchMove, { passive: false });
     var bsv = byId('baseSave'); // v71: the explicit "Your numbers" save button
     if (bsv) bsv.onclick = function () { commitBaseForm(); };
+    bindUserTour();
     var hob = byId('homeOpenSet');
     if (hob) hob.onclick = function () { openSheet('numSheet'); };
     var hcb = byId('homeCoach');
