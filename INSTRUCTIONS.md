@@ -1,6 +1,8 @@
 ## 2026-11-22 - "fix the sync" -> Fix the two assessed sync defects: pulled account numbers must survive restart, and an upload must acknowledge only the state it sent and follow up on later edits.
+Follow-up, verbatim: "live check if the sync is now fixed" → check the public deployment for the fix and verify behavior on the available build.
 Status: implemented and covered by the app smoke gate. The shared GitHub Gist and Google Cloud pull saves the merged base with its original edit timestamp. Cloud sync captures the outgoing data before encryption and follows up on edits made during an upload. Follow-up, verbatim: "verify this \"Cloud sync reported Synced after I added an expense during an upload...\"" -> confirmed on v75.38 (fake-Firestore repro: 1 upload, the new entry phone-only) and fixed by this change (2 uploads, cloud = phone); then "Yes, ship it".
 Status: **done** - v75.40 pushed to main (rebased onto v75.39, the first-run tour). Live Firebase and iPhone verification pending.
+- Live deployment check complete. GitHub Pages served v75.40, and the public `app.js` and `sw.js` matched deployed commit `6cae5a1` byte for byte. The full gate passed on that commit, including merged-balance persistence and the delayed Firebase write followed by a second upload. The regression used a Firebase stand-in. A signed-in round trip between real devices remains pending.
 
 ## 2026-11-22 - "make a thorough assessment of the app" -> Review the current Fin.AI release across everyday use, financial correctness, storage and recovery, sync and privacy, offline behavior, accessibility, and release evidence. Prioritize findings by user impact and record verification limits.
 Follow-up, verbatim: "wrap up" → conclude the same assessment and publish the findings.
