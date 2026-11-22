@@ -1,3 +1,9 @@
+## 2026-11-22 - "fix all" -> Fix all four Owed sync defects reported by the two-sided simulation. Publish each fix in dependency order with its release checks.
+Status: implementation and verification complete. One v75.41 candidate covers all four fixes because they share revision and confirmation logic. Published with this commit on `agent/owed-sync-revisions`.
+- Pending edits use ordered revisions, deletes keep a durable revision marker, and confirming or rejecting uses the exact review shown. A proposed edit leaves the accepted amount and ledger intact until its exact acknowledgement. The rejected proposal stays visible as a status on the original entry.
+- The full release gate passed, including 18 new Owed checks. Isolated Edge profiles with browser IndexedDB and an encrypted relay stand-in passed the four regressions with each friend sending. The second-device check used a synthetic backup to initialize the third profile.
+- Both friends and their devices need v75.41 for exact-revision confirmations on new changes. Main was still at v75.40 when the candidate was published. Live Firebase, the production Worker, and physical iPhones were outside this verification.
+
 ## 2026-11-22 - "do full sim now" -> Run the agreed Owed sync simulation with synthetic data, both perspectives, pending edits, delivery failures, reloads, and a second device. Record results and gaps.
 Status: simulation complete (100%) with this documentation push. Tested v75.40 at `6cae5a1` in isolated Edge profiles with synthetic books, browser IndexedDB and Web Crypto, and simulated Firebase and Worker transport. Nine groups ran in both sender roles. Across 70 checks, 58 passed and 12 failed in four distinct cases. The final totals use the controlled rerun of the two-device group. A focused Ledger rerun also verified one visible recipient expense on each side.
 

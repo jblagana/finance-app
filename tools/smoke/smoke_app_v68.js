@@ -4234,7 +4234,7 @@ waitReady().then(async function (F) {
       var e82 = p82.entries[p82.entries.length - 1], m82 = p82.conn.out[p82.conn.out.length - 1];
       ok(e82.cid === e82.id && e82.cst === 'wait' && e82.cv === 1, 'v75.02: your entry on a linked card is shared, waiting');
       ok(m82 && m82.t === 'e' && m82.dir === 'ipf' && m82.amt === 200 && m82.note === 'Dinner' && m82.mine === undefined && m82.acc === undefined && m82.total === undefined, 'v75.02: the message carries direction, amount, note, date only (no mine / total / account)');
-      F.connApply(p82, { t: 'no', cid: e82.cid, cv: 1, why: 'I paid this one' });
+      F.connApply(p82, { t: 'no', cid: e82.cid, cv: 1, cr: m82.cr, why: 'I paid this one' });
       ok(e82.cst === 'no' && e82.cwhy === 'I paid this one', 'v75.02: a reject marks it with the reason');
       ok(F.owedHeroData().ins.filter(function (x) { return x.name === 'Probe82'; })[0].b === 500, 'v75.02: a rejected entry stops counting');
       ok(F.connRowStatus(p82, e82).indexOf('Rejected') >= 0, 'v75.02: the row says Rejected');
@@ -4264,6 +4264,79 @@ waitReady().then(async function (F) {
         var s82 = await F.connSeal(p82.conn, { t: 'e', amt: 1 });
         var o82 = await F.connOpenMsg(p82.conn, s82);
         ok(o82 && o82.amt === 1 && s82.indexOf('amt') < 0, 'v75.02: messages are sealed (AES-GCM) and open again');
+      }
+      // Each side can send. Exchange real message payloads between two books,
+      // controlling delivery order and restoring the saved connection between steps.
+      for (var originSide of ['a', 'b']) {
+        await F.addOwedPerson('Sender ' + originSide);
+        await F.addOwedPerson('Recipient ' + originSide);
+        var people = F.getOwed().people;
+        var sender = people[people.length - 2], recipient = people[people.length - 1];
+        sender.conn = { side: originSide, st: 'linked', in: [], out: [] };
+        recipient.conn = { side: originSide === 'a' ? 'b' : 'a', st: 'linked', in: [], out: [] };
+        var detail = function (amount) {
+          return { dir: 'ipf', d: F.todayISO(), total: amount + 50, mine: 50, theirs: amount, amt: amount,
+            note: 'Test purchase', cat: 'Food', acc: 'CASH::Cash' };
+        };
+        var latest = function (person) { return person.conn.out[person.conn.out.length - 1]; };
+        await F.addOwedEntry(sender.id, detail(70));
+        var entry = sender.entries[0], v1 = latest(sender);
+        await F.updateOwedEntry(sender.id, entry.id, detail(88));
+        var v2 = latest(sender);
+        await F.updateOwedEntry(sender.id, entry.id, detail(99));
+        var v3 = latest(sender);
+        [v3, v2, v1].forEach(function (message) { F.connApply(recipient, message); });
+        ok(recipient.conn.in.length === 1 && recipient.conn.in[0].amt === 99,
+          'Owed ' + originSide + ': reversed delivery keeps the latest pending edit');
+        await F.connConfirm(recipient.id, entry.cid, 'e', 'CASH::Cash', 'Food', v1);
+        ok(recipient.entries.length === 0 && recipient.conn.in.length === 1,
+          'Owed ' + originSide + ': a stale confirmation cannot apply a revision the recipient did not review');
+        await F.connConfirm(recipient.id, entry.cid, 'e', 'CASH::Cash', 'Food', v3);
+        await F.connApply(sender, latest(recipient));
+        ok(entry.amt === 99 && entry.cst === 'ok' && recipient.entries[0].amt === 99,
+          'Owed ' + originSide + ': confirming the current revision agrees on both sides');
+
+        var ledgerIds = [entry.txnId, entry.theirsTxnId];
+        await F.updateOwedEntry(sender.id, entry.id, detail(110));
+        var proposed = latest(sender);
+        F.connApply(recipient, proposed);
+        await F.connReject(recipient.id, entry.cid, 'e', 'check amount', proposed);
+        await F.connApply(sender, latest(recipient));
+        ok(entry.amt === 99 && entry.cst === 'ok' && !entry.cdraft && entry.crejected === 'check amount' &&
+          recipient.entries[0].amt === 99 && ![entry.txnId, entry.theirsTxnId].some(function (id, i) { return id !== ledgerIds[i]; }),
+          'Owed ' + originSide + ': rejecting a proposed edit preserves the accepted debt and ledger legs');
+
+        await F.addOwedPerson('Second device ' + originSide);
+        var shadow = F.getOwed().people[F.getOwed().people.length - 1];
+        shadow.conn = { side: originSide, st: 'linked', in: [], out: [] };
+        await F.addOwedEntry(shadow.id, detail(99), { conn: { cid: entry.cid, cv: entry.cv, cr: entry.cr } });
+        await F.updateOwedEntry(sender.id, entry.id, detail(111));
+        await F.updateOwedEntry(shadow.id, shadow.entries[0].id, detail(122));
+        var actual = latest(sender), other = latest(shadow);
+        ok(actual.cv === other.cv && actual.cr !== other.cr,
+          'Owed ' + originSide + ': two device edits have distinct identifiers at the same version number');
+        F.connApply(recipient, other);
+        await F.connConfirm(recipient.id, entry.cid, 'e', 'CASH::Cash', 'Food', other);
+        await F.connApply(sender, latest(recipient));
+        ok(entry.cst === 'wait' && entry.cdraft.amt === 111 && entry.amt === 99 && recipient.entries[0].amt === 122,
+          'Owed ' + originSide + ': accepting a sibling-device revision never acknowledges a different amount');
+        await F.connApply(shadow, latest(recipient));
+        ok(shadow.entries[0].amt === 122 && shadow.entries[0].cst === 'ok' && !shadow.entries[0].cdraft,
+          'Owed ' + originSide + ': the exact acknowledgement applies the matching proposal');
+
+        await F.addOwedEntry(sender.id, detail(70));
+        var doomed = sender.entries[sender.entries.length - 1], original = latest(sender);
+        F.delOwedEntry(sender.id, doomed.id);
+        var deletion = latest(sender);
+        F.connApply(recipient, deletion);
+        recipient.conn = JSON.parse(JSON.stringify(recipient.conn));
+        F.connApply(recipient, original);
+        ok(!recipient.conn.in.some(function (item) { return item.cid === doomed.cid; }),
+          'Owed ' + originSide + ': a delayed add cannot resurrect a deletion after reload');
+        F.connApply(recipient, Object.assign({}, original, { cv: deletion.cv + 1, cr: 'restored' }));
+        ok(recipient.conn.in.some(function (item) { return item.cid === doomed.cid; }),
+          'Owed ' + originSide + ': a newer undo of a deletion can still be reviewed');
+        await sleep(25);
       }
       F.setOwed(owed82); F.setTxns(txns82);
       var A82 = F.getAdj(); Object.keys(A82).forEach(function (k) { delete A82[k]; }); Object.keys(adj82).forEach(function (k) { A82[k] = adj82[k]; });
