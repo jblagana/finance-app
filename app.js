@@ -11331,7 +11331,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       step = step.then(function () { return fileOwedLeg(e, p); });
     }
     if (owed > 0) { // v75.02: a linked card shares the entry (yours: waiting; a confirmed one of theirs: in sync)
-      if (opts && opts.conn) { e.cid = opts.conn.cid; e.cv = opts.conn.cv; e.cst = 'ok'; }
+    if (opts && opts.conn) {
+      e.cid = opts.conn.cid; e.cv = opts.conn.cv; e.cr = opts.conn.cr; e.cst = 'ok';
+    }
       else connStampMine(p, e, false);
     }
     if (owed > 0) p.entries.push(e); // v72.49: an ipf add with ONLY yours = a ledger txn, no owed entry
@@ -11343,7 +11345,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       else msg = OWED_DIRS[e.dir].label + ' ' + money(owed) + ' · ' + esc(p.name);
       snack(msg, (opts && opts.conn) ? null : function () {
         p.entries = p.entries.filter(function (x) { return x.id !== e.id; });
-        if (e.cid && connLive(p)) connQueue(p, { t: 'del', cid: e.cid }); // v75.02
+        if (e.cid && connLive(p)) connQueueDelete(p, e);
         // v73.72: undo removes the theirs pair too (charge + cash advance)
         var u = removeTxnsQuiet([e.txnId].concat(ipfTheirsTxnIds(e)));
         e.txnId = null; e.theirsTxnId = null; delete e.theirsBumpId;
@@ -11451,7 +11453,22 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     });
     return r2(b);
   }
-  function connEntryMsg(e) { return { t: 'e', cid: e.cid, cv: e.cv || 1, dir: e.dir, amt: r2(e.amt), note: e.note || '', d: e.d }; }
+  function connVersion(r) { return Number(r && r.cv) || 1; }
+  function connCompareRevision(a, b) {
+    if (!b) return 1;
+    var n = connVersion(a) - connVersion(b);
+    if (n) return n;
+    var ar = (a && a.cr) || '', br = b.cr || '';
+    return ar === br ? 0 : ar > br ? 1 : -1;
+  }
+  function connEntryMsg(e) {
+    var details = e.cdraft || e;
+    return { t: 'e', cid: e.cid, cv: connVersion(e), cr: e.cr, dir: details.dir,
+      amt: r2(details.amt), note: details.note || '', d: details.d };
+  }
+  function connReply(p, t, item, why) {
+    connQueue(p, { t: t, cid: item.cid, cv: connVersion(item), cr: item.cr, why: why });
+  }
   function connQueue(p, msg) {
     if (!p || !p.conn) return;
     if (!p.conn.out) p.conn.out = [];
@@ -11463,8 +11480,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   function connStampMine(p, e, bump) {
     if (!connLive(p)) return;
     if (!e.cid) { e.cid = e.id; e.cv = 1; } else if (bump) e.cv = (Number(e.cv) || 1) + 1;
+    e.cr = connHex(connRand(16));
     e.cst = 'wait'; delete e.cwhy;
+    delete e.crejected;
     connQueue(p, connEntryMsg(e));
+  }
+  function connQueueDelete(p, e) {
+    e.cv = connVersion(e) + 1;
+    e.cr = connHex(connRand(16));
+    connQueue(p, { t: 'del', cid: e.cid, cv: e.cv, cr: e.cr });
   }
   var connSyncTimers = {}, connSyncing = {}, connLastAll = 0;
   function connSyncSoon(pid) {
@@ -11507,7 +11531,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       msgs.forEach(function (row) {
         step = step.then(function () {
           ids.push(row.id);
-          return connOpenMsg(c, row.msg).then(function (m) { if (connApplyOnce(p, m)) changed = true; }, function () {});
+          return connOpenMsg(c, row.msg).then(function (m) {
+            return Promise.resolve(connApplyOnce(p, m)).then(function (applied) { if (applied) changed = true; });
+          }, function () {});
         });
       });
       return step.then(function () {
@@ -11550,8 +11576,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       list.push(m.mid); all[p.conn.pair] = list.slice(-CONN_SEEN_CAP);
       try { localStorage.setItem(CONN_SEEN_LS, JSON.stringify(all)); } catch (e) {}
     }
-    connApply(p, m);
-    return true;
+    var result = connApply(p, m);
+    return result ? result.then(function () { return true; }) : true;
   }
   function connFsBox(c, side) {
     return crypto.subtle.digest('SHA-256', new TextEncoder().encode('finai-box|' + c.k + '|' + side)).then(function (d) {
@@ -11598,7 +11624,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
             var doc = ch.doc, p = connFind(pid);
             if (!p || !p.conn || p.conn.pair !== h.pair) return;
             connOpenMsg(p.conn, String((doc.data() || {}).msg || '')).then(function (m) {
-              if (connApplyOnce(p, m)) return saveOwed().then(emitOwed);
+              return Promise.resolve(connApplyOnce(p, m)).then(function (applied) {
+                if (applied) return saveOwed().then(emitOwed);
+              });
             }, function () {}).then(function () { return doc.ref['delete'](); })['catch'](function () {});
           });
         }, function () { connFsOk = false; if (connFsUnsub[pid] === h) delete connFsUnsub[pid]; });
@@ -11636,26 +11664,48 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       }
     } else if (t === 'e' && CONN_MIRROR[m.dir] && Number(m.amt) > 0) {
       var dir = CONN_MIRROR[m.dir], have = ent(m.cid);
-      var item = { k: 'e', cid: String(m.cid), cv: Number(m.cv) || 1, dir: dir, amt: r2(m.amt), note: String(m.note || '').slice(0, 120), d: String(m.d || todayISO()), at: new Date().toISOString() };
+      var pending = connInItem(p, m.cid, 'e');
+      var removed = c.removed && c.removed['$' + m.cid];
+      if (connCompareRevision(m, pending) <= 0 || connCompareRevision(m, have) <= 0 ||
+          connCompareRevision(m, removed) <= 0) return;
+      var item = { k: 'e', cid: String(m.cid), cv: connVersion(m), cr: m.cr, dir: dir,
+        amt: r2(m.amt), note: String(m.note || '').slice(0, 120), d: String(m.d || todayISO()), at: new Date().toISOString() };
       if (have && have.dir === dir && Math.abs((Number(have.amt) || 0) - item.amt) < 0.005 && have.d === item.d && (have.note || '') === item.note) {
         // nothing changed on your side (e.g. they resent the same entry): it is in sync
-        have.cv = item.cv; have.cst = 'ok'; delete have.cwhy; dropIn(item.cid);
-        connQueue(p, { t: 'ok', cid: item.cid, cv: item.cv });
+        have.cv = item.cv; have.cr = item.cr; have.cst = 'ok';
+        delete have.cdraft; delete have.crejected; delete have.cwhy; dropIn(item.cid);
+        connReply(p, 'ok', item);
         return;
       }
       if (have) item.old = { amt: r2(have.amt), dir: have.dir };
       dropIn(item.cid);
       c.in.push(item);
     } else if (t === 'del') {
-      var had = c.in.some(function (x) { return x.cid === m.cid && x.k === 'e' && !x.old; });
-      dropIn(m.cid);
       var h2 = ent(m.cid);
-      if (h2 && !had) c.in.push({ k: 'del', cid: String(m.cid), dir: h2.dir, amt: r2(h2.amt), note: h2.note || '', d: h2.d, at: new Date().toISOString() });
+      var waiting = connInItem(p, m.cid, 'e');
+      if (!c.removed) c.removed = Object.create(null);
+      var deletion = { cv: m.cv ? connVersion(m) : Math.max(connVersion(h2), connVersion(waiting)), cr: m.cr || '' };
+      // Legacy deletes carried no revision. Treat the last known revision as deleted.
+      if ((m.cv && (connCompareRevision(deletion, h2) <= 0 || connCompareRevision(deletion, waiting) <= 0)) ||
+          connCompareRevision(deletion, c.removed['$' + m.cid]) <= 0) return;
+      c.removed['$' + m.cid] = deletion;
+      dropIn(m.cid);
+      if (h2) c.in.push({ k: 'del', cid: String(m.cid), cv: deletion.cv, cr: deletion.cr,
+        dir: h2.dir, amt: r2(h2.amt), note: h2.note || '', d: h2.d, at: new Date().toISOString() });
     } else if (t === 'ok' || t === 'no') {
       var e = ent(m.cid);
-      if (e && (Number(e.cv) || 1) === (Number(m.cv) || 1)) {
-        if (t === 'ok') { e.cst = 'ok'; delete e.cwhy; } else { e.cst = 'no'; e.cwhy = String(m.why || '').slice(0, 120); }
+      if (!e || e.cst !== 'wait') return;
+      if (connCompareRevision(m, e) !== 0) {
+        if (!m.cr && e.cr && connVersion(m) === connVersion(e)) e.cwhy = 'Both devices need the latest Fin.AI to confirm this version.';
+        return;
       }
+      if (e.cdraft) {
+        if (t === 'ok') return updateOwedEntry(p.id, e.id, e.cdraft, { conn: e });
+        delete e.cdraft;
+        e.cst = 'ok';
+        e.crejected = String(m.why || '').slice(0, 120) || 'Edit declined';
+      } else if (t === 'ok') { e.cst = 'ok'; delete e.cwhy; }
+      else { e.cst = 'no'; e.cwhy = String(m.why || '').slice(0, 120); }
     } else if (t === 'open') {
       c.in = c.in.filter(function (x) { return x.k !== 'open'; });
       c.in.push({ k: 'open', cid: 'open', b: r2(m.b), at: new Date().toISOString() });
@@ -11682,9 +11732,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     (p.conn && p.conn.in || []).forEach(function (x) { if (x.cid === cid && x.k === k) f = x; });
     return f;
   }
-  function connConfirm(pid, cid, k, acc, cat) {
+  function connConfirm(pid, cid, k, acc, cat, revision) {
     var p = connFind(pid); if (!p || !p.conn) return Promise.resolve();
-    var it = connInItem(p, cid, k); if (!it) return Promise.resolve();
+    var it = connInItem(p, cid, k); if (!it || (revision && connCompareRevision(revision, it) !== 0)) return Promise.resolve();
     var c = p.conn;
     c.in = c.in.filter(function (x) { return x !== it; });
     if (k === 'open') {
@@ -11701,28 +11751,33 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var have = null;
     (p.entries || []).forEach(function (e) { if (e.cid === cid) have = e; });
     var data = { d: it.d, amt: it.amt, dir: it.dir, note: it.note, acc: acc || 'CASH::Cash', cat: cat || 'Unsorted' };
-    var conn = { cid: cid, cv: it.cv };
-    connQueue(p, { t: 'ok', cid: cid, cv: it.cv });
+    var conn = { cid: cid, cv: it.cv, cr: it.cr };
     return saveOwed().then(function () {
       if (have) return updateOwedEntry(pid, have.id, data, { conn: conn });
       return addOwedEntry(pid, data, { conn: conn });
+    }).then(function () {
+      connReply(p, 'ok', it);
+      return saveOwed().then(emitOwed);
     });
   }
-  function connReject(pid, cid, k, why) {
+  function connReject(pid, cid, k, why, revision) {
     var p = connFind(pid); if (!p || !p.conn) return Promise.resolve();
-    var it = connInItem(p, cid, k); if (!it) return Promise.resolve();
+    var it = connInItem(p, cid, k); if (!it || (revision && connCompareRevision(revision, it) !== 0)) return Promise.resolve();
     p.conn.in = p.conn.in.filter(function (x) { return x !== it; });
     why = String(why || '').trim().slice(0, 120);
     if (k === 'open') connQueue(p, { t: 'oack', st: 'no', why: why });
     else if (k === 'e') {
-      connQueue(p, { t: 'no', cid: cid, cv: it.cv, why: why });
+      connReply(p, 'no', it, why);
       // v75.32 (boss: 'the one who rejected should still see the entry and says you rejected in red and only
       // disappears when it gets deleted'): it stays, marked; their edit replaces it, their delete removes it
       it.rej = 1; it.why = why;
       p.conn.in.push(it);
     }
     else if (k === 'del') { // keep it: it stays in your book, no longer shared
-      (p.entries || []).forEach(function (e) { if (e.cid === cid) { delete e.cid; delete e.cv; delete e.cst; delete e.cwhy; } });
+      (p.entries || []).forEach(function (e) {
+        if (e.cid !== cid) return;
+        delete e.cid; delete e.cv; delete e.cr; delete e.cst; delete e.cwhy; delete e.cdraft; delete e.crejected;
+      });
     }
     return saveOwed().then(emitOwed);
   }
@@ -12086,7 +12141,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var nPend = connPending(p);
       h += '<div class="cn-inbox"><div class="cn-ih"><span>' + (nPend ? 'Waiting for you · ' + nPend : 'You rejected · ' + items.length) + '</span><span>from ' + nm + '</span></div>';
       items.forEach(function (it) {
-        var key = esc(p.id) + '|' + esc(it.cid) + '|' + it.k;
+        var key = esc(p.id) + '|' + esc(it.cid) + '|' + it.k + '|' + connVersion(it) + '|' + esc(it.cr || '');
         if (it.k === 'open') {
           var ob = it.b > 0.004 ? 'You owe ' + nm + ' ' + money(it.b) : it.b < -0.004 ? nm + ' owes you ' + money(-it.b) : 'Settled';
           h += '<div class="cn-it"><div class="cn-r"><b>Starting balance</b><b>' + ob + '</b></div><div class="cn-s">' + nm + ' resent it</div>' + connItActs(key, it, '') + '</div>';
@@ -12131,13 +12186,19 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (!e.cid || !p.conn) return '';
     var nm = esc(p.name);
     if (e.cst === 'no') return '<span class="owr-s cn-no">Rejected' + (e.cwhy ? ' · “' + esc(e.cwhy) + '”' : '') + '</span>';
-    if (e.cst === 'wait') return '<span class="owr-s cn-w">waiting for ' + nm + '</span>';
+    if (e.cst === 'wait') return '<span class="owr-s cn-w">' +
+      (e.cdraft ? 'Edit to ' + money(e.cdraft.amt) + ' waiting for ' : 'waiting for ') + nm +
+      (e.cwhy ? ' · ' + esc(e.cwhy) : '') + '</span>';
+    if (e.crejected) return '<span class="owr-s cn-no">Edit rejected · ' + esc(e.crejected) + ' · confirmed amount kept</span>';
     if (e.cst === 'ok') return '<span class="owr-s cn-ok">✓ in sync with ' + nm + '</span>';
     return '';
   }
   function connWire() {
     var body = byId('owedBody'), sheet = byId('connSheet');
-    var parse = function (v) { var s = String(v || '').split('|'); return { pid: s[0], cid: s[1], k: s[2] }; };
+    var parse = function (v) {
+      var s = String(v || '').split('|');
+      return { pid: s[0], cid: s[1], k: s[2], revision: { cv: Number(s[3]), cr: s[4] } };
+    };
     var box = function (root, attr, key) { return root.querySelector('[' + attr + '="' + key.replace(/"/g, '') + '"]'); };
     if (body) body.addEventListener('click', function (ev) {
       var t = ev.target && ev.target.closest ? ev.target.closest('[data-cn-conn],[data-cn-ok],[data-cn-rej],[data-cn-back],[data-cn-rejsend],[data-cn-resend]') : null;
@@ -12156,12 +12217,12 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var acc = it && it.querySelector('.cn-acc') ? it.querySelector('.cn-acc').value : '';
         var cat = it && it.querySelector('.cn-cat') ? it.querySelector('.cn-cat').value : '';
         t.disabled = true;
-        connConfirm(x.pid, x.cid, x.k, acc, cat);
+        connConfirm(x.pid, x.cid, x.k, acc, cat, x.revision);
         return;
       }
       if (t.hasAttribute('data-cn-rej')) {
         key = t.getAttribute('data-cn-rej'); x = parse(key);
-        if (t.hasAttribute('data-cn-keep')) { connReject(x.pid, x.cid, x.k, ''); return; }
+        if (t.hasAttribute('data-cn-keep')) { connReject(x.pid, x.cid, x.k, '', x.revision); return; }
         var rb = box(body, 'data-cn-rejbox', key), bb = box(body, 'data-cn-btns', key);
         if (rb) { rb.hidden = false; var w = rb.querySelector('.cn-why'); if (w) w.focus(); }
         if (bb) bb.hidden = true;
@@ -12176,7 +12237,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (t.hasAttribute('data-cn-rejsend')) {
         key = t.getAttribute('data-cn-rejsend'); x = parse(key);
         var rb3 = box(body, 'data-cn-rejbox', key);
-        connReject(x.pid, x.cid, x.k, rb3 && rb3.querySelector('.cn-why') ? rb3.querySelector('.cn-why').value : '');
+        connReject(x.pid, x.cid, x.k, rb3 && rb3.querySelector('.cn-why') ? rb3.querySelector('.cn-why').value : '', x.revision);
       }
     }, true);
     var pasteBtn = byId('owedPasteInv'); // v75.15
@@ -12269,7 +12330,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (idx < 0) return;
     var gone = p.entries.splice(idx, 1)[0];
     var connDel = !!(gone.cid && connLive(p) && !(opts && opts.conn)); // v75.02: the friend is told (they confirm the removal)
-    if (connDel) connQueue(p, { t: 'del', cid: gone.cid });
+    if (connDel) connQueueDelete(p, gone);
     // v72.10: the linked ledger txn (if any) is snapshotted for the undo
     var goneTxn = null;
     if (gone.txnId) {
@@ -12544,6 +12605,31 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       note: String(data.note || '').trim(),
       cat: cat
     };
+    // A proposed edit to an agreed entry leaves its debt and ledger legs in place.
+    if (!(opts && opts.conn) && e.cid && connLive(p) && (e.cst === 'ok' || e.cdraft)) {
+      var priorDraft = e.cdraft;
+      e.cdraft = Object.assign({}, next, { acc: acc, expr: data.expr });
+      if (hasSplitFields) {
+        e.cdraft.total = r2(data.total);
+        e.cdraft.mine = nextDir === 'ipf' ? split.ledger : split.owed;
+        e.cdraft.theirs = nextDir === 'ipf' ? split.owed : r2(data.theirs);
+      }
+      connStampMine(p, e, true);
+      var draftRevision = e.cr;
+      p.updated = new Date().toISOString();
+      return saveOwed().then(function () {
+        emitOwed();
+        snack('Sent edit for confirmation', function () {
+          if (e.cr !== draftRevision || !e.cdraft) return;
+          // Resend the prior proposal or the accepted details as a newer revision.
+          e.cdraft = priorDraft || { d: e.d, amt: e.amt, dir: e.dir, note: e.note, cat: e.cat, acc: e.acc, expr: e.expr,
+            total: e.total, mine: e.dir === 'tpf' && e.total ? e.amt : e.mine,
+            theirs: e.dir === 'ipf' && e.total ? e.amt : e.theirs };
+          connStampMine(p, e, true);
+          saveOwed().then(emitOwed);
+        });
+      });
+    }
     // v72.51: split.ledger — owedSplit already derived the missing part
     // (Total + Theirs, Mine left blank => yours = total − theirs); the raw
     // r2(data.mine) read 0 there, so a T+Th edit silently un-filed the txn
@@ -12564,7 +12650,10 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     e.d = next.d; e.amt = next.amt; e.dir = next.dir; e.note = next.note;
     e.cat = next.cat; // v72.25→v72.28
     if (data.expr) e.expr = data.expr; else delete e.expr;
-    if (opts && opts.conn) { e.cid = opts.conn.cid; e.cv = opts.conn.cv; e.cst = 'ok'; delete e.cwhy; } // v75.02
+    if (opts && opts.conn) {
+      e.cid = opts.conn.cid; e.cv = opts.conn.cv; e.cr = opts.conn.cr; e.cst = 'ok';
+      delete e.cdraft; delete e.crejected; delete e.cwhy;
+    }
     else if (e.cid) connStampMine(p, e, true); // v75.02: an edit goes back to the friend to confirm
     // v72.49: the split parts — only the ones that are there (ipf: mine +
     // total; tpf: theirs + total; e.amt IS the debt side)
@@ -12865,6 +12954,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
               if (x.id === pid3) (x.entries || []).forEach(function (y) { if (y.id === edE) ee = y; });
             });
             if (ee) {
+              if (ee.cdraft) ee = ee.cdraft;
               var stale = body.querySelectorAll('.oent-inline');
               for (var si = 0; si < stale.length; si++) {
                 if (stale[si].parentNode) stale[si].parentNode.removeChild(stale[si]);
@@ -13141,6 +13231,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           open: (c.open && typeof c.open === 'object') ? { amt: r2(c.open.amt), st: String(c.open.st || ''), why: String(c.open.why || '').slice(0, 120) } : undefined,
           out: Array.isArray(c.out) ? c.out.slice(0, 200) : [], in: Array.isArray(c.in) ? c.in.slice(0, 200) : [] };
         if (!out.conn.open) delete out.conn.open;
+        if (c.removed && typeof c.removed === 'object') {
+          out.conn.removed = Object.create(null);
+          Object.keys(c.removed).forEach(function (key) {
+            var version = c.removed[key];
+            if (key.charAt(0) === '$' && version && typeof version === 'object') {
+              out.conn.removed[key] = { cv: connVersion(version), cr: typeof version.cr === 'string' ? version.cr : '' };
+            }
+          });
+        }
       }
       return out;
     });
@@ -13806,12 +13905,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.40, live: new Date(2026, 10, 22, 13, 8) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.41, live: new Date(2026, 10, 22, 23, 40) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.41': [
+      'Owed keeps the newest shared change even when messages arrive out of order. A rejected edit keeps the last confirmed balance, and confirmation applies to the exact edit. Update Fin.AI on both sides of a connection and on any second device.'
+    ],
     '75.40': [
       'Pulled account balances stay after you reopen Fin.AI. Cloud sync uploads edits made during an upload before showing them as synced.'
     ],
