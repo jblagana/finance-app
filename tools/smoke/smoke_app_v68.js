@@ -354,6 +354,7 @@ var META = [
   { key: 'adjSig', value: seed.adjSig },
   { key: 'moneyLog', value: seed.moneyLog || [] }
 ];
+var metaWrites = {};
 global.indexedDB = {
   open: function () {
     var req = {};
@@ -374,7 +375,11 @@ global.indexedDB = {
               }, 0);
               return r2;
             },
-            put: function () { setTimeout(function () { if (tx.oncomplete) tx.oncomplete(); }, 0); return {}; },
+            put: function (row) {
+              if (storeName === 'meta') metaWrites[row.key] = JSON.parse(JSON.stringify(row));
+              setTimeout(function () { if (tx.oncomplete) tx.oncomplete(); }, 0);
+              return {};
+            },
             delete: function () { setTimeout(function () { if (tx.oncomplete) tx.oncomplete(); }, 0); return {}; },
             get: function () { var p = {}; setTimeout(function () { p.result = null; if (p.onsuccess) p.onsuccess(); if (tx.oncomplete) tx.oncomplete(); }, 0); return p; }
           };
@@ -389,7 +394,11 @@ global.indexedDB = {
 };
 
 var src = fs.readFileSync(APP, 'utf8');
-eval(src);
+eval(src.replace('  function cloudSync() {', [
+  '  window.testSync = { applyRemote: syncApplyRemote, sync: cloudSync,',
+  '    connect: function (db) { cloudFb = { db: db }; cloudUser = { uid: "test" }; } };',
+  '  function cloudSync() {'
+].join('\n')));
 
 function waitReady() {
   return new Promise(function (res, rej) {
@@ -4398,6 +4407,49 @@ waitReady().then(async function (F) {
       await tick();
       await F.deleteTxn(id31);
       await tick();
+
+      var incomingBase = JSON.parse(JSON.stringify(st.base));
+      incomingBase.accounts[0].value += 500;
+      incomingBase.edited = new Date(Date.now() + 60000).toISOString();
+      await window.testSync.applyRemote({ base: incomingBase });
+      ok(metaWrites.base.value.accounts[0].value === incomingBase.accounts[0].value &&
+        metaWrites.base.value.edited === incomingBase.edited &&
+        metaWrites.adjSig.value === st.adjSig,
+      'sync pull: saves the remote balance and original edit timestamp in the boot metadata');
+
+      var pass = 'smoke passphrase';
+      global.localStorage.getItem = function (key) {
+        return key === 'fin.cloud.v1' ? JSON.stringify({ pass: pass }) : null;
+      };
+      var uploads = [], acknowledgeFirst;
+      var ref = {
+        get: function () {
+          return Promise.resolve({ exists: uploads.length > 0, data: function () { return { env: uploads[uploads.length - 1] }; } });
+        },
+        set: function (data) {
+          uploads.push(data.env);
+          if (uploads.length === 1) return new Promise(function (resolve) { acknowledgeFirst = resolve; });
+          return Promise.resolve();
+        }
+      };
+      global.firebase = { firestore: { FieldValue: { serverTimestamp: Date.now } } };
+      window.testSync.connect({ collection: function () { return { doc: function () { return ref; } }; } });
+      var firstSync = window.testSync.sync();
+      for (var tries = 0; !acknowledgeFirst && tries < 150; tries++) await sleep(20);
+      if (!acknowledgeFirst) throw new Error('cloud sync never started its first upload');
+      var laterId = await F.addTxn({ date: F.todayISO(), account: 'Cash', kind: 'cash_out', amount: 25 }, { quiet: true });
+      acknowledgeFirst();
+      await firstSync;
+      ok(!String(byIdStub('cloudNote').textContent).startsWith('Synced'), 'cloud sync: a stale acknowledgement does not report the newer edit as synced');
+      for (var n = 0; uploads.length < 2 && n < 150; n++) await sleep(20);
+      ok(uploads.length === 2, 'cloud sync: queues a second upload without another user action');
+      if (uploads.length >= 2) {
+        var first = await F.syncDecrypt(JSON.parse(uploads[0]), pass);
+        var second = await F.syncDecrypt(JSON.parse(uploads[1]), pass);
+        ok(!first.txns.some(function (row) { return row.id === laterId; }) &&
+          second.txns.some(function (row) { return row.id === laterId; }),
+        'cloud sync: the newer transaction is present in the next encrypted upload');
+      }
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);

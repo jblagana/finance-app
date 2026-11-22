@@ -2720,6 +2720,9 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.40 (boss: 'fix the sync' -> 'ship it'): cloud sync marks only the state it actually uploaded as synced, keeps a sync asked for mid-upload (cloudPullPending) and follows up; a pull saves the merged base with its own edit time",
+          "if (cloudBusy) { cloudPullPending = true; return Promise.resolve(); }" in js and "cloudSig = sentSig;" in js
+          and "cloudNote('Syncing newer changes…');" in js and "meta.put({ key: 'base', value: state.base });" in js and "'75.40': [" in js)
     check("v75.38 (boss: 'make the histogram a rolling window of 15days, but add a division line between cycles'): the bars cover the last 15 days (lo = hi - 14), a dashed .dcut 'new cycle' line before the cycle's first day, .prev bars dimmer; the total + donut stay the cycle's",
           "lo = localISO(new Date(endD.getFullYear(), endD.getMonth(), endD.getDate() - 14))" in js and "<span class=\"dcut' + (i > days.length - 4 ? ' end' : '') + '\" aria-hidden=\"true\"><i>new cycle</i></span>" in js
           and ".dbars .dcut::before{" in rd("index.html") and ".dbars .db.prev{opacity:.28}" in rd("index.html") and "'75.38': [" in js)

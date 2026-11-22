@@ -7739,12 +7739,13 @@
       });
   }
   function syncEncrypt(obj, passphrase) {
+    // Capture the payload before deriving the key; live records can change in place.
+    var payload = new TextEncoder().encode(JSON.stringify(obj));
     var salt = window.crypto.getRandomValues(new Uint8Array(16));
     var iv = window.crypto.getRandomValues(new Uint8Array(12));
     return syncDeriveKey(passphrase, salt.buffer)
       .then(function (key) {
-        return window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key,
-          new TextEncoder().encode(JSON.stringify(obj)));
+        return window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, payload);
       })
       .then(function (ct) {
         return { v: 1, salt: b64(salt), iv: b64(iv), data: b64(ct) };
@@ -13410,9 +13411,6 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           syncApplyAdj(state.txns, merged.txns || []);
         }
         histMuteUntil = Date.now() + 20000; // v74.74: a sync pull is not a list of your changes
-        var prev = { base: cloneObj(state.base || defaultBase()), txns: cloneObj(state.txns || []),
-          plans: cloneObj(state.plans || []), owed: cloneObj(state.owed || { people: [], sort: 'recent' }),
-          moneyLog: cloneObj(state.moneyLog || []) };
         var puts = [];
         // delete what the merge dropped (tombstoned on the other side)
         var keepT = {}, keepP = {};
@@ -13430,8 +13428,23 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         migratePlanDrift(); // v74.09: a phone on an older version may push links on drifted plan dates
         return Promise.all(puts).then(function () {
           refreshLocalSnapshot();
-          return Promise.all([persistSnapshot(), saveAdj(), saveOwed({ asIs: true }),
-            idbPut(STORE_META, { key: 'moneyLog', value: state.moneyLog }).catch(function () {})]);
+          state.adjLoaded = true;
+          owedSeedSigs();
+          return openDB().then(function (db) {
+            return new Promise(function (resolve, reject) {
+              var tx = db.transaction(STORE_META, 'readwrite');
+              var meta = tx.objectStore(STORE_META);
+              // Preserve the merged base timestamp and avoid filing a balance adjustment.
+              meta.put({ key: 'base', value: state.base });
+              meta.put({ key: 'snapshot', value: state.snapshot, at: (state.base && state.base.edited) || null });
+              meta.put({ key: 'adj', value: state.adj });
+              meta.put({ key: 'adjSig', value: state.adjSig });
+              meta.put({ key: 'owed', value: state.owed });
+              meta.put({ key: 'moneyLog', value: state.moneyLog });
+              tx.oncomplete = resolve;
+              tx.onabort = function () { reject(tx.error || new Error('Could not save the synced records')); };
+            });
+          });
         }).then(function () {
           render();
         });
@@ -13520,6 +13533,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   var CLOUD_LS = 'fin.cloud.v1';
   var CLOUD_SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
   var cloudFb = null, cloudUnsub = null, cloudEnv = '', cloudUser = null, cloudBusy = false, cloudTimer = null, cloudSig = '', cloudReady = null;
+  var cloudPullPending = false;
   function cloudRead() { try { return JSON.parse(localStorage.getItem(CLOUD_LS) || 'null') || {}; } catch (e) { return {}; } }
   function cloudWrite(patch) {
     var c = cloudRead(); Object.keys(patch).forEach(function (k) { if (patch[k] == null) delete c[k]; else c[k] = patch[k]; });
@@ -13591,31 +13605,60 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     }).then(function () { cloudNote('Signed in. Set the passphrase below, then Sync now.'); })['catch'](function (e) { cloudNote('Sign-in failed: ' + (e && e.message ? e.message : e), true); });
   }
   function cloudSync() {
-    if (cloudBusy) return Promise.resolve();
+    if (cloudBusy) { cloudPullPending = true; return Promise.resolve(); }
     var pass = cloudRead().pass || '';
     if (!cloudUser) return Promise.resolve();
     if (!pass) { cloudNote('Set a passphrase first — it locks your data before it leaves this phone.', true); return Promise.resolve(); }
     if (!window.crypto || !crypto.subtle) { cloudNote('Encryption needs a secure context (https).', true); return Promise.resolve(); }
-    cloudBusy = true; cloudNote('Syncing…');
-    var ref = cloudFb.db.collection('finai').doc(cloudUser.uid), pulled = null;
+    cloudBusy = true; cloudPullPending = false; cloudNote('Syncing…');
+    var uid = cloudUser.uid, pulled = null, sentSig = null;
+    var ref = cloudFb.db.collection('finai').doc(uid);
+    function sameAccount() { return cloudUser && cloudUser.uid === uid && cloudRead().pass === pass; }
     return ref.get().then(function (snap) {
       if (!snap.exists || !snap.data().env) return null;
       return syncDecrypt(JSON.parse(snap.data().env), pass).then(null, function () { throw new Error('wrong passphrase for this account (nothing was changed)'); });
     }).then(function (remote) {
+      if (!sameAccount()) return;
       pulled = remote; return remote ? syncApplyRemote(remote) : null;
     }).then(function () {
-      var obj = syncBuildObj(), sig = cloudSigNow();
-      var same = pulled && JSON.stringify([pulled.base, pulled.txns, pulled.plans, pulled.owed, pulled.moneyLog]) === sig;
+      if (!sameAccount()) return;
+      var obj = syncBuildObj();
+      sentSig = cloudSigNow();
+      var same = pulled && JSON.stringify([pulled.base, pulled.txns, pulled.plans, pulled.owed, pulled.moneyLog]) === sentSig;
       if (same) return;
-      return syncEncrypt(obj, pass).then(function (env) { cloudEnv = JSON.stringify(env); return ref.set({ env: cloudEnv, at: window.firebase.firestore.FieldValue.serverTimestamp() }); });
+      return syncEncrypt(obj, pass).then(function (env) {
+        if (!sameAccount()) return;
+        cloudEnv = JSON.stringify(env);
+        return ref.set({ env: cloudEnv, at: window.firebase.firestore.FieldValue.serverTimestamp() });
+      });
     }).then(function () {
-      cloudSig = cloudSigNow(); cloudWrite({ last: Date.now() }); cloudPaint();
-      cloudNote('Synced — ' + state.txns.length + ' entries, ' + state.plans.length + ' plans. Only scrambled data is stored online.');
-    })['catch'](function (e) { cloudNote('Sync failed: ' + (e && e.message ? e.message : e), true); })['finally'](function () { cloudBusy = false; });
+      if (!sameAccount() || sentSig === null) return;
+      cloudSig = sentSig; cloudWrite({ last: Date.now() }); cloudPaint();
+      if (cloudSigNow() !== sentSig || cloudPullPending) {
+        cloudNote('Syncing newer changes…');
+      } else {
+        cloudNote('Synced — ' + state.txns.length + ' entries, ' + state.plans.length + ' plans. Only scrambled data is stored online.');
+      }
+    })['catch'](function (e) {
+      if (sameAccount()) cloudNote('Sync failed: ' + (e && e.message ? e.message : e), true);
+    })['finally'](function () {
+      cloudBusy = false;
+      if (cloudPullPending || (sameAccount() && sentSig !== null && cloudSigNow() !== sentSig)) cloudSoon(600);
+    });
   }
   function cloudSoon(ms) {
-    if (!cloudUser || cloudTimer) return;
-    cloudTimer = setTimeout(function () { cloudTimer = null; if (cloudSigNow() !== cloudSig || ms === 1500 || ms === 600) cloudSync(); }, ms || 8000);
+    if (!cloudUser) return;
+    if (ms) cloudPullPending = true;
+    if (cloudBusy) return;
+    if (cloudTimer) {
+      if (!ms) return;
+      clearTimeout(cloudTimer);
+    }
+    cloudTimer = setTimeout(function () {
+      cloudTimer = null;
+      if (cloudBusy) return;
+      if (cloudPullPending || cloudSigNow() !== cloudSig) cloudSync();
+    }, ms || 8000);
   }
   function cloudInit() {
     var cfg = cloudCfg(); cloudPaint();
@@ -13763,12 +13806,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.39, live: new Date(2026, 10, 21, 15, 54) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.40, live: new Date(2026, 10, 22, 13, 8) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.40': [
+      'Pulled account balances stay after you reopen Fin.AI. Cloud sync uploads edits made during an upload before showing them as synced.'
+    ],
     '75.39': [
       'Take a three-step tour from the empty Home screen, or replay it from Settings. Try the sample Ledger day to see its breakdown.'
     ],
