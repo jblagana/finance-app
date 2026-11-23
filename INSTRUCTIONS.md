@@ -1,3 +1,8 @@
+## 2026-11-23 - "Add the tap-to-explain (i) on Home numbers next?" -> "Yes, add it"
+Status: **done** - v75.44 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] An (i) beside Left to spend, In your accounts, Coming out, Salary not in yet, Free cash and Owed to you opens one plain-language line under it; one at a time, folded by default, in-memory. Tapping the (i) never folds its row (tap area kept small so a tap on a 320 px row still folds it).
+- [x] Smoke PART 97 + check_site v75.44; headless Chromium at 320 px in both themes (14 checks).
+
 ## 2026-11-23 - "assess if the app is intuitive for a first timer, are there parts that can be combined like maybe the pay card tab in the add expense sheet idk, are the add entries so overwhelming for a new user, what can be done" -> (assessed: the Add sheet is lean; the friction is wording and the Pay card tab) -> "Yes, both" (the quick wording fixes + the Move tab)
 Status: **done** - v75.43 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] Pay card -> Move: From (Cash / banks) -> To (a card = the same card_payment as before; Cash or a bank = two linked legs, cash_out + cash_in sharing t.xfer). A move is not spend, income, a refund or the salary; deleting or editing one leg carries to the other; the Ledger day total skips it. Hidden until there is a card or a bank account besides Cash.

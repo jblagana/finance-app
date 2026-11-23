@@ -4558,6 +4558,15 @@ waitReady().then(async function (F) {
       F.deleteTxnFromLog(out96.id); await sleep(80);
       ok(!st.txns.some(function (t) { return t.id === out96.id || t.id === in96.id; }), 'v75.43: deleting one leg removes the other');
       ok(Math.abs(F.effectiveSnap().cash.free - free96) < 0.005, 'v75.43: free cash unchanged after the delete');
+      // ============ PART 97: v75.44 - the (i) explanations on Home ============
+      console.log('\n== PART 97: v75.44 - tap-to-explain on Home numbers ==');
+      st.cycleMode = 'this'; st.cbInfo = null; F.renderCycleBlock();
+      var cb97 = byIdStub('cycleBlock').innerHTML;
+      ok(cb97.indexOf('data-cbi="acc"') >= 0 && cb97.indexOf('data-cbi="free"') >= 0 && cb97.indexOf('class="cbexp"') < 0, 'v75.44: the (i) marks show, every explanation folded');
+      st.cbInfo = 'free'; F.renderCycleBlock();
+      var cb97b = byIdStub('cycleBlock').innerHTML;
+      ok(cb97b.indexOf('same as the big number at the top') >= 0 && (cb97b.match(/class="cbexp"/g) || []).length === 1, 'v75.44: one explanation opens at a time');
+      st.cbInfo = null; F.renderCycleBlock();
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);
