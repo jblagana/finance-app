@@ -4664,6 +4664,21 @@ waitReady().then(async function (F) {
       var c100b = String(byIdStub('cycleBlock').innerHTML || '');
       ok(c100b.indexOf('Everyday spending') > c100b.indexOf('Coming out') && c100b.indexOf('Everyday spending') < c100b.indexOf('Free at the end'), 'v75.48: opened, everyday spending sits inside Coming out');
       st.cbDeductOpen = false; F.peekGo(0);
+      // ============ PART 101: v75.50 - the average is a switch ============
+      console.log('\n== PART 101: v75.50 - counting your average spending is optional ==');
+      var bud101 = st.base.budgets; st.base.budgets = {};
+      var on101 = F.cycleProjection('next', 'with', 2);
+      F.peekAvgSet(false);
+      var off101 = F.cycleProjection('next', 'with', 2);
+      ok(on101.everydaySrc === 'spent' && off101.everydaySrc === 'off' && off101.everyday === 0, 'v75.50: off -> nothing taken off (' + on101.everyday + ' -> ' + off101.everyday + ')');
+      ok(off101.net > on101.net, 'v75.50: off -> Free at the end goes up');
+      st.cbDeductOpen = true; F.peekGo(2);
+      var c101 = String(byIdStub('cycleBlock').innerHTML || '');
+      ok(c101.indexOf('id="cbAvgSw"') >= 0 && c101.indexOf('aria-checked="false"') >= 0 && c101.indexOf('not counted') >= 0, 'v75.50: the row shows the switch off and says not counted');
+      st.base.budgets = { Food: 5000 }; F.renderCycleBlock();
+      var c101b = String(byIdStub('cycleBlock').innerHTML || '');
+      ok(c101b.indexOf('id="cbAvgSw"') < 0 && F.cycleProjection('next', 'with', 2).everydaySrc === 'budgets', 'v75.50: budgets set -> budgets used, no switch (even with the average off)');
+      F.peekAvgSet(true); st.base.budgets = bud101; st.cbDeductOpen = false; F.peekGo(0);
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);

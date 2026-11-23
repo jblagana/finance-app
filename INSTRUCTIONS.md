@@ -1,3 +1,8 @@
+## 2026-11-24 - "ive no everydy budget but why doest my app shows the inferred ammount" -> (it is the agreed fallback: no budgets -> your average) -> "the average but optional, mockup first" -> "A, switch on row"
+Status: **done** - v75.50 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] With no budgets set, the Everyday spending row of a cycle ahead carries a switch (cbAvgSw, role=switch): on = your average of the last full cycles, off = 0 "not counted · no budgets set". On by default; remembered on the phone (localStorage fin.peek.avg.v1). Budgets always win; with budgets the switch is not shown.
+- [x] Smoke PART 101; check_site v75.50; headless Chromium 320 px: on by default, off raises Free at the end, survives reopening, back on restores the number, the tap does not fold Coming out, no JS errors.
+
 ## 2026-11-24 - "Remove the (i) on the rows below too?" -> "Remove them too"
 Status: **done** - v75.49 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] The v75.44 (i) marks, their explanations (CB_INFO / cbI / cbX / cbInfoWire / heroInfoPaint) and their CSS are removed; the rows render as before v75.44. Smoke PART 97 now asserts no (i); check_site retargeted (v74.33, v75.43, v75.44).

@@ -5575,12 +5575,25 @@
     var p = String(m).split('-'), t = new Date(Number(p[0]), Number(p[1]) - 1 + k, 1);
     return t.getFullYear() + '-' + (t.getMonth() < 9 ? '0' : '') + (t.getMonth() + 1);
   }
+  // v75.50 (boss: 'the average but optional, mockup first' -> 'A, switch on row'): with no budgets set, counting your
+  // average spending in the cycles ahead is a switch on the Everyday spending row - on by default, remembered on this phone
+  var PEEK_AVG_LS = 'fin.peek.avg.v1';
+  function peekAvgOn() {
+    if (state.peekAvg == null) { var v = null; try { v = localStorage.getItem(PEEK_AVG_LS); } catch (e) {} state.peekAvg = v !== '0'; }
+    return state.peekAvg;
+  }
+  function peekAvgSet(on) {
+    state.peekAvg = !!on;
+    try { localStorage.setItem(PEEK_AVG_LS, on ? '1' : '0'); } catch (e) {}
+    renderCycleBlock(); renderSpark();
+  }
   function everydayFor(m) {
     var b = state.base || {}, ovM = (b.budget_overrides || {})[m] || {}, keys = {}, bud = 0;
     Object.keys(b.budgets || {}).forEach(function (k) { keys[k] = true; });
     Object.keys(ovM).forEach(function (k) { keys[k] = true; });
     Object.keys(keys).forEach(function (k) { var a = ovM[k] !== undefined ? Number(ovM[k]) : Number((b.budgets || {})[k]); if (a > 0) bud += a; });
     if (bud > 0.004) return { amt: r2(bud), src: 'budgets', n: 0 };
+    if (!peekAvgOn()) return { amt: 0, src: 'off', n: 0 }; // v75.50: you switched the average off
     var nowM = currentCycleMonth(b, todayISO()), tot = 0, n = 0;
     for (var k = 1; k <= 3; k++) {
       var cd = cycleDataFor(cycleMonthAdd(nowM, -k), b), s = 0, any = false;
@@ -8380,8 +8393,9 @@
       // v74.69: the pots' top-ups due in the window (as if you tap Add)
       if (p.potTotal > 0.004) rows += '<div class="cbrow"><div class="lab">Saving for<small>' + (p.potItems || []).map(function (it) { return esc(it.name) + (it.starts ? ' (starts)' : ' ' + dayMonth(it.date)); }).join(', ') + '</small></div><div class="amt goalv">− ' + money(p.potTotal) + '</div></div>';
       // v75.47: everyday spending in the cycle ahead, and where the number comes from
-      var evSub = p.everydaySrc === 'budgets' ? 'your budgets' : p.everydaySrc === 'spent' ? 'your average, last ' + (p.everydayN === 1 ? 'cycle' : p.everydayN + ' cycles') : 'no budgets or spending yet';
-      rows += '<div class="cbrow' + (p.everyday > 0.004 ? '' : ' mut') + '"><div class="lab">Everyday spending<small>' + evSub + '</small></div><div class="amt' + (p.everyday > 0.004 ? ' minus' : '') + '">' + (p.everyday > 0.004 ? '− ' + money(p.everyday) : '0') + '</div></div>';
+      var evSub = p.everydaySrc === 'budgets' ? 'your budgets' : p.everydaySrc === 'spent' ? 'your average, last ' + (p.everydayN === 1 ? 'cycle' : p.everydayN + ' cycles') : p.everydaySrc === 'off' ? 'not counted · no budgets set' : 'no budgets or spending yet';
+      var evSw = (p.everydaySrc === 'spent' || p.everydaySrc === 'off') ? '<button type="button" class="cbsw' + (p.everydaySrc === 'spent' ? ' on' : '') + '" id="cbAvgSw" role="switch" aria-checked="' + (p.everydaySrc === 'spent' ? 'true' : 'false') + '" aria-label="Count your average spending"></button>' : ''; // v75.50
+      rows += '<div class="cbrow' + (p.everyday > 0.004 ? '' : ' mut') + '"><div class="lab">Everyday spending<small>' + evSub + '</small></div><div class="amt' + (p.everyday > 0.004 ? ' minus' : '') + '">' + (p.everyday > 0.004 ? '− ' + money(p.everyday) : '0') + evSw + '</div></div>';
       var nInner = rows.slice(nStart), nTotal = r2(p.plans + p.potTotal + p.everyday);
       var nCount = [p.plans, p.potTotal, p.everyday].filter(function (v) { return v > 0.004; }).length;
       rows = rows.slice(0, nStart);
@@ -8416,6 +8430,8 @@
       if (!btn || btn.disabled) return;
       peekGo(off + Number(btn.getAttribute('data-step'))); // v75.47; v75.12: the graph shows the selected cycle
     };
+    var avgSw = byId('cbAvgSw'); // v75.50
+    if (avgSw) avgSw.onclick = function (e) { if (e) e.stopPropagation(); peekAvgSet(!peekAvgOn()); };
     var segS = byId('cbSegSalary');
     if (segS) segS.onclick = function (e) {
       var btn = e.target && e.target.closest ? e.target.closest('button[data-m]') : null;
@@ -14167,12 +14183,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.49, live: new Date(2026, 10, 24, 0, 11) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.50, live: new Date(2026, 10, 24, 0, 18) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.50': [
+      'Home: with no budgets set, a switch on the Everyday spending row (open Coming out on a cycle ahead) turns counting your average spending on or off. It is on by default and remembered on this phone.'
+    ],
     '75.49': [
       'Home: the small (i) marks on the hero card rows are gone too, so the card is back to its clean look.'
     ],
@@ -16148,7 +16167,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     state: state, // v73.34: the smoke reads state.cycleMode after the switch handler
     cycleProjection: cycleProjection, // v73.34: the pure cycle math (smoke: the peek's with/without salary)
     insightsData: insightsData, // v73.44: the hero's data (the bridge's freeNet source — the probe reads it)
-    peekGo: peekGo, everydayFor: everydayFor, // v75.47 (smoke drives them)
+    peekGo: peekGo, everydayFor: everydayFor, peekAvgSet: peekAvgSet, peekAvgOn: peekAvgOn, // v75.47 (smoke drives them)
     renderCycleBlock: renderCycleBlock // v73.44: the block's render (the probe drives both modes)
   };
 
