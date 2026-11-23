@@ -1,3 +1,7 @@
+## 2026-11-23 - "check unintended consequence if i log my late salary" -> (found: past day 10 it reads as next cycle's early salary; a short pay as plain Money in is not the salary) -> "i logged my salary tday yet the headroom count to january 14" -> "a late salary always counts for this cycle: inside an extended grace, and past day 10 unless it is within 5 days of the next payday"
+Status: **done** - v75.42 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] v75.42 (app.js cycleDataFor: first-scan salary after w.start -> received.late; else-branch late up to w.end-5 when as_of predates the cycle; smoke + check_site)
+
 ## 2026-11-22 - "merge to main" -> Release the Owed sync fixes on main and verify GitHub Pages.
 Follow-up, verbatim: "before merging, rerun the full sim first" → rerun the full two-sided Owed matrix on the release candidate before merging.
 Status: the full pre-merge simulation passed 70 of 70 checks in 18 scenario runs on v75.41. It used synthetic finances, separate Edge browser profiles, real app encryption and persistence, and local Firebase and relay stand-ins. The resend fixture was set to today's date after the separate backdate test so the current card balance assertions measured the intended behavior. v75.41 releases to main with this commit after the full release gate passes.

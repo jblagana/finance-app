@@ -2720,6 +2720,8 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.42 (boss: 'i logged my salary tday yet the headroom count to january 14'): a salary after payday inside the (extended) grace is flagged late (this cycle's), and past day 10 too unless it is within 5 days of the next payday",
+          "if (received && received.date > w.start) received.late = true;" in js and "received.date < isoAdd(w.end, -4)" in js and "'75.42': [" in js)
     check("v75.40 (boss: 'fix the sync' -> 'ship it'): cloud sync marks only the state it actually uploaded as synced, keeps a sync asked for mid-upload (cloudPullPending) and follows up; a pull saves the merged base with its own edit time",
           "if (cloudBusy) { cloudPullPending = true; return Promise.resolve(); }" in js and "cloudSig = sentSig;" in js
           and "cloudNote('Syncing newer changes…');" in js and "meta.put({ key: 'base', value: state.base });" in js and "'75.40': [" in js)

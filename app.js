@@ -5326,6 +5326,11 @@
       if (d < lo || d > hi) return;
       if (!received || d < received.date) received = { date: d, amount: r2(amt), id: t.id || null };
     });
+    // v75.42 (boss: 'i logged my salary tday yet the headroom count to january 14'): a salary AFTER payday but
+    // inside the grace window (Extend stretches it from today) is THIS cycle's salary arriving late. It was
+    // left unflagged, and headroomWindow read any unflagged salary dated after the cycle start as NEXT
+    // cycle's arriving early - the headroom then ran from today to the payday after next (Jan 14).
+    if (received && received.date > w.start) received.late = true;
     // v73.98 (boss: 'whenever a salary is logged ahead of the next cycle, the
     // headroom recomputes x/day based on (date of salary logged to end of
     // next cycle)'): a SECOND scan — a qualifying cash_in dated AFTER payday+2
@@ -5361,7 +5366,10 @@
       // spread it across two cycles); later than that it is still the next
       // cycle's early salary (the seed case: the current salary sits in the
       // base, not the ledger).
-      if (received && received.date <= isoAdd(w.start, 10)) received.late = true;
+      // v75.42: ...and past day 10 too, unless it lands in the last 5 days before the next payday (that is
+      // the next salary arriving early) or the balances' as-of already holds this cycle's salary.
+      var asOf0 = !!(b.as_of && String(b.as_of) >= w.start);
+      if (received && (received.date <= isoAdd(w.start, 10) || (!asOf0 && received.date < isoAdd(w.end, -4)))) received.late = true;
     }
     var receivedId = received ? received.id : null;
     // spend this cycle (the one spend rule, v72.44 — prepays are not spend).
@@ -13905,12 +13913,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.41, live: new Date(2026, 10, 22, 23, 40) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.42, live: new Date(2026, 10, 23, 21, 9) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.42': [
+      'Home: a late salary now always counts for the cycle it belongs to. After tapping Extend, or if it lands more than 10 days late, the headroom used to stretch it to the payday after next; it now runs to your next payday.'
+    ],
     '75.41': [
       'Owed keeps the newest shared change even when messages arrive out of order. A rejected edit keeps the last confirmed balance, and confirmation applies to the exact edit. Update Fin.AI on both sides of a connection and on any second device.'
     ],

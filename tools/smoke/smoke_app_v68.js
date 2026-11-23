@@ -4523,6 +4523,24 @@ waitReady().then(async function (F) {
           second.txns.some(function (row) { return row.id === laterId; }),
         'cloud sync: the newer transaction is present in the next encrypted upload');
       }
+      // ============ v75.42: a late salary (inside an extended grace / past day 10) is this cycle's ============
+      console.log('\n== v75.42 - a late salary is this cycle\'s, not the next one early ==');
+      var gcPrev42 = st.base.salary_grace_cycle, asOfPrev42 = st.base.as_of;
+      st.base.salary_grace_cycle = { start: '2026-11-15', days: 11 }; // Extend tapped on the 23rd
+      var s42 = await F.addTxn({ date: '2026-11-23', kind: 'cash_in', account: 'Cash', amount: 46615, note: 'Salary42' }, { quiet: true });
+      var cd42 = F.cycleDataFor('2026-11', st.base);
+      ok(cd42.received && cd42.received.id === s42 && cd42.received.late === true, 'v75.42: a salary inside the extended grace is this cycle\'s LATE salary (headroom to the next payday, not Jan 14)');
+      await F.deleteTxn(s42); await sleep(40);
+      delete st.base.salary_grace_cycle;
+      var s42b = await F.addTxn({ date: '2026-11-28', kind: 'cash_in', account: 'Cash', amount: 46615, note: 'Salary42b' }, { quiet: true });
+      var cd42b = F.cycleDataFor('2026-11', st.base);
+      ok(cd42b.received && cd42b.received.id === s42b && cd42b.received.late === true, 'v75.42: 13 days late with nothing earlier is still this cycle\'s salary');
+      await F.deleteTxn(s42b); await sleep(40);
+      var s42c = await F.addTxn({ date: '2026-12-12', kind: 'cash_in', account: 'Cash', amount: 46615, note: 'Salary42c' }, { quiet: true });
+      var cd42c = F.cycleDataFor('2026-11', st.base);
+      ok(cd42c.received && cd42c.received.id === s42c && !cd42c.received.late, 'v75.42: 3 days before the next payday it is the next salary arriving early');
+      await F.deleteTxn(s42c); await sleep(40);
+      if (gcPrev42) st.base.salary_grace_cycle = gcPrev42; st.base.as_of = asOfPrev42;
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);
