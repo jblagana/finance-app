@@ -1,3 +1,11 @@
+## 2026-11-24 - "check why the google accoutn sign in is not persisting as sign in, it signs out most of the time when i look at it"
+Status: **done** - v75.51 pushed to https://github.com/jblagana/finance-app.git (main).
+- Cause: Firebase restores a saved sign-in a moment after start-up (currentUser is null until the first onAuthStateChanged). With a friend linked in Owed, connLiveStart / connFsAuth (v75.29 / v75.31) asked for currentUser in that moment, saw nobody and called signInAnonymously(), which replaced the saved Google sign-in. Every reopen then came back signed out.
+- Repro: headless Chromium with a fake firebase compat SDK whose auth restores asynchronously (localStorage-backed). v75.50 with a linked friend: Google -> ANON on every reopen; without a link: Google kept.
+- [x] Fix: cloudAuthSettled() waits for the first onAuthStateChanged before anything decides on currentUser (connFsAuth, connLiveStart). After the fix: Google kept across 3 reopens with a 500 ms and a 2,500 ms restore; a linked friend with no Google sign-in still gets the anonymous mailbox session; check_site v75.51.
+- After updating, sign in to Google once more: the phone currently holds the anonymous session.
+- Not verified against the real Firebase or on the iPhone.
+
 ## 2026-11-24 - "ive no everydy budget but why doest my app shows the inferred ammount" -> (it is the agreed fallback: no budgets -> your average) -> "the average but optional, mockup first" -> "A, switch on row"
 Status: **done** - v75.50 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] With no budgets set, the Everyday spending row of a cycle ahead carries a switch (cbAvgSw, role=switch): on = your average of the last full cycles, off = 0 "not counted · no budgets set". On by default; remembered on the phone (localStorage fin.peek.avg.v1). Budgets always win; with budgets the switch is not shown.

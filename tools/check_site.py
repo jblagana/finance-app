@@ -2734,6 +2734,12 @@ def main():
           "function owedFollowLedger(tid) {" in js and "function owedUnlinkTxn(tid) {" in js and "function connResendWaiting(p) {" in js
           and "'You both changed it at once - check their version'" in js and "owedCatOptions((had && had.cat) || 'Unsorted')" in js
           and "PART 98: v75.45" in smoke and "'75.45': [" in js)
+    check("v75.51 (boss: 'check why the google accoutn sign in is not persisting as sign in, it signs out most of the time when i look at it'): the friend-link route signs in anonymously only after Firebase has restored the saved sign-in (cloudAuthSettled waits for the first onAuthStateChanged), so it no longer replaces the Google sign-in",
+          "function cloudAuthSettled() { return cloudLoad().then(function () { return cloudAuthFirst; }); }" in js
+          and "if (cloudAuthRes) { cloudAuthRes(); cloudAuthRes = null; }" in js
+          and js.count("cloudAuthSettled().then(function () {") == 2
+          and "return cloudLoad().then(function () {\n      if (cloudFb.auth.currentUser) return;" not in js
+          and "'75.51': [" in js)
     check("v75.50 (boss: 'the average but optional, mockup first' -> 'A, switch on row'): with no budgets set, a switch on the Everyday spending row (cbAvgSw, role=switch) counts your average spending in the cycles ahead or not; on by default, remembered (fin.peek.avg.v1); off = 0 'not counted · no budgets set'; budgets always win. Smoke PART 101",
           "var PEEK_AVG_LS = 'fin.peek.avg.v1';" in js and "if (!peekAvgOn()) return { amt: 0, src: 'off', n: 0 };" in js
           and 'id="cbAvgSw" role="switch"' in js and ".cbsw{" in html and "PART 101: v75.50" in smoke and "'75.50': [" in js)

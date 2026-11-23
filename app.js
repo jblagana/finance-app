@@ -11842,7 +11842,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   function connFsAuth() {
     if (connFsReady()) return Promise.resolve();
     if (!window.crypto || !crypto.subtle) return Promise.reject(new Error('no crypto'));
-    return cloudLoad().then(function () {
+    return cloudAuthSettled().then(function () { // v75.51: never before the saved sign-in is restored
       if (cloudFb.auth.currentUser) return;
       return cloudFb.auth.signInAnonymously();
     });
@@ -11889,7 +11889,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   function connLiveStart() {
     if (!connAnyLive()) { connFsWatch(); return; }
     if (!window.crypto || !crypto.subtle) return;
-    cloudLoad().then(function () {
+    cloudAuthSettled().then(function () { // v75.51: wait for the saved sign-in first
       if (!cloudFb.auth.currentUser) return cloudFb.auth.signInAnonymously()['catch'](function () {});
       connFsWatch();
     })['catch'](function () {});
@@ -13934,14 +13934,23 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       document.head.appendChild(el);
     });
   }
+  // v75.51 (boss: 'check why the google accoutn sign in is not persisting as sign in, it signs out most of the time when i
+  // look at it'): Firebase restores a saved sign-in a moment AFTER it starts (currentUser is null until the first auth
+  // callback). With a friend linked in Owed, the friend-link route asked "anyone signed in?" in that moment, got no, and
+  // signed in anonymously - which REPLACED the saved Google sign-in, so every reopen came back signed out. Anything
+  // that decides on currentUser now waits for that first callback.
+  var cloudAuthFirst = null, cloudAuthRes = null;
+  function cloudAuthSettled() { return cloudLoad().then(function () { return cloudAuthFirst; }); }
   function cloudLoad() {
     if (cloudReady) return cloudReady;
+    cloudAuthFirst = new Promise(function (res) { cloudAuthRes = res; });
     var cfg = cloudCfg(); if (!cfg) return Promise.reject(new Error('Paste your Firebase config first.'));
     cloudReady = cloudScript(CLOUD_SDK + 'firebase-app-compat.js').then(function () { return cloudScript(CLOUD_SDK + 'firebase-auth-compat.js'); })
       .then(function () { return cloudScript(CLOUD_SDK + 'firebase-firestore-compat.js'); }).then(function () {
         window.firebase.initializeApp(cfg);
         cloudFb = { auth: window.firebase.auth(), db: window.firebase.firestore() };
         cloudFb.auth.onAuthStateChanged(function (u) {
+          if (cloudAuthRes) { cloudAuthRes(); cloudAuthRes = null; } // v75.51: the saved sign-in is back (or there is none)
           cloudUser = (u && !u.isAnonymous) ? u : null; // v75.29: an anonymous session is only the friend-link mailbox
           cloudPaint(); cloudWatch(); if (cloudUser) cloudSoon(1500);
           if (!u && connAnyLive()) cloudFb.auth.signInAnonymously()['catch'](function () {});
@@ -14183,12 +14192,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.50, live: new Date(2026, 10, 24, 0, 18) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.51, live: new Date(2026, 10, 24, 0, 29) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.51': [
+      'Sync: your Google sign-in now stays signed in. With a friend linked in Owed, opening the app used to replace it with a background session before it was restored, so Settings showed Signed out. Sign in once more after updating.'
+    ],
     '75.50': [
       'Home: with no budgets set, a switch on the Everyday spending row (open Coming out on a cycle ahead) turns counting your average spending on or off. It is on by default and remembered on this phone.'
     ],
