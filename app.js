@@ -8235,7 +8235,7 @@
   var CB_INFO = {
     hero: 'What is left for everyday spending until your next payday, after your card balances, the bills and plans due this cycle, and money you set aside.',
     acc: 'Everything in Cash and your bank accounts right now. Nothing has been taken off yet.',
-    out: 'What will come out of your accounts this cycle: card balances, bills and plans due before payday, what you owe friends, and money you set aside. Tap the row to see each part.',
+    out: 'What will come out of your accounts in this cycle: card balances or plan dues, what you owe friends, money you set aside, and (for a cycle ahead) everyday spending. Tap the row to see each part.',
     sal: 'Your salary is late, but it is still counted until the grace days run out.',
     free: 'In your accounts minus Coming out. It is the same as the big number at the top.',
     owedin: 'What friends owe you. It is not in your free cash until they pay you back.'
@@ -8380,21 +8380,17 @@
       }
     }
     if (mode === 'next') {
-      // v73.36 (boss: 'that 55k should CARRY OVER to the Next-cycle peek'):
-      // the peek starts from THIS cycle's displayed free cash — this
-      // cycle's plans + card prepayments are already netted out of it —
-      // shown as a row so the starting number is auditable. NO salary row
-      // in the this-cycle block (the boss's Oct-11 point: the salary is
-      // already inside the displayed free cash, so the row was misleading).
-      rows += '<div class="cbrow"><div class="lab">Carried over<small>' + (off > 1 ? 'what is left at the end of ' + peekName(off - 1).toLowerCase() : 'from this cycle — dues, Saving for &amp; prepayments already netted') + '</small></div><div class="amt' + (p.carry < 0 ? ' minus' : '') + '">' + money(p.carry) + '</div></div>';
-      // v73.37 (boss: 'keep it for the next cycle peek, and expandable to
-      // the specific plan dues'): the Plans row is a tap target — the
-      // specific dues drop in as sub-rows (resolved amounts: a fork shows
-      // its forked value, paid/skipped never appear), capped at 5 with
-      // "+N more…" (the Money tab's series cap, same pattern).
+      // v75.48 (boss: 'check if the hero card peeking cycles looks neat like the current cycle'): a cycle ahead reads like
+      // This cycle - what you start with (Carried over, the salary), ONE folded Coming out (plan dues, Saving for,
+      // everyday spending) and the end in the Free cash row's style. v73.36: the carry is this cycle's free cash.
+      rows += '<div class="cbrow"><div class="lab ind">Carried over</div><div class="amt' + (p.carry < 0 ? ' minus' : '') + '">' + money(p.carry) + '</div></div>';
+      if (p.salary > 0) rows += p.withSalary
+        ? '<div class="cbrow"><div class="lab ind">Salary · the ' + ordinal(p.sday) + '</div><div class="amt plus">+ ' + money(p.salary) + '</div></div>'
+        : '<div class="cbrow mut"><div class="lab ind">Salary · not counted</div><div class="amt">0</div></div>';
+      var nStart = rows.length;
       if (p.plans > 0.004) {
         var open = !!state.cbPlansOpen;
-        rows += '<div class="cbrow cbplans" id="cbPlansRow" role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (open ? ' open' : '') + '">▸</span>Plans due<small>' + p.planCount + ' due in window</small></div><div class="amt minus">− ' + money(p.plans) + '</div></div>';
+        rows += '<div class="cbrow cbplans" id="cbPlansRow" role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (open ? ' open' : '') + '">▸</span>Plan dues · ' + p.planCount + '</div><div class="amt minus">− ' + money(p.plans) + '</div></div>';
         if (open) {
           var items = p.planItems || [];
           // v73.39: the "+N more…" row is itself a tap target (second
@@ -8411,29 +8407,18 @@
         }
       }
       // v74.69: the pots' top-ups due in the window (as if you tap Add)
-      if (p.potTotal > 0.004) {
-        rows += '<div class="cbrow"><div class="lab">Saving for<small>starting / top-ups · ' + (p.potItems || []).map(function (it) { return esc(it.name) + (it.starts ? ' (starts)' : ' ' + dayMonth(it.date)); }).join(', ') + '</small></div><div class="amt goalv">− ' + money(p.potTotal) + '</div></div>';
-      }
-      if (p.salary > 0) {
-        if (p.withSalary) {
-          rows += '<div class="cbrow"><div class="lab">Salary<small>the ' + ordinal(p.sday) + '</small></div><div class="amt plus">+ ' + money(p.salary) + '</div></div>';
-        } else {
-          rows += '<div class="cbrow mut"><div class="lab">Salary<small>the ' + ordinal(p.sday) + ' — not counted</small></div><div class="amt">0</div></div>';
-        }
-      }
-    }
-    // v73.35: the card-dues line is GONE — the card balance is part of
-    // 'owed' and therefore already inside the free cash the block starts
-    // from (the boss's Oct-5 point: it is accounted for in this cycle's
-    // displayed free cash, so the peek must not deduct it again).
-    // v73.44: the THIS-cycle block's rows END with the Free cash row (the
-    // hero's number, same source) — the separate "Free at end of this cycle"
-    // net line would repeat it, so it renders only for the peek.
-    if (mode === 'next') { // v75.47: everyday spending in the cycle ahead, and where the number comes from
-      var evSub = p.everydaySrc === 'budgets' ? 'your budgets' : p.everydaySrc === 'spent' ? 'what you spent, average of your last ' + (p.everydayN === 1 ? 'cycle' : p.everydayN + ' cycles') : 'no budgets or past spending yet';
+      if (p.potTotal > 0.004) rows += '<div class="cbrow"><div class="lab">Saving for<small>' + (p.potItems || []).map(function (it) { return esc(it.name) + (it.starts ? ' (starts)' : ' ' + dayMonth(it.date)); }).join(', ') + '</small></div><div class="amt goalv">− ' + money(p.potTotal) + '</div></div>';
+      // v75.47: everyday spending in the cycle ahead, and where the number comes from
+      var evSub = p.everydaySrc === 'budgets' ? 'your budgets' : p.everydaySrc === 'spent' ? 'your average, last ' + (p.everydayN === 1 ? 'cycle' : p.everydayN + ' cycles') : 'no budgets or spending yet';
       rows += '<div class="cbrow' + (p.everyday > 0.004 ? '' : ' mut') + '"><div class="lab">Everyday spending<small>' + evSub + '</small></div><div class="amt' + (p.everyday > 0.004 ? ' minus' : '') + '">' + (p.everyday > 0.004 ? '− ' + money(p.everyday) : '0') + '</div></div>';
+      var nInner = rows.slice(nStart), nTotal = r2(p.plans + p.potTotal + p.everyday);
+      var nCount = [p.plans, p.potTotal, p.everyday].filter(function (v) { return v > 0.004; }).length;
+      rows = rows.slice(0, nStart);
+      var nOpen = !!state.cbDeductOpen;
+      rows += '<div class="cbrow cbdeduct" id="cbDeductRow" role="button" tabindex="0" aria-expanded="' + (nOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (nOpen ? ' open' : '') + '">▸</span>Coming out' + (nCount ? ' <span class="cbn">· ' + nCount + '</span>' : '') + cbI('out') + '</div><div class="amt minus">− ' + money(nTotal) + '</div></div>' + cbX('out');
+      if (nOpen) rows += '<div class="cbgroup">' + nInner + '</div>';
+      rows += '<div class="cbrow cbfree"><div class="lab ind">Free at the end</div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
     }
-    if (!rows && mode === 'next') rows = '<div class="cbrow mut"><div class="lab">Nothing due in this window</div></div>';
     var netCls = p.net >= 0 ? 'pos' : 'neg';
     // v73.36: money() already renders the sign for negatives — the old
     // '− ' prefix produced "− PHP -12,461.00" (a double sign)
@@ -8451,8 +8436,7 @@
         '<button type="button" data-m="with" class="' + (salMode === 'with' ? 'on' : '') + '" aria-pressed="' + (salMode === 'with' ? 'true' : 'false') + '">With salary</button>' +
         '<button type="button" data-m="without" class="' + (salMode === 'without' ? 'on' : '') + '" aria-pressed="' + (salMode === 'without' ? 'true' : 'false') + '">Without</button>' +
       '</div></div>' : '') +
-      '<div class="cbrows">' + rows + '</div>' +
-      (mode === 'next' ? '<div class="cbnet"><span class="nl">Free at the end</span><span class="nv ' + netCls + '">' + netTxt + '</span></div>' : ''); // v75.12: the 'daily spending not included' note moved under the graph
+      '<div class="cbrows">' + rows + '</div>'; // v75.48: the peek ends in its own Free at the end row (no separate net line); v75.12: the note sits under the graph
     // re-wire the switches (innerHTML wiped the old listeners — the v73.20
     // chip pattern: the element is rebuilt, so the handler must be re-bound)
     var segC = byId('cbSegCycle');
@@ -14213,12 +14197,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.47, live: new Date(2026, 10, 23, 23, 46) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.48, live: new Date(2026, 10, 24, 0, 5) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.48': [
+      'Home: a cycle ahead now reads like this cycle - Carried over, Salary, one Coming out you can open (plan dues, Saving for, everyday spending) and Free at the end. The (i) beside Left to spend is gone.'
+    ],
     '75.47': [
       'Home: the arrows on the card step up to 5 cycles ahead, each starting from what the one before leaves. Every cycle ahead also takes off everyday spending: your budgets, or what you usually spend if you have none.'
     ],

@@ -731,7 +731,7 @@ def main():
           # the render: the carry-over row is peek-only; the salary row is
           # GONE from the this-cycle block (only rendered inside the
           # mode === 'next' branch)
-          and "'from this cycle — dues, Saving for &amp; prepayments already netted'" in js  # v75.47 retarget
+          and '<div class="lab ind">Carried over</div>' in js  # v75.48 retarget  # v75.47 retarget
           and "if (mode === 'next') {" in js
           and "the ' + ordinal(p.sday) + ' — in your free cash" not in js
           # v73.37: the THIS-cycle Plans row is GONE from the render (the
@@ -804,7 +804,7 @@ def main():
           and "var otherOut = r2(liquid - cardOwed - friendOwed - free);" in js
           and "var planShare = r2(cyclePlanDeduction());" in js
           and "planShare: planShare," in js and "otherOut: r2(otherOut)," in js
-          and "mode === 'next' ? '<div class=\"cbnet\"><span class=\"nl\">Free at the end</span>" in js  # v75.47 retarget: Free at end of the cycle shown
+          and "'<div class=\"cbrow cbfree\"><div class=\"lab ind\">Free at the end</div>" in js  # v75.48 retarget  # v75.47 retarget: Free at end of the cycle shown
           and ".cbrow.cbfree{margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}" in html
           and "'73.44': [" in js)
     check("v73.45 (boss: 'build v73.45 — reset undo + confirm + audit row'): 'Reset to my numbers' is no longer a one-way door — (1) it opens confirmAsk naming the MEASURED free-cash move (rises/drops by ₱X, direction-aware — the move is measured by previewing the zeroed effectiveSnap, not derived from adj.free, because the overlay's net effect on free is a formula); (2) the confirmed reset files audit rows (k='r', category Adjustment, note 'reset to my numbers') in the money log — one per moved dimension, signed actual delta; (3) the toast carries an Undo that restores the pre-reset overlay AND removes the audit rows; (4) the root 1k-phantom fix: deleteTxn/saveTxnEdit no-op their overlay reversal when adjEmpty() (a reset already wiped it → no phantom delta); (5) the 'r' flavor survives imports (normalizeTxn) and its ✕ just drops the record (no override behind it to revert)",
@@ -2088,8 +2088,8 @@ def main():
     check("v74.69 (boss: 'does the saving for accounted in the next cycle peek from the hero' -> 'ok'): the peek subtracts the pots' top-ups due in the next window (potWindowTotal: not yet added, not skipped, capped at the goal) on a 'Saving for · top-ups due' row; Carried over says dues, Saving for & prepayments are already netted",
           "function potWindowTotal(cd) {" in js
           and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total - evN.amt);" in js
-          and "dues, Saving for &amp; prepayments already netted" in js
-          and "starting / top-ups · " in js  # v74.71 retarget: the row also names the one-offs starting then
+          and '<div class="lab ind">Carried over</div>' in js  # v75.48 retarget
+          and "Saving for<small>' + (p.potItems || [])" in js  # v75.48 retarget  # v74.71 retarget: the row also names the one-offs starting then
           and "'74.69': [" in js)
     check("v74.68 (boss: 'have u shipped everything from the latest mockup, such as in the img, or the done tab for committed'): All plans = Recurring (default) | One-offs | Done (paid one-offs + bought Saving-for one-offs + recurring with nothing left; the Paid bar is gone); the plan's sheet = pdHead (tile · name · line), the ₱ due card, Coming up (next 4 dates: changed / skipped · undo, tap = edit that date) and Before chips (paid / partial / unpaid / skipped)",
           "data-pltab=\"done\">Done" in js and "var planTab = 'rec';" in js
@@ -2720,6 +2720,9 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.48 (boss: '-remove the i icon in the hero card -check if the hero card peeking cycles looks neat like the current cycle'): no (i) beside Left to spend; a cycle ahead reads like This cycle - Carried over, Salary, one folded Coming out (plan dues, Saving for, everyday spending) and a Free at the end row in the Free cash style. Smoke PART 100",
+          'id="heroInfo"' not in html and "var nInner = rows.slice(nStart), nTotal = r2(p.plans + p.potTotal + p.everyday);" in js
+          and '<div class=\"lab ind\">Carried over</div>' in js and "PART 100: v75.48" in smoke and "'75.48': [" in js)
     check("v75.47 (boss: 'the this/next cycle toggle in hero card for peeking, can we extend it to more cycles' -> 'budgets first, actual spending fallback, build A'): arrows step the hero peek up to PEEK_MAX = 5 cycles ahead; each starts from the previous cycle's end; every cycle ahead takes off everyday spending (budgets, else the average of your last 3 full cycles, plan payments left out); the graph spreads it by week. Smoke PART 99",
           "var PEEK_MAX = 5;" in js and "function everydayFor(m) {" in js and "function cycleProjection(mode, salMode, off) {" in js
           and "var prevP = cycleProjection('next', salMode, off - 1);" in js and "function peekGo(off) {" in js
@@ -2733,7 +2736,7 @@ def main():
           and "PART 98: v75.45" in smoke and "'75.45': [" in js)
     check("v75.44 (boss: 'Add the tap-to-explain (i) on Home numbers next?' -> 'Yes, add it'): an (i) beside Left to spend, In your accounts, Coming out, Salary not in yet, Free cash and Owed to you opens a one-line plain explanation (one at a time, in-memory); a tap on the (i) never toggles its row. Smoke PART 97",
           "var CB_INFO = {" in js and "function cbInfoWire(root) {" in js and "cbI('acc')" in js and "cbI('out')" in js and "cbI('free')" in js and "cbI('owedin')" in js
-          and 'id="heroInfo"' in html and 'id="heroExp"' in html and ".cbexp{" in html
+          and 'id="heroInfo"' not in html and 'id="heroExp"' not in html and ".cbexp{" in html  # v75.48 retarget: the hero's own (i) is gone
           and "PART 97: v75.44" in smoke and "'75.44': [" in js)
     check("v75.43 (boss: 'assess if the app is intuitive for a first timer ... combine the pay card tab' -> 'Yes, both'): Pay card is Move (pay a card, or move money between your own accounts as two linked legs t.xfer that are neither spend nor income nor the salary; one leg's delete / edit carries to the other); Money in says Into with Salary / Refund / Gift; plain words on Home; no made-up name; the quick-sum hint retires once used. Smoke PART 96",
           "function addMove(from, to, amount, date, note) {" in js and "function moveMateOf(t) {" in js

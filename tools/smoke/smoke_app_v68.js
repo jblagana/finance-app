@@ -4652,11 +4652,22 @@ waitReady().then(async function (F) {
       var hs99 = F.heroSteps('next', 3), p99 = F.cycleProjection('next', 'with', 3);
       var last99 = hs99.steps.length ? hs99.steps[hs99.steps.length - 1].after : hs99.start;
       ok(Math.abs(hs99.start - p99.carry) < 0.005 && Math.abs(last99 - p99.net) < 0.005 && hs99.steps.some(function (x) { return x.items.some(function (i) { return i.label === 'Everyday spending'; }); }), 'v75.47: the graph for 3 cycles ahead runs carry -> end, everyday spending by week');
-      F.peekGo(3);
+      st.cbDeductOpen = true; F.peekGo(3); // v75.48: the rows sit inside Coming out
       var cb99 = String(byIdStub('cycleBlock').innerHTML || '');
       ok(st.cycleMode === 'next' && cb99.indexOf('In 3 cycles') >= 0 && cb99.indexOf('Everyday spending') >= 0 && cb99.indexOf('your budgets') >= 0, 'v75.47: the card says In 3 cycles with an Everyday spending row from your budgets');
       F.peekGo(0); st.base.budgets = bud99;
       ok(st.cycleMode === 'this', 'v75.47: back to This cycle');
+      // ============ PART 100: v75.48 - a cycle ahead reads like This cycle ============
+      console.log('\n== PART 100: v75.48 - the peek is Carried over, Salary, Coming out, Free at the end ==');
+      st.cbDeductOpen = false; F.peekGo(2);
+      var c100 = String(byIdStub('cycleBlock').innerHTML || ''), p100 = F.cycleProjection('next', 'with', 2);
+      var o100 = ['>Carried over<', '>Salary \u00b7 ', '>Coming out', '>Free at the end<'].map(function (w) { return c100.indexOf(w); });
+      ok(o100.every(function (x, i) { return x >= 0 && (i === 0 || x > o100[i - 1]); }), 'v75.48: the rows read Carried over, Salary, Coming out, Free at the end');
+      ok(c100.indexOf('Everyday spending') < 0 && c100.indexOf('class="cbnet"') < 0, 'v75.48: Coming out starts folded, no separate net line');
+      st.cbDeductOpen = true; F.renderCycleBlock();
+      var c100b = String(byIdStub('cycleBlock').innerHTML || '');
+      ok(c100b.indexOf('Everyday spending') > c100b.indexOf('Coming out') && c100b.indexOf('Everyday spending') < c100b.indexOf('Free at the end'), 'v75.48: opened, everyday spending sits inside Coming out');
+      st.cbDeductOpen = false; F.peekGo(0);
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);

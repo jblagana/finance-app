@@ -1,3 +1,9 @@
+## 2026-11-24 - "-remove the i icon in the hero card -check if the hero card peeking cycles looks neat like the current cycle"
+Status: **done** - v75.48 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] The (i) beside "Left to spend" (heroInfo / heroExp) is removed; the row (i)s inside the cycle block stay.
+- [x] A cycle ahead reads like This cycle: Carried over, Salary · the 15th, ONE folded Coming out (cbDeductRow: plan dues, Saving for, everyday spending) and "Free at the end" in the Free cash row style; the separate cbnet line and the long sub-labels are gone.
+- [x] Smoke PART 100 (+ PART 99 opens the group); check_site v75.48 (4 old checks retargeted); headless Chromium 390 / 320 px, 24 checks.
+
 ## 2026-11-23 - "the this/next cycle toggle in hero card for peeking, can we extend it to more cycles, mockup first" -> (mockup: A arrows / B chips + runway) -> "whre will everyday budget come from, is that inferred from prev cycle?" -> "budgets first, actual spending fallback, build A"
 Status: **done** - v75.47 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] cycleProjection(mode, salMode, off): up to PEEK_MAX = 5 cycles ahead, each carrying the previous cycle's end; every cycle ahead (Next cycle included) takes off everyday spending - the month's budgets (with overrides), else the average spendOf of the last 3 full cycles with entries (plan payments left out). The With / Without salary choice applies to every cycle ahead.
