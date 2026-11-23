@@ -2713,6 +2713,10 @@
     // v73.53: the cashback flag (a Money-in CC payoff that is NEW money —
     // owed − amt, free + amt, liquid untouched) rides the record too.
     if (data.cashback) t.cashback = true;
+    // v75.43 (boss: 'are there parts that can be combined like maybe the pay card tab' -> the Move tab): one
+    // leg of a move between your own accounts (cash_out on From, cash_in on To) - t.xfer pairs the two legs.
+    // A move is neither spending nor income; it only shifts money between accounts.
+    if (data.xfer && (t.kind === 'cash_in' || t.kind === 'cash_out')) t.xfer = String(data.xfer).slice(0, 40);
     // v74.53 (stress test #5): logged from the salary chip = the salary, at
     // any amount (deductions, a half month, a bonus) — not only >= 90% of it
     if (data.salary && t.kind === 'cash_in') t.salary = true;
@@ -2745,6 +2749,22 @@
       }
       return Promise.resolve();
     }).then(function () { return id; });
+  }
+  // v75.43: Move between your own cash / bank accounts - two linked legs, one toast
+  function addMove(from, to, amount, date, note) {
+    var gid = 'mv' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    var nt = note || (from + ' \u2192 ' + to), ids = [];
+    var leg = { date: date || todayISO(), category: 'Move', amount: amount, note: nt, xfer: gid };
+    return addTxn(Object.assign({}, leg, { account: from, kind: 'cash_out' }), { quiet: true }).then(function (id) {
+      ids.push(id);
+      return addTxn(Object.assign({}, leg, { account: to, kind: 'cash_in' }), { quiet: true });
+    }).then(function (id) {
+      ids.push(id);
+      snack('Moved ' + money(amount) + ' \u00b7 ' + esc(from) + ' \u2192 ' + esc(to), function () {
+        removeTxnQuiet(ids[1]).then(function () { return removeTxnQuiet(ids[0]); });
+      }, 'add');
+      return ids;
+    });
   }
   // v74.15: the record-only toast's "Count it" — the entry was NOT in the
   // balance after all. Flip it, move the balances by its effect, and shift its
@@ -2857,9 +2877,19 @@
     if (r.t) saveAdj();
     emit('txn');
   }
+  function moveMateOf(t) {
+    var m = null;
+    if (t && t.xfer) (state.txns || []).forEach(function (x) { if (x.xfer === t.xfer && x.id !== t.id) m = x; });
+    return m;
+  }
   function deleteTxnFromLog(tid) {
+    var mate0 = null;
+    (state.txns || []).forEach(function (x) { if (x.id === tid) mate0 = moveMateOf(x); });
     var r = removeTxnRow(tid);
     if (!r) return;
+    // v75.43: deleting one leg of a move deletes the other leg as well (a lone leg would read as spending or income)
+    var rm = mate0 ? removeTxnRow(mate0.id) : null;
+    if (rm) r.persist = Promise.all([r.persist, rm.persist]);
     // v74.74: a deleted entry leaves no trace in the money log — History keeps it so it can be restored later
     var hr = {}; Object.keys(r).forEach(function (k) { if (k !== 'persist') hr[k] = r[k]; });
     var he = r.t ? histAdd({ k: 'led', t: 'Deleted ' + pesoFull(r.t.amount) + ' · ' + esc(r.t.category || r.t.account || 'entry'), s: (r.t.note ? esc(r.t.note) + ' · ' : '') + mdShort(r.t.date), r: cloneObj(hr) }) : null;
@@ -2869,6 +2899,7 @@
       snack('Deleted ' + (r.t ? money(r.t.amount) + ' · ' + esc(r.t.category || r.t.account) : 'entry'), function () {
         if (he) histMarkUndone(he.id); // v74.74
         syncTombRemove('t', tid); // the row is back — the tombstone goes
+        if (rm) { syncTombRemove('t', rm.t.id); restoreTxnRow(rm); }
         restoreTxnRow(r);
       });
     });
@@ -2920,7 +2951,7 @@
     if (!(expected > 0)) return null;
     var best = null;
     state.txns.forEach(function (t) {
-      if (t.kind !== 'cash_in') return;
+      if (t.kind !== 'cash_in' || t.xfer) return; // v75.43: a move is never the salary
       var amt = Number(t.amount) || 0;
       if (!t.salary && amt < 0.9 * expected) return; // v74.53: the chip's salary counts at any amount
       if (!best || String(t.date || '') < String(best.date || '')) best = t;
@@ -2943,12 +2974,13 @@
   // overrides t.amount: monthEffect's amt is the LIVE amount (t may be the
   // pre-edit original on the rebase path).
   function salaryIsTxn(t, amt) {
-    if (!t) return false;
+    if (!t || t.xfer) return false; // v75.43: a move is never the salary
     var a = (amt !== undefined) ? Number(amt) : (Number(t.amount) || 0);
     var exp = expectedSalaryFor(String(t.date || '').slice(0, 7), state.base || {});
     return !!t.salary || a >= 0.9 * exp; // v74.53: the chip's salary is the salary at any amount
   }
   function monthEffect(kind, amt, t) {
+    if (t && t.xfer) return 0; // v75.43: a move is neither spend nor a refund
     if (kind === 'card_payment') return 0;
     if (kind === 'cash_in') return salaryIsTxn(t, amt) ? 0 : -amt;
     return amt;
@@ -2975,6 +3007,7 @@
     if (t.kind === 'card_payment' && o.payWith) t.payWith = o.payWith;
     if (o.recordOnly) t.recordOnly = true; // v74.15: an edit keeps it record-only
     if (o.salary && t.kind === 'cash_in') t.salary = true; // v74.53: an edit keeps it the salary
+    if (o.xfer && (t.kind === 'cash_in' || t.kind === 'cash_out')) t.xfer = o.xfer; // v75.43: an edit keeps it a move leg
     if (o.cycle === 'next' && t.kind === 'card_charge' && t.account === o.account) t.cycle = 'next'; // v74.79: an edit keeps 'moved to the next bill' (same card) // v74.79: an edit (a note fix) kept dropping the NEXT CYCLE tag; a move to another card starts fresh
     state.txns[oIdx] = t; // in place — position preserved
     paidIdx = null; // v74.57: the plan link may have changed in place
@@ -3393,9 +3426,11 @@
   // alone, keep mine:'): the day header splits YOUR spend from the day's total (a friend's share, a payback
   // you sent - the greyed rows - are in the total only)
   function mlGroupDays(rows, htmls, all, owIdx) {
-    var tot = {}, mine = {};
+    var tot = {}, mine = {}, mv = {};
+    (state.txns || []).forEach(function (t) { if (t && t.xfer) mv[t.id] = 1; }); // v75.43: a move is not spending
     (all || []).forEach(function (e) {
       if (!e || e.ro || !(e.k === 'x' || e.k === 'c' || !e.k)) return;
+      if (e.tid && mv[e.tid]) return;
       var k = mlDayKey(e.at), v = (e.a === 'add' ? 1 : -1) * (Number(e.n) || 0);
       tot[k] = r2((tot[k] || 0) + v);
       var ow = owIdx ? mlOwedRow(mlParts(e).note, e.tid ? owIdx[e.tid] : null) : null;
@@ -4632,7 +4667,7 @@
       h += lab('From before') + '<section class="nv-card nv-pad">' +
         nvRow('legacy', 'Debts, savings goals &amp; one-offs', nLeg + ' item' + (nLeg === 1 ? '' : 's')) +
         '<p class="nv-foot">These were set up before Committed. Move them there so the plan-dues and the hero count them.</p>' +
-        '<button type="button" class="nv-move" data-nvmove="1">Move to Committed</button></section>';
+        '<button type="button" class="nv-move" data-nvmove="1">Move to Bills & plans</button></section>';
     }
     // Learned merchants (top 4)
     var learned = learnedMerchantCat(), mmov = merchantOv();
@@ -5115,7 +5150,7 @@
     host.innerHTML = '<button type="button" class="set-all" id="setNumAll">' +
       '<span class="sa-top"><span class="sa-t">All numbers</span><span class="sa-asof" title="' + esc('Balances set as of ' + asof0) + '">live</span>' + CHEV + '</span>' + // v75.07: the tiles are LIVE since v74.51 — 'as of Oct 11' read as stale numbers
       '<span class="sa-tiles">' +
-        '<span class="sa-tile"><span class="k">Liquid</span><span class="n">' + money0(cash0) + '</span></span>' +
+        '<span class="sa-tile"><span class="k">In accounts</span><span class="n">' + money0(cash0) + '</span></span>' +
         '<span class="sa-tile"><span class="k">Cards owe</span><span class="n warn">' + money0(owed0) + '</span></span>' +
         '<span class="sa-tile"><span class="k">Salary</span><span class="n">' + ((Number(b.salary) || 0) > 0 ? money0(b.salary) : 'not set') + '</span></span>' +
       '</span><span class="sa-line">' + esc(line0) + '</span></button>';
@@ -5192,6 +5227,7 @@
     // s line). monthEffect keeps the narrower rule (refunds still net the
     // ledger line down) for the audit trail.
     if (t.kind === 'cash_in') return 0;
+    if (t.xfer) return 0; // v75.43: the From leg of a move is not spending
     // v74.76 (boss: 'find the bug on the spent today entry that pollutes
     // it'): the friend's share of an ipf-on-card (fileIpfTheirs) files a
     // card_charge + a cash_in pair. Before v73.8 the cash_in netted the
@@ -5318,7 +5354,7 @@
     if (hi > w.end) hi = w.end;
     var received = null;
     state.txns.forEach(function (t) {
-      if (t.kind !== 'cash_in') return;
+      if (t.kind !== 'cash_in' || t.xfer) return; // v75.43: a move is never the salary
       var amt = Number(t.amount) || 0;
       if (amt <= 0) return;
       if (!t.salary && (!(expected > 0) || amt < 0.9 * expected)) return; // v74.13: no salary set = nothing is "the salary" (a P150 refund read as an early payday); v74.53: the chip's salary always is
@@ -5342,7 +5378,7 @@
       // is the next cycle's salary arriving early — it wins over the
       // early-payday one above.
       state.txns.forEach(function (t) {
-        if (t.kind !== 'cash_in') return;
+        if (t.kind !== 'cash_in' || t.xfer) return; // v75.43: a move is never the salary
         var amt = Number(t.amount) || 0;
         if (amt <= 0) return;
         if (!t.salary && (!(expected > 0) || amt < 0.9 * expected)) return; // v74.13; v74.53
@@ -5352,7 +5388,7 @@
       });
     } else {
       state.txns.forEach(function (t) {
-        if (t.kind !== 'cash_in') return;
+        if (t.kind !== 'cash_in' || t.xfer) return; // v75.43: a move is never the salary
         var amt = Number(t.amount) || 0;
         if (amt <= 0) return;
         if (!t.salary && (!(expected > 0) || amt < 0.9 * expected)) return; // v74.13; v74.53
@@ -6210,7 +6246,7 @@
       var d = String(t.date || '');
       if (d < from || d > to) return;
       var a = Number(t.amount) || 0;
-      if (t.kind === 'cash_in') { if (!(t.id && isIpfTheirsTxn(t.id))) income += a; return; } // v74.76: the theirs cash advance is not income
+      if (t.kind === 'cash_in') { if (!(t.id && isIpfTheirsTxn(t.id)) && !t.xfer) income += a; return; } // v74.76: the theirs cash advance is not income
       var s = spendOf(t);
       if (s <= 0) return;
       spent += s;
@@ -6619,10 +6655,14 @@
     var sb = byId('addModeSpend'), pb = byId('addModePrepay'), mb = byId('addModeMoneyin');
     if (sb) sb.className = 'amb' + (addMode === 'spend' ? ' on' : '');
     if (pb) pb.className = 'amb' + (addMode === 'prepay' ? ' on' : '');
+    // v75.43: Move shows once there is somewhere to move money to (a card, or a bank account besides Cash)
+    var canMove = ((state.base && state.base.accounts) || []).some(function (a) { return a && (a.kind === 'card' || (a.kind === 'debit' && a.name !== 'Cash')); });
+    if (pb) pb.style.display = canMove ? '' : 'none';
+    var amr = pb && pb.parentNode; if (amr && amr.classList) amr.classList.toggle('two', !canMove);
     if (mb) mb.className = 'amb' + (addMode === 'moneyin' ? ' on' : '');
     var ttl = byId('addSheetTitle'), sub = byId('addSubmit');
-    if (ttl) ttl.textContent = addMode === 'prepay' ? 'Card prepay' : (addMode === 'moneyin' ? 'Money in' : 'Add expense');
-    if (sub) sub.textContent = addMode === 'prepay' ? 'Add payment' : (addMode === 'moneyin' ? 'Add money in' : 'Add expense');
+    if (ttl) ttl.textContent = addMode === 'prepay' ? 'Move money' : (addMode === 'moneyin' ? 'Money in' : 'Add expense');
+    if (sub) sub.textContent = addMode === 'prepay' ? 'Move' : (addMode === 'moneyin' ? 'Add money in' : 'Add expense');
     // v73.80: the field swap — Pay card shows Pay to (f_payto, the card)
     // + Paid with (f_paywith, the cash/debit funder); Spend / Money in show
     // Category + Paid with (f_category / f_account). The old "prepay mode
@@ -6632,6 +6672,7 @@
     updateAddModeFields();
     updateCashbackRow();
     updateChargeHint();
+    if (m === 'salary') { var fc = byId('f_category'); if (fc) fc.value = 'Salary'; } // v75.43: the salary chip opens on Salary
     renderAddChips(); // v74.24 look upgrade: the chip rows follow the field swap
   }
   // v74.24 look upgrade: the Add sheet's chip rows mirror the (hidden) selects —
@@ -6646,9 +6687,10 @@
         var ids = (row.getAttribute('data-for') || '').split(','), sel = null;
         for (var i = 0; i < ids.length; i++) { var s = byId(ids[i]); if (s && s.style.display !== 'none') { sel = s; break; } }
         if (!sel) { row.innerHTML = ''; return; }
-        var dots = row.getAttribute('data-dots') === '1', html = '';
+        var dots = row.getAttribute('data-dots') === '1' && sel.id === 'f_category', html = ''; // v75.43: accounts (Move's From) wear no category dot
         for (var o = 0; o < sel.options.length; o++) {
           var op = sel.options[o], on = op.value === sel.value;
+          if (sel.id === 'f_payto' && !op.value) continue; // v75.43: the blank pick is not a choice
           html += '<button type="button" class="achip' + (on ? ' on' : '') + '" data-v="' + esc(op.value) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' +
             (dots ? '<span class="adot" style="background:' + mlTile(op.textContent).fg + '"></span>' : '') + esc(op.textContent) + '</button>';
         }
@@ -6709,6 +6751,17 @@
   // itself. Tapping the chip links (sets the ref from the suggestion);
   // tapping a linked chip unlinks. Submitting stores the ref on the txn.
   var planLinkSug = null; // the live suggestion (null when none)
+  // v75.43: the "Quick sums work" hint retires once a quick sum was used (the line keeps its height)
+  var QS_LS = 'fin.qs.used.v1';
+  function qsSeen(raw) {
+    try { if (/\d\s*[-+\u00d7\u00f7*\/]\s*\(?\d/.test(String(raw || ''))) localStorage.setItem(QS_LS, '1'); } catch (e) {}
+    qsHint();
+  }
+  function qsHint() {
+    var h = byId('amtHint'); if (!h) return;
+    var used = false; try { used = localStorage.getItem(QS_LS) === '1'; } catch (e) {}
+    h.textContent = used ? '\u00a0' : 'Quick sums work: 300-125+10';
+  }
   function addFormPayload() {
     var raw = byId('f_account').value || 'CASH::Cash';
     var sep = raw.indexOf('::');
@@ -6779,7 +6832,7 @@
     var debits = ((state.base && state.base.accounts) || []).filter(function (a) { return a && a.kind === 'debit' && a.name; }).map(function (a) { return a.name; });
     var exp = Number(state.base && state.base.salary) || 0, best = null;
     (state.txns || []).forEach(function (t) {
-      if (t.kind !== 'cash_in' || debits.indexOf(t.account) < 0) return;
+      if (t.kind !== 'cash_in' || t.xfer || debits.indexOf(t.account) < 0) return;
       if (!(t.salary || (exp > 0 && (Number(t.amount) || 0) >= 0.9 * exp))) return;
       if (!best || String(t.date) > String(best.date)) best = t;
     });
@@ -7576,6 +7629,7 @@
       if (t.planRef) { skip.plans += spendOf(t); return; }
       var sp = spendOf(t);
       if (sp) { items.push({ id: t.id, name: String(t.note || '').trim() || t.category || 'Unsorted', cat: t.category || 'Unsorted', acc: t.account || '', amt: r2(sp) }); total += sp; return; }
+      if (t.xfer) return; // v75.43: a move between your own accounts is neither spend nor money in
       var lg = t.id ? owedLegDir(t.id) : '';
       if (lg) { if (lg === 'itb') skip.owedBack += a; else if (t.kind !== 'cash_in') skip.theirs += a; return; }
       if (t.kind === 'card_payment') skip.payoffs += a;
@@ -8151,7 +8205,7 @@
       // = free − planShare (cyclePlanDeduction, the hero's own deduction) —
       // so the rows sum EXACTLY to the hero: Liquid − (Cards owed + Other
       // outflows) − Plan dues = Free cash. All display-only, one source each.
-      rows += '<div class="cbrow"><div class="lab ind">Liquid</div><div class="amt">' + money(p.liquid) + '</div></div>';
+      rows += '<div class="cbrow"><div class="lab ind">In your accounts</div><div class="amt">' + money(p.liquid) + '</div></div>';
       // v74.98 (boss: 'add a main chevron for all deductions from free cash to
       // keep hero neat'): everything taken off Liquid (Cards owed, To pay
       // back, Other outflows, Plan dues, Saving for) folds under ONE
@@ -8222,7 +8276,7 @@
       rows = rows.slice(0, dStart);
       if (dInner) {
         var dOpen = !!state.cbDeductOpen;
-        rows += '<div class="cbrow cbdeduct" id="cbDeductRow" role="button" tabindex="0" aria-expanded="' + (dOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (dOpen ? ' open' : '') + '">▸</span>Deductions' + (dCount ? ' <span class="cbn">· ' + dCount + '</span>' : '') + '</div><div class="amt minus">− ' + money(dTotal) + '</div></div>';
+        rows += '<div class="cbrow cbdeduct" id="cbDeductRow" role="button" tabindex="0" aria-expanded="' + (dOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (dOpen ? ' open' : '') + '">▸</span>Coming out' + (dCount ? ' <span class="cbn">· ' + dCount + '</span>' : '') + '</div><div class="amt minus">− ' + money(dTotal) + '</div></div>';
         if (dOpen) rows += '<div class="cbgroup">' + dInner + '</div>';
       }
       if (p.salaryPending > 0.004) rows += '<div class="cbrow"><div class="lab ind">Salary · not in yet</div><div class="amt">+ ' + money(p.salaryPending) + '</div></div>'; // v74.78; v74.98: no 'counted until' (the hero line says it)
@@ -8514,7 +8568,7 @@
     var last = steps.length ? steps[steps.length - 1].after : start;
     var diff = r2(p.net - last);
     if (Math.abs(diff) > 0.5) { add(x0, 'Other', diff); steps = build(); } // the line ends exactly at the hero's number
-    return { mode: isNext ? 'next' : 'this', start: start, startLabel: isNext ? 'Carried over' : 'Liquid', x0: x0, end: end, steps: steps, net: r2(p.net), payday: isNext ? null : isoAdd(end, 1) };
+    return { mode: isNext ? 'next' : 'this', start: start, startLabel: isNext ? 'Carried over' : 'In accounts', x0: x0, end: end, steps: steps, net: r2(p.net), payday: isNext ? null : isoAdd(end, 1) };
   }
   function pesoK(v) { var n = Number(v) || 0, a = Math.abs(n); return (n < 0 ? '−' : '') + (a >= 10000 ? '₱' + (a / 1000).toFixed(1) + 'k' : pesoShort(Math.round(a))); }
   function renderSpark() {
@@ -9194,9 +9248,15 @@
     var b = state.base;
     var prev = sel.value;
     var cards = (b && b.accounts || []).filter(function (a) { return a.kind === 'card'; });
-    var html = '<option value="">Pick a card</option>';
+    var html = '<option value="">Pick where it goes</option>';
     cards.forEach(function (a) {
       html += '<option value="' + esc(a.name) + '">' + esc(a.name) + '</option>';
+    });
+    // v75.43: Move - a bank or Cash is a destination too (a transfer between your own accounts)
+    html += '<option value="CASH::Cash">Cash</option>';
+    ((b && b.accounts) || []).forEach(function (a) {
+      if (a.kind !== 'debit' || a.name === 'Cash') return;
+      html += '<option value="' + esc('CASH::' + a.name) + '">' + esc(a.name) + '</option>';
     });
     sel.innerHTML = html;
     if (prev) sel.value = prev;
@@ -9232,6 +9292,9 @@
     show('f_accountLabel', !pre); show('f_account', !pre);
     show('f_paywithLabel', pre); show('f_paywith', pre);
     if (pre) { seedPayTo(); seedPayWith(); } else { seedAccounts(); }
+    // v75.43: Money in is worded for money coming in - Into, and its own categories
+    var al = byId('f_accountLabel'); if (al) al.textContent = addMode === 'moneyin' ? 'Into' : 'Paid with';
+    seedCategories();
   }
   function seedAccounts() {
     var sel = byId('f_account');
@@ -9252,7 +9315,7 @@
     accounts.forEach(function (a) {
       if (a.type === 'debit' && a.name === 'Cash') return; // the default option is already it
       var v = (a.type === 'card' ? 'CARD' : 'CASH') + '::' + a.name;
-      html += '<option value="' + esc(v) + '">' + esc(a.name + (a.type === 'card' && moneyin ? ' · CC' : '')) + '</option>';
+      html += '<option value="' + esc(v) + '">' + esc(a.name + (a.type === 'card' && moneyin && !/\bcc\b|card/i.test(a.name) ? ' · card' : '')) // v75.43: no 'Maya CC · CC' + '</option>';
     });
     sel.innerHTML = html;
     if (prev) sel.value = prev;
@@ -13207,6 +13270,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (typeof t.payWith === 'string' && t.payWith) r.payWith = t.payWith.slice(0, 60);
       if (t.cashback === true) r.cashback = true;
       if (t.recordOnly === true) r.recordOnly = true; // v74.15
+      if (typeof t.xfer === 'string' && t.xfer && (t.kind === 'cash_in' || t.kind === 'cash_out')) r.xfer = t.xfer.slice(0, 40); // v75.43: a move leg survives import + sync
       if (t.salary === true) r.salary = true; // v74.78: the salary chip's flag survived nothing but local edits — an import dropped it
       if (t.cycle === 'next') r.cycle = 'next'; // v74.79: the 'moved to the next bill' tag survives an import // v74.79: the card-charge NEXT CYCLE tag ("survives export/import" — the sanitizer dropped it)
       var pr = t.planRef;
@@ -13913,12 +13977,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.42, live: new Date(2026, 10, 23, 21, 9) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.43, live: new Date(2026, 10, 23, 23, 15) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.43': [
+      'Add: Pay card is now Move. Pay a card, or move money between your own accounts (Maya to LandBank); a move is not spending or income. It shows once you have a card or a bank account.',
+      'Add: Money in says Into, and offers Salary, Refund and Gift. Picking Salary counts it as your salary at any amount. Cards no longer read "CC · CC".',
+      'Home: plainer words - In your accounts, Coming out, and Bills & plans for Committed. No made-up name in the greeting. The quick-sum hint goes once you have used one.'
+    ],
     '75.42': [
       'Home: a late salary now always counts for the cycle it belongs to. After tapping Extend, or if it lands more than 10 days late, the headroom used to stretch it to the payday after next; it now runs to your next payday.'
     ],
@@ -14916,10 +14985,10 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var h = byId('greetHello'), d = byId('greetDate');
     var now = new Date();
     var hr = now.getHours();
-    var who = (state.base && state.base.name && String(state.base.name).trim()) || 'Hooman';
+    var who = (state.base && state.base.name && String(state.base.name).trim()) || ''; // v75.43: no made-up name - setup asks for yours
     var greet = hr < 5 ? 'Up late' : hr < 12 ? 'Good morning' :
       hr < 17 ? 'Good afternoon' : hr < 21 ? 'Good evening' : 'Good night';
-    if (h) h.textContent = greet + ', ' + who + '!';
+    if (h) h.textContent = greet + (who ? ', ' + who : '') + '!';
     if (d) d.textContent =
       ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()] + ', ' +
       ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][now.getMonth()] + ' ' +
@@ -14964,7 +15033,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var dl = d ? Number(d.cycleDaysLeft || d.daysLeft) || 0 : 0;
         // v74.89: days left first — the header's + Plan narrows the line, so a cut trims the dates, not 'left'
         kick = (dl ? dl + ' day' + (dl === 1 ? '' : 's') + ' left' : '') + (win ? (dl ? ' · ' : '') + win.replace(/^Cycle /, '') : '');
-        title = 'Committed';
+        title = 'Bills & plans'; // v75.43: plain words
       } else if (tab === 'ledger') { kick = win; title = 'Ledger'; }
       else { kick = 'Splits and IOUs'; title = 'Owed'; }
     }
@@ -15472,19 +15541,22 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // v63: the category options come from "Your numbers" — the base monthly
   // budgets, in the order they are listed there. No budgets yet → the options
   // are empty and "Unsorted" (value '' = no category) is the default choice.
+  var MONEYIN_CATS = ['Salary', 'Refund', 'Gift']; // v75.43
   function seedCategories() {
     var sel = byId('f_category');
     if (!sel) return;
-    var names = Object.keys((state.base && state.base.budgets) || {})
+    var mi = addMode === 'moneyin' && !editingTxn; // v75.43: Money in picks from money-in categories
+    var names = mi ? MONEYIN_CATS.slice() : Object.keys((state.base && state.base.budgets) || {})
       .filter(function (n) { return String(n).trim(); });
     // v72.30 (user: 'remove the Owed from the category'): 'Owed' is out of the
     // options — tpf files under the picked category ('Unsorted' fallback)
     // since v72.28; old 'Owed' ledger rows keep their data (no migration)
-    var sig = names.join('|');
+    var sig = (mi ? 'in|' : '') + names.join('|');
     if (sig === catSig) return;
+    var cur = names.indexOf(sel.value) >= 0 ? sel.value : (editingTxn ? sel.value : ''); // a pick from the other list does not carry over
+    if (cur && names.indexOf(cur) < 0) names.push(cur);
     catSig = sig;
-    var cur = sel.value;
-    var html = '<option value=""' + (cur ? '' : ' selected') + '>Unsorted</option>';
+    var html = '<option value=""' + (cur ? '' : ' selected') + '>' + (mi ? 'Other' : 'Unsorted') + '</option>';
     names.forEach(function (c) {
       html += '<option value="' + esc(c) + '"' + (cur === c ? ' selected' : '') + '>' + esc(c) + '</option>';
     });
@@ -15614,6 +15686,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     addPlan: addPlan,
     deletePlan: deletePlan,
     addTxn: addTxn,
+    addMove: addMove, moveMateOf: moveMateOf, deleteTxnFromLog: deleteTxnFromLog, qsSeen: qsSeen, // v75.43 (smoke drives them)
     deleteTxn: deleteTxn,
     saveTxnEdit: saveTxnEdit, // v71: editable ledger entries
     // v72.10: the owed flow (smoke drives the real paths) + the effective
@@ -16029,7 +16102,21 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var funder = byId('f_paywith').value || 'CASH::Cash';
         var fsep = funder.indexOf('::');
         if (!card) {
-          alert('Pick the card you paid — Pay card logs a payment to a credit card.');
+          alert('Pick where the money goes: a card you are paying, or another account.');
+          return;
+        }
+        // v75.43: To a bank or Cash = a move between your own accounts (two linked legs)
+        if (card.indexOf('CASH::') === 0) {
+          var toAcc = card.slice(6), fromAcc = funder.slice(fsep + 2);
+          if (toAcc === fromAcc) { alert('Pick two different accounts: the money moves from one into the other.'); return; }
+          if (addBusy) return;
+          addBusy = true;
+          addMove(fromAcc, toAcc, amount, byId('f_date').value || todayISO(), (byId('f_note').value || '').trim()).then(function () {
+            addBusy = false;
+            byId('f_amount').value = ''; addAmtEq(byId('f_amount')); byId('f_note').value = '';
+            qsSeen(amtRaw);
+            closeSheets(); setTab('ledger');
+          }, function () { addBusy = false; });
           return;
         }
         type = 'CARD'; name = card;
@@ -16048,9 +16135,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       // (card_payment, the exact inverse of the card_charge spends) — it must
       // land on a CARD account: the card the money was paid to.
       if (addMode === 'prepay' && type !== 'CARD') {
-        alert('Pick the card you paid — Pay card logs a payment to a credit card.');
+        alert('Pick where the money goes: a card you are paying, or another account.');
         return;
       }
+      // v75.43: a move leg stays between cash / bank accounts, and its two sides stay apart
+      var xMate = editingTxn ? moveMateOf(editingTxn) : null;
+      if (editingTxn && editingTxn.xfer && type === 'CARD') { alert('A move runs between Cash and your bank accounts. Pick one of those.'); return; }
+      if (xMate && xMate.account === name) { alert('The other side of this move is already ' + name + '. Pick a different account.'); return; }
       // v73.52: the old "Money in lands in a cash account" guard is gone —
       // Money in on a CARD account is a payoff (card_payment), by design.
       var kind = addSheetKind(addMode, type, editingTxn ? editingTxn.kind : null);
@@ -16076,6 +16167,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       // ref, and the chip only holds it while its suggestion still matches.
       if (state.planLinkRef) payload.planRef = state.planLinkRef;
       if (salaryChipPending && kind === 'cash_in' && !editingTxn) payload.salary = true; // v74.53 (stress test #5)
+      if (kind === 'cash_in' && !editingTxn && category === 'Salary') payload.salary = true; // v75.43: picking Salary makes it the salary at any amount
       // v74.53 (stress test #14): a salary when one already landed within ~3 weeks asks first
       if (!editingTxn && kind === 'cash_in') {
         var expS = Number(state.base && state.base.salary) || 0;
@@ -16083,7 +16175,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         if (isSal) {
           var dNew = parseISO(payload.date || todayISO()), dup = null;
           (state.txns || []).forEach(function (x) {
-            if (x.kind !== 'cash_in' || !(x.salary || (expS > 0 && (Number(x.amount) || 0) >= 0.9 * expS))) return;
+            if (x.kind !== 'cash_in' || x.xfer || !(x.salary || (expS > 0 && (Number(x.amount) || 0) >= 0.9 * expS))) return;
             if (Math.abs((parseISO(x.date) - dNew) / 86400000) <= 20) dup = x;
           });
           if (dup && !window.confirm('You already logged a salary on ' + fmtDate(dup.date) + ' (' + money(dup.amount) + '). Log another one?')) return;
@@ -16113,7 +16205,12 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (addBusy) return;
       addBusy = true;
       var done = editId ? saveTxnEdit(editId, payload) : addTxn(payload);
-      done.then(function () { addBusy = false; }, function () { addBusy = false; });
+      // v75.43: editing one leg of a move carries the amount, date and note to the other leg
+      if (xMate) done = done.then(function () {
+        return saveTxnEdit(xMate.id, { date: payload.date, account: xMate.account, kind: xMate.kind, category: xMate.category,
+          amount: payload.amount, note: payload.note }, { quiet: true });
+      });
+      done.then(function () { addBusy = false; qsSeen(amtRaw); }, function () { addBusy = false; });
       done.then(function () {
         // v73.0: the good moments — salary in, card prepaid — Coach Fin
         // smiles for a beat (the flash reverts to the real mood on its own)
@@ -16285,7 +16382,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
 
     wireTestSpend(); tsResetResting(); // v74.00: the "Test a spend" row under the cycle strip (static markup, events wired once)
     var ab = byId('addBtn');
-    if (ab) ab.onclick = function () { setAddMode('spend'); openSheet('addSheet'); }; // v72.41: a fresh Add opens in Spend mode
+    if (ab) ab.onclick = function () { setAddMode('spend'); openSheet('addSheet'); };
+    qsHint(); // v75.43 // v72.41: a fresh Add opens in Spend mode
     // v72.41: the Add sheet's direction toggle (Spend / Pay card) — v73.8: + Money in
     var amS = byId('addModeSpend'), amP = byId('addModePrepay'), amM = byId('addModeMoneyin');
     if (amS) amS.onclick = function () { setAddMode('spend'); };

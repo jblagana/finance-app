@@ -253,8 +253,8 @@ def main():
     check("v54: home greeting has breathing room before the hero card",
           ".greet{padding:12px 18px 14px}" in html)
     check("switches to the Ledger tab right after an add", "setTab('ledger')" in js)
-    check("home greeting carries the name (Hooman when none is set)",
-          "'Hooman'" in js and "greet + ', ' + who + '!'" in js)
+    check("home greeting carries the name (v75.43 retarget: no made-up name when none is set)",
+          "greet + (who ? ', ' + who : '') + '!'" in js and "'Hooman'" not in js)
     check("coach LED is grey, not amber, when the online coach is not ready",
           ".coach-led{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--mut)" in html)
     check("'Your numbers': your name + cc prepay day labels, no stray placeholders",
@@ -460,7 +460,7 @@ def main():
           and "function openRecap() {" in js
           and "'73.2': [" in js)
     check("v73.14 (user: 'rename it to just Coming up' + 'the home tab is so full of info?' + the Fin AI backlog 'repeatable entries'): (1) the Money tab's 'Plans · coming up' heading is now 'Coming up'; (2) Home slim — the due strip is GONE (it previewed the Coming-up list two taps away) and the two AI cards are MERGED: the coach's note is the opening block (#coachNoteBlock) INSIDE the #coach card, so Home reads as one coach voice; (3) REPEATABLE ENTRIES — the repeat select gains 'daily', the form gains a count field (visible only when a repeat is picked; blank = the old window), the plan row carries count + overrides, and the 3-scope model (boss-confirmed) lands in resolveOccurrence: 'just this one' = an exact-date fork, 'this one and after' = applyFrom, 'all' = applyFrom at the series' first occurrence, skip hides the occurrence; (4) the per-occurrence edit sheet (#planEditSheet) — name/amount/date pre-filled from the RESOLVED occurrence + the scope select + skip-this-occurrence + explicit delete-whole-plan; forked dates wear an 'edited' pill; (5) the coach's math (insightsData week items + month plans + the Plan-due rows) reads RESOLVED occurrences, so forks and skips change what the coach says",
-          '<h2>Committed</h2>' in html and 'Plans · coming up' not in html  # v73.96: the heading is now "Committed" (the v73.14 "Coming up" rename is superseded)
+          '<h2>Bills &amp; plans</h2>' in html and 'Plans · coming up' not in html  # v75.43 retarget: Bills & plans  # v73.96: the heading is now "Committed" (the v73.14 "Coming up" rename is superseded)
           and 'id="coachNoteBlock"' in html and 'id="coachNote"' not in html
           and 'id="dueStrip"' not in html and 'id="dueBody"' not in html
           and '.coachnote-block{' in html
@@ -475,7 +475,7 @@ def main():
           and "'73.14': [" in js)
     check("v73.15 (user: 'the ui for coming up and the entries is so cluttered' — the mockup he approved): the Coming-up list renders SERIES, not projections — a recurring plan is ONE tappable row (name · 'Every <cadence> · next <date>' · count badge · amount 'each') that expands into occurrence sub-rows capped at 5 with '+N more…'; one-offs are plain rows with their own ✕; the 'recurring' pill is gone (the row IS the series), 'edited' survives on the head (any fork) and on the specific sub-row; the ✕ foot-gun left the list for series (delete-whole-plan lives in the edit sheet); the add form collapsed to the one-line '＋ Add a plan' trigger and now lives in #planSheet (bottom-sheet family); the v73.14 rows' unstyled .txn classes are replaced by the .plrow/.occ styles (the v18 ledger rework had deleted the old .txn CSS); the form's Amount label drops the '— number or quick sum' tail",
           'id="planSheet"' in html and 'id="planAddBtn"' in html and 'id="planAddClose"' in html
-          and '＋ New plan' in html and '<h2>Committed</h2>' in html  # v74.66 retarget: the button reads New plan  # v73.96: the tab heading is "Committed" (was "Coming up")
+          and '＋ New plan' in html and '<h2>Bills &amp; plans</h2>' in html  # v75.43 retarget  # v74.66 retarget: the button reads New plan  # v73.96: the tab heading is "Committed" (was "Coming up")
           and 'id="planForm"' in html and 'id="p_amount"' in html
           and "number or quick sum" not in html
           and ".plrow{" in html and ".occwrap{" in html and ".chev{" in html
@@ -846,7 +846,7 @@ def main():
     check("v73.52 (boss: 'when i log money in entry, i should be able to choose my cc accounts and that subtracts from my owed in that cc'): Money in on a CARD account is a PAYOFF — addSheetKind('moneyin'|'salary', 'CARD') = card_payment (owed − amt, free untouched, raw liquid − amt); on a cash account it is still cash_in. The Paid-with list is the SAME values in every mode (the pick survives a mode switch) — only the LABEL is mode-specific: in Money in the cards wear '· CC' so the payoff is legible. setAddMode re-seeds the list on every switch; the old 'Money in lands in a cash account' submit guard is gone; the deficit hint hides for a Money-in card pick (free is untouched — the hint would be a lie)",
           "if (mode === 'salary' || mode === 'moneyin') return type === 'CARD' ? 'card_payment' : 'cash_in';" in js
           and "var moneyin = addMode === 'moneyin';" in js
-          and "esc(a.name + (a.type === 'card' && moneyin ? ' · CC' : ''))" in js
+          and "esc(a.name + (a.type === 'card' && moneyin && !/\\bcc\\b|card/i.test(a.name) ? ' · card' : ''))" in js  # v75.43 retarget: no 'CC · CC'
           # v73.80 retarget: setAddMode's re-seed is now updateAddModeFields (the
           # field swap — the non-prepay branch still re-seeds f_account, the
           # prepay branch seeds f_payto/f_paywith); the v73.52 pin was the
@@ -1326,7 +1326,7 @@ def main():
           and "f_categoryCustom" not in html)
     check("add-sheet options = base budget names; Unsorted default when none",
           "Object.keys((state.base && state.base.budgets) || {})" in js
-          and "'>Unsorted</option>" in js and "selected>Unsorted</option>" in html)
+          and "(mi ? 'Other' : 'Unsorted') + '</option>'" in js and "selected>Unsorted</option>" in html)  # v75.43 retarget: Money in has its own list
     check("re-seeded automatically when the base changes (snap render list; v72.30: renderMoneyLog follows — a base save can file 'Adjustment' rows; v73.0: renderMood rides the same key; v73.2: the money pulse; v73.14: the due strip left the list; v73.33: renderRecap left — the Home recap card is gone; v73.74: reconRender rides the same key — a base save must repaint the Reconcile card)",
           "renderBaseStatus, renderCoachNote, seedCategories, renderMoneyLog, renderMood, reconRender]" in js)
     check("chat matches only stored budget names: no hint list, no 'Other' fallback",
@@ -1918,7 +1918,7 @@ def main():
           and ".pace .p .v.sm{font-size:12px;white-space:nowrap}" in html
           and "'73.95': [" in js)
     check("v73.96 (boss-approved mockup_committed_sections.html: 'use another colors for expenses and saving for and make the order home,committed,ledger,owed' + 'Ship it'): the Money tab is renamed COMMITTED (the other half of the hero's Free/unallocated — the money already spoken for) and sits second in the tab bar (Home · Committed · Ledger · Owed). It opens with a one-line summary: this cycle's committed total (the SAME cyclePlanDeduction math the hero's Plan dues row uses, so the tab proves the hero's number) + the % of free cash it speaks for. The plans list is SECTIONED by kind — Expenses (amber) / Saving for (blue) — inside the One-offs/Recurring tabs, each section label carrying the count + subtotal, goal rows tint their amount blue, and EMPTY sections are hidden. The add sheet gains the 'This is for' toggle (Expense default / Saving for); p.kind rides the record ('goal' or 'expense') and old plans (no field) migrate to expense. Smoke PART 39: the sections render with subtotals, the summary quotes cyclePlanDeduction + freeNet, and the kind round-trips through addPlan",
-          '<h2>Committed</h2>' in html and 'data-tab="money">Committed</button>' in html
+          '<h2>Bills &amp; plans</h2>' in html and 'data-tab="money">Plans</button>' in html  # v75.43 retarget: plain words
           and 'data-tab="home">Home</button>' in html and 'data-tab="ledger">Ledger</button>' in html and 'data-tab="owed">Owed</button>' in html
           and html.index('data-tab="home"') < html.index('data-tab="money"') < html.index('data-tab="ledger"') < html.index('data-tab="owed"')
           and 'id="committedSum"' in html and 'id="committedSumV"' in html and 'id="committedSumSub"' in html
@@ -2041,7 +2041,7 @@ def main():
     check("v74.76 (boss: 'find the bug on the spent today home tab entry that pollutes it' -> 'yes, fix it'): a friend's share paid on a card (the ipf theirs pair, theirsTxnId / theirsBumpId) is not spend — spendOf returns 0 for it (Spent today, donut, pace, coach, budgets) and the month recap does not count its cash advance as income; balances untouched. Smoke PART 59 (3)",
           "function isIpfTheirsTxn(id) {" in js
           and "if (t.id && isIpfTheirsTxn(t.id)) return 0;" in js
-          and "if (t.kind === 'cash_in') { if (!(t.id && isIpfTheirsTxn(t.id))) income += a; return; }" in js
+          and "if (t.kind === 'cash_in') { if (!(t.id && isIpfTheirsTxn(t.id)) && !t.xfer) income += a; return; }" in js  # v75.43 retarget: a move is not income
           and "PART 59: v74.76 - the ipf theirs pair stays out of Spent today" in smoke
           and "'74.76': [" in js)
     check("v74.75 (boss: 'check what to do or change in the current toast behavior' -> board 15b -> 'go'): every toast hides itself (8 s with Undo, 4 s without — most used to stay until swiped / replaced) with a time bar; the first 3 toasts for a recorded change add 'saved in History'; Unlinked and Moved-to-Committed get an Undo",
@@ -2184,7 +2184,7 @@ def main():
           and "'74.55': [" in js)
     check("v74.54 (stress test #6 #8 #13): the Add submit ignores a second tap while saving (addBusy); a future-dated spend asks first; evalExpr reads a comma before exactly three digits as a thousands separator",
           "var addBusy = false;" in js and "if (addBusy) return;" in js
-          and "done.then(function () { addBusy = false; }, function () { addBusy = false; });" in js
+          and "done.then(function () { addBusy = false; qsSeen(amtRaw); }, function () { addBusy = false; });" in js  # v75.43 retarget
           and "Logged now, it comes out of your cash today. Log it anyway?" in js
           and "t = t.replace(/(\\d),(?=\\d{3}(?!\\d))/g, '$1');" in js
           and "'74.54': [" in js)
@@ -2720,6 +2720,17 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.43 (boss: 'assess if the app is intuitive for a first timer ... combine the pay card tab' -> 'Yes, both'): Pay card is Move (pay a card, or move money between your own accounts as two linked legs t.xfer that are neither spend nor income nor the salary; one leg's delete / edit carries to the other); Money in says Into with Salary / Refund / Gift; plain words on Home; no made-up name; the quick-sum hint retires once used. Smoke PART 96",
+          "function addMove(from, to, amount, date, note) {" in js and "function moveMateOf(t) {" in js
+          and "if (t.xfer) return 0; // v75.43: the From leg of a move is not spending" in js
+          and "if (!t || t.xfer) return false; // v75.43: a move is never the salary" in js
+          and "if (t && t.xfer) return 0; // v75.43" in js
+          and "var rm = mate0 ? removeTxnRow(mate0.id) : null;" in js
+          and "r.xfer = t.xfer.slice(0, 40)" in js
+          and 'id="addModePrepay" class="amb">Move</button>' in html and 'id="f_paywithLabel" style="display:none">From</label>' in html
+          and "al.textContent = addMode === 'moneyin' ? 'Into' : 'Paid with';" in js and "var MONEYIN_CATS = ['Salary', 'Refund', 'Gift'];" in js
+          and 'class="lab ind">In your accounts</div>' in js and "</span>Coming out'" in js
+          and "PART 96: v75.43" in smoke and "'75.43': [" in js)
     check("v75.42 (boss: 'i logged my salary tday yet the headroom count to january 14'): a salary after payday inside the (extended) grace is flagged late (this cycle's), and past day 10 too unless it is within 5 days of the next payday",
           "if (received && received.date > w.start) received.late = true;" in js and "received.date < isoAdd(w.end, -4)" in js and "'75.42': [" in js)
     check("v75.40 (boss: 'fix the sync' -> 'ship it'): cloud sync marks only the state it actually uploaded as synced, keeps a sync asked for mid-upload (cloudPullPending) and follows up; a pull saves the merged base with its own edit time",
@@ -2854,7 +2865,7 @@ def main():
           and "if (e.c && e.c !== 'Unsorted')" in js
           and "See this cycle\\'s plans" in js
           and "daily spending not included</p>'" in js  # v75.12: the note moved under the graph
-          and '<span class="k">Liquid</span>' in js
+          and '<span class="k">In accounts</span>' in js  # v75.43 retarget: plain words
           and "document.hidden)) { el.textContent = fmt(to); return; }" in js
           and "PART 85: v75.07" in smoke
           and "'75.07': [" in js)

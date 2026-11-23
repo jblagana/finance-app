@@ -1325,6 +1325,7 @@ button.cmlink.pdnotpay{display:block;margin:10px auto 0;color:var(--bad);font-si
 .qsbar{border-radius:10px}
 .brow input,.brow select{border-radius:8px;padding:9px 10px}
 /* the Add sheet: segmented direction, the big amount, pill selects */
+.amrow.two{grid-template-columns:repeat(2,1fr)}
 .amrow{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:11px;background:var(--card2);margin:4px 0 6px}
 .amb{height:36px;border:0;border-radius:8px;padding:0;background:transparent;color:var(--mut);font-size:13px}
 .amb.on{background:var(--acc);color:var(--accInk)}
@@ -1889,7 +1890,7 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
     </div>
 
     <section id="hero" class="card hero" style="display:none">
-      <div class="hero-k"><span>Left to spend · after Committed</span><span class="hero-pill" id="heroPill"></span></div>
+      <div class="hero-k"><span>Left to spend · after bills &amp; plans</span><span class="hero-pill" id="heroPill"></span></div>
       <div class="hero-v" id="heroFree">—</div>
       <div class="hero-sub" id="heroSub"></div>
       <!-- v73.34: the cycle block — This cycle by default, tap Next cycle
@@ -1969,7 +1970,7 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
          the free cash it speaks for. The plans list below is sectioned
          Expenses (amber) / Saving for (blue) inside the One-offs/Recurring
          tabs. -->
-    <h2>Committed</h2>
+    <h2>Bills &amp; plans</h2>
     <!-- v74.66 (boss: 'redesign the commited tab' -> boards 12/12b/12c -> 'ship the committed redesign'): the top card says
          what is still to pay this cycle (+ a plain warning when it is more than the free cash); #plans holds This cycle /
          Saving for / All plans; a row tap opens the plan's sheet (#planDetSheet) -->
@@ -2312,7 +2313,7 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
       <div class="add-top" id="addTop">
       <div class="amrow">
         <button type="button" id="addModeSpend" class="amb on">Spend</button>
-        <button type="button" id="addModePrepay" class="amb">Pay card</button>
+        <button type="button" id="addModePrepay" class="amb">Move</button>
         <button type="button" id="addModeMoneyin" class="amb">Money in</button>
       </div>
       <!-- v74.58 (boss: 'make the add expense sheet shown fully on screen, the top remains where it is
@@ -2343,10 +2344,10 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
         <div>
           <label for="f_category" id="f_categoryLabel">Category</label>
           <select id="f_category"><option value="" selected>Unsorted</option></select>
-          <label for="f_payto" id="f_paytoLabel" style="display:none">Pay to</label>
-          <select id="f_payto" style="display:none"><option value="" selected>Cash</option></select>
+          <label for="f_paywith" id="f_paywithLabel" style="display:none">From</label>
+          <select id="f_paywith" style="display:none"><option value="CASH::Cash" selected>Cash</option></select>
           <!-- v74.24 look upgrade: the chip row mirrors whichever of the two selects is shown (renderAddChips) -->
-          <div class="chiprow" id="f_categoryChips" data-for="f_category,f_payto" data-dots="1"></div>
+          <div class="chiprow" id="f_categoryChips" data-for="f_category,f_paywith" data-dots="1"></div>
         </div>
       </div>
       <p id="chargeHint" class="note" style="display:none;margin:8px 0 0"></p>
@@ -2357,9 +2358,9 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
           <!-- v73.80: the Pay-card "Paid with" — the cash/debit account the
                payoff is funded from (the card pick moves to Pay to above).
                Hidden outside Pay card mode. -->
-          <label for="f_paywith" id="f_paywithLabel" style="display:none">Paid with</label>
-          <select id="f_paywith" style="display:none"><option value="CASH::Cash" selected>Cash</option></select>
-          <div class="chiprow" id="f_accountChips" data-for="f_account,f_paywith"></div>
+          <label for="f_payto" id="f_paytoLabel" style="display:none">To</label>
+          <select id="f_payto" style="display:none"><option value="" selected>Pick where it goes</option></select>
+          <div class="chiprow" id="f_accountChips" data-for="f_account,f_payto"></div>
         </div>
       </div>
       <!-- v73.53: the cashback flag — Money in on a CC where the money is
@@ -2535,7 +2536,7 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
       <section class="card set-list" style="margin-top:12px">
         <label class="set-sw"><span>Your numbers<small>accounts, salary, budgets</small></span><input type="checkbox" id="bkBase" checked style="width:auto"></label>
         <label class="set-sw"><span>Ledger<small>every entry</small></span><input type="checkbox" id="bkTxns" checked style="width:auto"></label>
-        <label class="set-sw"><span>Plans<small>everything in Committed</small></span><input type="checkbox" id="bkPlans" checked style="width:auto"></label>
+        <label class="set-sw"><span>Plans<small>everything in Bills &amp; plans</small></span><input type="checkbox" id="bkPlans" checked style="width:auto"></label>
         <label class="set-sw"><span>Owed<small>people + entries</small></span><input type="checkbox" id="bkOwed" checked style="width:auto"></label>
         <label class="set-sw"><span>Money log<small>balance history + overlay</small></span><input type="checkbox" id="bkLog" checked style="width:auto"></label>
         <label class="set-sw"><span>Coach chat<small>your conversation with Fin</small></span><input type="checkbox" id="bkChat" checked style="width:auto"></label>
@@ -2670,7 +2671,7 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 <nav id="bottombar" aria-label="Sections">
   <div id="tabs">
     <button type="button" class="tab active" data-tab="home">Home</button>
-    <button type="button" class="tab" data-tab="money">Committed</button>
+    <button type="button" class="tab" data-tab="money">Plans</button>
     <button type="button" class="addbtn" id="addBtn" aria-label="Add expense">+</button>
     <button type="button" class="tab" data-tab="ledger">Ledger</button>
     <button type="button" class="tab" data-tab="owed">Owed</button>

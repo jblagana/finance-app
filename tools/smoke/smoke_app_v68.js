@@ -606,10 +606,10 @@ waitReady().then(async function (F) {
   F.setAddMode('moneyin');
   await sleep(20);
   var miOpts = (accSel.innerHTML || '').split('<option');
-  ok(miOpts.some(function (o) { return o.indexOf('CARD::Maya CC') >= 0 && o.indexOf('· CC') >= 0; }),
-    'v73.52: Money in offers Maya CC in Paid with, labeled "· CC"');
-  ok(miOpts.some(function (o) { return o.indexOf('CARD::MariBank CC') >= 0 && o.indexOf('· CC') >= 0; }),
-    'v73.52: Money in offers MariBank CC in Paid with, labeled "· CC"');
+  ok(miOpts.some(function (o) { return o.indexOf('CARD::Maya CC') >= 0 && o.indexOf('· CC') < 0 && o.indexOf('· card') < 0; }),
+    'v73.52 (v75.43 retarget): Money in offers Maya CC, without a second "CC"');
+  ok(miOpts.some(function (o) { return o.indexOf('CARD::MariBank CC') >= 0 && o.indexOf('· CC') < 0; }),
+    'v73.52 (v75.43 retarget): Money in offers MariBank CC, without a second "CC"');
   ok(miOpts.some(function (o) { return o.indexOf('value="CASH::Cash"') >= 0; }),
     'v73.52: Money in keeps Cash as the default option');
   F.setAddMode('spend');
@@ -2959,8 +2959,8 @@ waitReady().then(async function (F) {
       // record ('goal' | 'expense'); old plans (no field) are expenses.
       console.log('\n== PART 39: v73.96 - the Committed tab (sections + summary) =');
       var html39 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
-      ok(html39.indexOf('<h2>Committed</h2>') >= 0, 'v73.96: the tab heading is Committed');
-      ok(html39.indexOf('data-tab="money">Committed</button>') >= 0, 'v73.96: the bottom-bar label is Committed');
+      ok(html39.indexOf('<h2>Bills &amp; plans</h2>') >= 0, 'v73.96 (v75.43 retarget): the tab heading is Bills & plans');
+      ok(html39.indexOf('data-tab="money">Plans</button>') >= 0, 'v73.96 (v75.43 retarget): the bottom-bar label is Plans');
       // the tab order: Home < Committed < Ledger < Owed (the + button sits between)
       ok(html39.indexOf('data-tab="home"') < html39.indexOf('data-tab="money"') &&
          html39.indexOf('data-tab="money"') < html39.indexOf('data-tab="ledger"') &&
@@ -4541,6 +4541,23 @@ waitReady().then(async function (F) {
       ok(cd42c.received && cd42c.received.id === s42c && !cd42c.received.late, 'v75.42: 3 days before the next payday it is the next salary arriving early');
       await F.deleteTxn(s42c); await sleep(40);
       if (gcPrev42) st.base.salary_grace_cycle = gcPrev42; st.base.as_of = asOfPrev42;
+      // ============ PART 96: v75.43 - Move between your own accounts ============
+      console.log('\n== PART 96: v75.43 - a move is neither spend nor income, and its legs travel together ==');
+      var snap96 = F.effectiveSnap(), free96 = snap96.cash.free, liq96 = snap96.cash.total;
+      var ids96 = await F.addMove('Cash', 'LandBank', 46615, F.todayISO(), '');
+      await sleep(60);
+      var legs96 = st.txns.filter(function (t) { return t.xfer && ids96.indexOf(t.id) >= 0; });
+      ok(legs96.length === 2 && legs96[0].xfer === legs96[1].xfer, 'v75.43: a move files two linked legs');
+      var out96 = legs96.filter(function (t) { return t.kind === 'cash_out'; })[0], in96 = legs96.filter(function (t) { return t.kind === 'cash_in'; })[0];
+      ok(out96 && out96.account === 'Cash' && in96 && in96.account === 'LandBank' && out96.note === 'Cash \u2192 LandBank', 'v75.43: From leaves Cash, To lands in LandBank, the note names both');
+      var snapB96 = F.effectiveSnap();
+      ok(Math.abs(snapB96.cash.free - free96) < 0.005 && Math.abs(snapB96.cash.total - liq96) < 0.005, 'v75.43: liquid and free cash do not move');
+      ok(F.spendOf(out96) === 0 && F.spendOf(in96) === 0, 'v75.43: neither leg is spending');
+      var cd96 = F.cycleDataFor(F.todayISO().slice(0, 7), st.base);
+      ok(!(cd96.received && cd96.received.id === in96.id), 'v75.43: a salary-sized move is never read as the salary');
+      F.deleteTxnFromLog(out96.id); await sleep(80);
+      ok(!st.txns.some(function (t) { return t.id === out96.id || t.id === in96.id; }), 'v75.43: deleting one leg removes the other');
+      ok(Math.abs(F.effectiveSnap().cash.free - free96) < 0.005, 'v75.43: free cash unchanged after the delete');
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);

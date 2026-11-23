@@ -1,3 +1,11 @@
+## 2026-11-23 - "assess if the app is intuitive for a first timer, are there parts that can be combined like maybe the pay card tab in the add expense sheet idk, are the add entries so overwhelming for a new user, what can be done" -> (assessed: the Add sheet is lean; the friction is wording and the Pay card tab) -> "Yes, both" (the quick wording fixes + the Move tab)
+Status: **done** - v75.43 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] Pay card -> Move: From (Cash / banks) -> To (a card = the same card_payment as before; Cash or a bank = two linked legs, cash_out + cash_in sharing t.xfer). A move is not spend, income, a refund or the salary; deleting or editing one leg carries to the other; the Ledger day total skips it. Hidden until there is a card or a bank account besides Cash.
+- [x] Money in: "Into", categories Other / Salary / Refund / Gift (Salary = the salary at any amount), no "CC · CC".
+- [x] Plain words: In your accounts, Coming out, Bills & plans (tab: Plans), "after bills & plans"; no "Hooman"; the quick-sum hint retires once used.
+- [x] Smoke PART 96 + check_site v75.43 (old checks retargeted); headless Chromium UI pass (21 checks: move via chips, edit + delete + Undo of a leg, card payment, same-account guard, Money in, 320/430 px, no JS errors).
+- Not done (offered): a tap-to-explain (i) per Home number, and "Split with..." on Spend.
+
 ## 2026-11-23 - "make an exhaustive sim of the owed sync feature, like multiple edits on each detail while still pending cofirmation, edtiting the ledger entry equivalent only details not amount, etc, plan first" -> "Yes, run it"
 Status: **simulation done, report only (no app changes)**. Tested v75.42 (`83ea393`) with the new `tools/stress/stress_owed.js` (group W): two headless Chromium profiles (Ana, Ben) plus a third (Ana's second phone, restored from her backup), synthetic smoke seed, the real invite link, app encryption and IndexedDB, and a relay mailbox the test controls (hold, in order, reversed, duplicated, lost, offline). Firebase and every outside host blocked; no LLM calls. **70 checks, 55 passed, 15 failed: 5 distinct defects + 1 expected gap.**
 
