@@ -7618,6 +7618,7 @@
     }
   }
   function renderInsights() {
+    renderStart(); // v75.53: the Get started card follows every change that could tick a step
     var wrap = byId('insights'), body = byId('insBody');
     if (!wrap || !body) return;
     var d = insightsData();
@@ -8250,6 +8251,7 @@
   function peekGo(off) {
     off = Math.max(0, Math.min(PEEK_MAX, off));
     state.cycleMode = off ? 'next' : 'this'; state.cycleOff = off || 1;
+    if (off && !startGet().peek) { startSet('peek', true); renderStart(); } // v75.53: ticks Peek at next cycle
     state.cbPlansOpen = false; state.cbPlansMore = false;
     renderCycleBlock(); renderSpark();
   }
@@ -14204,12 +14206,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.52, live: new Date(2026, 10, 24, 2, 51) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.53, live: new Date(2026, 10, 24, 2, 58) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.53': [
+      'Home: a Get started card lists five steps - accounts, salary day, your first expense, a bill or plan, and a peek at next cycle. Each ticks itself once done; tap one and it shows you where. Show me around is the new tour, and Settings › Replay tour plays it again.'
+    ],
     '75.52': [
       'Home: in a cycle ahead, Saving for and Everyday spending fold like the other rows - tap them for the pots and where the number comes from.'
     ],
@@ -15716,11 +15721,87 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       window.__financeChat.startSetup();
     }
   }
+  // v75.53 (boss: 'redo the tour, mockup first' -> 'Build B with A'): the old 3-step tour (balances, +, Ledger) is
+  // replaced by (B) a Get started card on Home - five real steps that tick themselves once done, each tap points at the
+  // real control with a Do it button - and (A) Show me around, a 5-stop spotlight (the hero card, the cycle arrows, +,
+  // Plans and the Ledger, Owed) that shows a sample when the book is still empty. Settings > Replay tour plays A and
+  // brings the card back if it was hidden.
+  var START_LS = 'fin.start.v1'; // {hide, peek} - this phone only
+  function startGet() { try { return JSON.parse(localStorage.getItem(START_LS) || '{}') || {}; } catch (e) { return {}; } }
+  function startSet(k, v) { var o = startGet(); o[k] = v; try { localStorage.setItem(START_LS, JSON.stringify(o)); } catch (e) {} }
+  function startSteps() {
+    var b = state.base || {}, o = startGet();
+    return [
+      { k: 'acc', t: 'Add your accounts and cash', s: 'what you have today', done: (b.accounts || []).length > 0 },
+      { k: 'sal', t: 'Set your salary day', s: 'your salary and the day it lands', done: (Number(b.salary) || 0) > 0 },
+      { k: 'exp', t: 'Log your first expense', s: 'tap + · amount · how you paid', done: (state.txns || []).some(function (t) { return !t.xfer && (t.kind === 'card_charge' || t.kind === 'cash_out'); }) },
+      { k: 'plan', t: 'Add a bill or plan', s: 'Plans · + Plan', done: (state.plans || []).length > 0 },
+      { k: 'peek', t: 'Peek at next cycle', s: 'the arrows on the Home card', done: !!o.peek }
+    ];
+  }
+  function renderStart() {
+    var el = byId('startCard');
+    if (!el) return;
+    var st = startSteps(), n = st.filter(function (x) { return x.done; }).length;
+    if (startGet().hide || n === st.length) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    var nextK = null;
+    st.forEach(function (x) { if (!x.done && !nextK) nextK = x.k; });
+    el.innerHTML = '<div class="sthd"><span class="stt">Get started</span><span class="stn">' + n + ' of ' + st.length + '</span></div>' +
+      '<div class="stbar" aria-hidden="true"><i style="width:' + Math.round(n / st.length * 100) + '%"></i></div>' +
+      st.map(function (x) {
+        var inner = (x.done ? '<span class="stc" role="img" aria-label="Done">✓</span>' : '<span class="stc" aria-hidden="true"></span>') + '<span class="stx"><span class="stl">' + esc(x.t) + '</span>' + (x.k === nextK ? '<small>' + esc(x.s) + '</small>' : '') + '</span>';
+        return x.done ? '<div class="strow done">' + inner + '</div>'
+          : '<button type="button" class="strow' + (x.k === nextK ? ' next' : '') + '" data-st="' + x.k + '">' + inner + '</button>';
+      }).join('') +
+      '<div class="stfoot"><button type="button" id="startHide">Hide</button><button type="button" id="tourStart">Show me around ›</button></div>';
+    el.onclick = function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('button') : null;
+      if (!b) return;
+      if (b.id === 'startHide') { startSet('hide', true); renderStart(); snack('Hidden. Settings › Replay tour brings it back.'); return; }
+      if (b.id === 'tourStart') { tourRun('tour', false); return; }
+      if (b.getAttribute('data-st')) tourRun(b.getAttribute('data-st'), false);
+    };
+  }
+  function isShown(el) { return !!(el && el.offsetWidth && el.offsetHeight); }
+  function tabBtn(t) { return document.querySelector('#tabs [data-tab="' + t + '"]'); }
+  function unionBox(a, b) { // one ring around two controls
+    return { getBoundingClientRect: function () {
+      var r1 = a.getBoundingClientRect(), r2 = b.getBoundingClientRect();
+      var l = Math.min(r1.left, r2.left), t = Math.min(r1.top, r2.top), r = Math.max(r1.right, r2.right), bt = Math.max(r1.bottom, r2.bottom);
+      return { left: l, top: t, right: r, bottom: bt, width: r - l, height: bt - t };
+    } };
+  }
+  function tourStops(kind) {
+    var hero = byId('hero'), heroOn = isShown(hero), home = heroOn ? hero : (isShown(byId('homeEmpty')) ? byId('homeEmpty') : byId('homeGreet'));
+    var arrows = byId('cbSegCycle'), arrowsOn = isShown(arrows);
+    var numsAt = isShown(byId('homeOpenSet')) ? byId('homeOpenSet') : byId('setBtn');
+    var openNums = function () { openSheet('numSheet'); };
+    var SAMPLE_HERO = '<small>Example</small><small>Left to spend · after bills &amp; plans</small><b>PHP 8,420.00</b><small>this cycle · 6 days left</small>';
+    var SAMPLE_STEP = '<small>Example</small><div class="tsstep"><span aria-hidden="true">‹</span>Next cycle<span aria-hidden="true">›</span></div>';
+    if (kind === 'tour') return [
+      { el: home, t: 'Your money at a glance', c: 'Left to spend is what is left of this cycle once your bills and plans are paid. It moves with every entry.', sample: heroOn ? '' : SAMPLE_HERO },
+      { el: arrowsOn ? arrows : home, t: 'Peek ahead', c: 'The arrows step through the next 5 cycles: what carries over, your salary, what is coming out and what is free at the end.', sample: arrowsOn ? '' : SAMPLE_STEP },
+      { el: byId('addBtn'), t: 'Add anything with +', c: 'Expense, Money in, or Move between your accounts. Type the amount, pick how you paid, and you are done.' },
+      { el: unionBox(tabBtn('money'), tabBtn('ledger')), t: 'Plans and the Ledger', c: 'Plans holds your bills, debts and what you are saving for. The Ledger lists each day; tap a day for its breakdown.' },
+      { el: tabBtn('owed'), t: 'Owed', c: 'Keep track of who owes whom. Link a friend and the entries show up on both phones.' }
+    ];
+    var P = {
+      acc: { el: numsAt, t: 'Add your accounts and cash', c: 'Your numbers holds your bank accounts, cash and cards. Add what you have today.', act: openNums },
+      sal: { el: numsAt, t: 'Set your salary day', c: 'In Your numbers, fill in your salary and the day it lands. The Home card then follows your pay cycle.', act: openNums },
+      exp: { el: byId('addBtn'), t: 'Log your first expense', c: 'Tap +, type the amount and pick how you paid.', act: function () { byId('addBtn').click(); } },
+      plan: { el: tabBtn('money'), t: 'Add a bill or plan', c: 'In Plans, tap + Plan for a bill, a debt or something you are saving for.', act: function () { setTab('money'); var hp = byId('hdPlan'); if (hp) hp.click(); } },
+      peek: arrowsOn
+        ? { el: arrows.querySelector('[data-step="1"]') || arrows, t: 'Peek at next cycle', c: 'Tap › to see the next cycle: what carries over, your salary, and what is free at the end.', act: function () { peekGo(1); } }
+        : { el: numsAt, t: 'Peek at next cycle', c: 'The arrows show up on the Home card once your salary is set.', act: openNums, doLabel: 'Set salary' }
+    };
+    return P[kind] ? [P[kind]] : [];
+  }
+  var tourRun = function () {};
   function bindUserTour() {
     var dialog = byId('userTour');
     if (!dialog || typeof dialog.showModal !== 'function') return;
-    var step = 0, replay = false, originTab, target;
-    var titles = ['Start with your balances', 'Log an expense', 'Read your ledger'];
+    var step = 0, replay = false, originTab, target, stops = [], point = false, pending = null;
     var card = byId('tourCard'), ring = byId('tourFocus');
     function position() {
       if (!dialog.open || !target) return;
@@ -15735,53 +15816,51 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         below + height < room - 8 ? below : rect.top - height - 14)) + 'px';
     }
     function render() {
-      setTab(step === 2 ? 'ledger' : 'home');
-      var setup = byId('homeOpenSet');
-      target = step === 0 ? (setup.offsetWidth ? setup : byId('setBtn')) :
-        step === 1 ? byId('addBtn') : document.querySelector('[data-tab="ledger"]');
-      target.scrollIntoView({ block: 'nearest' });
-      byId('tourCount').textContent = (step + 1) + ' of 3';
-      byId('tourTitle').textContent = titles[step];
-      byId('tourCopy').textContent = [
-        target === setup ? 'Choose “Add them yourself” to enter your cash and account balances.' : 'Open Settings to review your accounts and balances.',
-        'Tap + to enter an amount and choose how you paid.',
-        'The Ledger shows the last 15 days. Tap today in this example for a spending breakdown.'
-      ][step];
-      byId('tourSample').hidden = step !== 2;
-      byId('tourDetail').hidden = true;
-      byId('tourDay').setAttribute('aria-expanded', 'false');
-      byId('tourBack').textContent = step ? 'Back' : 'Skip tour';
-      byId('tourNext').textContent = step === 2 ? 'Done' : 'Next';
+      var s = stops[step];
+      target = s.el;
+      if (target && target.scrollIntoView) target.scrollIntoView({ block: 'nearest' });
+      byId('tourCount').textContent = point ? 'Get started' : (step + 1) + ' of ' + stops.length;
+      byId('tourTitle').textContent = s.t;
+      byId('tourCopy').textContent = s.c;
+      var smp = byId('tourSample');
+      smp.innerHTML = s.sample || '';
+      smp.hidden = !s.sample;
+      byId('tourBack').textContent = point ? 'Not now' : (step ? 'Back' : 'Skip tour');
+      byId('tourNext').textContent = point ? (s.doLabel || 'Do it') : (step === stops.length - 1 ? 'Done' : 'Next');
       position();
       byId('tourTitle').focus({preventScroll:true});
     }
-    function start(fromSettings) {
+    tourRun = function (kind, fromSettings) {
       if (dialog.open) return;
       replay = fromSettings;
       var active = document.querySelector('.tab.active');
       originTab = active ? active.getAttribute('data-tab') : 'home';
-      if (replay) closeSheets();
+      if (replay) { closeSheets(); startSet('hide', false); renderStart(); }
+      setTab('home');
+      point = kind !== 'tour'; pending = null;
+      stops = tourStops(kind);
+      if (!stops.length) return;
       step = 0;
       dialog.showModal();
       render();
-    }
-    byId('tourStart').onclick = function () { start(false); };
-    byId('tourReplay').onclick = function () { start(true); };
-    byId('tourBack').onclick = function () { if (step) { step--; render(); } else dialog.close(); };
-    byId('tourNext').onclick = function () { if (step < 2) { step++; render(); } else dialog.close(); };
-    byId('tourDay').onclick = function () {
-      var detail = byId('tourDetail');
-      detail.hidden = !detail.hidden;
-      this.setAttribute('aria-expanded', String(!detail.hidden));
-      position();
+    };
+    byId('tourReplay').onclick = function () { tourRun('tour', true); };
+    byId('tourBack').onclick = function () { if (!point && step) { step--; render(); } else dialog.close(); };
+    byId('tourNext').onclick = function () {
+      if (point) { pending = stops[0].act || null; dialog.close(); return; }
+      if (step < stops.length - 1) { step++; render(); } else dialog.close();
     };
     dialog.onclose = function () {
       setTab(originTab);
       if (replay) openSheet('setSheet');
-      byId(replay ? 'tourReplay' : 'tourStart').focus();
+      var act = pending; pending = null;
+      if (act) { act(); return; }
+      var back = byId(replay ? 'tourReplay' : 'tourStart');
+      if (back) back.focus();
     };
     window.addEventListener('resize', position);
     window.addEventListener('scroll', position, true);
+    renderStart();
   }
 
   function currentTab() {
@@ -16071,6 +16150,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     insightsData: insightsData, // v73.2: the insight math (coachRows' input)
     syncScrollLock: syncScrollLock, // v74.81: the sheet lock (smoke: it never moves the page)
     spentTodayData: spentTodayData, // v74.77: the Spent today popover's rows (the smoke checks them against todaySpend)
+    startSteps: startSteps, renderStart: renderStart, // v75.53
     renderInsights: renderInsights, // v73.94: the 3-cell strip render (smoke PART 38 drives it)
     dayMonth: dayMonth, // v73.94: the date label (smoke PART 38 builds the expected title)
     // v73.75: renderProjection is GONE with the card (the v73.42 export dies too)

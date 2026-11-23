@@ -4688,6 +4688,20 @@ waitReady().then(async function (F) {
       var c102b = String(byIdStub('cycleBlock').innerHTML || '');
       ok(/class="cbsub"><span class="sl">(Your budgets|Your average|Not counted|No budgets)/.test(c102b), 'v75.52: opened, the source shows as a sub-row');
       st.cbEvOpen = false; st.cbDeductOpen = false; F.peekGo(0);
+      // ============ PART 103: v75.53 - Get started ============
+      console.log('\n== PART 103: v75.53 - the Get started steps tick themselves ==');
+      var ls103 = {}, gi103 = global.localStorage.getItem, si103 = global.localStorage.setItem;
+      global.localStorage.getItem = function (k) { return Object.prototype.hasOwnProperty.call(ls103, k) ? ls103[k] : null; };
+      global.localStorage.setItem = function (k, v) { ls103[k] = String(v); };
+      var plans103 = st.plans; st.plans = [];
+      var s103 = F.startSteps(), by103 = {}; s103.forEach(function (x) { by103[x.k] = x.done; });
+      ok(s103.length === 5 && by103.acc && by103.sal && !by103.plan && !by103.peek, 'v75.53: five steps; accounts and salary done, no plan and no peek yet (' + JSON.stringify(by103) + ')');
+      ok(by103.exp === st.txns.some(function (t) { return !t.xfer && (t.kind === 'card_charge' || t.kind === 'cash_out'); }), 'v75.53: the expense step follows a real (non-Move) expense');
+      st.plans = plans103;
+      F.peekGo(1); F.peekGo(0);
+      var s103b = F.startSteps();
+      ok(s103b[4].done && s103b[3].done === (st.plans.length > 0), 'v75.53: stepping to the next cycle ticks Peek; a plan ticks Add a bill or plan');
+      global.localStorage.getItem = gi103; global.localStorage.setItem = si103;
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);

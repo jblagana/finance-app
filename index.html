@@ -1831,8 +1831,19 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 #tourCard p{margin:5px 0 12px}
 .tourActions{display:flex;gap:10px}.tourActions button{flex:1}
 #tourSample{background:var(--card2);padding:10px;border-radius:10px;margin-bottom:12px}
-#tourSample button{width:100%;color:var(--ink);background:transparent;border:0;text-align:left;font:inherit}
-.tourBars{display:flex;height:34px;gap:4px;align-items:end;margin:6px 0}.tourBars i{background:var(--mut);height:4px;flex:1;border-radius:3px}.tourBars i:last-child{height:30px;background:var(--warn)}
+#tourSample small{display:block;color:var(--mut);font-size:12px}#tourSample b{display:block;color:var(--ink);font-size:22px;margin:2px 0}
+.tsstep{display:flex;justify-content:space-between;align-items:center;color:var(--ink);font-weight:600}.tsstep span{color:var(--acc);font-size:20px;padding:0 8px}
+/* v75.53: Get started */
+.startcard .sthd{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.startcard .stt{font-weight:700;color:var(--ink);font-size:16px}.startcard .stn{font-size:12px;color:var(--mut);white-space:nowrap}
+.stbar{height:5px;background:var(--card2);border-radius:3px;margin:8px 0 6px;overflow:hidden}.stbar i{display:block;height:100%;background:var(--acc);border-radius:3px}
+.strow{display:flex;gap:10px;align-items:flex-start;width:100%;box-sizing:border-box;text-align:left;background:transparent;border:0;color:var(--ink);font:inherit;padding:8px 6px;border-radius:10px;margin:0}
+.strow .stc{flex:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--mut);box-sizing:border-box;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;color:var(--bg)}
+.strow.done{color:var(--mut)}.strow.done .stl{text-decoration:line-through}.strow.done .stc{border-color:var(--ok);background:var(--ok)}
+.strow.next{background:var(--card2)}.strow.next .stc{border-color:var(--acc)}
+.strow small{display:block;color:var(--mut);font-size:12px;margin-top:1px}.strow .stx{flex:1;min-width:0}
+.stfoot{display:flex;justify-content:space-between;margin-top:4px}
+.stfoot button{background:transparent;border:0;font:inherit;color:var(--mut);padding:8px 4px}.stfoot #tourStart{color:var(--acc);font-weight:600}
 </style></head>
 
 <body>
@@ -1887,6 +1898,8 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
       <h2 class="greet-h" id="greetHello">Hello</h2>
       <p class="greet-d" id="greetDate"></p>
     </div>
+    <!-- v75.53: Get started - five real steps that tick themselves; Show me around plays the tour -->
+    <section id="startCard" class="card startcard" aria-label="Get started" hidden></section>
 
     <div id="homeEmpty" class="card" style="display:none">
       <p class="note" style="margin:2px 0">You haven’t added your numbers yet. Set them up with the coach, or add your accounts, salary, debts and budgets yourself — the insights appear here once they exist.</p>
@@ -1894,7 +1907,6 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
         <button class="act" id="homeCoach" type="button">Set up with the coach</button>
         <button class="act ghost" id="homeOpenSet" type="button">Add them yourself</button>
       </div>
-      <button type="button" id="tourStart" class="act ghost" style="margin-top:10px">Take a quick tour</button>
     </div>
 
     <section id="hero" class="card hero" style="display:none">
@@ -2669,10 +2681,7 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
   <div id="tourFocus" aria-hidden="true"></div>
   <section id="tourCard">
     <small id="tourCount"></small><h2 id="tourTitle" tabindex="-1"></h2><p id="tourCopy"></p>
-    <div id="tourSample" hidden><strong>Example · ₱185</strong>
-      <button id="tourDay" type="button" aria-expanded="false" aria-controls="tourDetail" aria-label="Show or hide example spending for today"><span class="tourBars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>Today ▾</button>
-      <span id="tourDetail" hidden>Food · ₱185</span>
-    </div>
+    <div id="tourSample" hidden></div>
     <div class="tourActions"><button class="act ghost" type="button" id="tourBack"></button><button class="act" type="button" id="tourNext"></button></div>
   </section>
 </dialog>

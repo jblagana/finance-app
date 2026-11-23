@@ -2734,6 +2734,10 @@ def main():
           "function owedFollowLedger(tid) {" in js and "function owedUnlinkTxn(tid) {" in js and "function connResendWaiting(p) {" in js
           and "'You both changed it at once - check their version'" in js and "owedCatOptions((had && had.cat) || 'Unsorted')" in js
           and "PART 98: v75.45" in smoke and "'75.45': [" in js)
+    check("v75.53 (boss: 'redo the tour, mockup first' -> 'Build B with A'): a Get started card on Home (#startCard) with five self-ticking steps (startSteps), each tap points at the real control with Do it; Show me around (#tourStart) plays a 5-stop tour (hero, arrows, +, Plans and Ledger, Owed) with samples on an empty book; Replay tour brings the card back",
+          'id="startCard"' in html and "function startSteps() {" in js and "function tourStops(kind) {" in js
+          and "tourRun('tour', true)" in js and "startSet('peek', true)" in js and 'id="tourDay"' not in html
+          and "PART 103: v75.53" in smoke and "'75.53': [" in js)
     check("v75.52 (boss: 'the hero card peeks such as the saving for should only show details when expnded just ike the rest of the rows'): in a cycle ahead Saving for (cbSaveRow) and Everyday spending (cbEvRow) are folded rows; the pots and the everyday source (with the v75.50 switch) show only when opened",
           'id="cbEvRow" role="button"' in js and "state.cbEvOpen = !state.cbEvOpen;" in js
           and "Everyday spending<small>" not in js and "Saving for<small>" not in js

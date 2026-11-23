@@ -1,3 +1,10 @@
+## 2026-11-24 - "redo the tour, mockup first" -> "Build B with A"
+Status: **done** - v75.53 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] B: a Get started card at the top of Home (#startCard) with five steps that tick themselves (startSteps): accounts, salary, a first non-Move expense, a plan, a peek at the next cycle (peekGo sets fin.start.v1 peek). Tapping a step spotlights the real control with Not now / Do it (Do it opens Your numbers, the add sheet, + Plan, or steps the peek). Hide hides it on this phone; it disappears when all 5 are done.
+- [x] A: Show me around (and Settings > Replay tour) plays 5 stops - the hero card, the cycle arrows, +, Plans and the Ledger, Owed - with a sample hero / arrows when the book is empty. Replay tour also brings back a hidden card. The old 3-step tour (balances, +, Ledger sample day) and the empty card's "Take a quick tour" button are gone.
+- [x] Checked headless at 320 and 390 px on an empty book and the synthetic seed (32 checks: every stop's card inside the screen and clear of the ring, Do it opens the add sheet, peeking ticks, Hide, Replay); smoke PART 103; check_site v75.53.
+- Not checked on the phone.
+
 ## 2026-11-24 - "the hero card peeks such as the saving for should only show details when expnded just ike the rest of the rows"
 Status: **done** - v75.52 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] In a cycle ahead, Saving for (cbSaveRow, state.cbSaveOpen) and Everyday spending (cbEvRow, state.cbEvOpen) are folded rows like Plan dues; opened, Saving for lists each pot's top-up (name · date · amount) and Everyday shows where the number comes from, with the v75.50 average switch on that sub-row.
