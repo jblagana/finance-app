@@ -1,3 +1,8 @@
+## 2026-11-24 - "live check the tour if it looks great for all steps"
+Status: **done** - v75.55 pushed to https://github.com/jblagana/finance-app.git (main).
+- Live check on the site (pane, 375 px, an empty book; only Next / Not now tapped, nothing written): all stops rendered inside the screen. Found: the Plans-and-Ledger stop drew one ring that took in the + between them; on an empty book stops 1-2 ringed the empty card while talking about Left to spend.
+- [x] Plans and Ledger are separate stops (6 stops now; unionBox gone); on an empty book stop 1 says the card turns into Left to spend once your numbers are in; contractions in the copy. Headless 320/390 rerun green; check_site v75.55.
+
 ## 2026-11-24 - "for the average everyday spend, make it avergae of last 2 cycles, weighted to account for incomplete cycles say a cycle only has 15days worth of data so average base on that 15 and not the entire cycle"
 Status: **done** - v75.54 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] everydayFor (no budgets, average on): a per-day rate over the last 2 full cycles, counting only the days from your first entry on (a quiet day after that is a real 0 day), times the days in the cycle ahead. Plan payments, Moves and friends' shares stay out. Confirmed with the boss before building.
