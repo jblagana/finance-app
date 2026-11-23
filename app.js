@@ -35,7 +35,7 @@
     cbPlansMore: false, // v73.39: the peek's "+N more…" second-level expansion (in-memory, defaults collapsed)
     cbCardsOpen: false, // v73.93: the this-cycle Cards owed row expansion (in-memory, defaults collapsed)
     cbFriendsOpen: false, cbOwedInOpen: false, // v74.97: To pay back / Owed to you expansions (in-memory)
-    cbDeductOpen: false, cbSaveOpen: false, // v74.98: the Deductions group + Saving for pots (in-memory, folded by default)
+    cbDeductOpen: false, cbSaveOpen: false, cbEvOpen: false, // v74.98: the Deductions group + Saving for pots (in-memory, folded by default)
     coachPlansMore: false // v73.68: the coach's Plans group "+N more…" (in-memory, defaults collapsed to 4 rows)
   };
 
@@ -8391,11 +8391,21 @@
         }
       }
       // v74.69: the pots' top-ups due in the window (as if you tap Add)
-      if (p.potTotal > 0.004) rows += '<div class="cbrow"><div class="lab">Saving for<small>' + (p.potItems || []).map(function (it) { return esc(it.name) + (it.starts ? ' (starts)' : ' ' + dayMonth(it.date)); }).join(', ') + '</small></div><div class="amt goalv">− ' + money(p.potTotal) + '</div></div>';
+      // v75.52 (boss: 'the hero card peeks such as the saving for should only show details when expnded just ike the rest of the rows'):
+      // Saving for and Everyday spending fold like Plan dues - the pots / where the number comes from show on a tap
+      if (p.potTotal > 0.004) {
+        var pItems = p.potItems || [], pOpen = !!state.cbSaveOpen;
+        rows += '<div class="cbrow cbsave" id="cbSaveRow" role="button" tabindex="0" aria-expanded="' + (pOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (pOpen ? ' open' : '') + '">▸</span>Saving for' + (pItems.length ? ' · ' + pItems.length : '') + '</div><div class="amt goalv">− ' + money(p.potTotal) + '</div></div>';
+        if (pOpen) rows += '<div class="cbsubwrap">' + pItems.map(function (it) {
+          return '<div class="cbsub"><span class="sl">' + esc(it.name) + (it.date ? (it.starts ? ' · starts ' : ' · ') + dayMonth(it.date) : (it.starts ? ' · starts' : '')) + '</span><span class="sv">' + money(it.amount) + '</span></div>';
+        }).join('') + '</div>';
+      }
       // v75.47: everyday spending in the cycle ahead, and where the number comes from
       var evSub = p.everydaySrc === 'budgets' ? 'your budgets' : p.everydaySrc === 'spent' ? 'your average, last ' + (p.everydayN === 1 ? 'cycle' : p.everydayN + ' cycles') : p.everydaySrc === 'off' ? 'not counted · no budgets set' : 'no budgets or spending yet';
       var evSw = (p.everydaySrc === 'spent' || p.everydaySrc === 'off') ? '<button type="button" class="cbsw' + (p.everydaySrc === 'spent' ? ' on' : '') + '" id="cbAvgSw" role="switch" aria-checked="' + (p.everydaySrc === 'spent' ? 'true' : 'false') + '" aria-label="Count your average spending"></button>' : ''; // v75.50
-      rows += '<div class="cbrow' + (p.everyday > 0.004 ? '' : ' mut') + '"><div class="lab">Everyday spending<small>' + evSub + '</small></div><div class="amt' + (p.everyday > 0.004 ? ' minus' : '') + '">' + (p.everyday > 0.004 ? '− ' + money(p.everyday) : '0') + evSw + '</div></div>';
+      var eOpen = !!state.cbEvOpen; // v75.52: folded; open = where the number comes from (and the v75.50 switch)
+      rows += '<div class="cbrow cbev' + (p.everyday > 0.004 ? '' : ' mut') + '" id="cbEvRow" role="button" tabindex="0" aria-expanded="' + (eOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (eOpen ? ' open' : '') + '">▸</span>Everyday spending</div><div class="amt' + (p.everyday > 0.004 ? ' minus' : '') + '">' + (p.everyday > 0.004 ? '− ' + money(p.everyday) : '0') + '</div></div>';
+      if (eOpen) rows += '<div class="cbsubwrap"><div class="cbsub"><span class="sl">' + evSub.charAt(0).toUpperCase() + evSub.slice(1) + '</span><span class="sv">' + evSw + '</span></div></div>';
       var nInner = rows.slice(nStart), nTotal = r2(p.plans + p.potTotal + p.everyday);
       var nCount = [p.plans, p.potTotal, p.everyday].filter(function (v) { return v > 0.004; }).length;
       rows = rows.slice(0, nStart);
@@ -8455,6 +8465,8 @@
     if (friendsRow) friendsRow.onclick = function () { state.cbFriendsOpen = !state.cbFriendsOpen; renderCycleBlock(); };
     var deductRow = byId('cbDeductRow'); // v74.98
     if (deductRow) deductRow.onclick = function () { state.cbDeductOpen = !state.cbDeductOpen; renderCycleBlock(); };
+    var evRow = byId('cbEvRow'); // v75.52
+    if (evRow) evRow.onclick = function () { state.cbEvOpen = !state.cbEvOpen; renderCycleBlock(); };
     var saveRow = byId('cbSaveRow'); // v74.98
     if (saveRow) saveRow.onclick = function () { state.cbSaveOpen = !state.cbSaveOpen; renderCycleBlock(); };
     var owedInRow = byId('cbOwedInRow'); // v74.97
@@ -14192,12 +14204,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.51, live: new Date(2026, 10, 24, 0, 29) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.52, live: new Date(2026, 10, 24, 2, 51) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.52': [
+      'Home: in a cycle ahead, Saving for and Everyday spending fold like the other rows - tap them for the pots and where the number comes from.'
+    ],
     '75.51': [
       'Sync: your Google sign-in now stays signed in. With a friend linked in Owed, opening the app used to replace it with a background session before it was restored, so Settings showed Signed out. Sign in once more after updating.'
     ],

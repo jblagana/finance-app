@@ -4648,9 +4648,9 @@ waitReady().then(async function (F) {
       var hs99 = F.heroSteps('next', 3), p99 = F.cycleProjection('next', 'with', 3);
       var last99 = hs99.steps.length ? hs99.steps[hs99.steps.length - 1].after : hs99.start;
       ok(Math.abs(hs99.start - p99.carry) < 0.005 && Math.abs(last99 - p99.net) < 0.005 && hs99.steps.some(function (x) { return x.items.some(function (i) { return i.label === 'Everyday spending'; }); }), 'v75.47: the graph for 3 cycles ahead runs carry -> end, everyday spending by week');
-      st.cbDeductOpen = true; F.peekGo(3); // v75.48: the rows sit inside Coming out
+      st.cbDeductOpen = true; st.cbEvOpen = true; F.peekGo(3); // v75.48: the rows sit inside Coming out; v75.52: Everyday opened
       var cb99 = String(byIdStub('cycleBlock').innerHTML || '');
-      ok(st.cycleMode === 'next' && cb99.indexOf('In 3 cycles') >= 0 && cb99.indexOf('Everyday spending') >= 0 && cb99.indexOf('your budgets') >= 0, 'v75.47: the card says In 3 cycles with an Everyday spending row from your budgets');
+      ok(st.cycleMode === 'next' && cb99.indexOf('In 3 cycles') >= 0 && cb99.indexOf('Everyday spending') >= 0 && cb99.indexOf('Your budgets') >= 0, 'v75.47: the card says In 3 cycles with an Everyday spending row from your budgets');
       F.peekGo(0); st.base.budgets = bud99;
       ok(st.cycleMode === 'this', 'v75.47: back to This cycle');
       // ============ PART 100: v75.48 - a cycle ahead reads like This cycle ============
@@ -4672,13 +4672,22 @@ waitReady().then(async function (F) {
       var off101 = F.cycleProjection('next', 'with', 2);
       ok(on101.everydaySrc === 'spent' && off101.everydaySrc === 'off' && off101.everyday === 0, 'v75.50: off -> nothing taken off (' + on101.everyday + ' -> ' + off101.everyday + ')');
       ok(off101.net > on101.net, 'v75.50: off -> Free at the end goes up');
-      st.cbDeductOpen = true; F.peekGo(2);
+      st.cbDeductOpen = true; st.cbEvOpen = true; F.peekGo(2); // v75.52: the switch sits inside the opened Everyday row
       var c101 = String(byIdStub('cycleBlock').innerHTML || '');
-      ok(c101.indexOf('id="cbAvgSw"') >= 0 && c101.indexOf('aria-checked="false"') >= 0 && c101.indexOf('not counted') >= 0, 'v75.50: the row shows the switch off and says not counted');
+      ok(c101.indexOf('id="cbAvgSw"') >= 0 && c101.indexOf('aria-checked="false"') >= 0 && c101.indexOf('Not counted') >= 0, 'v75.50: the row shows the switch off and says not counted');
       st.base.budgets = { Food: 5000 }; F.renderCycleBlock();
       var c101b = String(byIdStub('cycleBlock').innerHTML || '');
       ok(c101b.indexOf('id="cbAvgSw"') < 0 && F.cycleProjection('next', 'with', 2).everydaySrc === 'budgets', 'v75.50: budgets set -> budgets used, no switch (even with the average off)');
       F.peekAvgSet(true); st.base.budgets = bud101; st.cbDeductOpen = false; F.peekGo(0);
+      // ============ PART 102: v75.52 - the peek rows fold ============
+      console.log('\n== PART 102: v75.52 - Saving for and Everyday spending fold in the peek ==');
+      st.cbDeductOpen = true; st.cbEvOpen = false; st.cbSaveOpen = false; F.peekGo(1);
+      var c102 = String(byIdStub('cycleBlock').innerHTML || '');
+      ok(c102.indexOf('id="cbEvRow"') >= 0 && c102.indexOf('aria-expanded="false"') >= 0 && c102.indexOf('your budgets') < 0 && c102.indexOf('your average') < 0 && c102.indexOf('<small>') < 0, 'v75.52: Everyday spending is folded - no source line until opened');
+      st.cbEvOpen = true; F.renderCycleBlock();
+      var c102b = String(byIdStub('cycleBlock').innerHTML || '');
+      ok(/class="cbsub"><span class="sl">(Your budgets|Your average|Not counted|No budgets)/.test(c102b), 'v75.52: opened, the source shows as a sub-row');
+      st.cbEvOpen = false; st.cbDeductOpen = false; F.peekGo(0);
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);

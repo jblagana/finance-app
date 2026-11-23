@@ -2089,7 +2089,7 @@ def main():
           "function potWindowTotal(cd) {" in js
           and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total - evN.amt);" in js
           and '<div class="lab ind">Carried over</div>' in js  # v75.48 retarget
-          and "Saving for<small>' + (p.potItems || [])" in js  # v75.48 retarget  # v74.71 retarget: the row also names the one-offs starting then
+          and "Saving for' + (pItems.length ? ' · ' + pItems.length : '')" in js  # v75.52 retarget  # v75.48 retarget  # v74.71 retarget: the row also names the one-offs starting then
           and "'74.69': [" in js)
     check("v74.68 (boss: 'have u shipped everything from the latest mockup, such as in the img, or the done tab for committed'): All plans = Recurring (default) | One-offs | Done (paid one-offs + bought Saving-for one-offs + recurring with nothing left; the Paid bar is gone); the plan's sheet = pdHead (tile · name · line), the ₱ due card, Coming up (next 4 dates: changed / skipped · undo, tap = edit that date) and Before chips (paid / partial / unpaid / skipped)",
           "data-pltab=\"done\">Done" in js and "var planTab = 'rec';" in js
@@ -2734,6 +2734,10 @@ def main():
           "function owedFollowLedger(tid) {" in js and "function owedUnlinkTxn(tid) {" in js and "function connResendWaiting(p) {" in js
           and "'You both changed it at once - check their version'" in js and "owedCatOptions((had && had.cat) || 'Unsorted')" in js
           and "PART 98: v75.45" in smoke and "'75.45': [" in js)
+    check("v75.52 (boss: 'the hero card peeks such as the saving for should only show details when expnded just ike the rest of the rows'): in a cycle ahead Saving for (cbSaveRow) and Everyday spending (cbEvRow) are folded rows; the pots and the everyday source (with the v75.50 switch) show only when opened",
+          'id="cbEvRow" role="button"' in js and "state.cbEvOpen = !state.cbEvOpen;" in js
+          and "Everyday spending<small>" not in js and "Saving for<small>" not in js
+          and "PART 102: v75.52" in smoke and "'75.52': [" in js)
     check("v75.51 (boss: 'check why the google accoutn sign in is not persisting as sign in, it signs out most of the time when i look at it'): the friend-link route signs in anonymously only after Firebase has restored the saved sign-in (cloudAuthSettled waits for the first onAuthStateChanged), so it no longer replaces the Google sign-in",
           "function cloudAuthSettled() { return cloudLoad().then(function () { return cloudAuthFirst; }); }" in js
           and "if (cloudAuthRes) { cloudAuthRes(); cloudAuthRes = null; }" in js

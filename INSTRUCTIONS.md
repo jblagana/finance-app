@@ -1,3 +1,8 @@
+## 2026-11-24 - "the hero card peeks such as the saving for should only show details when expnded just ike the rest of the rows"
+Status: **done** - v75.52 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] In a cycle ahead, Saving for (cbSaveRow, state.cbSaveOpen) and Everyday spending (cbEvRow, state.cbEvOpen) are folded rows like Plan dues; opened, Saving for lists each pot's top-up (name · date · amount) and Everyday shows where the number comes from, with the v75.50 average switch on that sub-row.
+- [x] Checked headless at 320 px (folded, opened, switch still toggles); smoke PART 102; check_site v75.52.
+
 ## 2026-11-24 - "check why the google accoutn sign in is not persisting as sign in, it signs out most of the time when i look at it"
 Status: **done** - v75.51 pushed to https://github.com/jblagana/finance-app.git (main).
 - Cause: Firebase restores a saved sign-in a moment after start-up (currentUser is null until the first onAuthStateChanged). With a friend linked in Owed, connLiveStart / connFsAuth (v75.29 / v75.31) asked for currentUser in that moment, saw nobody and called signInAnonymously(), which replaced the saved Google sign-in. Every reopen then came back signed out.
