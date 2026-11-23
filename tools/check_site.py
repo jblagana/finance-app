@@ -2720,6 +2720,10 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.45 (boss: 'Yes, fix all five' after the two-phone Owed sim): a Ledger edit on an Owed entry's row updates the entry (category / account / share local, date / note proposed to the friend); Confirm keeps your picks and your share; a tie is declined with a reason and a reject lines both versions up; a waiting change is resent after 15 min; deleting the row unlinks it. Smoke PART 98, stress group W",
+          "function owedFollowLedger(tid) {" in js and "function owedUnlinkTxn(tid) {" in js and "function connResendWaiting(p) {" in js
+          and "'You both changed it at once - check their version'" in js and "owedCatOptions((had && had.cat) || 'Unsorted')" in js
+          and "PART 98: v75.45" in smoke and "'75.45': [" in js)
     check("v75.44 (boss: 'Add the tap-to-explain (i) on Home numbers next?' -> 'Yes, add it'): an (i) beside Left to spend, In your accounts, Coming out, Salary not in yet, Free cash and Owed to you opens a one-line plain explanation (one at a time, in-memory); a tap on the (i) never toggles its row. Smoke PART 97",
           "var CB_INFO = {" in js and "function cbInfoWire(root) {" in js and "cbI('acc')" in js and "cbI('out')" in js and "cbI('free')" in js and "cbI('owedin')" in js
           and 'id="heroInfo"' in html and 'id="heroExp"' in html and ".cbexp{" in html

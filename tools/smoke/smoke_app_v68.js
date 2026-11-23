@@ -4567,6 +4567,75 @@ waitReady().then(async function (F) {
       var cb97b = byIdStub('cycleBlock').innerHTML;
       ok(cb97b.indexOf('same as the big number at the top') >= 0 && (cb97b.match(/class="cbexp"/g) || []).length === 1, 'v75.44: one explanation opens at a time');
       st.cbInfo = null; F.renderCycleBlock();
+      // ============ PART 98: v75.45 - Owed sync: Ledger edits, Confirm picks, ties, lost messages, row deletes ============
+      console.log('\n== PART 98: v75.45 - Owed sync fixes from the two-phone simulation ==');
+      await F.addOwedPerson('Ana98'); await F.addOwedPerson('Ben98');
+      var pp98 = F.getOwed().people, ana98 = pp98[pp98.length - 2], ben98 = pp98[pp98.length - 1];
+      ana98.conn = { side: 'a', st: 'linked', in: [], out: [] }; ben98.conn = { side: 'b', st: 'linked', in: [], out: [] };
+      var last98 = function (p) { return p.conn.out[p.conn.out.length - 1]; };
+      var d98 = function (th) { return { dir: 'ipf', d: '2026-11-05', total: 100 + th, mine: 100, theirs: th, amt: th, note: 'dinner', cat: 'Food', acc: 'CASH::Cash' }; };
+      await F.addOwedEntry(ana98.id, d98(200)); await sleep(60);
+      var ea98 = ana98.entries[0];
+      await F.connApply(ben98, last98(ana98));
+      await F.connConfirm(ben98.id, ea98.cid, 'e', '', 'Transpo'); await sleep(60);
+      await F.connApply(ana98, last98(ben98)); await sleep(60);
+      var eb98 = ben98.entries[0];
+      ok(ea98.cst === 'ok' && eb98 && eb98.cat === 'Transpo', 'v75.45: setup - Ben filed Ana\'s entry under Transpo');
+      // Confirm keeps the picks
+      await F.updateOwedEntry(ana98.id, ea98.id, d98(230)); await sleep(60);
+      await F.connApply(ben98, last98(ana98));
+      var card98 = F.connCardHTML(ben98);
+      ok(/<option value="Transpo" selected/.test(card98), 'v75.45: the Confirm card for a change opens on Ben\'s own category');
+      await F.connConfirm(ben98.id, ea98.cid, 'e', '', ''); await sleep(60);
+      await F.connApply(ana98, last98(ben98)); await sleep(60);
+      var tb98 = st.txns.filter(function (t) { return t.id === eb98.txnId; })[0];
+      ok(eb98.amt === 230 && eb98.cat === 'Transpo' && tb98 && tb98.category === 'Transpo', 'v75.45: confirming Ana\'s change keeps Ben\'s category on the entry and its Ledger row');
+      // Ana confirming Ben's change keeps her own share row
+      await F.updateOwedEntry(ben98.id, eb98.id, { dir: 'tpf', d: '2026-11-05', total: 240, mine: 240, theirs: 0, amt: 240, note: 'dinner', cat: 'Transpo' }); await sleep(60);
+      await F.connApply(ana98, last98(ben98));
+      await F.connConfirm(ana98.id, ea98.cid, 'e', '', ''); await sleep(60);
+      await F.connApply(ben98, last98(ana98)); await sleep(60);
+      var ta98 = st.txns.filter(function (t) { return t.id === ea98.txnId; })[0];
+      ok(ea98.amt === 240 && ea98.mine === 100 && ta98 && ta98.amount === 100, 'v75.45: Ana confirming Ben\'s change keeps her own ₱100 share and its Ledger row');
+      // a Ledger edit on the linked row: category local, date + note proposed to Ben
+      var n98 = ana98.conn.out.length;
+      await F.saveTxnEdit(ta98.id, { date: '2026-11-04', account: ta98.account, kind: ta98.kind, category: 'Grocery', amount: ta98.amount, note: 'dinner at Mesa · Owed · Ana98' }); await sleep(120);
+      ok(ea98.cat === 'Grocery' && ea98.cdraft && ea98.cdraft.d === '2026-11-04' && ea98.cdraft.note === 'dinner at Mesa' && ana98.conn.out.length === n98 + 1 && last98(ana98).d === '2026-11-04',
+        'v75.45: a Ledger edit updates the Owed entry (category) and proposes the new date / note to the friend');
+      await F.connApply(ben98, last98(ana98));
+      await F.connReject(ben98.id, ea98.cid, 'e', 'wrong day', { cv: ben98.conn.in[0].cv, cr: ben98.conn.in[0].cr }); await sleep(60);
+      await F.connApply(ana98, last98(ben98)); await sleep(120);
+      ta98 = st.txns.filter(function (t) { return t.id === ea98.txnId; })[0];
+      ok(ea98.d === '2026-11-05' && ta98.date === '2026-11-05' && /wrong day/.test(ea98.crejected || ''), 'v75.45: a declined Ledger date change puts the row back on the agreed date');
+      // a tie: both change it from the same version
+      await F.updateOwedEntry(ana98.id, ea98.id, d98(250)); await sleep(60);
+      var mA98 = last98(ana98);
+      await F.updateOwedEntry(ben98.id, eb98.id, { dir: 'tpf', d: '2026-11-05', total: 260, mine: 260, theirs: 0, amt: 260, note: 'dinner', cat: 'Transpo' }); await sleep(60);
+      var mB98 = last98(ben98);
+      var nA = ana98.conn.out.length, nB = ben98.conn.out.length;
+      await F.connApply(ben98, mA98); await F.connApply(ana98, mB98);
+      var nos98 = ana98.conn.out.slice(nA).concat(ben98.conn.out.slice(nB)).filter(function (m) { return m.t === 'no' && /at once/.test(m.why || ''); });
+      ok(nos98.length === 1, 'v75.45: when both change it at once, the losing proposal is declined with a reason (not left waiting)');
+      // clear the tie for the next checks
+      var winSide98 = ana98.conn.in.length ? ana98 : ben98, loseSide98 = winSide98 === ana98 ? ben98 : ana98;
+      await F.connApply(loseSide98, nos98[0]);
+      await F.connConfirm(winSide98.id, ea98.cid, 'e', '', ''); await sleep(60);
+      await F.connApply(loseSide98, last98(winSide98)); await sleep(60);
+      // a lost message is resent; a resent version you already answered is answered again
+      await F.updateOwedEntry(ana98.id, ea98.id, d98(270)); await sleep(60);
+      ana98.conn.out = []; // the relay lost it
+      ea98.csent = Date.now() - 16 * 60 * 1000;
+      ok(F.connResendWaiting(ana98) && last98(ana98) && last98(ana98).cid === ea98.cid && last98(ana98).amt === 270, 'v75.45: a change waiting over 15 minutes is sent again');
+      await F.connApply(ben98, last98(ana98));
+      await F.connConfirm(ben98.id, ea98.cid, 'e', '', ''); await sleep(60);
+      var nb98 = ben98.conn.out.length;
+      await F.connApply(ben98, Object.assign({}, last98(ana98), { mid: 'again98' }));
+      ok(ben98.conn.out.length === nb98 + 1 && last98(ben98).t === 'ok', 'v75.45: a resent version already confirmed gets its "ok" again');
+      await F.connApply(ana98, last98(ben98)); await sleep(60);
+      // deleting the linked Ledger row unlinks; Undo links it back
+      var tid98 = ea98.txnId;
+      F.deleteTxnFromLog(tid98); await sleep(120);
+      ok(ea98.txnId === null && ea98.unfiled && ea98.unfiled.tid === tid98 && !ea98.mine && ea98.amt === 270, 'v75.45: deleting the Owed entry\'s Ledger row keeps the entry, unlinked');
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);

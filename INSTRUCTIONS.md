@@ -1,3 +1,12 @@
+## 2026-11-23 - "Yes, fix all five" (the Owed sync sim findings) -> v75.45
+Status: **done** - v75.45 pushed to https://github.com/jblagana/finance-app.git (main), after the parent session's v75.44.
+- [x] Ledger edits on an Owed entry's row (`owedFollowLedger`): category, account (ipf: the friend's card pair re-files) and your own share update the entry; a date / note change on a shared entry is a proposal (pending entry: the new version); a declined one puts the row back (`owedRefileMine`); Undo follows back.
+- [x] Confirm keeps your picks: the card opens on the entry's category / account, and `connConfirm` keeps your own split share (found while fixing: confirming a friend's change to your split entry dropped your share's Ledger row).
+- [x] Ties: the winning side declines the losing proposal with "You both changed it at once"; a reject now lines both books up on the rejected version (found by smoke: after a reject the versions drifted and the rejecter's next edit could be ignored, 50/50).
+- [x] Lost messages: an entry waiting 15+ min is resent (`connResendWaiting`); a resent version already answered gets its ok / no again.
+- [x] Deleting the row from the Ledger unlinks the entry (`e.unfiled`), a synced change keeps it off, Undo / History restore links it back.
+- Tests: smoke PART 98 (11 checks), check_site, and stress group W rerun on v75.45: 76 checks, 75 pass; the one left is the expected gap (Ana's first phone learns her second phone's confirmed edit only through cloud sync, not simulated). Real Firebase / Worker / iPhones not exercised.
+
 ## 2026-11-23 - "Add the tap-to-explain (i) on Home numbers next?" -> "Yes, add it"
 Status: **done** - v75.44 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] An (i) beside Left to spend, In your accounts, Coming out, Salary not in yet, Free cash and Owed to you opens one plain-language line under it; one at a time, folded by default, in-memory. Tapping the (i) never folds its row (tap area kept small so a tap on a 320 px row still folds it).

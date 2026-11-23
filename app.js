@@ -2803,6 +2803,7 @@
     var dEff = effAdj(t); // v74.51: only what still counts
     if (!adjEmpty()) addAdj(dEff, -1); // v73.45: no-op on an empty overlay (no phantom)
     logMoney('del', t);
+    owedUnlinkTxn(id); // v75.45
     syncTombAdd('t', id); // v73.3: the deletion syncs (tombstone; Undo clears it)
     return Promise.all([idbDel(STORE_TX, id), saveAdj()]).then(function () {
       emit('txn');
@@ -2811,6 +2812,7 @@
         state.txns.push(t);
         addAdj(dEff, 1); // v74.51: the same share the delete took
         logMoney('add', t);
+        owedRelinkTxn(id); // v75.45
         Promise.all([idbPut(STORE_TX, touchRec(t)), saveAdj()]).then(function () { emit('txn'); });
       });
     });
@@ -2862,6 +2864,7 @@
       state.txns.splice(ti, 0, r.t);
       addAdj(r.adjUsed || txnAdj(r.t), 1); // v74.51: the same share the removal took
       idbPut(STORE_TX, touchRec(r.t)).catch(function () {});
+      owedRelinkTxn(r.t.id); // v75.45
     }
     if (r.removed.length) {
       state.moneyLog = (state.moneyLog || []).filter(function (e) { return !(e && r.t && e.tid === r.t.id); });
@@ -2887,6 +2890,7 @@
     (state.txns || []).forEach(function (x) { if (x.id === tid) mate0 = moveMateOf(x); });
     var r = removeTxnRow(tid);
     if (!r) return;
+    owedUnlinkTxn(tid); // v75.45: an Owed entry's row: the entry stays, unlinked
     // v75.43: deleting one leg of a move deletes the other leg as well (a lone leg would read as spending or income)
     var rm = mate0 ? removeTxnRow(mate0.id) : null;
     if (rm) r.persist = Promise.all([r.persist, rm.persist]);
@@ -3073,6 +3077,7 @@
       emit('txn');
       // v72.10: opts.quiet — the owed flow wraps the edit in its own
       // entry+txn undo toast (two snacks would collide).
+      if (!(opts && opts.quiet)) owedFollowLedger(tid); // v75.45
       if (!(opts && opts.quiet))
       snack('Updated ' + money(t.amount) + ' · ' + esc(t.kind === 'card_payment' ? 'CC Payment' : (t.category || 'Unsorted')), function () {
         // undo: the exact inverse — un-rebase everything after the edited row
@@ -3094,7 +3099,7 @@
         }
         r.t = o; // original values; r.txIdx/logIdxs = the edited row's CURRENT positions
         r.removed = origRow ? [origRow] : [];
-        r.persist.then(function () { restoreTxnRow(r); }); // restore re-puts in place by id (+ saveAdj)
+        r.persist.then(function () { restoreTxnRow(r); owedFollowLedger(tid); }); // restore re-puts in place by id (+ saveAdj); v75.45: the entry follows back
       });
       return tid;
     });
@@ -11248,6 +11253,99 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // with an ellipsis, so the part that tells rows apart survives a narrow
   // phone) and the owed tag follows: 'Samgyup · Owed · Ana'. Whitespace is
   // collapsed to one line; no note = the old 'Owed · Ana' exactly.
+  // v75.45 (boss: 'yes, fix all five' after the Owed sync sim): the Ledger row an Owed entry filed (e.txnId) is
+  // part of that entry. An edit there used to stay in the Ledger only, and the next confirmed change rebuilt
+  // the row from the entry (category, account, date, note silently went back). Now the row's category,
+  // account and your own share update the entry (they are yours alone); a date or note change on a shared
+  // entry goes to the friend like an Owed edit (an agreed entry: a proposal; a pending one: the new version).
+  function owedLinkOf(tid) {
+    var f = null;
+    ((state.owed && state.owed.people) || []).forEach(function (p) {
+      (p.entries || []).forEach(function (e) { if (e && tid && e.txnId === tid) f = { p: p, e: e }; });
+    });
+    return f;
+  }
+  function owedNoteFromRow(note, name) {
+    var n = String(note || '').replace(/\s+/g, ' ').trim(), tag = 'Owed · ' + name, suf = ' · ' + tag;
+    if (n === tag) return '';
+    if (n.length > suf.length && n.slice(-suf.length) === suf) return n.slice(0, -suf.length).trim();
+    return n; // the tag was edited away: the whole text is the note
+  }
+  // the details an entry would be re-saved with (the undo snack's shape)
+  function owedDraftOf(e) {
+    return { d: e.d, amt: e.amt, dir: e.dir, note: e.note, cat: e.cat, acc: e.acc, expr: e.expr,
+      total: e.total, mine: e.dir === 'tpf' && e.total ? e.amt : e.mine,
+      theirs: e.dir === 'ipf' && e.total ? e.amt : e.theirs };
+  }
+  function owedFollowLedger(tid) {
+    var L = owedLinkOf(tid); if (!L) return Promise.resolve();
+    var p = L.p, e = L.e, t = null;
+    (state.txns || []).forEach(function (x) { if (x.id === tid) t = x; });
+    if (!t) return Promise.resolve();
+    var changed = false, step = Promise.resolve();
+    if (t.category && t.category !== e.cat) { e.cat = t.category; if (e.cdraft) e.cdraft.cat = t.category; changed = true; }
+    if (e.dir === 'ipf') {
+      var acc = (t.kind === 'card_charge' ? 'CARD::' : 'CASH::') + (t.account || 'Cash');
+      var mine = r2(t.amount);
+      var accMoved = acc !== (e.acc || 'CASH::Cash');
+      if (accMoved) { e.acc = acc; if (e.cdraft) e.cdraft.acc = acc; changed = true; }
+      if (mine > 0 && Math.abs(mine - (Number(e.mine) || 0)) > 0.004) {
+        e.mine = mine; e.total = r2(mine + (Number(e.amt) || 0)); changed = true;
+        if (e.cdraft) { e.cdraft.mine = mine; e.cdraft.total = r2(mine + (Number(e.cdraft.amt) || 0)); }
+      }
+      if (accMoved) { // the friend's share follows the account, as an Owed edit files it (card: charge + cash advance)
+        var old = ipfTheirsTxnIds(e);
+        e.theirsTxnId = null; delete e.theirsBumpId;
+        old.forEach(function (x) { step = step.then(function () { return removeTxnQuiet(x); }); });
+        step = step.then(function () { return fileIpfTheirs(e, p, true, true); });
+      }
+    }
+    var note = owedNoteFromRow(t.note, p.name), cur = e.cdraft || e;
+    if (t.date !== cur.d || note !== (cur.note || '')) {
+      if (e.cid && connLive(p) && (e.cst === 'ok' || e.cdraft)) {
+        e.cdraft = Object.assign(owedDraftOf(e), e.cdraft || {}, { d: t.date, note: note, cat: e.cat, acc: e.acc });
+        connStampMine(p, e, true);
+      } else {
+        e.d = t.date; e.note = note;
+        if (e.cid) connStampMine(p, e, true);
+      }
+      changed = true;
+    }
+    if (!changed) return step;
+    p.updated = new Date().toISOString();
+    return step.then(function () { return saveOwed(); }).then(emitOwed);
+  }
+  // a rejected date / note proposal: the row goes back to the agreed details
+  function owedRefileMine(p, e) {
+    var t = null;
+    (state.txns || []).forEach(function (x) { if (e.txnId && x.id === e.txnId) t = x; });
+    if (!t) return Promise.resolve();
+    var note = owedMineNote(e.note, p.name);
+    if (t.date === e.d && t.note === note) return Promise.resolve();
+    return saveTxnEdit(t.id, { date: e.d, account: t.account, kind: t.kind, category: t.category, amount: t.amount, note: note }, { quiet: true });
+  }
+  // deleting the row from the Ledger: the entry stays (and stays shared), it just no longer files your share
+  function owedUnlinkTxn(tid) {
+    var L = owedLinkOf(tid); if (!L) return;
+    var e = L.e;
+    e.unfiled = { tid: tid, mine: e.mine, total: e.total };
+    e.txnId = null;
+    if (e.dir === 'ipf') { delete e.mine; delete e.total; }
+    saveOwed().then(emitOwed);
+  }
+  // ...and the row coming back (Undo, or Settings > History) links it again
+  function owedRelinkTxn(tid) {
+    ((state.owed && state.owed.people) || []).forEach(function (p) {
+      (p.entries || []).forEach(function (e) {
+        if (!e || !e.unfiled || e.unfiled.tid !== tid || e.txnId) return;
+        e.txnId = tid;
+        if (e.unfiled.mine) e.mine = e.unfiled.mine;
+        if (e.unfiled.total) e.total = e.unfiled.total;
+        delete e.unfiled;
+        saveOwed().then(emitOwed);
+      });
+    });
+  }
   function owedMineNote(note, name) {
     var n = String(note || '').replace(/\s+/g, ' ').trim();
     return (n ? n + ' · ' : '') + 'Owed · ' + name;
@@ -11584,6 +11682,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (!e.cid) { e.cid = e.id; e.cv = 1; } else if (bump) e.cv = (Number(e.cv) || 1) + 1;
     e.cr = connHex(connRand(16));
     e.cst = 'wait'; delete e.cwhy;
+    e.csent = Date.now(); // v75.45: resent while it waits (connResendWaiting)
     delete e.crejected;
     connQueue(p, connEntryMsg(e));
   }
@@ -11591,6 +11690,21 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     e.cv = connVersion(e) + 1;
     e.cr = connHex(connRand(16));
     connQueue(p, { t: 'del', cid: e.cid, cv: e.cv, cr: e.cr });
+  }
+  // v75.45: a change the relay accepted can still be lost on the way. An entry waiting more than 15 minutes
+  // goes again (same version: the friend applies it once, or answers again if they already did).
+  var CONN_RESEND_MS = 15 * 60 * 1000;
+  function connResendWaiting(p) {
+    if (!connLive(p)) return false;
+    var now = Date.now(), any = false, queued = {};
+    (p.conn.out || []).forEach(function (m) { if (m && m.cid) queued[m.cid] = 1; });
+    (p.entries || []).forEach(function (e) {
+      if (!e || !e.cid || e.cst !== 'wait' || queued[e.cid]) return;
+      if (e.csent && now - e.csent < CONN_RESEND_MS) return;
+      e.csent = now; any = true;
+      connQueue(p, connEntryMsg(e));
+    });
+    return any;
   }
   var connSyncTimers = {}, connSyncing = {}, connLastAll = 0;
   function connSyncSoon(pid) {
@@ -11642,6 +11756,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         if (ids.length) return connCall(c, { op: 'ack', me: c.side, ids: ids });
       }).then(function () {
         c.err = ''; c.seen = new Date().toISOString();
+        if (connResendWaiting(p)) changed = true;
         if (j && j.more) connSyncSoon(pid);
       });
     }).catch(function (er) {
@@ -11768,6 +11883,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       var dir = CONN_MIRROR[m.dir], have = ent(m.cid);
       var pending = connInItem(p, m.cid, 'e');
       var removed = c.removed && c.removed['$' + m.cid];
+      // v75.45: a resent version you already answered gets the answer again (the first one may have been lost)
+      if (pending && pending.rej && connCompareRevision(m, pending) === 0) { connReply(p, 'no', pending, pending.why); return; }
+      if (have && have.cst === 'ok' && !have.cdraft && connCompareRevision(m, have) === 0) { connReply(p, 'ok', have); return; }
+      // v75.45: you both changed it from the same version and yours won the tie: theirs is declined, with a
+      // reason, so it does not sit "waiting" on their side and vanish when they confirm yours
+      if (have && have.cdraft && have.cst === 'wait' && connVersion(m) === connVersion(have) && m.cr && have.cr &&
+          connCompareRevision(m, have) < 0 && !(removed && connCompareRevision(m, removed) <= 0)) {
+        connReply(p, 'no', { cid: m.cid, cv: m.cv, cr: m.cr }, 'You both changed it at once - check their version');
+        return;
+      }
       if (connCompareRevision(m, pending) <= 0 || connCompareRevision(m, have) <= 0 ||
           connCompareRevision(m, removed) <= 0) return;
       var item = { k: 'e', cid: String(m.cid), cv: connVersion(m), cr: m.cr, dir: dir,
@@ -11806,6 +11931,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         delete e.cdraft;
         e.cst = 'ok';
         e.crejected = String(m.why || '').slice(0, 120) || 'Edit declined';
+        return owedRefileMine(p, e); // v75.45: a Ledger date / note change they declined comes back off the row
       } else if (t === 'ok') { e.cst = 'ok'; delete e.cwhy; }
       else { e.cst = 'no'; e.cwhy = String(m.why || '').slice(0, 120); }
     } else if (t === 'open') {
@@ -11852,7 +11978,14 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     }
     var have = null;
     (p.entries || []).forEach(function (e) { if (e.cid === cid) have = e; });
-    var data = { d: it.d, amt: it.amt, dir: it.dir, note: it.note, acc: acc || 'CASH::Cash', cat: cat || 'Unsorted' };
+    var data = { d: it.d, amt: it.amt, dir: it.dir, note: it.note, acc: acc || (have && have.acc) || 'CASH::Cash', cat: cat || (have && have.cat) || 'Unsorted' };
+    // v75.45: your own share of a split stays (their change is to what is owed). It used to drop, and your
+    // share's Ledger row went with it.
+    if (have && have.dir === it.dir && it.dir === 'ipf' && Number(have.mine) > 0) {
+      data.mine = r2(have.mine); data.theirs = it.amt; data.total = r2(have.mine + it.amt);
+    } else if (have && have.dir === it.dir && it.dir === 'tpf' && Number(have.theirs) > 0) {
+      data.mine = it.amt; data.theirs = r2(have.theirs); data.total = r2(it.amt + have.theirs);
+    }
     var conn = { cid: cid, cv: it.cv, cr: it.cr };
     return saveOwed().then(function () {
       if (have) return updateOwedEntry(pid, have.id, data, { conn: conn });
@@ -11870,6 +12003,10 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (k === 'open') connQueue(p, { t: 'oack', st: 'no', why: why });
     else if (k === 'e') {
       connReply(p, 'no', it, why);
+      (p.entries || []).forEach(function (x) {
+        if (x.cid !== cid || x.cdraft || connVersion(it) < connVersion(x)) return;
+        x.cv = connVersion(it); x.cr = it.cr; // v75.45: both books now hold the same version of the agreed entry
+      });
       // v75.32 (boss: 'the one who rejected should still see the entry and says you rejected in red and only
       // disappears when it gets deleted'): it stays, marked; their edit replaces it, their delete removes it
       it.rej = 1; it.why = why;
@@ -12260,8 +12397,10 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         }
         var pick = '';
         if (it.k === 'e') {
-          if (it.dir === 'tpf') pick = '<select class="cn-cat" aria-label="Category">' + owedCatOptions('Unsorted') + '</select>';
-          else pick = '<select class="cn-acc" aria-label="' + (it.dir === 'tmb' ? 'Into account' : 'From account') + '">' + owedAccOptions('CASH::Cash') + '</select>';
+          // v75.45: a change to an entry you already filed opens on YOUR picks (it used to reset to Unsorted / Cash)
+          var had = null; (p.entries || []).forEach(function (x) { if (x.cid === it.cid) had = x; });
+          if (it.dir === 'tpf') pick = '<select class="cn-cat" aria-label="Category">' + owedCatOptions((had && had.cat) || 'Unsorted') + '</select>';
+          else pick = '<select class="cn-acc" aria-label="' + (it.dir === 'tmb' ? 'Into account' : 'From account') + '">' + owedAccOptions((had && had.acc) || 'CASH::Cash') + '</select>';
         }
         h += '<div class="cn-it"><div class="cn-r"><b>' + esc(it.note || dl.label) + '</b><b class="' + (dl.sign > 0 ? 'pos' : 'neg') + '">' + sg + money(it.amt) + '</b></div>' +
           '<div class="cn-s">' + sub + '</div>' + (pick ? '<div class="cn-pick">' + (it.dir === 'tpf' ? 'Category' : it.dir === 'tmb' ? 'Into' : 'From') + ' ' + pick + '</div>' : '') +
@@ -12736,7 +12875,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     // (Total + Theirs, Mine left blank => yours = total − theirs); the raw
     // r2(data.mine) read 0 there, so a T+Th edit silently un-filed the txn
     var ledger = isSplitDir ? split.ledger : 0;
+    if (e.unfiled && opts && opts.conn && !e.txnId) ledger = 0; // v75.45: you removed its Ledger row; a synced change keeps it off
     var files = ledger > 0;
+    if (files) delete e.unfiled;
     var tData = {
       date: next.d, account: 'Cash', kind: 'cash_out',
       category: next.cat, amount: ledger, note: owedMineNote(next.note, p.name)
@@ -14008,12 +14149,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.44, live: new Date(2026, 10, 23, 23, 21) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.45, live: new Date(2026, 10, 23, 23, 32) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.45': [
+      'Owed: editing the Ledger row of an Owed entry now updates the entry. Category and account stay yours; a date or note change goes to your friend to confirm. A later synced change no longer undoes it.',
+      'Owed: confirming a friend\u2019s change keeps the category, account and your own share you picked before. If you both change an entry at once, you are told. A change that got lost on the way is sent again, and deleting an entry\u2019s Ledger row keeps the entry.'
+    ],
     '75.44': [
       'Home: tap the small (i) next to Left to spend, In your accounts, Coming out, Free cash or Owed to you to see what each number means.'
     ],
@@ -15711,6 +15856,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     heroSteps: heroSteps, // v75.12 (smoke)
     planCurrent: planCurrent, planLeftCount: planLeftCount, planRuleAt: planRuleAt, cmPer: cmPer, // v75.06 (smoke)
     // v75.02: Owed connections (smoke drives the pieces without a relay)
+    owedFollowLedger: owedFollowLedger, connResendWaiting: connResendWaiting, // v75.45 (smoke)
     connApply: connApply, connConfirm: connConfirm, connReject: connReject, connPreBal: connPreBal,
     connOpenAdjust: connOpenAdjust, connParseJoin: connParseJoin, connJoinFromText: connJoinFromText, connInstalled: connInstalled, connCheckHash: connCheckHash, connSeal: connSeal, connOpenMsg: connOpenMsg,
     connCardHTML: connCardHTML, connRowStatus: connRowStatus, connEntryMsg: connEntryMsg, qrEncode: qrEncode, qrSvg: qrSvg,

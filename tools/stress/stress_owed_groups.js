@@ -142,23 +142,19 @@ module.exports = [
     const cid = await agreed(X);
     await T(a, 'upd', cid, Object.assign({}, BASE, { theirs: 240, total: 340 }));
     // Ben edits his mirror (tpf 200 -> 210) before Ana's proposal arrives
-    await T(b, 'upd', cid, { d: '2026-11-20', dir: 'tpf', total: 210, cat: 'Food', note: 'lunch' });
-    await send(X, a); await send(X, b);
-    X.deliver('a'); X.deliver('b'); await T(a, 'sync'); await T(b, 'sync');
-    let sa = await T(a, 'snap'), sb = await T(b, 'snap');
-    const ia = inb(sa, cid), ib = inb(sb, cid);
-    check('W3.seen', '3: simultaneous proposals (Ana 240, Ben 210): each side is shown the other\'s, or one is told theirs lost',
-      (ia.length === 1 && ib.length === 1) || (ia.length + ib.length === 1 && (ent(sa, cid).why || ent(sb, cid).why)),
-      'both reviews shown, or the losing side told', { anaInbox: ia, benInbox: ib, ana: ent(sa, cid), ben: ent(sb, cid) });
-    // whoever got a review confirms it
-    if (ib.length) await T(b, 'confirm', cid, '', 'Food');
-    if (ia.length) await T(a, 'confirm', cid, 'CASH::Cash', 'Food');
+    await T(b, 'upd', cid, { d: '2026-11-20', dir: 'tpf', total: 210, mine: 210, cat: 'Food', note: 'lunch' });
     await flush(X);
-    sa = await T(a, 'snap'); sb = await T(b, 'snap');
+    let sa = await T(a, 'snap'), sb = await T(b, 'snap');
+    const ia = inb(sa, cid).filter((x) => !x.rej), ib = inb(sb, cid).filter((x) => !x.rej);
     const loser = ib.length && !ia.length ? 'Ben' : ia.length && !ib.length ? 'Ana' : null;
     const le = loser === 'Ben' ? ent(sb, cid) : loser === 'Ana' ? ent(sa, cid) : null;
-    check('W3.loser', '3: the side whose proposal lost is not left showing "waiting" or silently dropped',
-      !loser || (le && le.cst === 'ok' && !le.draft && !!(le.why || le.rejd)), 'in sync and told', { loser, entry: le });
+    check('W3.seen', '3: simultaneous proposals (Ana 240, Ben 210): exactly one review is shown, on the side whose proposal lost',
+      !!loser, 'one side has the other\'s card', { anaInbox: ia, benInbox: ib });
+    check('W3.loser', '3: the side whose proposal lost is told ("You both changed it at once"), not left waiting',
+      le && le.cst === 'ok' && !le.draft && /at once/.test(le.rejd), 'in sync + told', { loser, entry: le });
+    if (ib.length) await T(b, 'confirm', cid, '', '');
+    if (ia.length) await T(a, 'confirm', cid, '', '');
+    await flush(X);
     await X.agree('W3.agree', a, b, { title: '3: after one confirmation both books agree' });
   } },
 
@@ -173,33 +169,52 @@ module.exports = [
     await T(a, 'ledEdit', cid, { account: 'Maya CC', kind: 'card_charge' });
     await send(X, a);
     let sa = await T(a, 'snap'), ea = ent(sa, cid);
-    check('W4.a.follow', '4: Ledger edits (category, note, date, account) on Ana\'s linked row show on her Owed entry',
-      ea.cat === 'Transpo' && ea.d === '2026-11-19' && /Maya CC/.test(ea.acc) && /Mesa/.test(ea.note),
-      'entry: Transpo / 2026-11-19 / Maya CC / note', { entry: [ea.cat, ea.d, ea.acc, ea.note], row: ea.txn });
-    check('W4.a.friend', '4: a Ledger date or note change on a shared entry reaches Ben (or the Ledger keeps it local and says so)',
-      X.heldN('b') > 0, 'a message to Ben', 'messages to Ben: ' + X.heldN('b'));
-    // 4b: Ana's own Owed edit (the form opens prefilled from the ENTRY) -> Ben confirms -> Ana's row is rebuilt
-    await T(a, 'upd', cid, Object.assign({}, BASE, { note: ea.note, cat: ea.cat, d: ea.d, acc: ea.acc || 'CASH::Cash', theirs: 250, total: 350 }));
-    await flush(X); await T(b, 'confirm', cid, '', 'Food'); await flush(X);
+    check('W4.a.follow', '4: Ledger edits on Ana\'s linked row: category + account update her entry, date + note become a proposal to Ben',
+      ea.cat === 'Transpo' && /Maya CC/.test(ea.acc) && ea.draft && ea.draft.d === '2026-11-19' && ea.draft.note === 'dinner at Mesa' && ea.amt === 200,
+      'entry Transpo / Maya CC, draft 2026-11-19 "dinner at Mesa"', { entry: [ea.cat, ea.acc, ea.d, ea.note], draft: ea.draft, row: ea.txn });
+    check('W4.a.friend', '4: the date / note change goes to Ben', X.heldN('b') > 0, 'a message to Ben', 'messages to Ben: ' + X.heldN('b'));
+    await flush(X);
+    let sb = await T(b, 'snap');
+    check('W4.a.card', '4: Ben is asked to confirm Nov 19 "dinner at Mesa" at the same 200',
+      inb(sb, cid).length === 1 && inb(sb, cid)[0].d === '2026-11-19' && inb(sb, cid)[0].note === 'dinner at Mesa' && inb(sb, cid)[0].amt === 200, '1 card', inb(sb, cid));
+    await T(b, 'confirm', cid, '', ''); await flush(X);
+    sa = await T(a, 'snap'); ea = ent(sa, cid);
+    check('W4.a.kept', '4: after Ben confirms, Ana\'s row still reads Transpo / Maya CC / Nov 19 / ₱100',
+      ea.d === '2026-11-19' && ea.txn && ea.txn.category === 'Transpo' && ea.txn.account === 'Maya CC' && ea.txn.date === '2026-11-19' && ea.txn.amount === 100,
+      'row Transpo / Maya CC / 2026-11-19 / 100', { row: ea.txn, entry: [ea.cat, ea.d, ea.acc] });
+    // 4b: Ana's own Owed edit (the form opens prefilled from the entry) -> Ben confirms -> the row keeps her details
+    await T(a, 'upd', cid, Object.assign({}, BASE, { note: ea.note, cat: ea.cat, d: ea.d, acc: ea.acc, theirs: 250, total: 350 }));
+    await flush(X); await T(b, 'confirm', cid, '', ''); await flush(X);
     sa = await T(a, 'snap'); ea = ent(sa, cid);
     check('W4.b.keep', '4: after her own Owed edit is confirmed, Ana\'s Ledger row keeps Transpo / Maya CC / Nov 19',
       ea.txn && ea.txn.category === 'Transpo' && ea.txn.account === 'Maya CC' && ea.txn.date === '2026-11-19',
       'row Transpo / Maya CC / 2026-11-19', { row: ea.txn, entry: [ea.cat, ea.d, ea.acc] });
-    // 4c: Ben edits his row (category + note), then Ana proposes a new amount and Ben confirms keeping his category
+    // 4c: Ben edits his row (category + note); Ana confirms the note; then Ana proposes a new amount and Ben confirms
     await T(b, 'ledEdit', cid, { category: 'Fam', note: 'Ben side note · Owed · Ana' });
-    let sb = await T(b, 'snap'), eb = ent(sb, cid);
-    check('W4.c.follow', '4: Ben\'s Ledger category edit shows on his Owed entry', eb.cat === 'Fam', 'Fam', { entryCat: eb.cat, row: eb.txn });
-    await T(a, 'upd', cid, Object.assign({}, BASE, { note: ent(sa, cid).note, cat: 'Food', d: ent(sa, cid).d, theirs: 260, total: 360 }));
-    await flush(X); await T(b, 'confirm', cid, '', eb.cat); await flush(X);
+    sb = await T(b, 'snap'); let eb = ent(sb, cid);
+    check('W4.c.follow', '4: Ben\'s Ledger category edit shows on his Owed entry; his note goes to Ana', eb.cat === 'Fam' && eb.draft && eb.draft.note === 'Ben side note', 'Fam + draft note', { entryCat: eb.cat, draft: eb.draft });
+    await flush(X); await T(a, 'confirm', cid, '', ''); await flush(X);
+    sa = await T(a, 'snap'); ea = ent(sa, cid);
+    check('W4.c.anaShare', '4: Ana confirming Ben\'s note keeps her own ₱100 share row (Transpo / Maya CC)',
+      ea.note === 'Ben side note' && ea.txn && ea.txn.amount === 100 && ea.txn.category === 'Transpo' && ea.txn.account === 'Maya CC', 'row 100 Transpo Maya CC', { entry: [ea.note, ea.mine], row: ea.txn });
+    await T(a, 'upd', cid, Object.assign({}, BASE, { note: ea.note, cat: ea.cat, d: ea.d, acc: ea.acc, theirs: 260, total: 360 }));
+    await flush(X); await T(b, 'confirm', cid, '', ''); await flush(X);
     sb = await T(b, 'snap'); eb = ent(sb, cid);
-    check('W4.c.keep', '4: Ana\'s later edit, once Ben confirms, leaves Ben\'s Ledger category (Fam) and note alone',
-      eb.txn && eb.txn.category === 'Fam' && /Ben side note/.test(eb.txn.note), 'row Fam / "Ben side note"', eb.txn);
+    check('W4.c.keep', '4: Ana\'s later edit, once Ben confirms, leaves Ben\'s Ledger category (Fam) and the agreed note',
+      eb.txn && eb.txn.category === 'Fam' && /Ben side note/.test(eb.txn.note) && eb.txn.amount === 260, 'row Fam / "Ben side note" / 260', eb.txn);
+    // 4c2: a date change Ben rejects puts Ana's row back on the agreed date
+    await T(a, 'ledEdit', cid, { date: '2026-11-17' });
+    await flush(X); await T(b, 'reject', cid, 'wrong day'); await flush(X);
+    sa = await T(a, 'snap'); ea = ent(sa, cid);
+    check('W4.c.rej', '4: Ben rejects a Ledger date change: Ana\'s row goes back to Nov 19 and she is told',
+      ea.d === '2026-11-19' && ea.txn.date === '2026-11-19' && /wrong day/.test(ea.rejd), 'row 2026-11-19, rejd', { entry: [ea.d, ea.rejd], row: ea.txn });
     // 4d: Undo of a Ledger edit + reopen
     const before = (await T(a, 'snap'));
     await T(a, 'ledEdit', cid, { category: 'Grocery' });
     const u = await T(a, 'undo');
     sa = await T(a, 'snap');
-    check('W4.d.undo', '4: Undo right after a Ledger edit restores the row', u && ent(sa, cid).txn.category === ent(before, cid).txn.category, ent(before, cid).txn.category, { undo: u, row: ent(sa, cid).txn });
+    check('W4.d.undo', '4: Undo right after a Ledger edit restores the row and the entry', u && ent(sa, cid).txn.category === ent(before, cid).txn.category && ent(sa, cid).cat === ent(before, cid).cat,
+      ent(before, cid).txn.category, { undo: u, row: ent(sa, cid).txn, entryCat: ent(sa, cid).cat });
     await reloadBoth(X);
     sa = await T(a, 'snap');
     check('W4.d.reload', '4: rows survive reopening', JSON.stringify(ent(sa, cid).txn) === JSON.stringify(ent(before, cid).txn), JSON.stringify(ent(before, cid).txn), ent(sa, cid).txn);
@@ -211,13 +226,20 @@ module.exports = [
     check('W4.e.pending', '4: a Ledger date change on a still-pending entry: Ben is asked to confirm Nov 18, the date Ana\'s money moved',
       inb(sb, p.cid).length === 1 && inb(sb, p.cid)[0].d === '2026-11-18', 'inbox 2026-11-18', inb(sb, p.cid));
     await T(b, 'confirm', p.cid, '', 'Food'); await flush(X);
-    // 4f: deleting the linked Ledger row
+    // 4f: deleting the linked Ledger row, then a synced change, then a second row deleted + Undo
     const q = await agreed(X, { note: 'row deleted' });
     await T(a, 'ledDel', q);
     await send(X, a);
-    sa = await T(a, 'snap'); const eq = ent(sa, q);
-    check('W4.f.del', '4: deleting the linked Ledger row is refused, or removes / unlinks the Owed entry (no dangling link)',
-      !eq || (eq.txn !== 'MISSING'), 'no dangling link', eq);
+    sa = await T(a, 'snap'); let eq = ent(sa, q);
+    check('W4.f.del', '4: deleting the linked Ledger row keeps the Owed entry, unlinked (no dangling link)', eq && eq.txn === null && eq.amt === 200 && eq.cst === 'ok', 'entry kept, no row', eq);
+    await T(b, 'upd', q, { d: '2026-11-20', dir: 'tpf', total: 230, mine: 230, cat: 'Food', note: 'row deleted' });
+    await flush(X); await T(a, 'confirm', q, '', ''); await flush(X);
+    sa = await T(a, 'snap'); eq = ent(sa, q);
+    check('W4.f.stays', '4: a change from Ben, confirmed, does not bring the deleted row back', eq && eq.amt === 230 && eq.txn === null, '230, no row', eq);
+    const q2 = await agreed(X, { note: 'row undo' });
+    await T(a, 'ledDel', q2); const u2 = await T(a, 'undo');
+    sa = await T(a, 'snap');
+    check('W4.f.undo', '4: Undo of the Ledger delete links the row again', u2 && ent(sa, q2).txn && ent(sa, q2).txn.amount === 100 && ent(sa, q2).mine === 100, 'row 100 linked', ent(sa, q2));
     await X.agree('W4.agree', a, b, { title: '4: after the Ledger edits both books agree (and each row matches its entry)' });
   } },
 
@@ -328,11 +350,13 @@ module.exports = [
     // a lost message: the relay accepts it and it never arrives
     const e3 = await T(a, 'add', Object.assign({}, BASE, { note: 'lost' }));
     await send(X, a); X.dropHeld('b');
-    for (let i = 0; i < 3; i++) { await flush(X); await X.reload(a); }
+    for (let i = 0; i < 2; i++) { await flush(X); await X.reload(a); }
+    await a.clock.fastForward('16:00'); await flush(X); // v75.45: a change still waiting after 15 min goes again
     sa = await T(a, 'snap'); sb = await T(b, 'snap');
     check('W7.lost', '7: a message the relay lost: Ana\'s app resends, or the entry shows it never arrived',
       inb(sb, e3.cid).length === 1 || /resend|not delivered|never/i.test(ent(sa, e3.cid).why || ''), 'resent or flagged',
       { ana: ent(sa, e3.cid), benInbox: inb(sb, e3.cid) }, 'low');
+    await T(b, 'confirm', e3.cid, '', 'Food'); await flush(X);
     // Ben offline for a long stretch while Ana makes 10 changes over 5 entries
     P.down = true;
     const ids = [];
@@ -344,7 +368,7 @@ module.exports = [
     check('W7.long', '7: after a long offline stretch Ben has 5 items, each at its edited version', got === 5, '5', got + ' of 5: ' + JSON.stringify(sb.inb.map((x) => [x.note, x.amt])));
     for (const c of ids) await T(b, 'confirm', c, '', 'Food');
     await flush(X);
-    await X.agree('W7.agree', a, b, { title: '7: both books agree after the batch (the lost entry aside)', sev: 'low' });
+    await X.agree('W7.agree', a, b, { title: '7: both books agree after the batch and the resent entry' });
   } },
 
   // ---------------- 8: Ana's second phone (restored from her backup) ----------------

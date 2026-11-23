@@ -163,7 +163,8 @@ async function agree(tag, a, b, opts) {
     if (x.draft || y.draft) probs.push(cid + ' still has a proposed edit');
   });
   [['Ana', sa], ['Ben', sb]].forEach(([w, s]) => {
-    if (s.inb.length) probs.push(w + ' inbox still has ' + JSON.stringify(s.inb).slice(0, 200));
+    const open = s.inb.filter((x) => !x.rej); // a card you rejected stays on purpose (v75.32) until they change or delete it
+    if (open.length) probs.push(w + ' inbox still has ' + JSON.stringify(open).slice(0, 200));
     if (s.out) probs.push(w + ' still has ' + s.out + ' unsent message(s)');
     s.ents.forEach((e) => { probs.push.apply(probs, rowProbs(w, e)); });
   });
