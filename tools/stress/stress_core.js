@@ -43,6 +43,7 @@ async function fresh(opts) {
     colorScheme: opts.theme || 'dark', serviceWorkers: 'block',
     timezoneId: opts.tz || 'Asia/Manila', hasTouch: !!opts.touch, isMobile: !!opts.mobile
   });
+  if (opts.onCtx) await opts.onCtx(ctx); // stress_owed: route the relay before the app loads
   const pg = await ctx.newPage();
   pg.errs = []; pg.dialogs = [];
   pg.on('pageerror', (e) => pg.errs.push(String(e.message).slice(0, 200)));
@@ -78,8 +79,8 @@ async function inv(pg, tag) {
     if (!e) return ['no snapshot'];
     const fin = (x) => typeof x === 'number' && isFinite(x);
     if (![e.cash.total, e.cash.free, e.card_owed].every(fin)) out.push('a core number is not a number (liquid/free/owed)');
-    const bc = e.budget_credit || 0;
-    if (Math.abs(e.cash.free - (e.cash.total - e.card_owed + bc)) > 0.02) out.push('free ' + e.cash.free + ' != liquid ' + e.cash.total + ' − owed ' + e.card_owed + (bc ? ' + budget credit ' + bc : ''));
+    const bc = e.budget_credit || 0, fo = e.friend_owed || 0; // v74.94: money owed to friends comes off free cash too
+    if (Math.abs(e.cash.free - (e.cash.total - e.card_owed + bc - fo)) > 0.02) out.push('free ' + e.cash.free + ' != liquid ' + e.cash.total + ' − owed ' + e.card_owed + (bc ? ' + budget credit ' + bc : '') + (fo ? ' − owed to friends ' + fo : ''));
     const sc = (e.cards || []).reduce((s, c) => s + (Number(c.balance) || 0), 0);
     if (Math.abs(sc - e.card_owed) > 0.02) out.push('the cards add up to ' + sc.toFixed(2) + ' but cards owed says ' + e.card_owed);
     const st = F.state, names = new Set((st.base.accounts || []).map((a) => a.name)); names.add('Cash');
@@ -111,4 +112,4 @@ async function heroCheck(pg) {
   });
 }
 const S = (pg, fn, arg) => pg.evaluate(fn, arg); // shorthand
-module.exports = { OUT, SEED, boot, shutdown, fresh, closeAll, hideSnack, inv, heroCheck, rec, RESULTS, S };
+module.exports = { base: () => base, OUT, SEED, boot, shutdown, fresh, closeAll, hideSnack, inv, heroCheck, rec, RESULTS, S };

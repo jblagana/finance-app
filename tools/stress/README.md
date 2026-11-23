@@ -17,6 +17,7 @@ app's own file input, and the clock pinned to a chosen date. Nothing touches a p
 | U | `stress_c.js` | every screen at 320 / 390 / 430 px in both themes (overflow, tap targets, names), 60 fast open/closes, keyboard-up Add sheet |
 | M | `stress_c.js` | monkey test: 3 × 1,000 random taps / typing |
 | Y | `stress_c.js` | a simulated year of daily use: liquid and owed must equal a plain sum of the ledger every day; 6 reopenings |
+| W | `stress_owed.js` + `stress_owed_groups.js` | two-phone Owed sync (Ana, Ben, Ana's second phone) over a relay stand-in the test controls: edits while pending, stacked proposals, stale confirms, simultaneous edits, Ledger-side detail edits, Confirm pickers, deletes, offline / lost messages. Run with `node stress_run.js ../.. owed` (`ONLY_W=W4` for one group) |
 
 Every check also runs the shared invariants (`inv()` in `stress_core.js`): free = liquid − owed,
 the cards add up to cards owed, no entry on an unknown account, no NaN / undefined on screen, no
