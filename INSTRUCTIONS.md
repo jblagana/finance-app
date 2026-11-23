@@ -1,3 +1,7 @@
+## 2026-11-24 - "Remove the (i) on the rows below too?" -> "Remove them too"
+Status: **done** - v75.49 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] The v75.44 (i) marks, their explanations (CB_INFO / cbI / cbX / cbInfoWire / heroInfoPaint) and their CSS are removed; the rows render as before v75.44. Smoke PART 97 now asserts no (i); check_site retargeted (v74.33, v75.43, v75.44).
+
 ## 2026-11-24 - "-remove the i icon in the hero card -check if the hero card peeking cycles looks neat like the current cycle"
 Status: **done** - v75.48 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] The (i) beside "Left to spend" (heroInfo / heroExp) is removed; the row (i)s inside the cycle block stay.

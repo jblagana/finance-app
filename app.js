@@ -35,7 +35,7 @@
     cbPlansMore: false, // v73.39: the peek's "+N more…" second-level expansion (in-memory, defaults collapsed)
     cbCardsOpen: false, // v73.93: the this-cycle Cards owed row expansion (in-memory, defaults collapsed)
     cbFriendsOpen: false, cbOwedInOpen: false, // v74.97: To pay back / Owed to you expansions (in-memory)
-    cbDeductOpen: false, cbSaveOpen: false, cbInfo: null, // v75.44: which (i) is open // v74.98: the Deductions group + Saving for pots (in-memory, folded by default)
+    cbDeductOpen: false, cbSaveOpen: false, // v74.98: the Deductions group + Saving for pots (in-memory, folded by default)
     coachPlansMore: false // v73.68: the coach's Plans group "+N more…" (in-memory, defaults collapsed to 4 rows)
   };
 
@@ -8230,36 +8230,7 @@
   // NEXT-cycle question — rev 3 of the approved mockup). The salary row is
   // honest about where the money is: RECEIVED = "in your free cash"
   // (informational, 0 effect); EXPECTED = "+ amount" (with mode only).
-  // v75.44 (boss: 'Add the tap-to-explain (i) on Home numbers next?' -> 'Yes, add it'): each Home number
-  // says what it is, in plain words, on a tap of its (i); one open at a time, in-memory, folded by default
-  var CB_INFO = {
-    hero: 'What is left for everyday spending until your next payday, after your card balances, the bills and plans due this cycle, and money you set aside.',
-    acc: 'Everything in Cash and your bank accounts right now. Nothing has been taken off yet.',
-    out: 'What will come out of your accounts in this cycle: card balances or plan dues, what you owe friends, money you set aside, and (for a cycle ahead) everyday spending. Tap the row to see each part.',
-    sal: 'Your salary is late, but it is still counted until the grace days run out.',
-    free: 'In your accounts minus Coming out. It is the same as the big number at the top.',
-    owedin: 'What friends owe you. It is not in your free cash until they pay you back.'
-  };
-  function cbI(k) { return '<span class="cbi" role="button" tabindex="0" data-cbi="' + k + '" aria-label="What is this?" aria-expanded="' + (state.cbInfo === k ? 'true' : 'false') + '">i</span>'; }
-  function cbX(k) { return state.cbInfo === k ? '<div class="cbexp">' + esc(CB_INFO[k]) + '</div>' : ''; }
-  function cbInfoWire(root) {
-    if (!root || !root.querySelectorAll) return;
-    var bs = root.querySelectorAll('[data-cbi]');
-    for (var i = 0; i < bs.length; i++) {
-      bs[i].onclick = function (e) {
-        if (e) e.stopPropagation();
-        var k = this.getAttribute('data-cbi');
-        state.cbInfo = state.cbInfo === k ? null : k;
-        heroInfoPaint(); renderCycleBlock();
-      };
-      bs[i].onkeydown = function (e) { if (e && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.onclick(e); } };
-    }
-  }
-  function heroInfoPaint() {
-    var x = byId('heroExp'), b = byId('heroInfo');
-    if (x) { x.hidden = state.cbInfo !== 'hero'; x.textContent = CB_INFO.hero; }
-    if (b) b.setAttribute('aria-expanded', state.cbInfo === 'hero' ? 'true' : 'false');
-  }
+  // v75.49 (boss: 'Remove them too'): the v75.44 (i) explanations are gone from the hero card (v75.48 took the top one)
   // v75.47: how far ahead the hero peeks (0 = this cycle); cycleMode stays the this / ahead switch
   function peekOff() { return state.cycleMode === 'next' ? Math.max(1, Math.min(PEEK_MAX, Number(state.cycleOff) || 1)) : 0; }
   function peekName(off) { return off === 0 ? 'This cycle' : off === 1 ? 'Next cycle' : 'In ' + off + ' cycles'; }
@@ -8295,7 +8266,7 @@
       // = free − planShare (cyclePlanDeduction, the hero's own deduction) —
       // so the rows sum EXACTLY to the hero: Liquid − (Cards owed + Other
       // outflows) − Plan dues = Free cash. All display-only, one source each.
-      rows += '<div class="cbrow"><div class="lab ind">In your accounts' + cbI('acc') + '</div><div class="amt">' + money(p.liquid) + '</div></div>' + cbX('acc');
+      rows += '<div class="cbrow"><div class="lab ind">In your accounts</div><div class="amt">' + money(p.liquid) + '</div></div>';
       // v74.98 (boss: 'add a main chevron for all deductions from free cash to
       // keep hero neat'): everything taken off Liquid (Cards owed, To pay
       // back, Other outflows, Plan dues, Saving for) folds under ONE
@@ -8366,16 +8337,16 @@
       rows = rows.slice(0, dStart);
       if (dInner) {
         var dOpen = !!state.cbDeductOpen;
-        rows += '<div class="cbrow cbdeduct" id="cbDeductRow" role="button" tabindex="0" aria-expanded="' + (dOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (dOpen ? ' open' : '') + '">▸</span>Coming out' + (dCount ? ' <span class="cbn">· ' + dCount + '</span>' : '') + cbI('out') + '</div><div class="amt minus">− ' + money(dTotal) + '</div></div>' + cbX('out');
+        rows += '<div class="cbrow cbdeduct" id="cbDeductRow" role="button" tabindex="0" aria-expanded="' + (dOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (dOpen ? ' open' : '') + '">▸</span>Coming out' + (dCount ? ' <span class="cbn">· ' + dCount + '</span>' : '') + '</div><div class="amt minus">− ' + money(dTotal) + '</div></div>';
         if (dOpen) rows += '<div class="cbgroup">' + dInner + '</div>';
       }
-      if (p.salaryPending > 0.004) rows += '<div class="cbrow"><div class="lab ind">Salary · not in yet' + cbI('sal') + '</div><div class="amt">+ ' + money(p.salaryPending) + '</div></div>' + cbX('sal'); // v74.78; v74.98: no 'counted until' (the hero line says it)
-      rows += '<div class="cbrow cbfree"><div class="lab ind">Free cash' + cbI('free') + '</div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>' + cbX('free');
+      if (p.salaryPending > 0.004) rows += '<div class="cbrow"><div class="lab ind">Salary · not in yet</div><div class="amt">+ ' + money(p.salaryPending) + '</div></div>'; // v74.78; v74.98: no 'counted until' (the hero line says it)
+      rows += '<div class="cbrow cbfree"><div class="lab ind">Free cash</div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
       // v74.97: what friends owe you — below Free cash, not part of it (tap for who)
       var odR = owedHeroData();
       if (odR.owedIn > 0.004) {
         var iOpen = !!state.cbOwedInOpen;
-        rows += '<div class="cbrow cbowedin" id="cbOwedInRow" role="button" tabindex="0" aria-expanded="' + (iOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (iOpen ? ' open' : '') + '">▸</span>Owed to you' + cbI('owedin') + '</div><div class="amt goodv">' + money(odR.owedIn) + '</div></div>' + cbX('owedin');
+        rows += '<div class="cbrow cbowedin" id="cbOwedInRow" role="button" tabindex="0" aria-expanded="' + (iOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (iOpen ? ' open' : '') + '">▸</span>Owed to you</div><div class="amt goodv">' + money(odR.owedIn) + '</div></div>';
         if (iOpen) rows += '<div class="cbsubwrap">' + odR.ins.map(function (x) { return '<div class="cbsub"><span class="sl">' + esc(x.name) + '</span><span class="sv">' + money(x.b) + '</span></div>'; }).join('') + '</div>';
       }
     }
@@ -8415,7 +8386,7 @@
       var nCount = [p.plans, p.potTotal, p.everyday].filter(function (v) { return v > 0.004; }).length;
       rows = rows.slice(0, nStart);
       var nOpen = !!state.cbDeductOpen;
-      rows += '<div class="cbrow cbdeduct" id="cbDeductRow" role="button" tabindex="0" aria-expanded="' + (nOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (nOpen ? ' open' : '') + '">▸</span>Coming out' + (nCount ? ' <span class="cbn">· ' + nCount + '</span>' : '') + cbI('out') + '</div><div class="amt minus">− ' + money(nTotal) + '</div></div>' + cbX('out');
+      rows += '<div class="cbrow cbdeduct" id="cbDeductRow" role="button" tabindex="0" aria-expanded="' + (nOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (nOpen ? ' open' : '') + '">▸</span>Coming out' + (nCount ? ' <span class="cbn">· ' + nCount + '</span>' : '') + '</div><div class="amt minus">− ' + money(nTotal) + '</div></div>';
       if (nOpen) rows += '<div class="cbgroup">' + nInner + '</div>';
       rows += '<div class="cbrow cbfree"><div class="lab ind">Free at the end</div><div class="amt ' + (p.net < 0 ? 'minus' : '') + '">' + money(p.net) + '</div></div>';
     }
@@ -8466,7 +8437,6 @@
     };
     var friendsRow = byId('cbFriendsRow'); // v74.97
     if (friendsRow) friendsRow.onclick = function () { state.cbFriendsOpen = !state.cbFriendsOpen; renderCycleBlock(); };
-    cbInfoWire(el); // v75.44: the (i) taps
     var deductRow = byId('cbDeductRow'); // v74.98
     if (deductRow) deductRow.onclick = function () { state.cbDeductOpen = !state.cbDeductOpen; renderCycleBlock(); };
     var saveRow = byId('cbSaveRow'); // v74.98
@@ -14197,12 +14167,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.48, live: new Date(2026, 10, 24, 0, 5) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.49, live: new Date(2026, 10, 24, 0, 11) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.49': [
+      'Home: the small (i) marks on the hero card rows are gone too, so the card is back to its clean look.'
+    ],
     '75.48': [
       'Home: a cycle ahead now reads like this cycle - Carried over, Salary, one Coming out you can open (plan dues, Saving for, everyday spending) and Free at the end. The (i) beside Left to spend is gone.'
     ],
@@ -16621,7 +16594,6 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     wireTestSpend(); tsResetResting(); // v74.00: the "Test a spend" row under the cycle strip (static markup, events wired once)
     var ab = byId('addBtn');
     if (ab) ab.onclick = function () { setAddMode('spend'); openSheet('addSheet'); };
-    var hi0 = byId('heroInfo'); if (hi0) { cbInfoWire(hi0.parentNode); heroInfoPaint(); } // v75.44
     qsHint(); // v75.43 // v72.41: a fresh Add opens in Spend mode
     // v72.41: the Add sheet's direction toggle (Spend / Pay card) — v73.8: + Money in
     var amS = byId('addModeSpend'), amP = byId('addModePrepay'), amM = byId('addModeMoneyin');

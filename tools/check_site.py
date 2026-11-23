@@ -2379,7 +2379,7 @@ def main():
           and "if (testSpendAmt && !testSpendOpen && row) { testSpendOpen = true; row.className = 'testrow ts-open'; }" in js
           and "'74.34': [" in js)
     check("v74.33 (boss: 'remove same as the hero number and salary follows ... amount.'): the Free cash row has no sub-label and the cycle footnote is just 'Estimate — pace & one-offs excluded.'",
-          "<div class=\"lab ind\">Free cash' + cbI('free') + '</div>" in js  # v75.44 retarget: the (i) sits in the label
+          "<div class=\"lab ind\">Free cash</div>" in js  # v75.49 retarget: no (i)
           and "Salary follows the target cycle" not in js
           and "'<p class=\"cbnote\">" not in js and "'daily spending not included') + '</p>'" in js  # v75.07: one-offs are in the estimate; v75.12: the note sits under the graph
           and "'74.33': [" in js)
@@ -2734,10 +2734,9 @@ def main():
           "function owedFollowLedger(tid) {" in js and "function owedUnlinkTxn(tid) {" in js and "function connResendWaiting(p) {" in js
           and "'You both changed it at once - check their version'" in js and "owedCatOptions((had && had.cat) || 'Unsorted')" in js
           and "PART 98: v75.45" in smoke and "'75.45': [" in js)
-    check("v75.44 (boss: 'Add the tap-to-explain (i) on Home numbers next?' -> 'Yes, add it'): an (i) beside Left to spend, In your accounts, Coming out, Salary not in yet, Free cash and Owed to you opens a one-line plain explanation (one at a time, in-memory); a tap on the (i) never toggles its row. Smoke PART 97",
-          "var CB_INFO = {" in js and "function cbInfoWire(root) {" in js and "cbI('acc')" in js and "cbI('out')" in js and "cbI('free')" in js and "cbI('owedin')" in js
-          and 'id="heroInfo"' not in html and 'id="heroExp"' not in html and ".cbexp{" in html  # v75.48 retarget: the hero's own (i) is gone
-          and "PART 97: v75.44" in smoke and "'75.44': [" in js)
+    check("v75.44 -> v75.49 (boss: 'Remove them too'): the (i) explanations on the hero card are removed again (v75.48 removed the one beside Left to spend). Smoke PART 97",
+          "function cbI(" not in js and "CB_INFO" not in js and 'data-cbi' not in js and ".cbi{" not in html and ".cbexp{" not in html
+          and "PART 97: v75.49" in smoke and "'75.49': [" in js)
     check("v75.43 (boss: 'assess if the app is intuitive for a first timer ... combine the pay card tab' -> 'Yes, both'): Pay card is Move (pay a card, or move money between your own accounts as two linked legs t.xfer that are neither spend nor income nor the salary; one leg's delete / edit carries to the other); Money in says Into with Salary / Refund / Gift; plain words on Home; no made-up name; the quick-sum hint retires once used. Smoke PART 96",
           "function addMove(from, to, amount, date, note) {" in js and "function moveMateOf(t) {" in js
           and "if (t.xfer) return 0; // v75.43: the From leg of a move is not spending" in js
@@ -2747,7 +2746,7 @@ def main():
           and "r.xfer = t.xfer.slice(0, 40)" in js
           and 'id="addModePrepay" class="amb">Move</button>' in html and 'id="f_paywithLabel" style="display:none">From</label>' in html
           and "al.textContent = addMode === 'moneyin' ? 'Into' : 'Paid with';" in js and "var MONEYIN_CATS = ['Salary', 'Refund', 'Gift'];" in js
-          and "class=\"lab ind\">In your accounts' + cbI('acc')" in js and "</span>Coming out'" in js  # v75.44 retarget
+          and "class=\"lab ind\">In your accounts</div>" in js  # v75.49 retarget and "</span>Coming out'" in js  # v75.44 retarget
           and "PART 96: v75.43" in smoke and "'75.43': [" in js)
     check("v75.42 (boss: 'i logged my salary tday yet the headroom count to january 14'): a salary after payday inside the (extended) grace is flagged late (this cycle's), and past day 10 too unless it is within 5 days of the next payday",
           "if (received && received.date > w.start) received.late = true;" in js and "received.date < isoAdd(w.end, -4)" in js and "'75.42': [" in js)
