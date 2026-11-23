@@ -1,3 +1,10 @@
+## 2026-11-23 - "the this/next cycle toggle in hero card for peeking, can we extend it to more cycles, mockup first" -> (mockup: A arrows / B chips + runway) -> "whre will everyday budget come from, is that inferred from prev cycle?" -> "budgets first, actual spending fallback, build A"
+Status: **done** - v75.47 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] cycleProjection(mode, salMode, off): up to PEEK_MAX = 5 cycles ahead, each carrying the previous cycle's end; every cycle ahead (Next cycle included) takes off everyday spending - the month's budgets (with overrides), else the average spendOf of the last 3 full cycles with entries (plan payments left out). The With / Without salary choice applies to every cycle ahead.
+- [x] Hero: arrows (cbSegCycle, data-step) replace the This / Next pair; the duplicate tag is gone; "Free at the end"; an Everyday spending row says its source. heroSteps(mode, off) spreads everyday spending by week; chat.js's next-cycle answers now include it too.
+- [x] Smoke PART 99 + check_site v75.47 (7 old checks retargeted); headless Chromium 390 / 320 px: all 5 steps, arrows disabled at the ends, graph, no sideways scroll, no JS errors (22 checks).
+- Note: the 26 "render TypeError ... currentUser" lines in the app smoke log are on the v75.46 baseline too (not from this change).
+
 ## 2026-11-23 - "when adding a plan, move the \"this is for...\" above \"what your palnning...\""
 Status: **done** - v75.46 pushed to https://github.com/jblagana/finance-app.git (main). Held until the Owed fixes (v75.45) landed.
 - [x] index.html planForm: the This is for toggle (p_kindWrap) is the first field; check_site v75.46; headless browser: toggle first, Saving for still switches, no errors.

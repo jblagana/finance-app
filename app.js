@@ -29,7 +29,7 @@
     coachMem: null,
     moneyLog: [],
     owed: { people: [] },
-    cycleMode: 'this', // v73.34: the hero's cycle block — This cycle by default, Next cycle only on tap
+    cycleMode: 'this', cycleOff: 1, // v75.47: cycleOff = how many cycles ahead the peek is (1..5); v73.34: the hero's cycle block — This cycle by default, Next cycle only on tap
     peekMode: 'with',  // v73.34: the Next-cycle salary toggle (With salary / Without)
     cbPlansOpen: false, // v73.37: the peek's Plans row expansion (in-memory, defaults closed)
     cbPlansMore: false, // v73.39: the peek's "+N more…" second-level expansion (in-memory, defaults collapsed)
@@ -5566,10 +5566,53 @@
     items.sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
     return { total: r2(total), count: count, items: items };
   }
-  function cycleProjection(mode, salMode) {
+  // v75.47 (boss: 'the this/next cycle toggle in hero card for peeking, can we extend it to more cycles' -> 'budgets
+  // first, actual spending fallback, build A'): the peek steps up to PEEK_MAX cycles ahead. Every cycle ahead also takes
+  // off everyday spending: your budgets for that month, or (no budgets set) what you spent on average in your last 3
+  // full cycles - plan payments, moves and friends' shares left out.
+  var PEEK_MAX = 5;
+  function cycleMonthAdd(m, k) {
+    var p = String(m).split('-'), t = new Date(Number(p[0]), Number(p[1]) - 1 + k, 1);
+    return t.getFullYear() + '-' + (t.getMonth() < 9 ? '0' : '') + (t.getMonth() + 1);
+  }
+  function everydayFor(m) {
+    var b = state.base || {}, ovM = (b.budget_overrides || {})[m] || {}, keys = {}, bud = 0;
+    Object.keys(b.budgets || {}).forEach(function (k) { keys[k] = true; });
+    Object.keys(ovM).forEach(function (k) { keys[k] = true; });
+    Object.keys(keys).forEach(function (k) { var a = ovM[k] !== undefined ? Number(ovM[k]) : Number((b.budgets || {})[k]); if (a > 0) bud += a; });
+    if (bud > 0.004) return { amt: r2(bud), src: 'budgets', n: 0 };
+    var nowM = currentCycleMonth(b, todayISO()), tot = 0, n = 0;
+    for (var k = 1; k <= 3; k++) {
+      var cd = cycleDataFor(cycleMonthAdd(nowM, -k), b), s = 0, any = false;
+      (state.txns || []).forEach(function (t) {
+        var d = String(t.date || '');
+        if (d < cd.start || d > cd.end) return;
+        any = true;
+        if (t.planRef) return; // a plan payment is already a plan due
+        s += spendOf(t);
+      });
+      if (any) { tot += s; n++; }
+    }
+    return n ? { amt: r2(tot / n), src: 'spent', n: n } : { amt: 0, src: 'none', n: 0 };
+  }
+  function cycleProjection(mode, salMode, off) {
     var b = state.base;
     if (!b) return null;
+    off = (mode === 'next') ? Math.max(1, Math.min(PEEK_MAX, Math.round(Number(off) || 1))) : 0;
     var nowM = currentCycleMonth(b, todayISO());
+    if (off > 1) {
+      // two or more cycles ahead: carry the cycle before it (one source - the same function, one step back)
+      var prevP = cycleProjection('next', salMode, off - 1);
+      var mK = cycleMonthAdd(nowM, off), cdK = cycleDataFor(mK, b);
+      var withK = salMode !== 'without', salK = withK ? cdK.expected : 0;
+      var pwK = planWindowTotal(cdK), potK = potWindowTotal(cdK), evK = everydayFor(mK);
+      return { mode: 'next', off: off, month: mK, start: cdK.start, end: cdK.end, sday: cdK.sday,
+        free: prevP.free, carry: prevP.net, liquid: prevP.liquid, cardOwed: 0, friendOwed: 0, otherOut: 0, planShare: 0, savingHeld: 0,
+        salary: r2(cdK.expected), salaryReceived: false, salaryInFree: false, withSalary: withK, salaryAdded: r2(salK),
+        salaryPending: 0, salaryPendingInfo: null, plans: r2(pwK.total), planCount: pwK.count, planItems: pwK.items,
+        potTotal: r2(potK.total), potItems: potK.items, everyday: evK.amt, everydaySrc: evK.src, everydayN: evK.n,
+        net: r2(prevP.net + salK - pwK.total - potK.total - evK.amt) };
+    }
     var m = (mode === 'next') ? (function () {
       var p = String(nowM).split('-');
       // v73.38 (boss: 'the peek shows Nov 15–Dec 14, it should be Oct 15–Nov 14'):
@@ -5644,7 +5687,8 @@
     // NEXT window come off the peek as if you tap Add (the dues are counted before they're paid the same way); the
     // set-aside so far is already inside the carry
     var potW = (mode === 'next') ? potWindowTotal(cd) : { total: 0, items: [] };
-    var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total);
+    var evN = (mode === 'next') ? everydayFor(m) : { amt: 0, src: 'none', n: 0 }; // v75.47: everyday spending in the cycle ahead
+    var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total - evN.amt);
     // v73.44: the THIS-cycle informational rows (liquid / cards owed / other
     // outflows / plan dues) must SUM EXACTLY to the hero. The hero =
     // effectiveFree − planShare (planShare = cyclePlanDeduction = the hero's
@@ -5672,6 +5716,7 @@
       // v73.37: the peek's expandable breakdown (the specific plan dues)
       planItems: pw.items,
       potTotal: r2(potW.total), potItems: potW.items, // v74.69
+      off: off, everyday: evN.amt, everydaySrc: evN.src, everydayN: evN.n, // v75.47
       net: net
     };
   }
@@ -8215,6 +8260,15 @@
     if (x) { x.hidden = state.cbInfo !== 'hero'; x.textContent = CB_INFO.hero; }
     if (b) b.setAttribute('aria-expanded', state.cbInfo === 'hero' ? 'true' : 'false');
   }
+  // v75.47: how far ahead the hero peeks (0 = this cycle); cycleMode stays the this / ahead switch
+  function peekOff() { return state.cycleMode === 'next' ? Math.max(1, Math.min(PEEK_MAX, Number(state.cycleOff) || 1)) : 0; }
+  function peekName(off) { return off === 0 ? 'This cycle' : off === 1 ? 'Next cycle' : 'In ' + off + ' cycles'; }
+  function peekGo(off) {
+    off = Math.max(0, Math.min(PEEK_MAX, off));
+    state.cycleMode = off ? 'next' : 'this'; state.cycleOff = off || 1;
+    state.cbPlansOpen = false; state.cbPlansMore = false;
+    renderCycleBlock(); renderSpark();
+  }
   function renderCycleBlock() {
     var el = byId('cycleBlock');
     if (!el) return;
@@ -8223,9 +8277,10 @@
     el.style.display = '';
     var mode = state.cycleMode === 'next' ? 'next' : 'this';
     var salMode = state.peekMode === 'without' ? 'without' : 'with';
-    var p = cycleProjection(mode, salMode);
+    var off = peekOff();
+    var p = cycleProjection(mode, salMode, off);
     if (!p) { el.style.display = 'none'; return; }
-    var tag = mode === 'next' ? 'NEXT CYCLE' : 'THIS CYCLE';
+    var tag = peekName(off).toUpperCase();
     var tagCls = mode === 'next' ? 'next' : 'this';
     var win = dayMonth(p.start) + ' → ' + dayMonth(p.end);
     var seg = function (on) { return '<button type="button" class="' + (on ? 'on' : '') + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + on + '</button>'; };
@@ -8331,7 +8386,7 @@
       // shown as a row so the starting number is auditable. NO salary row
       // in the this-cycle block (the boss's Oct-11 point: the salary is
       // already inside the displayed free cash, so the row was misleading).
-      rows += '<div class="cbrow"><div class="lab">Carried over<small>from this cycle — dues, Saving for &amp; prepayments already netted</small></div><div class="amt' + (p.carry < 0 ? ' minus' : '') + '">' + money(p.carry) + '</div></div>';
+      rows += '<div class="cbrow"><div class="lab">Carried over<small>' + (off > 1 ? 'what is left at the end of ' + peekName(off - 1).toLowerCase() : 'from this cycle — dues, Saving for &amp; prepayments already netted') + '</small></div><div class="amt' + (p.carry < 0 ? ' minus' : '') + '">' + money(p.carry) + '</div></div>';
       // v73.37 (boss: 'keep it for the next cycle peek, and expandable to
       // the specific plan dues'): the Plans row is a tap target — the
       // specific dues drop in as sub-rows (resolved amounts: a fork shows
@@ -8374,6 +8429,10 @@
     // v73.44: the THIS-cycle block's rows END with the Free cash row (the
     // hero's number, same source) — the separate "Free at end of this cycle"
     // net line would repeat it, so it renders only for the peek.
+    if (mode === 'next') { // v75.47: everyday spending in the cycle ahead, and where the number comes from
+      var evSub = p.everydaySrc === 'budgets' ? 'your budgets' : p.everydaySrc === 'spent' ? 'what you spent, average of your last ' + (p.everydayN === 1 ? 'cycle' : p.everydayN + ' cycles') : 'no budgets or past spending yet';
+      rows += '<div class="cbrow' + (p.everyday > 0.004 ? '' : ' mut') + '"><div class="lab">Everyday spending<small>' + evSub + '</small></div><div class="amt' + (p.everyday > 0.004 ? ' minus' : '') + '">' + (p.everyday > 0.004 ? '− ' + money(p.everyday) : '0') + '</div></div>';
+    }
     if (!rows && mode === 'next') rows = '<div class="cbrow mut"><div class="lab">Nothing due in this window</div></div>';
     var netCls = p.net >= 0 ? 'pos' : 'neg';
     // v73.36: money() already renders the sign for negatives — the old
@@ -8381,10 +8440,11 @@
     var netTxt = money(p.net);
     el.innerHTML =
       '<div class="cbhead">' +
-        '<div class="cbtitle"><span class="cbtag ' + tagCls + '">' + tag + '</span><span class="win">' + win + '</span></div>' +
-        '<div class="cbseg" id="cbSegCycle" role="group" aria-label="Cycle">' +
-          '<button type="button" data-m="this" class="' + (mode === 'this' ? 'on' : '') + '" aria-pressed="' + (mode === 'this' ? 'true' : 'false') + '">This cycle</button>' +
-          '<button type="button" data-m="next" class="' + (mode === 'next' ? 'on' : '') + '" aria-pressed="' + (mode === 'next' ? 'true' : 'false') + '">Next cycle</button>' +
+        '<div class="cbtitle"><span class="win">' + win + '</span></div>' + // v75.47: the arrows name the cycle (no second tag)
+        '<div class="cbstep" id="cbSegCycle" role="group" aria-label="Cycle">' + // v75.47: arrows step through the cycles
+          '<button type="button" class="cbarr" data-step="-1" aria-label="Earlier cycle"' + (off === 0 ? ' disabled' : '') + '>‹</button>' +
+          '<span class="cbsteplab" aria-live="polite">' + peekName(off) + '</span>' +
+          '<button type="button" class="cbarr" data-step="1" aria-label="Later cycle"' + (off >= PEEK_MAX ? ' disabled' : '') + '>›</button>' +
         '</div>' +
       '</div>' +
       (mode === 'next' ? '<div class="cbsegwrap" id="cbSegSalaryWrap"><div class="cbseg small" id="cbSegSalary" role="group" aria-label="Salary">' +
@@ -8392,16 +8452,14 @@
         '<button type="button" data-m="without" class="' + (salMode === 'without' ? 'on' : '') + '" aria-pressed="' + (salMode === 'without' ? 'true' : 'false') + '">Without</button>' +
       '</div></div>' : '') +
       '<div class="cbrows">' + rows + '</div>' +
-      (mode === 'next' ? '<div class="cbnet"><span class="nl">Free at end of next cycle</span><span class="nv ' + netCls + '">' + netTxt + '</span></div>' : ''); // v75.12: the 'daily spending not included' note moved under the graph
+      (mode === 'next' ? '<div class="cbnet"><span class="nl">Free at the end</span><span class="nv ' + netCls + '">' + netTxt + '</span></div>' : ''); // v75.12: the 'daily spending not included' note moved under the graph
     // re-wire the switches (innerHTML wiped the old listeners — the v73.20
     // chip pattern: the element is rebuilt, so the handler must be re-bound)
     var segC = byId('cbSegCycle');
     if (segC) segC.onclick = function (e) {
-      var btn = e.target && e.target.closest ? e.target.closest('button[data-m]') : null;
-      if (!btn) return;
-      state.cycleMode = btn.getAttribute('data-m') === 'next' ? 'next' : 'this';
-      renderCycleBlock();
-      renderSpark(); // v75.12: the graph shows the selected cycle
+      var btn = e.target && e.target.closest ? e.target.closest('button[data-step]') : null;
+      if (!btn || btn.disabled) return;
+      peekGo(off + Number(btn.getAttribute('data-step'))); // v75.47; v75.12: the graph shows the selected cycle
     };
     var segS = byId('cbSegSalary');
     if (segS) segS.onclick = function (e) {
@@ -8543,10 +8601,10 @@
   // hero's own bridge laid out in time. It starts at Liquid (next cycle: the carry), every deduction steps down on its
   // date (this cycle's unpaid past-due dues and the set-asides drop TODAY), and the line ENDS exactly at the hero's free
   // cash (next cycle: 'Free at end'). The selected cycle only, from zero. Pure — reads, never writes.
-  function heroSteps(mode) {
+  function heroSteps(mode, off) {
     var b = state.base; if (!b) return null;
     var isNext = mode === 'next';
-    var p = cycleProjection(isNext ? 'next' : 'this', state.peekMode === 'without' ? 'without' : 'with');
+    var p = cycleProjection(isNext ? 'next' : 'this', state.peekMode === 'without' ? 'without' : 'with', isNext ? (off || 1) : 0);
     if (!p || !p.start || !p.end) return null;
     var today = todayISO();
     var x0 = isNext ? p.start : today, end = p.end;
@@ -8590,6 +8648,12 @@
       if (p.salaryAdded > 0.004) add(p.start, 'Salary', p.salaryAdded);
       items.forEach(function (it) { add(it.date, it.name, -(Number(it.amount) || 0)); });
       (p.potItems || []).forEach(function (it) { add(it.date, it.name + ' (Saving for)', -(Number(it.amount) || 0)); });
+      // v75.47: everyday spending comes off week by week across the cycle
+      if (p.everyday > 0.004) {
+        var wk = [], dw = p.start; while (dw <= p.end) { wk.push(dw); dw = isoAdd(dw, 7); }
+        var per = r2(p.everyday / wk.length), left = p.everyday;
+        wk.forEach(function (d, i) { var a = i === wk.length - 1 ? r2(left) : per; left = r2(left - a); add(d, 'Everyday spending', -a); });
+      }
     }
     function build() {
       var v = start, out = [];
@@ -8610,9 +8674,9 @@
   function renderSpark() {
     var box = byId('sparkBox'); if (!box) return;
     var mode = state.cycleMode === 'next' ? 'next' : 'this';
-    var data = heroSteps(mode);
+    var data = heroSteps(mode, peekOff());
     if (!data) { box.innerHTML = ''; return; }
-    if (state.heroStepMode !== mode) { state.heroStepMode = mode; state.heroStepSel = null; }
+    if (state.heroStepMode !== mode + peekOff()) { state.heroStepMode = mode + peekOff(); state.heroStepSel = null; }
     var steps = data.steps, sel = state.heroStepSel;
     if (sel != null && !steps[sel]) sel = state.heroStepSel = null;
     var W = 320, H = 150, PL = 10, PR = 10, PT = 28, PB = 18;
@@ -8690,7 +8754,7 @@
       below2 = '<div class="hs-panel"><div class="hs-r"><b>' + esc(dayMonth(s0.date) + ' · ' + lab) + '</b><b class="' + (s0.amt < 0 ? 'neg' : 'pos') + '">' + (s0.amt < 0 ? '− ' : '+ ') + esc(pesoFull(Math.abs(s0.amt))) + '</b></div>' +
         (parts ? '<div class="hs-p">' + esc(parts) + '</div>' : '') +
         '<div class="hs-r hs-m"><span>Left after</span><span>' + esc(pesoFull(s0.after)) + '</span></div></div>';
-    } else below2 = '<p class="hs-cap">' + (steps.length ? 'Tap a step to see what it is · ' : '') + 'daily spending not included</p>';
+    } else below2 = '<p class="hs-cap">' + (steps.length ? 'Tap a step to see what it is · ' : '') + (mode === 'next' ? 'everyday spending spread by week' : 'daily spending not included') + '</p>';
     box.innerHTML = svg + below2;
     var rs = box.querySelectorAll ? box.querySelectorAll('[data-hstep]') : [];
     for (var ri = 0; ri < rs.length; ri++) rs[ri].onclick = function () {
@@ -14149,12 +14213,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.46, live: new Date(2026, 10, 23, 23, 34) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.47, live: new Date(2026, 10, 23, 23, 46) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.47': [
+      'Home: the arrows on the card step up to 5 cycles ahead, each starting from what the one before leaves. Every cycle ahead also takes off everyday spending: your budgets, or what you usually spend if you have none.'
+    ],
     '75.46': [
       'Plans: when you add a plan, Expense or Saving for comes first, then what you are planning.'
     ],
@@ -16121,6 +16188,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     state: state, // v73.34: the smoke reads state.cycleMode after the switch handler
     cycleProjection: cycleProjection, // v73.34: the pure cycle math (smoke: the peek's with/without salary)
     insightsData: insightsData, // v73.44: the hero's data (the bridge's freeNet source — the probe reads it)
+    peekGo: peekGo, everydayFor: everydayFor, // v75.47 (smoke drives them)
     renderCycleBlock: renderCycleBlock // v73.44: the block's render (the probe drives both modes)
   };
 

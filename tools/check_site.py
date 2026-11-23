@@ -703,7 +703,7 @@ def main():
     check("v73.37 (boss: 'remove the plan due row in hero card for this cycle. keep it for the next cycle peek, and expandable to the specific plan dues'): the hero's CYCLE BLOCK — THIS cycle is now just the window + net (the old hero number: the Plans row is NOT rendered, the math still nets it out); the NEXT cycle peek KEEPS the Plans row and it is now a TAP TARGET that expands the specific plan dues as sub-rows (resolved amounts: a fork shows its forked value, paid/skipped never appear), capped at 5 with '+N more…'. The v73.36 carry-over math + the With/Without salary survival toggle stand; v73.35's card-dues removal stands; the coach card's cardpay rows keep their own manual-due math (v73.29/30/31)",
           # the block still lives in the hero (index) + the pure math (app)
           'id="cycleBlock"' in html and "renderCycleBlock();" in js
-          and "function cycleProjection(mode, salMode) {" in js
+          and "function cycleProjection(mode, salMode, off) {" in js  # v75.47 retarget: any cycle ahead
           # the v73.34 window-aware dues helper is GONE (double-count removed)
           and "function cardDuesInWindow(cd, mode) {" not in js
           # the defaults: This cycle, no peek content, no salary toggle,
@@ -718,7 +718,7 @@ def main():
           # (with/without) − next window's plans
           and "var thisNet = r2(free - planWindowTotal(thisCd).total - heldS);" in js  # v74.65 retarget: the Saving-for set-aside comes off too
           and "var carry = (mode === 'next') ? thisNet : 0;" in js
-          and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total);" in js  # v74.69 retarget: the pots' top-ups due next cycle come off too
+          and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total - evN.amt);" in js  # v74.69 retarget: the pots' top-ups due next cycle come off too
           # ONE helper computes both windows' plan totals + the breakdown
           # (the carry, the peek's deduction, and the expanded sub-rows all
           # come from the same items — no drift)
@@ -731,7 +731,7 @@ def main():
           # the render: the carry-over row is peek-only; the salary row is
           # GONE from the this-cycle block (only rendered inside the
           # mode === 'next' branch)
-          and "Carried over<small>from this cycle" in js
+          and "'from this cycle — dues, Saving for &amp; prepayments already netted'" in js  # v75.47 retarget
           and "if (mode === 'next') {" in js
           and "the ' + ordinal(p.sday) + ' — in your free cash" not in js
           # v73.37: the THIS-cycle Plans row is GONE from the render (the
@@ -804,7 +804,7 @@ def main():
           and "var otherOut = r2(liquid - cardOwed - friendOwed - free);" in js
           and "var planShare = r2(cyclePlanDeduction());" in js
           and "planShare: planShare," in js and "otherOut: r2(otherOut)," in js
-          and "mode === 'next' ? '<div class=\"cbnet\"><span class=\"nl\">Free at end of next cycle</span>" in js
+          and "mode === 'next' ? '<div class=\"cbnet\"><span class=\"nl\">Free at the end</span>" in js  # v75.47 retarget: Free at end of the cycle shown
           and ".cbrow.cbfree{margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}" in html
           and "'73.44': [" in js)
     check("v73.45 (boss: 'build v73.45 — reset undo + confirm + audit row'): 'Reset to my numbers' is no longer a one-way door — (1) it opens confirmAsk naming the MEASURED free-cash move (rises/drops by ₱X, direction-aware — the move is measured by previewing the zeroed effectiveSnap, not derived from adj.free, because the overlay's net effect on free is a formula); (2) the confirmed reset files audit rows (k='r', category Adjustment, note 'reset to my numbers') in the money log — one per moved dimension, signed actual delta; (3) the toast carries an Undo that restores the pre-reset overlay AND removes the audit rows; (4) the root 1k-phantom fix: deleteTxn/saveTxnEdit no-op their overlay reversal when adjEmpty() (a reset already wiped it → no phantom delta); (5) the 'r' flavor survives imports (normalizeTxn) and its ✕ just drops the record (no override behind it to revert)",
@@ -2087,7 +2087,7 @@ def main():
           and "'74.70': [" in js)
     check("v74.69 (boss: 'does the saving for accounted in the next cycle peek from the hero' -> 'ok'): the peek subtracts the pots' top-ups due in the next window (potWindowTotal: not yet added, not skipped, capped at the goal) on a 'Saving for · top-ups due' row; Carried over says dues, Saving for & prepayments are already netted",
           "function potWindowTotal(cd) {" in js
-          and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total);" in js
+          and "var net = (mode === 'this') ? thisNet : r2(carry + salAdded - planTotal - potW.total - evN.amt);" in js
           and "dues, Saving for &amp; prepayments already netted" in js
           and "starting / top-ups · " in js  # v74.71 retarget: the row also names the one-offs starting then
           and "'74.69': [" in js)
@@ -2381,7 +2381,7 @@ def main():
     check("v74.33 (boss: 'remove same as the hero number and salary follows ... amount.'): the Free cash row has no sub-label and the cycle footnote is just 'Estimate — pace & one-offs excluded.'",
           "<div class=\"lab ind\">Free cash' + cbI('free') + '</div>" in js  # v75.44 retarget: the (i) sits in the label
           and "Salary follows the target cycle" not in js
-          and "'<p class=\"cbnote\">" not in js and "daily spending not included</p>'" in js  # v75.07: one-offs are in the estimate; v75.12: the note sits under the graph
+          and "'<p class=\"cbnote\">" not in js and "'daily spending not included') + '</p>'" in js  # v75.07: one-offs are in the estimate; v75.12: the note sits under the graph
           and "'74.33': [" in js)
     check("v74.32 (boss: 'in hero card, remove all cards; Plan dues · N due on one row'): the This-cycle Cards owed row has no 'all cards' sub-label and the Plan dues row reads 'Plan dues · N due' (no sub-label)",
           "Cards owed' + (p.cardOwed > 0.004 ? '' : '<small>no cards</small>') + '</div>" in js
@@ -2720,6 +2720,10 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.47 (boss: 'the this/next cycle toggle in hero card for peeking, can we extend it to more cycles' -> 'budgets first, actual spending fallback, build A'): arrows step the hero peek up to PEEK_MAX = 5 cycles ahead; each starts from the previous cycle's end; every cycle ahead takes off everyday spending (budgets, else the average of your last 3 full cycles, plan payments left out); the graph spreads it by week. Smoke PART 99",
+          "var PEEK_MAX = 5;" in js and "function everydayFor(m) {" in js and "function cycleProjection(mode, salMode, off) {" in js
+          and "var prevP = cycleProjection('next', salMode, off - 1);" in js and "function peekGo(off) {" in js
+          and 'class="cbarr" data-step="1"' in js and ".cbstep{" in html and "PART 99: v75.47" in smoke and "'75.47': [" in js)
     check("v75.46 (boss: 'when adding a plan, move the \"this is for...\" above \"what your palnning...\"'): the Expense / Saving for toggle leads the Add a plan form, above the name field",
           html.find('id="p_kindWrap"') >= 0 and html.find('id="p_kindWrap"') < html.find('<label for="p_name"') and html.find('id="planForm"') < html.find('id="p_kindWrap"')
           and "'75.46': [" in js)
@@ -2841,11 +2845,11 @@ def main():
           and "v75.13" in rd(os.path.join("tools", "smoke", "smoke_v68.js"))
           and "'75.13': [" in js)
     check("v75.12 (boss: 'build the hero graph from the mockup'): heroSteps lays the hero's bridge out in time - starts at Liquid (next: the carry), steps on dates (this cycle's unpaid past dues drop today), ends exactly at free cash (residual step); renderSpark draws soft S-curve steps from zero, the dashed free cash line, a Payday pill, tap a step for the panel; the cycle switch re-renders it. Smoke PART 90",
-          "function heroSteps(mode) {" in js
+          "function heroSteps(mode, off) {" in js  # v75.47 retarget
           and "if (Math.abs(diff) > 0.5) { add(x0, 'Other', diff); steps = build(); }" in js
           and "' C' + f(xs) + ' ' + f(y1) + ' ' + f(xs) + ' ' + f(y2) + ' ' + f(xs + w) + ' ' + f(y2);" in js
           and "state.heroStepSel = state.heroStepSel === i ? null : i;" in js
-          and "renderSpark(); // v75.12: the graph shows the selected cycle" in js
+          and "state.cbPlansOpen = false; state.cbPlansMore = false;\n    renderCycleBlock(); renderSpark();" in js  # v75.47 retarget: peekGo repaints the graph
           and ".hs-panel{" in html
           and "PART 90: v75.12" in smoke
           and "'75.12': [" in js)
@@ -2875,7 +2879,7 @@ def main():
           "var goneLater = add && e.tid && !mlTxn" in js
           and "if (e.c && e.c !== 'Unsorted')" in js
           and "See this cycle\\'s plans" in js
-          and "daily spending not included</p>'" in js  # v75.12: the note moved under the graph
+          and "'daily spending not included') + '</p>'" in js  # v75.12: the note moved under the graph
           and '<span class="k">In accounts</span>' in js  # v75.43 retarget: plain words
           and "document.hidden)) { el.textContent = fmt(to); return; }" in js
           and "PART 85: v75.07" in smoke

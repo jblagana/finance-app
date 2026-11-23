@@ -4636,6 +4636,27 @@ waitReady().then(async function (F) {
       var tid98 = ea98.txnId;
       F.deleteTxnFromLog(tid98); await sleep(120);
       ok(ea98.txnId === null && ea98.unfiled && ea98.unfiled.tid === tid98 && !ea98.mine && ea98.amt === 270, 'v75.45: deleting the Owed entry\'s Ledger row keeps the entry, unlinked');
+      // ============ PART 99: v75.47 - peek up to 5 cycles ahead ============
+      console.log('\n== PART 99: v75.47 - the peek steps up to 5 cycles, with everyday spending ==');
+      var ps99 = [F.cycleProjection('this', 'with')];
+      for (var k99 = 1; k99 <= 5; k99++) ps99.push(F.cycleProjection('next', 'with', k99));
+      ok(ps99.slice(1).every(function (p, i) { return Math.abs(p.carry - ps99[i].net) < 0.005; }), 'v75.47: each cycle starts from what the one before leaves');
+      ok(ps99.slice(1).every(function (p) { return Math.abs(p.net - (p.carry + p.salaryAdded - p.plans - p.potTotal - p.everyday)) < 0.005; }), 'v75.47: each cycle = carry + salary - plans - Saving for - everyday spending');
+      ok(ps99.slice(2).every(function (p, i) { return p.start > ps99[i + 1].start; }), 'v75.47: the windows march forward');
+      ok(F.cycleProjection('next', 'with', 9).off === 5, 'v75.47: no further than 5 cycles');
+      var ev99 = F.everydayFor(ps99[1].month);
+      ok(ev99.src === 'spent' || ev99.src === 'none', 'v75.47: no budgets set -> your past spending is the fallback (' + ev99.src + ' ' + ev99.amt + ')');
+      var bud99 = st.base.budgets; st.base.budgets = { Food: 6000, Transpo: 2500 };
+      var ev99b = F.everydayFor(ps99[1].month);
+      ok(ev99b.src === 'budgets' && Math.abs(ev99b.amt - 8500) < 0.005, 'v75.47: budgets win when set (' + ev99b.amt + ')');
+      var hs99 = F.heroSteps('next', 3), p99 = F.cycleProjection('next', 'with', 3);
+      var last99 = hs99.steps.length ? hs99.steps[hs99.steps.length - 1].after : hs99.start;
+      ok(Math.abs(hs99.start - p99.carry) < 0.005 && Math.abs(last99 - p99.net) < 0.005 && hs99.steps.some(function (x) { return x.items.some(function (i) { return i.label === 'Everyday spending'; }); }), 'v75.47: the graph for 3 cycles ahead runs carry -> end, everyday spending by week');
+      F.peekGo(3);
+      var cb99 = String(byIdStub('cycleBlock').innerHTML || '');
+      ok(st.cycleMode === 'next' && cb99.indexOf('In 3 cycles') >= 0 && cb99.indexOf('Everyday spending') >= 0 && cb99.indexOf('your budgets') >= 0, 'v75.47: the card says In 3 cycles with an Everyday spending row from your budgets');
+      F.peekGo(0); st.base.budgets = bud99;
+      ok(st.cycleMode === 'this', 'v75.47: back to This cycle');
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);

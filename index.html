@@ -585,6 +585,10 @@ padding:7px 14px;font-size:12.5px}
 .cbi[aria-expanded=true]{background:var(--mut);color:var(--card)}
 .cbexp{margin:2px 0 6px;padding:8px 10px;border-radius:9px;background:var(--card2);color:var(--mut);font-size:12px;line-height:1.45;font-weight:400}
 .cbexp[hidden]{display:none}
+.cbstep{flex:none;display:flex;align-items:center;gap:2px;background:var(--card2);border-radius:10px;padding:2px}
+.cbarr{width:30px;height:34px;flex:none;border:0;border-radius:8px;background:transparent;color:var(--ink);font-size:20px;line-height:1;cursor:pointer;font-family:inherit}
+.cbarr:disabled{opacity:.3;cursor:default}
+.cbsteplab{min-width:74px;text-align:center;font-size:12.5px;font-weight:600;white-space:nowrap}
 .cbrow.cbfree{margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}
 .cbrow.cbfree .lab{font-weight:600}
 .cbrow.cbfree .amt{font-size:15px;font-weight:800}
@@ -600,7 +604,7 @@ padding:7px 14px;font-size:12.5px}
 .cbsub.mut .sl{color:var(--mut)}
 .cbnet{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
 .cbnet .nl{color:var(--mut);font-size:12.5px}
-.cbnet .nv{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+.cbnet .nv{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
 .cbnet .nv.pos{color:var(--ok)}
 .cbnet .nv.neg{color:var(--bad)}
 .cbnote{color:var(--mut);font-size:11px;margin:6px 0 0}
