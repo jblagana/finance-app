@@ -5594,19 +5594,27 @@
     Object.keys(keys).forEach(function (k) { var a = ovM[k] !== undefined ? Number(ovM[k]) : Number((b.budgets || {})[k]); if (a > 0) bud += a; });
     if (bud > 0.004) return { amt: r2(bud), src: 'budgets', n: 0 };
     if (!peekAvgOn()) return { amt: 0, src: 'off', n: 0 }; // v75.50: you switched the average off
-    var nowM = currentCycleMonth(b, todayISO()), tot = 0, n = 0;
-    for (var k = 1; k <= 3; k++) {
-      var cd = cycleDataFor(cycleMonthAdd(nowM, -k), b), s = 0, any = false;
+    // v75.54 (boss: 'make it avergae of last 2 cycles, weighted to account for incomplete cycles say a cycle only has
+    // 15days worth of data so average base on that 15 and not the entire cycle'): a PER-DAY rate over your last 2 full
+    // cycles, counting only the days you were logging (from your first entry on), times the days in the cycle ahead.
+    var nowM = currentCycleMonth(b, todayISO()), tot = 0, days = 0, n = 0, first = null;
+    (state.txns || []).forEach(function (t) { var d = String(t.date || ''); if (d && (!first || d < first)) first = d; });
+    if (!first) return { amt: 0, src: 'none', n: 0 };
+    for (var k = 1; k <= 2; k++) {
+      var cd = cycleDataFor(cycleMonthAdd(nowM, -k), b);
+      var from = first > cd.start ? first : cd.start;
+      if (from > cd.end) continue; // you had not started logging yet
+      var dd = diffDays(from, cd.end) + 1, s = 0;
       (state.txns || []).forEach(function (t) {
         var d = String(t.date || '');
-        if (d < cd.start || d > cd.end) return;
-        any = true;
-        if (t.planRef) return; // a plan payment is already a plan due
+        if (d < from || d > cd.end || t.planRef) return; // a plan payment is already a plan due
         s += spendOf(t);
       });
-      if (any) { tot += s; n++; }
+      tot += s; days += dd; n++;
     }
-    return n ? { amt: r2(tot / n), src: 'spent', n: n } : { amt: 0, src: 'none', n: 0 };
+    if (!n || days <= 0) return { amt: 0, src: 'none', n: 0 };
+    var cdM = cycleDataFor(m, b), rate = tot / days;
+    return { amt: r2(rate * (diffDays(cdM.start, cdM.end) + 1)), src: 'spent', n: n, rate: r2(rate), days: days };
   }
   function cycleProjection(mode, salMode, off) {
     var b = state.base;
@@ -5623,7 +5631,7 @@
         free: prevP.free, carry: prevP.net, liquid: prevP.liquid, cardOwed: 0, friendOwed: 0, otherOut: 0, planShare: 0, savingHeld: 0,
         salary: r2(cdK.expected), salaryReceived: false, salaryInFree: false, withSalary: withK, salaryAdded: r2(salK),
         salaryPending: 0, salaryPendingInfo: null, plans: r2(pwK.total), planCount: pwK.count, planItems: pwK.items,
-        potTotal: r2(potK.total), potItems: potK.items, everyday: evK.amt, everydaySrc: evK.src, everydayN: evK.n,
+        potTotal: r2(potK.total), potItems: potK.items, everyday: evK.amt, everydaySrc: evK.src, everydayN: evK.n, everydayRate: evK.rate,
         net: r2(prevP.net + salK - pwK.total - potK.total - evK.amt) };
     }
     var m = (mode === 'next') ? (function () {
@@ -5729,7 +5737,7 @@
       // v73.37: the peek's expandable breakdown (the specific plan dues)
       planItems: pw.items,
       potTotal: r2(potW.total), potItems: potW.items, // v74.69
-      off: off, everyday: evN.amt, everydaySrc: evN.src, everydayN: evN.n, // v75.47
+      off: off, everyday: evN.amt, everydaySrc: evN.src, everydayN: evN.n, everydayRate: evN.rate, // v75.47; v75.54: the per-day rate
       net: net
     };
   }
@@ -8403,7 +8411,7 @@
         }).join('') + '</div>';
       }
       // v75.47: everyday spending in the cycle ahead, and where the number comes from
-      var evSub = p.everydaySrc === 'budgets' ? 'your budgets' : p.everydaySrc === 'spent' ? 'your average, last ' + (p.everydayN === 1 ? 'cycle' : p.everydayN + ' cycles') : p.everydaySrc === 'off' ? 'not counted · no budgets set' : 'no budgets or spending yet';
+      var evSub = p.everydaySrc === 'budgets' ? 'your budgets' : p.everydaySrc === 'spent' ? (p.everydayRate != null ? pesoShort(Math.round(p.everydayRate)) + ' a day · ' : 'your average, ') + 'last ' + (p.everydayN === 1 ? 'cycle' : p.everydayN + ' cycles') : p.everydaySrc === 'off' ? 'not counted · no budgets set' : 'no budgets or spending yet';
       var evSw = (p.everydaySrc === 'spent' || p.everydaySrc === 'off') ? '<button type="button" class="cbsw' + (p.everydaySrc === 'spent' ? ' on' : '') + '" id="cbAvgSw" role="switch" aria-checked="' + (p.everydaySrc === 'spent' ? 'true' : 'false') + '" aria-label="Count your average spending"></button>' : ''; // v75.50
       var eOpen = !!state.cbEvOpen; // v75.52: folded; open = where the number comes from (and the v75.50 switch)
       rows += '<div class="cbrow cbev' + (p.everyday > 0.004 ? '' : ' mut') + '" id="cbEvRow" role="button" tabindex="0" aria-expanded="' + (eOpen ? 'true' : 'false') + '"><div class="lab"><span class="chev' + (eOpen ? ' open' : '') + '">▸</span>Everyday spending</div><div class="amt' + (p.everyday > 0.004 ? ' minus' : '') + '">' + (p.everyday > 0.004 ? '− ' + money(p.everyday) : '0') + '</div></div>';
@@ -14206,12 +14214,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.53, live: new Date(2026, 10, 24, 2, 58) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.54, live: new Date(2026, 10, 24, 3, 15) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.54': [
+      'Home: with no budgets set, everyday spending in a cycle ahead is your average per day over your last 2 cycles - only the days you were logging count - times the days in that cycle.'
+    ],
     '75.53': [
       'Home: a Get started card lists five steps - accounts, salary day, your first expense, a bill or plan, and a peek at next cycle. Each ticks itself once done; tap one and it shows you where. Show me around is the new tour, and Settings › Replay tour plays it again.'
     ],

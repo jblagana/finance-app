@@ -4686,7 +4686,7 @@ waitReady().then(async function (F) {
       ok(c102.indexOf('id="cbEvRow"') >= 0 && c102.indexOf('aria-expanded="false"') >= 0 && c102.indexOf('your budgets') < 0 && c102.indexOf('your average') < 0 && c102.indexOf('<small>') < 0, 'v75.52: Everyday spending is folded - no source line until opened');
       st.cbEvOpen = true; F.renderCycleBlock();
       var c102b = String(byIdStub('cycleBlock').innerHTML || '');
-      ok(/class="cbsub"><span class="sl">(Your budgets|Your average|Not counted|No budgets)/.test(c102b), 'v75.52: opened, the source shows as a sub-row');
+      ok(/class="cbsub"><span class="sl">(Your budgets|Your average|₱[0-9,]+ a day|Not counted|No budgets)/.test(c102b), 'v75.52: opened, the source shows as a sub-row');
       st.cbEvOpen = false; st.cbDeductOpen = false; F.peekGo(0);
       // ============ PART 103: v75.53 - Get started ============
       console.log('\n== PART 103: v75.53 - the Get started steps tick themselves ==');
@@ -4702,6 +4702,29 @@ waitReady().then(async function (F) {
       var s103b = F.startSteps();
       ok(s103b[4].done && s103b[3].done === (st.plans.length > 0), 'v75.53: stepping to the next cycle ticks Peek; a plan ticks Add a bill or plan');
       global.localStorage.getItem = gi103; global.localStorage.setItem = si103;
+      // ============ PART 104: v75.54 - the everyday average is per logged day ============
+      console.log('\n== PART 104: v75.54 - everyday spending = per-day rate over the last 2 cycles x the days ahead ==');
+      var bud104 = st.base.budgets, tx104 = st.txns; st.base.budgets = {}; F.peekAvgSet(true);
+      var mAdd104 = function (m, k) { var q = m.split('-'), t = new Date(Number(q[0]), Number(q[1]) - 1 + k, 1); return t.getFullYear() + '-' + (t.getMonth() < 9 ? '0' : '') + (t.getMonth() + 1); };
+      var iso104 = function (d) { return d.getFullYear() + '-' + (d.getMonth() < 9 ? '0' : '') + (d.getMonth() + 1) + '-' + (d.getDate() < 10 ? '0' : '') + d.getDate(); };
+      var add104 = function (iso, k) { var q = iso.split('-'); return iso104(new Date(Number(q[0]), Number(q[1]) - 1, Number(q[2]) + k)); };
+      var days104 = function (a, b) { var x = a.split('-'), y = b.split('-'); return Math.round((new Date(y[0], y[1] - 1, y[2]) - new Date(x[0], x[1] - 1, x[2])) / 864e5) + 1; };
+      var nextM104 = F.cycleProjection('next', 'with', 1).month, c1 = F.cycleDataFor(mAdd104(nextM104, -2), st.base), c2 = F.cycleDataFor(mAdd104(nextM104, -3), st.base);
+      var proto104 = tx104.filter(function (t) { return !t.xfer && !t.planRef && t.kind === 'cash_out' && F.spendOf(t) > 0; })[0] || tx104.filter(function (t) { return F.spendOf(t) > 0 && !t.planRef && !t.xfer; })[0];
+      var mk104 = function (date, amt) { var t = JSON.parse(JSON.stringify(proto104)); t.id = 'p104' + date + amt; t.date = date; t.amount = amt; delete t.planRef; delete t.xfer; return t; };
+      var d2 = add104(c2.start, 15);
+      st.txns = [mk104(d2, 9000), mk104(c1.start, 15000)];
+      var ok104 = Math.abs(F.spendOf(st.txns[0]) - 9000) < 0.01;
+      var ev104 = F.everydayFor(nextM104), cN = F.cycleDataFor(nextM104, st.base);
+      var rate104 = 24000 / (days104(d2, c2.end) + days104(c1.start, c1.end));
+      ok(ok104 && ev104.src === 'spent' && ev104.n === 2 && Math.abs(ev104.amt - Math.round(rate104 * days104(cN.start, cN.end) * 100) / 100) < 0.02,
+        'v75.54: a half-logged cycle counts only its logged days (' + ev104.amt + ' = ' + rate104.toFixed(2) + '/day x ' + days104(cN.start, cN.end) + ' days; the old 3-cycle average would be ' + (24000 / 2) + ')');
+      st.txns = [mk104(add104(c1.end, -9), 3000)];
+      var ev104b = F.everydayFor(nextM104);
+      ok(ev104b.n === 1 && Math.abs(ev104b.rate - 300) < 0.01, 'v75.54: one cycle of logging -> its logged days only (10 days, 3000 -> ' + ev104b.rate + '/day)');
+      st.txns = [mk104(iso104(new Date()), 500)];
+      ok(F.everydayFor(nextM104).src === 'none', 'v75.54: under one full cycle of logging -> nothing to average');
+      st.txns = tx104; st.base.budgets = bud104;
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);

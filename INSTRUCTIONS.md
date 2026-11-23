@@ -1,3 +1,9 @@
+## 2026-11-24 - "for the average everyday spend, make it avergae of last 2 cycles, weighted to account for incomplete cycles say a cycle only has 15days worth of data so average base on that 15 and not the entire cycle"
+Status: **done** - v75.54 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] everydayFor (no budgets, average on): a per-day rate over the last 2 full cycles, counting only the days from your first entry on (a quiet day after that is a real 0 day), times the days in the cycle ahead. Plan payments, Moves and friends' shares stay out. Confirmed with the boss before building.
+- [x] The opened Everyday row reads "₱X a day · last 2 cycles" (fits at 320 px).
+- [x] Smoke PART 104 (half-logged cycle: 24,000 over 15+30 logged days x 30 = 15,652, not 12,000; one cycle of logging; under one cycle -> none); check_site v75.54.
+
 ## 2026-11-24 - "redo the tour, mockup first" -> "Build B with A"
 Status: **done** - v75.53 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] B: a Get started card at the top of Home (#startCard) with five steps that tick themselves (startSteps): accounts, salary, a first non-Move expense, a plan, a peek at the next cycle (peekGo sets fin.start.v1 peek). Tapping a step spotlights the real control with Not now / Do it (Do it opens Your numbers, the add sheet, + Plan, or steps the peek). Hide hides it on this phone; it disappears when all 5 are done.
