@@ -14149,12 +14149,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.45, live: new Date(2026, 10, 23, 23, 32) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.46, live: new Date(2026, 10, 23, 23, 34) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.46': [
+      'Plans: when you add a plan, Expense or Saving for comes first, then what you are planning.'
+    ],
     '75.45': [
       'Owed: editing the Ledger row of an Owed entry now updates the entry. Category and account stay yours; a date or note change goes to your friend to confirm. A later synced change no longer undoes it.',
       'Owed: confirming a friend\u2019s change keeps the category, account and your own share you picked before. If you both change an entry at once, you are told. A change that got lost on the way is sent again, and deleting an entry\u2019s Ledger row keeps the entry.'

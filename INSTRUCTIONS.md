@@ -1,3 +1,7 @@
+## 2026-11-23 - "when adding a plan, move the \"this is for...\" above \"what your palnning...\""
+Status: **done** - v75.46 pushed to https://github.com/jblagana/finance-app.git (main). Held until the Owed fixes (v75.45) landed.
+- [x] index.html planForm: the This is for toggle (p_kindWrap) is the first field; check_site v75.46; headless browser: toggle first, Saving for still switches, no errors.
+
 ## 2026-11-23 - "Yes, fix all five" (the Owed sync sim findings) -> v75.45
 Status: **done** - v75.45 pushed to https://github.com/jblagana/finance-app.git (main), after the parent session's v75.44.
 - [x] Ledger edits on an Owed entry's row (`owedFollowLedger`): category, account (ipf: the friend's card pair re-files) and your own share update the entry; a date / note change on a shared entry is a proposal (pending entry: the new version); a declined one puts the row back (`owedRefileMine`); Undo follows back.

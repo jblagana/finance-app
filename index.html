@@ -2112,7 +2112,16 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
   </div>
   <div class="sheet-b">
     <form id="planForm" autocomplete="off">
-      <label for="p_name">What you're planning</label>
+      <!-- v73.96: the kind axis — an expense (obligation) or money being
+           saved for a thing. Default expense: old plans (no kind field)
+           migrate to expense, so the sections never surprise.
+           v75.46 (boss: 'when adding a plan, move the "this is for..." above "what your palnning..."'): it leads the form -->
+      <label style="display:block">This is for</label>
+      <div id="p_kindWrap" style="display:flex;gap:6px;padding:4px;background:var(--card2);border:1px solid var(--line);border-radius:12px">
+        <div id="p_kind_expense" class="pltab on">Expense</div>
+        <div id="p_kind_goal" class="pltab">Saving for</div>
+      </div>
+      <label for="p_name" style="margin-top:12px;display:block">What you're planning</label>
       <input id="p_name">
       <div class="row rowpair">
         <div>
@@ -2142,14 +2151,6 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
       <div id="p_countWrap" style="display:none;margin-top:10px">
         <label for="p_count">How many times <span class="note" style="margin-left:6px">blank = keep showing the next few</span></label>
         <input id="p_count" type="number" min="1" step="1" inputmode="numeric">
-      </div>
-      <!-- v73.96: the kind axis — an expense (obligation) or money being
-           saved for a thing. Default expense: old plans (no kind field)
-           migrate to expense, so the sections never surprise. -->
-      <label style="margin-top:12px;display:block">This is for</label>
-      <div id="p_kindWrap" style="display:flex;gap:6px;padding:4px;background:var(--card2);border:1px solid var(--line);border-radius:12px">
-        <div id="p_kind_expense" class="pltab on">Expense</div>
-        <div id="p_kind_goal" class="pltab">Saving for</div>
       </div>
       <!-- v74.71: a Saving-for one-off picks the cycle it starts coming off free cash (or any date) -->
       <div class="pcyc" id="p_cycChips" style="display:none"></div>

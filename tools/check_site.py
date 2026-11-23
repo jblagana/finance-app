@@ -2720,6 +2720,9 @@ def main():
           and "class=\"cmnew wide\" data-cmnew>＋ New plan</button>" in js
           and "button.cmnew{" in html
           and "'74.88': [" in js)
+    check("v75.46 (boss: 'when adding a plan, move the \"this is for...\" above \"what your palnning...\"'): the Expense / Saving for toggle leads the Add a plan form, above the name field",
+          html.find('id="p_kindWrap"') >= 0 and html.find('id="p_kindWrap"') < html.find('<label for="p_name"') and html.find('id="planForm"') < html.find('id="p_kindWrap"')
+          and "'75.46': [" in js)
     check("v75.45 (boss: 'Yes, fix all five' after the two-phone Owed sim): a Ledger edit on an Owed entry's row updates the entry (category / account / share local, date / note proposed to the friend); Confirm keeps your picks and your share; a tie is declined with a reason and a reject lines both versions up; a waiting change is resent after 15 min; deleting the row unlinks it. Smoke PART 98, stress group W",
           "function owedFollowLedger(tid) {" in js and "function owedUnlinkTxn(tid) {" in js and "function connResendWaiting(p) {" in js
           and "'You both changed it at once - check their version'" in js and "owedCatOptions((had && had.cat) || 'Unsorted')" in js
