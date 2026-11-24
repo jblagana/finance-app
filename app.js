@@ -14214,12 +14214,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.56, live: new Date(2026, 10, 25, 3, 20) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.57, live: new Date(2026, 10, 25, 3, 25) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.57': [
+      'Home: the big number\u2019s label is just Free Cash now.'
+    ],
     '75.56': [
       'Home: the big number is now called Free Cash (it was Left to spend). Same number, new name.'
     ],
@@ -15787,7 +15790,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var arrows = byId('cbSegCycle'), arrowsOn = isShown(arrows);
     var numsAt = isShown(byId('homeOpenSet')) ? byId('homeOpenSet') : byId('setBtn');
     var openNums = function () { openSheet('numSheet'); };
-    var SAMPLE_HERO = '<small>Example</small><small>Free Cash · after bills &amp; plans</small><b>PHP 8,420.00</b><small>this cycle · 6 days left</small>';
+    var SAMPLE_HERO = '<small>Example</small><small>Free Cash</small><b>PHP 8,420.00</b><small>this cycle · 6 days left</small>';
     var SAMPLE_STEP = '<small>Example</small><div class="tsstep"><span aria-hidden="true">‹</span>Next cycle<span aria-hidden="true">›</span></div>';
     if (kind === 'tour') return [
       // v75.55 (boss: 'live check the tour if it looks great for all steps'): on an empty book the ring sits on the

@@ -1,3 +1,6 @@
+## 2026-11-25 - "just free cash, no after bills..."
+Status: **done** - v75.57 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] Hero label is only "Free Cash" (the "· after bills & plans" tail is gone), also in the tour sample. check_site v75.57; v75.56 check and smoke PART 105 retargeted.
 ## 2026-11-25 - "rename the big hero number to "Free Cash""
 Status: **done** - v75.56 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] Hero label reads "Free Cash · after bills & plans" (was Left to spend); the tour sample and tour copy follow. Same number, only the name. check_site v75.56, smoke PART 105.
