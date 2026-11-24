@@ -1,3 +1,6 @@
+## 2026-11-25 - "rename the big hero number to "Free Cash""
+Status: **done** - v75.56 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] Hero label reads "Free Cash · after bills & plans" (was Left to spend); the tour sample and tour copy follow. Same number, only the name. check_site v75.56, smoke PART 105.
 ## 2026-11-24 - "live check the tour if it looks great for all steps"
 Status: **done** - v75.55 pushed to https://github.com/jblagana/finance-app.git (main).
 - Live check on the site (pane, 375 px, an empty book; only Next / Not now tapped, nothing written): all stops rendered inside the screen. Found: the Plans-and-Ledger stop drew one ring that took in the + between them; on an empty book stops 1-2 ringed the empty card while talking about Left to spend.

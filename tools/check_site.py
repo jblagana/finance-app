@@ -2734,9 +2734,13 @@ def main():
           "function owedFollowLedger(tid) {" in js and "function owedUnlinkTxn(tid) {" in js and "function connResendWaiting(p) {" in js
           and "'You both changed it at once - check their version'" in js and "owedCatOptions((had && had.cat) || 'Unsorted')" in js
           and "PART 98: v75.45" in smoke and "'75.45': [" in js)
+    check("v75.56 (boss: 'rename the big hero number to \"Free Cash\"'): the hero label, the tour sample and the tour copy say Free Cash, not Left to spend",
+          "<span>Free Cash · after bills &amp; plans</span>" in html and "Left to spend" not in html
+          and "<small>Free Cash · after bills &amp; plans</small>" in js and "'Free Cash is what" in js
+          and "come out of Free Cash before" in js and "'75.56': [" in js)
     check("v75.55 (boss: 'live check the tour if it looks great for all steps'): Plans and the Ledger are separate tour stops (no ring around the + between them), and on an empty book the first stops say what the empty card turns into",
           "{ el: tabBtn('money'), t: 'Plans'," in js and "{ el: tabBtn('ledger'), t: 'Ledger'," in js and "function unionBox(" not in js
-          and "Once your numbers are in, this card shows Left to spend" in js and "'75.55': [" in js)
+          and "Once your numbers are in, this card shows Free Cash" in js and "'75.55': [" in js)
     check("v75.54 (boss: 'make it avergae of last 2 cycles, weighted to account for incomplete cycles'): with no budgets, everyday spending ahead = spend per LOGGED day over the last 2 full cycles (from your first entry on) x the days in that cycle; the row shows the per-day rate",
           "for (var k = 1; k <= 2; k++) {" in js and "var from = first > cd.start ? first : cd.start;" in js
           and "amt: r2(rate * (diffDays(cdM.start, cdM.end) + 1))" in js and "everydayRate: evK.rate" in js

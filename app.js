@@ -14214,12 +14214,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.55, live: new Date(2026, 10, 24, 3, 18) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.56, live: new Date(2026, 10, 25, 3, 20) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.56': [
+      'Home: the big number is now called Free Cash (it was Left to spend). Same number, new name.'
+    ],
     '75.55': [
       'Tour: Plans and the Ledger are now their own stops, and on a new book the first stops explain what the Home card turns into.'
     ],
@@ -15784,15 +15787,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var arrows = byId('cbSegCycle'), arrowsOn = isShown(arrows);
     var numsAt = isShown(byId('homeOpenSet')) ? byId('homeOpenSet') : byId('setBtn');
     var openNums = function () { openSheet('numSheet'); };
-    var SAMPLE_HERO = '<small>Example</small><small>Left to spend · after bills &amp; plans</small><b>PHP 8,420.00</b><small>this cycle · 6 days left</small>';
+    var SAMPLE_HERO = '<small>Example</small><small>Free Cash · after bills &amp; plans</small><b>PHP 8,420.00</b><small>this cycle · 6 days left</small>';
     var SAMPLE_STEP = '<small>Example</small><div class="tsstep"><span aria-hidden="true">‹</span>Next cycle<span aria-hidden="true">›</span></div>';
     if (kind === 'tour') return [
       // v75.55 (boss: 'live check the tour if it looks great for all steps'): on an empty book the ring sits on the
       // empty card, so the copy says what it turns into; Plans and the Ledger are two stops (one ring took in the +)
-      { el: home, t: 'Your money at a glance', c: heroOn ? 'Left to spend is what\u2019s left of this cycle once your bills and plans are paid. It moves with every entry.' : 'Once your numbers are in, this card shows Left to spend: what\u2019s left of this cycle once your bills and plans are paid.', sample: heroOn ? '' : SAMPLE_HERO },
+      { el: home, t: 'Your money at a glance', c: heroOn ? 'Free Cash is what\u2019s left of this cycle once your bills and plans are paid. It moves with every entry.' : 'Once your numbers are in, this card shows Free Cash: what\u2019s left of this cycle once your bills and plans are paid.', sample: heroOn ? '' : SAMPLE_HERO },
       { el: arrowsOn ? arrows : home, t: 'Peek ahead', c: (arrowsOn ? 'The arrows' : 'Arrows on that card') + ' step through the next 5 cycles: what carries over, your salary, what\u2019s coming out and what\u2019s free at the end.', sample: arrowsOn ? '' : SAMPLE_STEP },
       { el: byId('addBtn'), t: 'Add anything with +', c: 'Expense, Money in, or Move between your accounts. Type the amount, pick how you paid, and that\u2019s it.' },
-      { el: tabBtn('money'), t: 'Plans', c: 'Your bills, debts and what you\u2019re saving for. Their dues come out of Left to spend before you spend it.' },
+      { el: tabBtn('money'), t: 'Plans', c: 'Your bills, debts and what you\u2019re saving for. Their dues come out of Free Cash before you spend it.' },
       { el: tabBtn('ledger'), t: 'Ledger', c: 'Every day you logged, newest first. Tap a day for its breakdown.' },
       { el: tabBtn('owed'), t: 'Owed', c: 'Keep track of who owes whom. Link a friend and the entries show up on both phones.' }
     ];

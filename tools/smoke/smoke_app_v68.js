@@ -4725,6 +4725,12 @@ waitReady().then(async function (F) {
       st.txns = [mk104(iso104(new Date()), 500)];
       ok(F.everydayFor(nextM104).src === 'none', 'v75.54: under one full cycle of logging -> nothing to average');
       st.txns = tx104; st.base.budgets = bud104;
+      // ============ PART 105: v75.56 - the hero number is Free Cash ============
+      console.log('\n== PART 105: v75.56 - the big hero number is called Free Cash ==');
+      var html105 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
+      var js105 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'app.js'), 'utf8');
+      ok(html105.indexOf('<span>Free Cash · after bills &amp; plans</span>') > 0 && html105.indexOf('Left to spend') < 0, 'v75.56: the hero label reads Free Cash');
+      ok(js105.indexOf('<small>Free Cash · after bills &amp; plans</small>') > 0 && !/c: [^\n]*Left to spend/.test(js105), 'v75.56: the tour sample and copy say Free Cash');
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);
