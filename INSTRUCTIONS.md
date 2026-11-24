@@ -1,3 +1,6 @@
+## 2026-11-25 - "Put it back"
+Status: **done** - v75.58 pushed to https://github.com/jblagana/finance-app.git (main).
+- [x] After "nevermind", the hero label is "Free Cash · after bills & plans" again (undoes v75.57), also in the tour sample. check_site v75.58; v75.56 check and smoke PART 105 back on the long label.
 ## 2026-11-25 - "just free cash, no after bills..."
 Status: **done** - v75.57 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] Hero label is only "Free Cash" (the "· after bills & plans" tail is gone), also in the tour sample. check_site v75.57; v75.56 check and smoke PART 105 retargeted.

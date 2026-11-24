@@ -4729,8 +4729,8 @@ waitReady().then(async function (F) {
       console.log('\n== PART 105: v75.56 - the big hero number is called Free Cash ==');
       var html105 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
       var js105 = require('fs').readFileSync(path.join(__dirname, '..', '..', 'app.js'), 'utf8');
-      ok(html105.indexOf('<span>Free Cash</span>') > 0 && html105.indexOf('after bills') < 0 && html105.indexOf('Left to spend') < 0, 'v75.56: the hero label reads Free Cash');
-      ok(js105.indexOf('<small>Free Cash</small>') > 0 && !/c: [^\n]*Left to spend/.test(js105), 'v75.56: the tour sample and copy say Free Cash');
+      ok(html105.indexOf('<span>Free Cash · after bills &amp; plans</span>') > 0 && html105.indexOf('Left to spend') < 0, 'v75.56: the hero label reads Free Cash');
+      ok(js105.indexOf('<small>Free Cash · after bills &amp; plans</small>') > 0 && !/c: [^\n]*Left to spend/.test(js105), 'v75.56: the tour sample and copy say Free Cash');
       console.log('');
       console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES');
       process.exit(fails === 0 ? 0 : 1);
