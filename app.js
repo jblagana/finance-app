@@ -11810,7 +11810,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (!slot.isConnected || !byId('paymentQRSheet').classList.contains('show')) return;
       byId('paymentQRTitle').textContent = 'Review QR image';
       slot.innerHTML = '<form id="qrReview"><label>Bank or wallet label<input maxlength="40" required></label>' +
-        '<canvas aria-label="QR image preview"></canvas><div class="qrModes"><button type="button" value="original">Original</button>' +
+        '<canvas aria-label="QR image preview"></canvas><p class="crop-hint" hidden>Drag to position · Pinch to zoom</p><div class="qrModes"><button type="button" value="original">Original</button>' +
         '<button type="button" value="square">Square</button></div><label hidden>Zoom<input type="range" min="1" max="4" step=".01" value="1"></label>' +
         '<button class="act">Save QR</button></form>';
       var form = slot.querySelector('form'), canvas = form.querySelector('canvas'), zoom = form.querySelector('[type=range]');
@@ -11821,12 +11821,21 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         left = Math.max(0, Math.min(w-side, x*w-side/2));
         top = Math.max(0, Math.min(h-side, y*h-side/2));
         x = (left + side/2)/w; y = (top + side/2)/h;
-        var sw = square ? side : w, sh = square ? side : h;
+        var sw = w, sh = h;
         var scale = Math.min(1, 1024 / Math.max(sw,sh));
         canvas.width = Math.max(1, Math.round(sw*scale)); canvas.height = Math.max(1, Math.round(sh*scale));
         var ctx = canvas.getContext('2d');
         ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.drawImage(img,square?left:0,square?top:0,sw,sh,0,0,canvas.width,canvas.height);
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        if (square) {
+          var l = left*scale, t = top*scale, size = side*scale;
+          ctx.fillStyle = 'rgba(10,16,27,.52)';
+          ctx.beginPath(); ctx.rect(0,0,canvas.width,canvas.height); ctx.rect(l,t,size,size); ctx.fill('evenodd');
+          ctx.strokeStyle = '#37d39b'; ctx.lineWidth = 2; ctx.strokeRect(l,t,size,size);
+          ctx.fillStyle = '#9af3cf';
+          [l,l+size].forEach(function (cx) { [t,t+size].forEach(function (cy) { ctx.fillRect(cx-5,cy-5,10,10); }); });
+        }
+        form.querySelector('.crop-hint').hidden = !square;
         form.querySelectorAll('.qrModes button').forEach(function (button) {
           button.setAttribute('aria-pressed', String((button.value === 'square') === square));
         });
@@ -11847,8 +11856,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           var p = other[1], oldDist = Math.hypot(prev[0]-p[0],prev[1]-p[1]);
           if (oldDist > 0) zoom.value = Math.max(1,Math.min(4,zoom.value*Math.hypot(e.clientX-p[0],e.clientY-p[1])/oldDist));
         } else {
-          x -= (e.clientX-prev[0])*side/(canvas.clientWidth*w);
-          y -= (e.clientY-prev[1])*side/(canvas.clientHeight*h);
+          x += (e.clientX-prev[0])/canvas.clientWidth;
+          y += (e.clientY-prev[1])/canvas.clientHeight;
         }
         pointers.set(e.pointerId,[e.clientX,e.clientY]); draw();
       };
@@ -11856,8 +11865,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       form.onsubmit = function (e) {
         e.preventDefault();
         var label = form.querySelector('input').value.trim(); if (!label) return;
-        var src = canvas.toDataURL('image/png');
-        var jpeg = canvas.toDataURL('image/jpeg',0.9);
+        var output = document.createElement('canvas');
+        var sourceW = square ? side : w, sourceH = square ? side : h;
+        var ratio = Math.min(1,1024/Math.max(sourceW,sourceH));
+        output.width = Math.max(1,Math.round(sourceW*ratio)); output.height = Math.max(1,Math.round(sourceH*ratio));
+        var context = output.getContext('2d');
+        context.fillStyle = 'white'; context.fillRect(0,0,output.width,output.height);
+        context.drawImage(img,square?left:0,square?top:0,sourceW,sourceH,0,0,output.width,output.height);
+        var src = output.toDataURL('image/png');
+        var jpeg = output.toDataURL('image/jpeg',0.9);
         try { savePaymentQRs(paymentQRProfile().codes.concat({label:label,src:src.length < jpeg.length ? src : jpeg})); }
         catch (err) { snack(esc(err.message)); }
       };
@@ -14393,12 +14409,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.61, live: new Date(2026, 10, 27, 23, 29) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.62, live: new Date(2026, 10, 27, 23, 41) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.62': ['Owed: compact entry actions, an outlined My payment QRs button, and a visible square crop frame.'],
     '75.61': [
       'Owed: expanded cards group actions in the three-dot menu. Linked people can share payment QRs.'
     ],
