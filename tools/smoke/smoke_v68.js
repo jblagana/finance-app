@@ -428,3 +428,39 @@ v70hm('how much → status', 'how much');
   console.log('--- v75.23 cloud sync present, config baked in ' + (ok ? 'OK' : 'FAIL'));
   if (!ok) process.exitCode = 1;
 })();
+
+// v75.59 (Jan: "whats my average spend in the last 7days", any N): 'last N days' windows + the average per calendar day
+(function v7559() {
+  function iso(d) { return d.getFullYear() + '-' + (d.getMonth() < 9 ? '0' : '') + (d.getMonth() + 1) + '-' + (d.getDate() < 10 ? '0' : '') + d.getDate(); }
+  function ago(n) { var d = new Date(); d.setDate(d.getDate() - n); return iso(d); }
+  var txns = [0, 1, 2, 3, 5, 6, 9, 13, 20].map(function (n, i) { return { date: ago(n), kind: 'cash_out', amount: 100 * (i + 1), category: i % 2 ? 'Transport' : 'Food', account: 'LandBank' }; });
+  txns.push({ date: ago(2), kind: 'cash_in', amount: 46615, category: 'Salary', account: 'LandBank' });
+  var ctx = {
+    eff: { cards: [], total_prepay: 0, card_owed: 0, cash: { total: 5000, free: 4000, accounts: [{ name: 'LandBank', value: 5000 }] },
+      floor: 0, prepay_day: 14, cutoff_day: 15, month: iso(new Date()).slice(0, 7), obligations: { debts: [], one_offs: [] } },
+    base: { budgets: { Food: 0 }, salary: 25000, salary_overrides: {}, budget_overrides: {}, one_offs: {}, debts: {},
+      accounts: [{ name: 'LandBank', kind: 'debit', value: 5000 }] },
+    txns: txns, at: new Date().toISOString()
+  };
+  function txt(r) { return r ? String(r.html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ') : 'null'; }
+  [
+    // last 7 days = days 0,1,2,3,5,6 -> 2,100 / 7 = 300 (the salary is not spending)
+    ['whats my average spend in the last 7days', ['the last 7 days', '2,100.00', 'Average per day', '300.00', 'over 7 days']],
+    // any N: 14 days -> + day 9 and 13 -> 3,600 / 14 = 257.14
+    ['average spend last 14 days', ['the last 14 days', '3,600.00', '257.14', 'over 14 days']],
+    ['avg spending last 2 weeks', ['the last 14 days', '3,600.00', '257.14']],
+    ['average spend on food last ten days', ['the last 10 days', 'Food', '1,600.00', '160.00']],
+    // a total question gets no average line
+    ['how much did i spend in the past 3 days', ['the last 3 days', '600.00']]
+  ].forEach(function (c) {
+    var r = fc.handle(c[0], ctx), s = txt(r);
+    var ok = !!r && r.__path === 'rule:intentSpend' && c[1].every(function (x) { return s.indexOf(x) >= 0; }) && s.indexOf('46,615') < 0;
+    if (ok && /past 3 days/.test(c[0])) ok = s.indexOf('Average per day') < 0;
+    console.log('--- v75.59 "' + c[0] + '" ' + (ok ? 'OK' : 'FAIL path=' + (r && r.__path) + ' got=' + s.slice(0, 220)));
+    if (!ok) process.exitCode = 1;
+  });
+  var st = fc.handle('how much can i spend per day', ctx);
+  var stOk = !!st && st.__path !== 'rule:intentSpend';
+  console.log('--- v75.59 "how much can i spend per day" stays off the ledger answer ' + (stOk ? 'OK' : 'FAIL path=' + (st && st.__path)));
+  if (!stOk) process.exitCode = 1;
+})();

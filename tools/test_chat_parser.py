@@ -1021,6 +1021,22 @@ def learn(phrase, cid):
     LEX[norm(phrase)] = cid
 
 
+NUMWORD = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+           "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "twenty": 20,
+           "thirty": 30, "sixty": 60, "ninety": 90}
+
+
+def last_n_days(t):
+    """Mirror of chat.js lastNDays (v75.59): 'last 7days' / 'past 2 weeks' / 'last three days' -> N, else 0."""
+    m = re.search(r"\b(?:last|past|previous|prior)\s+(\d{1,3}|[a-z]+)\s*-?\s*(days?|d|weeks?|wks?)\b", t)
+    if not m:
+        return 0
+    n = int(m.group(1)) if m.group(1).isdigit() else NUMWORD.get(m.group(1), 0)
+    if m.group(2).startswith("w"):
+        n *= 7
+    return n if 1 <= n <= 366 else 0
+
+
 def route(text):
     t = norm(text)
     if re.match(r"^(help|\?+|what can you do|what do you do|what can i ask|how do you work|commands|abilities)\b", t):
@@ -1047,8 +1063,11 @@ def route(text):
         return "log"
     if re.search(r"charge|swipe|cash[- ]back", t) or re.search(r"\bcan\b.*\bbuy\b", t):
         return "deficit"
+    # v75.59: 'last N days' (any N) and 'average' are time cues too (mirror of chat.js lastNDays / wantAvg)
+    want_avg = (re.search(r"\b(average|avg|ave)\b", t) and not re.search(r"\b(can|could|should) i\b", t))
     if re.search(r"\b(spend|spent|spending)\b", t) and (
-            re.search(r"\b(today|yesterday|week|month)\b", t) or any(mention_of(c, t) for c in ["food", "gym", "rent"])):
+            re.search(r"\b(today|yesterday|week|month)\b", t) or last_n_days(t) or want_avg
+            or any(mention_of(c, t) for c in ["food", "gym", "rent"])):
         return "spend"
     if extract_story(t, SAMPLE_BASE) or story_asks(t, SAMPLE_BASE):
         return "story"
@@ -1176,6 +1195,11 @@ def main():
         ("is 2500 cash backed", "deficit"),
         ("how much did I spend this month", "spend"),
         ("how much did I spend on food", "spend"),  # category cue, no time word
+        ("whats my average spend in the last 7days", "spend"),  # v75.59
+        ("average spend last 14 days", "spend"),  # v75.59: any N
+        ("how much did i spend in the past three days", "spend"),  # v75.59: a number word
+        ("avg spending last 2 weeks", "spend"),  # v75.59: weeks = N x 7 days
+        ("whats my average daily spend", "spend"),  # v75.59: average, no window = this cycle
         ("what's my home credit balance", "debt"),
         ("when do I finish eeei", "debt"),
         ("what's above my free cash", "status"),  # 'above' must NOT hit the Ave debt
@@ -1217,6 +1241,11 @@ def main():
         check("route: %r" % text, route(text), want)
 
     print("\n== v43 personal lexicon + clarification ==")
+    # v75.59: the 'last N days' window reads any N
+    for q, want in [("average spend in the last 7days", 7), ("last 30 days", 30), ("past 2 weeks", 14),
+                    ("last three days", 3), ("previous 1 day", 1), ("last 0 days", 0), ("last week", 0),
+                    ("last 999 days", 0), ("spend in the next 5 days", 0)]:
+        check("last_n_days(%r)" % q, last_n_days(norm(q)), want)
     # first time: a known-ambiguous phrasing asks (and never writes)
     check("ambiguous 'whats my log' -> clarify (no write)", route("whats my log"), "clarify")
     check("ambiguous 'what i log' -> clarify", route("what i log"), "clarify")

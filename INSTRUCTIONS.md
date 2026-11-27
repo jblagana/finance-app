@@ -1,3 +1,10 @@
+## 2026-11-27 - "Can the bot answer my question "whats my average spend in the last 7days"" -> "Ur reco, and make sure its flexible to not just 7 days"
+Status: **in review** - branch `claude/project-thread-37xsyr`, PR open; not released yet (v75.59 once stamped with tools/release.ps1 on main).
+- Interpretation: spending questions accept any "last/past/previous N days" window (also "7days", "2 weeks" = 14 days, number words like "three"), and when the question says average / avg / per day / daily the answer adds the average per calendar day (days with no spending count as 0). An "average" with no window uses this cycle so far. "How much can I spend per day" stays a status question.
+- [x] chat.js intentSpend: lastNDays(), the average line on every window (today/yesterday = 1 day show no average line).
+- [x] test_chat_parser.py mirror (route + last_n_days checks); smoke_v68.js v75.59 block (2,100 / 7 = 300; 14 days; 2 weeks; food over 10 days; total-only; can-I-spend stays off).
+- [ ] Release: bump with tools/release.ps1 (needs PowerShell, not available in the cloud session) and push main.
+
 ## 2026-11-25 - "Put it back"
 Status: **done** - v75.58 pushed to https://github.com/jblagana/finance-app.git (main).
 - [x] After "nevermind", the hero label is "Free Cash · after bills & plans" again (undoes v75.57), also in the tour sample. check_site v75.58; v75.56 check and smoke PART 105 back on the long label.
