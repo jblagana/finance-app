@@ -1,0 +1,43 @@
+name: Inspect Owed release
+on: [push]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  snips:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: owed-screen-snips
+          path: snips
+          github-token: ${{ github.token }}
+          run-id: 46082486112
+      - name: Read preview images
+        run: |
+          for f in snips/*.png; do
+            convert "$f" -resize 390x844 -quality 76 "/tmp/$(basename "$f").jpg"
+            echo "SNIP $(basename "$f")"
+            base64 -w 1000 "/tmp/$(basename "$f").jpg"
+            echo ENDSNIP
+          done
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c7e49b82d47af25239419a03c0e0ae0054645f8f
+          path: finance-app
+      - name: Release checks
+        shell: pwsh
+        working-directory: finance-app
+        run: |
+          $p = (Resolve-Path 'app.js')
+          [IO.File]::WriteAllText($p, [IO.File]::ReadAllText($p).Replace("'75.60': [","'75.61': ["))
+          ./tools/release.ps1 v75.61
+      - name: Verified stamp
+        working-directory: finance-app
+        shell: pwsh
+        run: |
+          Select-String 'var SHELL_RELEASE =' app.js
+          git diff --stat
