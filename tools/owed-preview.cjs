@@ -4,15 +4,17 @@ const assert=require('node:assert/strict');
 (async()=>{
  const browser=await chromium.launch();try{
  const page=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:2});
- await page.goto('http://localhost:8734/');
+ const response=await page.goto('https://jblagana.github.io/finance-app/'); console.log('Live URL',response.url(),'HTTP',response.status()); if(!response.ok()) throw Error('Live URL unavailable');
  await page.waitForFunction(()=>window.FinApp && document.querySelector('#boot.off'));
  await page.evaluate(()=>{const f=FinApp;f.state.owed.people=[{id:'m',name:'Mika',entries:[]},{id:'v',name:'Vhal',entries:[]}];f.emit('owed');});
  await page.locator('.tab[data-tab=owed]').evaluate(el=>el.click());
+ console.log('Deployed shell',await page.evaluate(()=>FinApp.shellVersion));
  const card=page.locator('[data-ow-pid=m]');
  assert.equal(await card.locator('summary').first().isVisible(),false);
  await card.locator('[data-ow-open]').click();
  await card.locator('.owed-person-menu summary').click();
  fs.mkdirSync('snips',{recursive:true});
+ console.log('LIVE LAYOUT',await card.evaluate(el=>{const entry=el.querySelector('[data-ow-toggle]').getBoundingClientRect(),menu=el.querySelector('.owed-person-menu>div').getBoundingClientRect();return JSON.stringify({width:innerWidth,entryWidth:entry.width,menuRight:menu.right,clipped:menu.right>innerWidth});}));
  await page.screenshot({path:'snips/01-expanded-menu.png'});
  await card.locator('.owed-person-menu summary').click();
  await page.locator('#myPaymentQRs').click();
