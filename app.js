@@ -14214,12 +14214,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.58, live: new Date(2026, 10, 25, 3, 26) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.59, live: new Date(2026, 10, 27, 14, 58) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.59': [
+      'Coach Fin: ask “what’s my average spend in the last 7 days” (any number of days, or weeks) and it gives the total plus the average per day.'
+    ],
     '75.58': [
       'Home: the big number\u2019s label is back to Free Cash \u00b7 after bills & plans.'
     ],
