@@ -10762,13 +10762,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       // right under the header, above the entry list (user request); an opened
       // form expands next to its button and pushes the list down
       '<div class="ow-acts">' +
-      '<button type="button" class="addrow" data-ow-toggle="' + esc(p.id) + '">+ entry</button>' +
-      // v72.48: one statement of account per person — the SOA (PDF) button
-      // exports this person's full account (every entry, running balance,
-      // closing direction) as a PDF file
-      '<button type="button" class="ow-xbtn wide" data-ow-soa="' + esc(p.id) + '" title="Statement of account (PDF)">SOA (PDF)</button>' +
-      '<button type="button" class="ow-xbtn wide" data-cn-conn="' + esc(p.id) + '">' + (p.conn ? (p.conn.st === 'linked' ? 'Linked ✓' : p.conn.st === 'invited' ? 'Invite…' : 'Unlinked') : 'Connect') + '</button>' +
-      '<button type="button" class="ow-xbtn" data-ow-del="' + esc(p.id) + '" aria-label="Remove person">✕</button>' +
+      '<button type="button" class="addrow" data-ow-toggle="' + esc(p.id) + '">+ Entry</button>' +
+      '<details class="owed-person-menu"><summary aria-label="Person actions">⋯</summary><div>' +
+      '<button type="button" class="ow-xbtn wide" data-ow-soa="' + esc(p.id) + '" title="Statement of account (PDF)">Statement of account</button>' +
+      '<button type="button" class="ow-xbtn wide" data-cn-conn="' + esc(p.id) + '">Manage link</button>' +
+      '<button type="button" class="ow-xbtn wide" data-ow-qr="' + esc(p.id) + '">View payment QRs</button>' +
+      '<button type="button" class="ow-xbtn qr-delete" data-ow-del="' + esc(p.id) + '" aria-label="Remove person">Delete person</button>' +
+      '</div></details>' +
       '</div>' +
       '<form class="oent" data-ow-for="' + esc(p.id) + '" style="display:none" autocomplete="off">' +
       oentFormHTML() +
@@ -10817,6 +10817,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     owedOpen[pid] = isOpen;
     if (card.classList) card.classList.toggle('open', isOpen);
     header.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    if (!isOpen) card.querySelector('.owed-person-menu').open = false;
   }
   // v74.19: the row's running-balance line ("PHP 940.00 to you" / "you owe" / "settled")
   function owedRunText(v) {
@@ -11699,6 +11700,172 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       });
     });
   }
+  // Send a complete profile through the existing encrypted pair mailbox.
+  // Keep chunks below the worker's sealed-message limit and apply atomically.
+  var PAYMENT_QR_KEY = 'finai-payment-qrs';
+  var PAYMENT_QR_LIMIT = 120000;
+  function validPaymentQR(q) {
+    return q && typeof q.label === 'string' && q.label.trim() && q.label.length <= 40 &&
+      typeof q.src === 'string' && q.src.length <= PAYMENT_QR_LIMIT &&
+      /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(q.src);
+  }
+  function paymentQRProfile() {
+    try {
+      var data = JSON.parse(localStorage.getItem(PAYMENT_QR_KEY));
+      if (data && Array.isArray(data.codes)) return data;
+    } catch (e) {}
+    return { revision: 0, codes: [] };
+  }
+  function queuePaymentQRs(p) {
+    if (!connLive(p)) return false;
+    var profile = paymentQRProfile();
+    if (!profile.revision || p.conn.qrSent === profile.revision) return false;
+    var payload = JSON.stringify(profile.codes);
+    for (var offset = 0; offset < payload.length; offset += 3000) {
+      connQueue(p, { t: 'qr', rev: profile.revision, index: offset / 3000,
+        count: Math.ceil(payload.length / 3000), chunk: payload.slice(offset, offset + 3000) });
+    }
+    p.conn.qrSent = profile.revision;
+    return true;
+  }
+  function receivePaymentQRs(c, m) {
+    if ((c.st !== 'linked' && c.st !== 'invited') || !Number.isSafeInteger(m.rev) || m.rev <= (c.qrRevision || 0) ||
+        !Number.isInteger(m.count) || m.count < 1 || m.count > 43 ||
+        !Number.isInteger(m.index) || m.index < 0 || m.index >= m.count ||
+        typeof m.chunk !== 'string' || m.chunk.length > 3000) return;
+    if (!c.qrDraft || c.qrDraft.rev < m.rev) c.qrDraft = { rev: m.rev, count: m.count, chunks: {} };
+    var draft = c.qrDraft;
+    if (draft.rev !== m.rev || draft.count !== m.count) return;
+    draft.chunks[m.index] = m.chunk;
+    if (Object.keys(draft.chunks).length !== draft.count) return;
+    delete c.qrDraft;
+    var payload = Array.from({ length: draft.count }, function (_, i) { return draft.chunks[i]; }).join('');
+    try {
+      var codes = JSON.parse(payload);
+      if (payload.length <= PAYMENT_QR_LIMIT && Array.isArray(codes) && codes.every(validPaymentQR)) {
+        c.qrCodes = codes;
+        c.qrRevision = m.rev;
+      }
+    } catch (e) {}
+  }
+  function showPaymentQRs(person) {
+    var own = !person;
+    var slot = byId('paymentQRBody');
+    var codes = own ? paymentQRProfile().codes : connLive(person) ? person.conn.qrCodes || [] : [];
+    byId('paymentQRTitle').textContent = own ? 'My payment QRs' : person.name + '’s payment QRs';
+    slot.innerHTML = '<p class="note">' + (own ? 'Visible to everyone linked to you in Owed.' :
+      !connLive(person) ? 'Link with this person to see their payment QRs.' :
+      codes.length ? '' : 'No payment QRs shared yet.') + '</p>';
+    codes.forEach(function (qr, index) {
+      if (!validPaymentQR(qr)) return;
+      var card = document.createElement('details');
+      card.open = !own && index === 0;
+      card.className = 'card payment-qr';
+      card.innerHTML = '<summary>' + esc(qr.label) + '</summary><img alt="' + esc(qr.label) +
+        ' payment QR" src="' + esc(qr.src) + '">' +
+        (own ? '<button type="button" class="mini" data-qr-remove="' + index + '">Remove</button>' :
+          '<a class="mini" download="payment-qr" href="' + esc(qr.src) + '">Save QR image</a>');
+      slot.appendChild(card);
+    });
+    if (own) {
+      var upload = document.createElement('input');
+      upload.type = 'file'; upload.accept = 'image/png,image/jpeg,image/webp'; upload.hidden = true;
+      var button = document.createElement('button');
+      button.className = 'act'; button.textContent = 'Upload QR';
+      button.onclick = function () { upload.click(); };
+      upload.onchange = function () { if (upload.files[0]) reviewPaymentQR(upload.files[0]); };
+      slot.append(upload, button);
+    }
+    if (!byId('paymentQRSheet').classList.contains('show')) openSheet('paymentQRSheet');
+  }
+  function savePaymentQRs(codes) {
+    if (JSON.stringify(codes).length > PAYMENT_QR_LIMIT) throw new Error('QR images are too large. Crop the images around the QR codes and try again.');
+    localStorage.setItem(PAYMENT_QR_KEY, JSON.stringify({
+      revision: Math.max(Date.now(), paymentQRProfile().revision + 1), codes: codes
+    }));
+    showPaymentQRs();
+    connSyncAll(true);
+  }
+  function wirePaymentQRs() {
+    if (!byId('myPaymentQRs')) return;
+    byId('myPaymentQRs').onclick = function () { showPaymentQRs(); };
+    byId('paymentQRClose').onclick = closeSheets;
+    var slot = byId('paymentQRBody');
+    slot.addEventListener('click', function (ev) {
+      var value = ev.target.getAttribute('data-qr-remove');
+      if (value === null) return;
+      var codes = paymentQRProfile().codes.slice();
+      codes.splice(Number(value), 1);
+      try { savePaymentQRs(codes); } catch (e) { snack(esc(e.message)); }
+    });
+  }
+
+  async function reviewPaymentQR(file) {
+    var slot = byId('paymentQRBody');
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.src = url;
+    try {
+      await img.decode();
+      if (!slot.isConnected || !byId('paymentQRSheet').classList.contains('show')) return;
+      byId('paymentQRTitle').textContent = 'Review QR image';
+      slot.innerHTML = '<form id="qrReview"><label>Bank or wallet label<input maxlength="40" required></label>' +
+        '<canvas aria-label="QR image preview"></canvas><div class="qrModes"><button type="button" value="original">Original</button>' +
+        '<button type="button" value="square">Square</button></div><label hidden>Zoom<input type="range" min="1" max="4" step=".01" value="1"></label>' +
+        '<button class="act">Save QR</button></form>';
+      var form = slot.querySelector('form'), canvas = form.querySelector('canvas'), zoom = form.querySelector('[type=range]');
+      var square = false, x = 0.5, y = 0.5, w = img.naturalWidth, h = img.naturalHeight;
+      var side, left, top;
+      function draw() {
+        side = Math.min(w,h) / Number(zoom.value);
+        left = Math.max(0, Math.min(w-side, x*w-side/2));
+        top = Math.max(0, Math.min(h-side, y*h-side/2));
+        x = (left + side/2)/w; y = (top + side/2)/h;
+        var sw = square ? side : w, sh = square ? side : h;
+        var scale = Math.min(1, 1024 / Math.max(sw,sh));
+        canvas.width = Math.max(1, Math.round(sw*scale)); canvas.height = Math.max(1, Math.round(sh*scale));
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(img,square?left:0,square?top:0,sw,sh,0,0,canvas.width,canvas.height);
+        form.querySelectorAll('.qrModes button').forEach(function (button) {
+          button.setAttribute('aria-pressed', String((button.value === 'square') === square));
+        });
+        zoom.parentElement.hidden = !square;
+      }
+      form.querySelector('.qrModes').onclick = function (e) {
+        if (e.target.tagName === 'BUTTON') { square = e.target.value === 'square'; draw(); }
+      };
+      zoom.oninput = draw;
+      var pointers = new Map();
+      canvas.onpointerdown = function (e) {
+        if (square) { canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, [e.clientX,e.clientY]); }
+      };
+      canvas.onpointermove = function (e) {
+        var prev = pointers.get(e.pointerId); if (!prev) return;
+        var other = Array.from(pointers.entries()).find(function (v) { return v[0] !== e.pointerId; });
+        if (other) {
+          var p = other[1], oldDist = Math.hypot(prev[0]-p[0],prev[1]-p[1]);
+          if (oldDist > 0) zoom.value = Math.max(1,Math.min(4,zoom.value*Math.hypot(e.clientX-p[0],e.clientY-p[1])/oldDist));
+        } else {
+          x -= (e.clientX-prev[0])*side/(canvas.clientWidth*w);
+          y -= (e.clientY-prev[1])*side/(canvas.clientHeight*h);
+        }
+        pointers.set(e.pointerId,[e.clientX,e.clientY]); draw();
+      };
+      canvas.onlostpointercapture = function (e) { pointers.delete(e.pointerId); };
+      form.onsubmit = function (e) {
+        e.preventDefault();
+        var label = form.querySelector('input').value.trim(); if (!label) return;
+        var src = canvas.toDataURL('image/png');
+        var jpeg = canvas.toDataURL('image/jpeg',0.9);
+        try { savePaymentQRs(paymentQRProfile().codes.concat({label:label,src:src.length < jpeg.length ? src : jpeg})); }
+        catch (err) { snack(esc(err.message)); }
+      };
+      draw();
+    } catch (err) { snack('Could not open this image. Choose a PNG, JPEG or WebP.'); }
+    finally { URL.revokeObjectURL(url); }
+  }
+
   function connOther(c) { return c.side === 'a' ? 'b' : 'a'; }
   function connFind(pid) { var p = null; (state.owed.people || []).forEach(function (x) { if (x.id === pid) p = x; }); return p; }
   // the balance before the link: entries that are not shared (no cid)
@@ -11783,7 +11950,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var p = connFind(pid);
     if (!p || !p.conn || !p.conn.relay || p.conn.st === 'ended') return Promise.resolve();
     if (connSyncing[pid]) return connSyncing[pid];
-    var c = p.conn, changed = false;
+    var c = p.conn, changed = queuePaymentQRs(p);
     var run = Promise.resolve().then(function () {
       var out = (c.out || []).slice();
       var step = Promise.resolve();
@@ -11928,11 +12095,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var t = m.t;
     var ent = function (cid) { var f = null; (p.entries || []).forEach(function (e) { if (e.cid === cid) f = e; }); return f; };
     var dropIn = function (cid) { c.in = c.in.filter(function (x) { return x.cid !== cid; }); };
+    if (t === 'qr') { receivePaymentQRs(c, m); return; }
     if (t === 'hi') {
       if (c.side === 'a') {
         c.st = 'linked'; c.at = c.at || new Date().toISOString();
         if (!c.open) c.open = { amt: 0 };
         c.open.st = m.open === 'ok' ? 'ok' : 'no'; c.open.why = String(m.why || '');
+        connSyncSoon(p.id);
         snack(esc(p.name) + ' connected');
       }
     } else if (t === 'e' && CONN_MIRROR[m.dir] && Number(m.amt) > 0) {
@@ -12491,6 +12660,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     return '';
   }
   function connWire() {
+    wirePaymentQRs();
     var body = byId('owedBody'), sheet = byId('connSheet');
     var parse = function (v) {
       var s = String(v || '').split('|');
@@ -13234,6 +13404,10 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           renderOwed();
           return;
         }
+        var qrId = t.getAttribute && t.getAttribute('data-ow-qr');
+        var actions = t.closest && t.closest('.owed-person-menu');
+        if (actions && t.tagName === 'BUTTON') actions.open = false;
+        if (qrId) { var person = connFind(qrId); if (person) showPaymentQRs(person); return; }
         if (soaE) {
           exportOwedSoa(soaE); // v72.48: the per-person statement of account
           return;
@@ -13530,6 +13704,11 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           exp: Number(c.exp) || 0, at: typeof c.at === 'string' ? c.at : '',
           open: (c.open && typeof c.open === 'object') ? { amt: r2(c.open.amt), st: String(c.open.st || ''), why: String(c.open.why || '').slice(0, 120) } : undefined,
           out: Array.isArray(c.out) ? c.out.slice(0, 200) : [], in: Array.isArray(c.in) ? c.in.slice(0, 200) : [] };
+        if (Number.isSafeInteger(c.qrRevision) && Array.isArray(c.qrCodes) && c.qrCodes.every(validPaymentQR) &&
+            JSON.stringify(c.qrCodes).length <= PAYMENT_QR_LIMIT) {
+          out.conn.qrRevision = c.qrRevision;
+          out.conn.qrCodes = c.qrCodes;
+        }
         if (!out.conn.open) delete out.conn.open;
         if (c.removed && typeof c.removed === 'object') {
           out.conn.removed = Object.create(null);
@@ -14214,12 +14393,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.59, live: new Date(2026, 10, 27, 14, 58) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.61, live: new Date(2026, 10, 27, 23, 29) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.61': [
+      'Owed: expanded cards group actions in the three-dot menu. Linked people can share payment QRs.'
+    ],
     '75.59': [
       'Coach Fin: ask “what’s my average spend in the last 7 days” (any number of days, or weeks) and it gives the total plus the average per day.'
     ],

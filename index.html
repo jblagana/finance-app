@@ -1821,6 +1821,24 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 .hs-p{font-size:12px;color:var(--mut);line-height:1.4}
 .hs-m{font-size:12px;color:var(--mut)}
 .hs-cap{font-size:11.5px;color:var(--mut);margin:4px 0 0}
+
+.ow-p{position:relative}
+.ow-p:has(.owed-person-menu[open]){overflow:visible;z-index:2}
+.ow-acts>.addrow{flex:none;background:var(--acc);color:var(--accInk);border:0;padding:0 14px}
+.owed-person-menu{position:relative}
+.owed-person-menu summary{background:var(--card2);border:1px solid var(--line);border-radius:10px;list-style:none;cursor:pointer;padding:8px 12px;min-height:44px;text-align:center;font-size:20px}
+.owed-person-menu summary::-webkit-details-marker{display:none}
+.owed-person-menu>div{position:absolute;left:-40px;top:100%;z-index:3;width:max-content;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:4px;box-shadow:var(--shadow)}
+.owed-person-menu button{display:block;width:100%;text-align:left;min-height:44px}
+.owed-person-menu .qr-delete{color:var(--bad)}
+#myPaymentQRs{margin-top:10px;width:100%;min-height:44px}
+.payment-qr{padding:12px;margin-bottom:8px}
+.payment-qr summary{cursor:pointer;font-weight:600}
+.payment-qr img{display:block;width:min(100%,300px);height:auto;margin:12px auto;background:white}
+#qrReview label{display:block;margin-top:10px}
+#qrReview canvas{display:block;max-width:100%;max-height:38vh;width:auto;height:auto;margin:14px auto;touch-action:none}
+.qrModes{display:flex;gap:6px}.qrModes button{flex:1;padding:10px;color:var(--ink);background:var(--card2);border-radius:8px}.qrModes button[aria-pressed=true]{background:var(--acc);color:var(--accInk)}
+#qrReview label[hidden]{display:none}
 </style>
 <style>
 #userTour{color:var(--ink);background:transparent;border:0;padding:0;margin:0;inset:0;width:100%;height:100%;max-width:none;max-height:none;overflow:hidden}
@@ -2060,6 +2078,7 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
       </div>
     </section>
 
+    <button id="myPaymentQRs" type="button" class="ow-sort">My payment QRs</button>
     <form id="owedForm" class="ow-add" autocomplete="off">
       <label for="owedName" class="ow-add-l">Add a person</label>
       <input id="owedName" maxlength="24" placeholder="e.g. Vhal" autocomplete="off">
@@ -2087,6 +2106,11 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 </main>
 <!-- v73.2: the full recap sheet — last month, the whole story -->
 <!-- v75.02: Owed connections — make / show an invite, a link's status, the friend's join screen -->
+<div id="paymentQRSheet" class="sheet" role="dialog" aria-labelledby="paymentQRTitle">
+  <div class="sheet-h"><div class="t" id="paymentQRTitle"></div>
+    <button id="paymentQRClose" class="sheet-x" type="button" aria-label="Close">✕</button></div>
+  <div class="sheet-b" id="paymentQRBody"></div>
+</div>
 <div id="connSheet" class="sheet" role="dialog" aria-labelledby="connTitle">
   <div class="sheet-h">
     <div class="t" id="connTitle">Connect</div>
