@@ -14415,6 +14415,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.62': ['Owed: compact entry actions, an outlined My payment QRs button, and a visible square crop frame.'],
     '75.61': [
       'Owed: expanded cards group actions in the three-dot menu. Linked people can share payment QRs.'
     ],

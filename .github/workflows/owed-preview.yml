@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ac65dae718f63367aea3aad33b172f687421b90a
+          ref: 43c66842fbdd4669c883aa2769c40867058559c9
           path: finance-app
       - name: Release checks
         shell: pwsh
