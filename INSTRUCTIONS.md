@@ -1,3 +1,8 @@
+## 2026-11-28 - Owed card menu and payment QRs
+Status: in progress.
+- Approved: expanded cards alone show the ellipsis, with SOA, Link, payment QRs, and Delete.
+- Upload and manage bank or wallet payment QRs once, share them with linked people, and view and save their QRs from their cards.
+
 ## 2026-11-27 - "Can the bot answer my question "whats my average spend in the last 7days"" -> "Ur reco, and make sure its flexible to not just 7 days"
 Status: **done** - v75.59 pushed to https://github.com/jblagana/finance-app.git (main).
 - Interpretation: spending questions accept any "last/past/previous N days" window (also "7days", "2 weeks" = 14 days, number words like "three"), and when the question says average / avg / per day / daily the answer adds the average per calendar day (days with no spending count as 0). An "average" with no window uses this cycle so far. "How much can I spend per day" stays a status question.
