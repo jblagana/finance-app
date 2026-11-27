@@ -776,10 +776,30 @@
     return null;
   }
 
+  // v75.59: 'last N days' (any N, 'last 7days', 'past 2 weeks', 'last three days') -> N, else 0
+  var NUMWORD = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+    thirteen: 13, fourteen: 14, fifteen: 15, twenty: 20, thirty: 30, sixty: 60, ninety: 90 };
+  function lastNDays(t) {
+    var m = t.match(/\b(?:last|past|previous|prior)\s+(\d{1,3}|[a-z]+)\s*-?\s*(days?|d|weeks?|wks?)\b/);
+    if (!m) return 0;
+    var n = /^\d+$/.test(m[1]) ? parseInt(m[1], 10) : (NUMWORD[m[1]] || 0);
+    if (/^w/.test(m[2])) n *= 7;
+    return n >= 1 && n <= 366 ? n : 0;
+  }
+  function daysIncl(a, b) { return Math.max(1, Math.round((parseISO(b) - parseISO(a)) / 86400000) + 1); }
+  function monthNext1(ym) { var y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7)); return m === 12 ? (y + 1) + '-01-01' : y + '-' + pad2(m + 1) + '-01'; }
+
   function intentSpend(t, ctx) {
     if (!/\b(spend|spent|spending)\b/.test(t)) return null;
     // “how much can I spend” is a status question — the ledger needs a time or category cue
     var hasTime = /\b(today|yesterday|week|month)\b/.test(t);
+    // v75.59: 'last 7 days' / 'past 10days' / 'last 2 weeks' / 'last three days' - any N, counted back from today
+    var nWin = lastNDays(t);
+    if (nWin) hasTime = true;
+    // v75.59: 'average' / 'avg' / 'per day' / 'daily' = also show the total over the window's calendar days.
+    // 'how much can I spend per day' stays a status question (the per-day-until-payday answer).
+    var wantAvg = /\b(average|avg|ave|per day|a day|daily|each day)\b/.test(t) && !/\b(can|could|should) i\b/.test(t);
+    if (wantAvg && /\b(average|avg|ave)\b/.test(t)) hasTime = true; // 'my average daily spend' = this cycle so far
     var dmS = findDateSpan(t); // v75.13: 'on nov 3', 'last friday' — a single named day
     if (dmS && dmS.iso && !/\b(today|yesterday|week|month)\b/.test(t)) hasTime = true;
     var hasCat = mentionedCategory(t, ctx.txns);
@@ -794,34 +814,46 @@
     var today = todayISO();
     var monthP = today.slice(0, 7);
     var sel = txns, scope = 'all entries';
-    if (!hasTime) { // v75.19: no time named = this cycle (it summed every entry ever: 'food' = PHP 17,742)
-      var cdS = F.cycleData ? F.cycleData() : null;
-      var c0 = (cdS && cdS.start) || (monthP + '-01');
+    function c0Spend() { var cdS = F.cycleData ? F.cycleData() : null; return (cdS && cdS.start) || (monthP + '-01'); }
+    if (!hasTime || (wantAvg && !nWin && !/\b(today|yesterday|week|month)\b/.test(t))) { // v75.19: no time named = this cycle (it summed every entry ever: 'food' = PHP 17,742)
+      var c0 = c0Spend();
       sel = txns.filter(function (x) { return x.date >= c0 && x.date <= today; });
       scope = 'this cycle (' + fmtDate(c0) + ' →)';
     }
-    if (/\btoday\b/.test(t)) { sel = txns.filter(function (x) { return x.date === today; }); scope = 'today'; }
-    else if (/\byesterday\b/.test(t)) { var yd = addDaysISO(today, -1); sel = txns.filter(function (x) { return x.date === yd; }); scope = 'yesterday'; } // v75.13
+    var avgDays = 0; // the calendar days the average divides by
+    if (!hasTime || (wantAvg && !nWin && !/\b(today|yesterday|week|month)\b/.test(t))) avgDays = daysIncl(c0Spend(), today);
+    if (nWin) {
+      var n0 = addDaysISO(today, -(nWin - 1));
+      sel = txns.filter(function (x) { return x.date >= n0 && x.date <= today; });
+      scope = nWin === 1 ? 'today' : 'the last ' + nWin + ' days';
+      avgDays = nWin;
+    }
+    else if (/\btoday\b/.test(t)) { sel = txns.filter(function (x) { return x.date === today; }); scope = 'today'; avgDays = 1; }
+    else if (/\byesterday\b/.test(t)) { var yd = addDaysISO(today, -1); sel = txns.filter(function (x) { return x.date === yd; }); scope = 'yesterday'; avgDays = 1; } // v75.13
     else if (/\blast week\b/.test(t)) { // v75.13
       var lw0 = addDaysISO(today, -13), lw1 = addDaysISO(today, -7);
       sel = txns.filter(function (x) { return x.date >= lw0 && x.date <= lw1; });
       scope = 'the 7 days before that';
+      avgDays = 7;
     }
     else if (/\bthis week\b|\bweek\b/.test(t)) {
       var d7 = addDaysISO(today, -6);
       sel = txns.filter(function (x) { return x.date >= d7 && x.date <= today; });
       scope = 'the last 7 days';
+      avgDays = 7;
     }
     else if (/\blast month\b/.test(t)) {
       var lp = monthPrev(monthP);
       sel = txns.filter(function (x) { return String(x.date).slice(0, 7) === lp; });
       scope = 'last month';
+      avgDays = daysIncl(lp + '-01', addDaysISO(monthNext1(lp), -1));
     }
     else if (/\bthis month\b|\bmonth\b/.test(t)) {
       sel = txns.filter(function (x) { return String(x.date).slice(0, 7) === monthP; });
       scope = 'this month';
+      avgDays = daysIncl(monthP + '-01', today);
     }
-    if (dmS && dmS.iso && !/\b(today|yesterday|week|month)\b/.test(t)) { sel = txns.filter(function (x) { return x.date === dmS.iso; }); scope = fmtDate(dmS.iso); }
+    if (dmS && dmS.iso && !nWin && !/\b(today|yesterday|week|month)\b/.test(t)) { sel = txns.filter(function (x) { return x.date === dmS.iso; }); scope = fmtDate(dmS.iso); avgDays = 1; }
     var cat = mentionedCategory(t, txns);
     if (cat) {
       var cl = cat.toLowerCase();
@@ -835,11 +867,14 @@
       scope += ' · \u201c' + esc(merch) + '\u201d';
     }
     var total = sel.reduce(function (s, x) { return s + (Number(x.amount) || 0); }, 0);
+    var showAvg = wantAvg && avgDays > 1; // a one-day window: the total already is the day's spend
     var h = block('Logged in this app',
       sel.length
-        ? kv(scope, money(total) + ' <span class="note" style="font-size:11px">(' + sel.length + ' entr' + (sel.length === 1 ? 'y' : 'ies') + ')</span>')
+        ? kv(scope, money(total) + ' <span class="note" style="font-size:11px">(' + sel.length + ' entr' + (sel.length === 1 ? 'y' : 'ies') + ')</span>') +
+          (showAvg ? kv('Average per day', '<b>' + money(r2(total / avgDays)) + '</b> <span class="note" style="font-size:11px">over ' + avgDays + ' days</span>') : '')
         : line('Nothing logged ' + scope + ' yet.'),
-      'This counts entries logged in this app — everything is stored on this phone.', 'good');
+      showAvg ? 'The average divides by every day in the window, days with no spending included. It counts entries logged in this app.'
+        : 'This counts entries logged in this app — everything is stored on this phone.', 'good');
     return { html: h + freshness(ctx) };
   }
 
