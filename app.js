@@ -11800,6 +11800,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       revision: Math.max(Date.now(), paymentQRProfile().revision + 1), codes: codes
     }));
     showPaymentQRs();
+    cloudSoon(600);
     connSyncAll(true);
   }
   function wirePaymentQRs() {
@@ -14006,7 +14007,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // v75.23: the sync object and the merge-in, shared by the gist and the cloud account
   function syncBuildObj() {
     var rm = syncLocalRemoved();
-    return { app: 'finances-pwa', syncedAt: new Date().toISOString(),
+    return { app: 'finances-pwa', syncedAt: new Date().toISOString(), paymentQRs: paymentQRProfile(),
       base: state.base, txns: state.txns, plans: state.plans,
       owed: state.owed, moneyLog: state.moneyLog,
       removedTxn: rm.txn, removedPlan: rm.plan, removedOwed: rm.owed,
@@ -14023,6 +14024,17 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           owed: state.owed, moneyLog: state.moneyLog,
           removedTxn: rmL.txn, removedPlan: rmL.plan, removedOwed: rmL.owed };
         var merged = syncMerge(local, remote);
+        var incoming = remote && remote.paymentQRs;
+        var mine = paymentQRProfile();
+        if (incoming && Number.isSafeInteger(incoming.revision) && incoming.revision > 0 &&
+            Array.isArray(incoming.codes) && incoming.codes.every(validPaymentQR) &&
+            JSON.stringify(incoming.codes).length <= PAYMENT_QR_LIMIT &&
+            (incoming.revision > mine.revision || (incoming.revision === mine.revision &&
+             JSON.stringify(incoming.codes) > JSON.stringify(mine.codes)))) {
+          localStorage.setItem(PAYMENT_QR_KEY, JSON.stringify({revision: incoming.revision, codes: incoming.codes}));
+          var sheet = byId('paymentQRSheet'), slot = byId('paymentQRBody');
+          if (sheet && sheet.classList.contains('show') && slot && !slot.dataset.peer && !byId('qrReview')) showPaymentQRs();
+        }
         // v74.06: the overlay must match the base it sits on. Remote base won
         // and the push carried its overlay -> adopt that overlay and move it
         // from the REMOTE txns to the merged ones; otherwise keep this phone's
@@ -14166,7 +14178,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   }
   function cloudCfg() { return CLOUD_CFG || cloudRead().cfg || null; }
   function cloudNote(msg, bad) { var el = byId('cloudNote'); if (el) { el.textContent = msg; el.style.color = bad ? 'var(--bad)' : 'var(--mut)'; } }
-  function cloudSigNow() { return JSON.stringify([state.base, state.txns, state.plans, state.owed, state.moneyLog]); }
+  function cloudSigNow() { return JSON.stringify([state.base, state.txns, state.plans, state.owed, state.moneyLog, paymentQRProfile()]); }
   function cloudParseCfg(txt) {
     var m = String(txt || '').match(/\{[\s\S]*\}/); if (!m) return null;
     var o = null, t = m[0];
@@ -14258,7 +14270,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (!sameAccount()) return;
       var obj = syncBuildObj();
       sentSig = cloudSigNow();
-      var same = pulled && JSON.stringify([pulled.base, pulled.txns, pulled.plans, pulled.owed, pulled.moneyLog]) === sentSig;
+      var same = pulled && JSON.stringify([pulled.base, pulled.txns, pulled.plans, pulled.owed, pulled.moneyLog, pulled.paymentQRs || { revision: 0, codes: [] }]) === sentSig;
       if (same) return;
       return syncEncrypt(obj, pass).then(function (env) {
         if (!sameAccount()) return;
@@ -14446,6 +14458,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.65': ['My payment QRs now syncs across your own devices with your encrypted finance data.'],
     '75.64': ['Owed: opening a linked payment QR sheet requests updated codes and displays them as they arrive.'],
     '75.63': ['Owed: wider Entry button and confirmation before removing a payment QR.'],
     '75.62': ['Owed: compact entry actions, an outlined My payment QRs button, and a visible square crop frame.'],
