@@ -1,0 +1,37 @@
+name: Capture Owed previews
+on: [push]
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --prefix /tmp/preview playwright && /tmp/preview/node_modules/.bin/playwright install --with-deps chromium
+      - run: |
+          python3 -m http.server 8734 > /tmp/server.log 2>&1 &
+          node tools/owed-preview.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: owed-screen-snips
+          path: snips/*.png
+
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: a9e5ccecd45a1dace93d35509754cb84932cc322
+          path: finance-app
+      - name: Release checks
+        shell: pwsh
+        working-directory: finance-app
+        run: |
+          ./tools/release.ps1 v75.63
+      - name: Verified stamp
+        working-directory: finance-app
+        shell: pwsh
+        run: |
+          Select-String 'var SHELL_RELEASE =' app.js
+          git diff --stat
