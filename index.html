@@ -1790,7 +1790,6 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 .cn-promise li::before{content:"✓";position:absolute;left:2px;color:var(--ok)}
 .cn-chk{display:flex;gap:10px;align-items:center;font-size:13.5px;margin:12px 0 0}
 .cn-chk input{width:18px;height:18px;margin:0}
-.ow-paste{display:block;margin:-2px 4px 6px auto;background:none;border:0;padding:6px 2px;color:var(--acc);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
 .cn-steps{margin:0 0 12px;padding-left:20px;color:var(--mut);font-size:14px;line-height:1.5}
 .cn-steps b{color:var(--txt)}
 #connPasteIn{width:100%;box-sizing:border-box}
@@ -1831,8 +1830,11 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
 .owed-person-menu>div{position:absolute;left:-40px;top:100%;z-index:3;width:max-content;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:4px;box-shadow:var(--shadow)}
 .owed-person-menu button{display:block;width:100%;text-align:left;min-height:44px}
 .owed-person-menu .qr-delete{color:var(--bad)}
-#myPaymentQRs{appearance:none;display:flex;align-items:center;justify-content:center;gap:9px;margin-top:12px;width:100%;min-height:44px;border:1px solid var(--mut);border-radius:10px;background:transparent;color:var(--ink);font:inherit;font-weight:600;cursor:pointer}
-#myPaymentQRs svg{width:19px;height:19px}
+.ow-toolbar{display:grid;grid-template-columns:minmax(0,1fr) 46px 46px;gap:8px;margin:12px 0}
+.ow-toolbar button{height:46px;min-height:46px;margin:0;display:flex;align-items:center;justify-content:center;gap:8px}
+.ow-toolbar .ow-icon{appearance:none;border:0;border-radius:11px;background:var(--field,var(--card));color:var(--ink);cursor:pointer}
+.ow-toolbar svg{width:20px;height:20px}
+.ow-add[hidden]{display:none}
 .ow-p.open .ow-acts>.addrow{width:auto;min-width:0;flex:1 1 0}
 .ow-p.open .owed-person-menu{flex:0 0 44px}
 .ow-p.open .owed-person-menu summary{display:grid;place-items:center;width:44px;height:44px;padding:0}
@@ -2088,14 +2090,17 @@ button.hrest{flex:none;height:30px;min-height:0;width:auto;padding:0 11px;border
       </div>
     </section>
 
-    <button id="myPaymentQRs" type="button" class="payment-qr-trigger"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><path d="M13 13h4v4h4m-8 0v4h4m4-9v2"/></svg>My payment QRs</button>
-    <form id="owedForm" class="ow-add" autocomplete="off">
+    <div class="ow-toolbar" role="group" aria-label="Owed actions">
+      <button id="owedAddToggle" class="act" type="button" aria-controls="owedForm" aria-expanded="false"><span aria-hidden="true">＋</span>Add person</button>
+      <button id="myPaymentQRs" class="ow-icon" type="button" aria-label="My payment QRs" title="My payment QRs"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><path d="M13 13h4v4h4m-8 0v4h4m4-9v2"/></svg></button>
+      <button id="owedPasteInv" class="ow-icon" type="button" aria-label="Paste invite" title="Paste invite"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m10 13 4-4m-5 1-2 2a3.5 3.5 0 0 0 5 5l3-3m-1-2 2-2a3.5 3.5 0 0 0-5-5L8 8"/></svg></button>
+    </div>
+    <form id="owedForm" hidden class="ow-add" autocomplete="off">
       <label for="owedName" class="ow-add-l">Add a person</label>
       <input id="owedName" maxlength="24" placeholder="e.g. Vhal" autocomplete="off">
       <button class="act" type="submit">Add</button>
     </form>
-    <!-- v75.15: an invite that opened in the browser is pasted here, in the installed app -->
-    <button id="owedPasteInv" class="ow-paste" type="button">Got an invite link? Paste it</button>
+
 
     <!-- v74.20 (boss: 'the sort row makes it look awfull'): the sort control is
          a compact pill on the People section header (hidden while the book

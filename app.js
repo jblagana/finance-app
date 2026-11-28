@@ -12567,7 +12567,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (!c) return '';
     if (c.st === 'invited') {
       var expired = Date.now() > (c.exp || 0);
-      return '<p class="note" style="margin:0 0 12px">' + (expired ? 'The invite link expired before ' + nm + ' opened it. Make a new one.' : 'Send this to ' + nm + '. Ask them to open it in their Fin.AI app. If it opens in the browser instead, they tap Copy invite there and paste it in the app (Owed \u2192 Got an invite link?). The link works for 24 hours.') + '</p>' +
+      return '<p class="note" style="margin:0 0 12px">' + (expired ? 'The invite link expired before ' + nm + ' opened it. Make a new one.' : 'Send this to ' + nm + '. Ask them to open it in their Fin.AI app. If it opens in the browser instead, they tap Copy invite there and paste it in the app (Owed \u2192 Paste invite (link icon)). The link works for 24 hours.') + '</p>' +
         (expired ? '' : '<div class="cn-qrbox">' + qrSvg(connInviteLink(c, p.id)) + '</div>' +
           '<div class="cn-acts"><button type="button" class="act" data-cn-share="' + esc(p.id) + '">Share link</button>' +
           '<button type="button" class="act ghost" data-cn-copy="' + esc(p.id) + '">Copy link</button></div>') +
@@ -12667,7 +12667,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     connSheetPid = null; connBrowserJ = j;
     t.textContent = 'Open it in your Fin.AI app';
     b.innerHTML = '<p class="note" style="margin:0 0 12px">This invite opened in the browser. The browser keeps its own book, separate from your Fin.AI app, so connecting here would link the wrong one.</p>' +
-      '<ol class="cn-steps"><li>Tap <b>Copy invite</b></li><li>Open your <b>Fin.AI app</b> \u2192 <b>Owed</b></li><li>Tap <b>Got an invite link? Paste it</b></li></ol>' +
+      '<ol class="cn-steps"><li>Tap <b>Copy invite</b></li><li>Open your <b>Fin.AI app</b> \u2192 <b>Owed</b></li><li>Tap the <b>Paste invite</b> link icon</li></ol>' +
       '<div class="cn-acts"><button type="button" class="act" data-cn-bcopy="1">Copy invite</button></div>' +
       '<div class="cn-acts"><button type="button" class="act ghost" data-cn-here="1">I don\u2019t have the app \u2014 use it here</button></div>' +
       '<p class="note" style="margin:10px 0 0">The invite works for 24 hours from when it was made.</p>';
@@ -13377,6 +13377,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   }
   function owedBindEvents() {
     var form = byId('owedForm');
+    var toggle = byId('owedAddToggle');
+    function showNameField(open) {
+      form.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+      (open ? byId('owedName') : toggle).focus();
+    }
+    if (toggle && form) {
+      toggle.onclick = function () { showNameField(form.hidden); };
+      form.onkeydown = function (ev) { if (ev.key === 'Escape') showNameField(false); };
+    }
     if (form) form.onsubmit = function (ev) {
       ev.preventDefault();
       var nameEl = byId('owedName');
@@ -13384,6 +13394,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (!name) { alert('Give the person a name.'); return; }
       addOwedPerson(name);
       nameEl.value = '';
+      showNameField(false);
     };
     var body = byId('owedBody');
     if (!body) return;
@@ -14515,12 +14526,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.66, live: new Date(2026, 10, 28, 18, 27) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.67, live: new Date(2026, 10, 28, 19, 11) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.67': ['Add a person, open your payment QRs, or paste an invite from one row above People.'],
     '75.66': ['Payment QRs added on different devices are kept together. Deleted QRs stay removed after sync. Confirmed starting balances no longer repeat on Owed cards.'],
     '75.65': ['My payment QRs now syncs across your own devices with your encrypted finance data.'],
     '75.64': ['Owed: opening a linked payment QR sheet requests updated codes and displays them as they arrive.'],
