@@ -10581,7 +10581,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     owedSigs = next;
     return idbPut(STORE_META, { key: 'owed', value: state.owed });
   }
-  function emitOwed() { emit('owed'); }
+  function emitOwed() {
+    emit('owed');
+    var slot = byId('paymentQRBody');
+    if (!slot || !slot.dataset || !slot.dataset.peer || !byId('paymentQRSheet').classList.contains('show')) return;
+    var peer = connFind(slot.dataset.peer);
+    if (!peer) { closeSheets(); return; }
+    var version = connLive(peer) ? String(peer.conn.qrRevision || 0) : 'unlinked';
+    if (slot.dataset.peerVersion !== version) showPaymentQRs(peer, true);
+  }
   function owedUid(pref) { return pref + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
   // v72.29 (user edit: 'when enrties are more than 5, hide the old ones in a
   // see more'): each card shows the first 5 rows (newest first); the button
@@ -11748,9 +11756,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       }
     } catch (e) {}
   }
-  function showPaymentQRs(person) {
+  function showPaymentQRs(person, updating) {
     var own = !person;
     var slot = byId('paymentQRBody');
+    slot.dataset.peer = own ? '' : person.id;
+    slot.dataset.peerVersion = connLive(person) ? String(person.conn.qrRevision || 0) : 'unlinked';
+    if (connLive(person) && !updating) {
+      connQueue(person, { t: 'qrGet', rev: Array.isArray(person.conn.qrCodes) ? person.conn.qrRevision || 0 : 0 });
+      connSync(person.id);
+    }
     var profile = own ? paymentQRProfile() : null;
     slot.dataset.qrRevision = own ? String(profile.revision) : '';
     var codes = own ? profile.codes : connLive(person) ? person.conn.qrCodes || [] : [];
@@ -12011,6 +12025,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (er && er.status === 404 && c.st === 'linked') { c.st = 'ended'; changed = true; } // the pair was removed on the relay
     }).then(function () {
       delete connSyncing[pid];
+      if (connLive(p) && paymentQRProfile().revision > (c.qrSent || 0)) connSyncSoon(pid);
       if (changed) return saveOwed().then(emitOwed);
       emitOwed();
     });
@@ -12119,6 +12134,14 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     var t = m.t;
     var ent = function (cid) { var f = null; (p.entries || []).forEach(function (e) { if (e.cid === cid) f = e; }); return f; };
     var dropIn = function (cid) { c.in = c.in.filter(function (x) { return x.cid !== cid; }); };
+    if (t === 'qrGet' && connLive(p)) {
+      var current = paymentQRProfile();
+      if (current.revision && current.revision !== m.rev) {
+        c.qrSent = 0;
+        queuePaymentQRs(p);
+      }
+      return;
+    }
     if (t === 'qr') { receivePaymentQRs(c, m); return; }
     if (t === 'hi') {
       if (c.side === 'a') {
@@ -14417,12 +14440,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.63, live: new Date(2026, 10, 28, 1, 37) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.64, live: new Date(2026, 10, 28, 2, 57) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.64': ['Owed: opening a linked payment QR sheet requests updated codes and displays them as they arrive.'],
     '75.63': ['Owed: wider Entry button and confirmation before removing a payment QR.'],
     '75.62': ['Owed: compact entry actions, an outlined My payment QRs button, and a visible square crop frame.'],
     '75.61': [
