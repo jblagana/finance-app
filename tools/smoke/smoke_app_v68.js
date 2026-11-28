@@ -4506,7 +4506,14 @@ waitReady().then(async function (F) {
         }
       };
       global.firebase = { firestore: { FieldValue: { serverTimestamp: Date.now } } };
-      window.testSync.connect({ collection: function () { return { doc: function () { return ref; } }; } });
+      window.testSync.connect({
+        collection: function () { return { doc: function () { return ref; } }; },
+        runTransaction: async function (update) {
+          var pending;
+          await update({ get: function (doc) { return doc.get(); }, set: function (doc, data) { pending = doc.set(data); } });
+          await pending;
+        }
+      });
       var firstSync = window.testSync.sync();
       for (var tries = 0; !acknowledgeFirst && tries < 150; tries++) await sleep(20);
       if (!acknowledgeFirst) throw new Error('cloud sync never started its first upload');
