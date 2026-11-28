@@ -11712,25 +11712,69 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // Keep chunks below the worker's sealed-message limit and apply atomically.
   var PAYMENT_QR_KEY = 'finai-payment-qrs';
   var PAYMENT_QR_LIMIT = 120000;
+  var PAYMENT_QR_SYNC_LIMIT = 660000; // allow concurrent uploads to merge above the per-device upload limit
   function validPaymentQR(q) {
     return q && typeof q.label === 'string' && q.label.trim() && q.label.length <= 40 &&
       typeof q.src === 'string' && q.src.length <= PAYMENT_QR_LIMIT &&
       /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(q.src);
   }
+  // Legacy uploads had no ID. Use a deterministic fingerprint so two devices
+  // migrating the same image (including duplicate uploads) agree on its ID.
+  function qrFingerprint(text) {
+    var a = 2166136261, b = 5381;
+    for (var i = 0; i < text.length; i++) {
+      a = Math.imul(a ^ text.charCodeAt(i), 16777619);
+      b = Math.imul(b, 33) ^ text.charCodeAt(i);
+    }
+    return (a >>> 0).toString(36) + '-' + (b >>> 0).toString(36);
+  }
+  function normalizeQRProfile(data) {
+    var occurrences = new Map();
+    var removed = new Set(Array.isArray(data.removed) ? data.removed.filter(validQRId) : []);
+    var codes = data.codes.map(function (q) {
+      var id = q.id;
+      if (!validQRId(id)) {
+        var key = qrFingerprint(JSON.stringify([q.label, q.src]));
+        var n = occurrences.get(key) || 0;
+        occurrences.set(key, n + 1);
+        id = 'legacy-' + key + '-' + n;
+      }
+      return {id:id, label:q.label, src:q.src};
+    }).filter(function (q) { return !removed.has(q.id); });
+    return {revision:data.revision || 0, codes:codes, removed:Array.from(removed).sort()};
+  }
+  function validQRId(id) { return typeof id === 'string' && /^[a-z0-9-]{1,80}$/.test(id); }
+  function mergeQRProfiles(local, remote) {
+    var removed = new Set(local.removed.concat(remote.removed));
+    var records = new Map();
+    local.codes.concat(remote.codes).forEach(function (q) {
+      if (!removed.has(q.id)) records.set(q.id, q);
+    });
+    var codes = Array.from(records.values()).sort(function (a, b) { return a.id < b.id ? -1 : 1; });
+    var result = {revision:Math.max(local.revision, remote.revision), codes:codes, removed:Array.from(removed).sort()};
+    // Advance past every conflicting snapshot that a linked card could have seen.
+    [local, remote].forEach(function (profile) {
+      if (profile.revision === result.revision &&
+          (JSON.stringify(profile.codes) !== JSON.stringify(codes) ||
+           JSON.stringify(profile.removed) !== JSON.stringify(result.removed))) result.revision++;
+    });
+    return result;
+  }
   function paymentQRProfile() {
     try {
       var data = JSON.parse(localStorage.getItem(PAYMENT_QR_KEY));
-      if (data && Array.isArray(data.codes)) return data;
+      if (data && Array.isArray(data.codes)) return normalizeQRProfile(data);
     } catch (e) {}
-    return { revision: 0, codes: [] };
+    return { revision: 0, codes: [], removed: [] };
   }
   function queuePaymentQRs(p) {
     if (!connLive(p)) return false;
     var profile = paymentQRProfile();
     if (!profile.revision || p.conn.qrSent === profile.revision) return false;
     var payload = JSON.stringify(profile.codes);
+    var batch = qrFingerprint(payload);
     for (var offset = 0; offset < payload.length; offset += 3000) {
-      connQueue(p, { t: 'qr', rev: profile.revision, index: offset / 3000,
+      connQueue(p, { t: 'qr', rev: profile.revision, batch: batch, index: offset / 3000,
         count: Math.ceil(payload.length / 3000), chunk: payload.slice(offset, offset + 3000) });
     }
     p.conn.qrSent = profile.revision;
@@ -11738,10 +11782,10 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   }
   function receivePaymentQRs(c, m) {
     if ((c.st !== 'linked' && c.st !== 'invited') || !Number.isSafeInteger(m.rev) || m.rev <= (c.qrRevision || 0) ||
-        !Number.isInteger(m.count) || m.count < 1 || m.count > 43 ||
+        !Number.isInteger(m.count) || m.count < 1 || m.count > Math.ceil(PAYMENT_QR_SYNC_LIMIT / 3000) ||
         !Number.isInteger(m.index) || m.index < 0 || m.index >= m.count ||
         typeof m.chunk !== 'string' || m.chunk.length > 3000) return;
-    if (!c.qrDraft || c.qrDraft.rev < m.rev) c.qrDraft = { rev: m.rev, count: m.count, chunks: {} };
+    if (!c.qrDraft || c.qrDraft.rev < m.rev || (c.qrDraft.rev === m.rev && c.qrDraft.batch !== m.batch)) c.qrDraft = { rev: m.rev, batch: m.batch, count: m.count, chunks: {} };
     var draft = c.qrDraft;
     if (draft.rev !== m.rev || draft.count !== m.count) return;
     draft.chunks[m.index] = m.chunk;
@@ -11749,8 +11793,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     delete c.qrDraft;
     var payload = Array.from({ length: draft.count }, function (_, i) { return draft.chunks[i]; }).join('');
     try {
+      if (m.batch && qrFingerprint(payload) !== m.batch) return;
       var codes = JSON.parse(payload);
-      if (payload.length <= PAYMENT_QR_LIMIT && Array.isArray(codes) && codes.every(validPaymentQR)) {
+      if (payload.length <= PAYMENT_QR_SYNC_LIMIT && Array.isArray(codes) && codes.every(validPaymentQR)) {
         c.qrCodes = codes;
         c.qrRevision = m.rev;
       }
@@ -11795,9 +11840,16 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (!byId('paymentQRSheet').classList.contains('show')) openSheet('paymentQRSheet');
   }
   function savePaymentQRs(codes) {
-    if (JSON.stringify(codes).length > PAYMENT_QR_LIMIT) throw new Error('QR images are too large. Crop the images around the QR codes and try again.');
+    var previous = paymentQRProfile();
+    var revision = Math.max(Date.now(), previous.revision + 1);
+    codes = codes.map(function (q) {
+      return validQRId(q.id) ? q : {id:revision.toString(36) + '-' + connHex(connRand(12)), label:q.label, src:q.src};
+    });
+    var retained = new Set(codes.map(function (q) { return q.id; }));
+    var removed = previous.removed.concat(previous.codes.filter(function (q) { return !retained.has(q.id); }).map(function (q) { return q.id; }));
+    if (codes.length >= previous.codes.length && JSON.stringify(codes).length > PAYMENT_QR_LIMIT) throw new Error('QR images are too large. Crop the images around the QR codes and try again.');
     localStorage.setItem(PAYMENT_QR_KEY, JSON.stringify({
-      revision: Math.max(Date.now(), paymentQRProfile().revision + 1), codes: codes
+      revision: revision, codes: codes, removed: removed.sort()
     }));
     showPaymentQRs();
     cloudSoon(600);
@@ -12681,8 +12733,8 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       });
       h += '</div>';
     }
-    if (c.side === 'a' && c.open && c.st !== 'invited') {
-      var os = c.open.st === 'ok' ? '<span class="cn-ok">✓ ' + nm + ' confirmed</span>' : c.open.st === 'no' ? '<span class="cn-no">' + nm + ' did not confirm' + (c.open.why ? ' · “' + esc(c.open.why) + '”' : '') + '</span>' : '<span class="cn-w">waiting for ' + nm + '</span>';
+    if (c.side === 'a' && c.open && c.open.st !== 'ok' && c.st !== 'invited') {
+      var os = c.open.st === 'no' ? '<span class="cn-no">' + nm + ' did not confirm' + (c.open.why ? ' · “' + esc(c.open.why) + '”' : '') + '</span>' : '<span class="cn-w">waiting for ' + nm + '</span>';
       h += '<div class="cn-openrow"><span>Starting balance ' + money(Math.abs(c.open.amt || 0)) + ' · ' + os + '</span>' +
         (c.open.st === 'no' ? '<button type="button" class="mini" data-cn-resend="' + esc(p.id) + '">Resend</button>' : '') + '</div>';
     }
@@ -13753,7 +13805,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           open: (c.open && typeof c.open === 'object') ? { amt: r2(c.open.amt), st: String(c.open.st || ''), why: String(c.open.why || '').slice(0, 120) } : undefined,
           out: Array.isArray(c.out) ? c.out.slice(0, 200) : [], in: Array.isArray(c.in) ? c.in.slice(0, 200) : [] };
         if (Number.isSafeInteger(c.qrRevision) && Array.isArray(c.qrCodes) && c.qrCodes.every(validPaymentQR) &&
-            JSON.stringify(c.qrCodes).length <= PAYMENT_QR_LIMIT) {
+            JSON.stringify(c.qrCodes).length <= PAYMENT_QR_SYNC_LIMIT) {
           out.conn.qrRevision = c.qrRevision;
           out.conn.qrCodes = c.qrCodes;
         }
@@ -14028,10 +14080,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
         var mine = paymentQRProfile();
         if (incoming && Number.isSafeInteger(incoming.revision) && incoming.revision > 0 &&
             Array.isArray(incoming.codes) && incoming.codes.every(validPaymentQR) &&
-            JSON.stringify(incoming.codes).length <= PAYMENT_QR_LIMIT &&
-            (incoming.revision > mine.revision || (incoming.revision === mine.revision &&
-             JSON.stringify(incoming.codes) > JSON.stringify(mine.codes)))) {
-          localStorage.setItem(PAYMENT_QR_KEY, JSON.stringify({revision: incoming.revision, codes: incoming.codes}));
+            JSON.stringify(incoming.codes).length <= PAYMENT_QR_SYNC_LIMIT) {
+          var combined = mergeQRProfiles(mine, normalizeQRProfile(incoming));
+          localStorage.setItem(PAYMENT_QR_KEY, JSON.stringify(combined));
           var sheet = byId('paymentQRSheet'), slot = byId('paymentQRBody');
           if (sheet && sheet.classList.contains('show') && slot && !slot.dataset.peer && !byId('qrReview')) showPaymentQRs();
         }
@@ -14084,6 +14135,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
           });
         }).then(function () {
           render();
+          if (combined && combined.revision !== mine.revision) connSyncAll(true);
         });
   }
   function syncPush() {
@@ -14257,12 +14309,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     if (!pass) { cloudNote('Set a passphrase first — it locks your data before it leaves this phone.', true); return Promise.resolve(); }
     if (!window.crypto || !crypto.subtle) { cloudNote('Encryption needs a secure context (https).', true); return Promise.resolve(); }
     cloudBusy = true; cloudPullPending = false; cloudNote('Syncing…');
-    var uid = cloudUser.uid, pulled = null, sentSig = null;
+    var uid = cloudUser.uid, pulled = null, sentSig = null, readEnvelope = null;
     var ref = cloudFb.db.collection('finai').doc(uid);
     function sameAccount() { return cloudUser && cloudUser.uid === uid && cloudRead().pass === pass; }
     return ref.get().then(function (snap) {
       if (!snap.exists || !snap.data().env) return null;
-      return syncDecrypt(JSON.parse(snap.data().env), pass).then(null, function () { throw new Error('wrong passphrase for this account (nothing was changed)'); });
+      readEnvelope = snap.data().env;
+      return syncDecrypt(JSON.parse(readEnvelope), pass).then(null, function () { throw new Error('wrong passphrase for this account (nothing was changed)'); });
     }).then(function (remote) {
       if (!sameAccount()) return;
       pulled = remote; return remote ? syncApplyRemote(remote) : null;
@@ -14274,8 +14327,18 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
       if (same) return;
       return syncEncrypt(obj, pass).then(function (env) {
         if (!sameAccount()) return;
-        cloudEnv = JSON.stringify(env);
-        return ref.set({ env: cloudEnv, at: window.firebase.firestore.FieldValue.serverTimestamp() });
+        var encrypted = JSON.stringify(env);
+        return cloudFb.db.runTransaction(function (tx) {
+          return tx.get(ref).then(function (current) {
+            if (!sameAccount()) return;
+            if ((current.exists ? current.data().env || null : null) !== readEnvelope) {
+              cloudPullPending = true;
+              sentSig = null;
+              return;
+            }
+            tx.set(ref, { env: encrypted, at: window.firebase.firestore.FieldValue.serverTimestamp() });
+          });
+        });
       });
     }).then(function () {
       if (!sameAccount() || sentSig === null) return;
@@ -14452,12 +14515,13 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // build went live. Rendered into both footers (page + Settings sheet) from
   // this one source so they can never drift. Bump SHELL_RELEASE together with
   // the sw.js cache on each release.
-  var SHELL_RELEASE = { v: 75.65, live: new Date(2026, 10, 28, 3, 31) }; // live re-stamped at each push
+  var SHELL_RELEASE = { v: 75.66, live: new Date(2026, 10, 28, 18, 27) }; // live re-stamped at each push
   // v72.29 (user edit: 'add a section in settings on What's new with
   // <version> containing plain word changes'): the plain-wording changes per
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.66': ['Payment QRs added on different devices are kept together. Deleted QRs stay removed after sync. Confirmed starting balances no longer repeat on Owed cards.'],
     '75.65': ['My payment QRs now syncs across your own devices with your encrypted finance data.'],
     '75.64': ['Owed: opening a linked payment QR sheet requests updated codes and displays them as they arrive.'],
     '75.63': ['Owed: wider Entry button and confirmation before removing a payment QR.'],
