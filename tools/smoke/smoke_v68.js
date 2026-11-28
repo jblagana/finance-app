@@ -376,9 +376,14 @@ v70hm('how much → status', 'how much');
   var aOk = !!a && !/Which maya/i.test(a.html);
   console.log('--- v75.19 "charge 8k on maya" means the card (no which-one ask) ' + (aOk ? 'OK' : 'FAIL ' + a.html.replace(/<[^>]+>/g, ' ').slice(0, 90)));
   if (!aOk) process.exitCode = 1;
-  var b = fc.handle('add meralco 2500 on the 28th', ctx);
+  var tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  var day = tomorrow.getDate();
+  var suffix = day >= 11 && day <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[day % 10] || 'th');
+  var command = 'add meralco 2500 on the ' + day + suffix;
+  var b = fc.handle(command, ctx);
   var bOk = !!b && b.__path === 'rule:intentPlanAdd';
-  console.log('--- v75.19 "add meralco 2500 on the 28th" drafts a plan ' + (bOk ? 'OK' : 'FAIL path=' + (b && b.__path)));
+  console.log('--- v75.19 "' + command + '" drafts a plan ' + (bOk ? 'OK' : 'FAIL path=' + (b && b.__path)));
   if (!bOk) process.exitCode = 1;
 })();
 (function v7519c() {

@@ -1,3 +1,8 @@
+## Owed · v75.63
+Extend the length of the +entry, mockup first. Also add cofirmation when deleting a qr
+
+Approved design: Entry fills the available row beside the fixed overflow button. Removing a saved QR requires confirmation naming the selected bank or wallet.
+
 ## 2026-11-28 - Owed card menu and payment QRs
 Status: in progress.
 - Approved: expanded cards alone show the ellipsis, with SOA, Link, payment QRs, and Delete.
