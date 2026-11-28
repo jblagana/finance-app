@@ -1,0 +1,32 @@
+name: Live two-instance QR sharing
+on: [push]
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --prefix /tmp/preview playwright qrcode && /tmp/preview/node_modules/.bin/playwright install --with-deps chromium
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm install --prefix /tmp/preview firebase-tools
+      - run: |
+          echo 'Checking deployed Owed UI'
+          printf '%s' '{"emulators":{"auth":{"port":9099},"firestore":{"port":8080},"ui":{"enabled":false}}}' > firebase.json
+          EMULATOR=1 /tmp/preview/node_modules/.bin/firebase emulators:exec --project demo-finai --only auth,firestore 'node tools/owed-preview.cjs'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: owed-screen-snips
+          path: snips/*.png
+
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --prefix /tmp/preview playwright qrcode && /tmp/preview/node_modules/.bin/playwright install --with-deps chromium
+      - run: node tools/owed-preview.cjs
