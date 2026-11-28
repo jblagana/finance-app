@@ -11751,7 +11751,9 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   function showPaymentQRs(person) {
     var own = !person;
     var slot = byId('paymentQRBody');
-    var codes = own ? paymentQRProfile().codes : connLive(person) ? person.conn.qrCodes || [] : [];
+    var profile = own ? paymentQRProfile() : null;
+    slot.dataset.qrRevision = own ? String(profile.revision) : '';
+    var codes = own ? profile.codes : connLive(person) ? person.conn.qrCodes || [] : [];
     byId('paymentQRTitle').textContent = own ? 'My payment QRs' : person.name + '’s payment QRs';
     slot.innerHTML = '<p class="note">' + (own ? 'Visible to everyone linked to you in Owed.' :
       !connLive(person) ? 'Link with this person to see their payment QRs.' :
@@ -11794,9 +11796,15 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
     slot.addEventListener('click', function (ev) {
       var value = ev.target.getAttribute('data-qr-remove');
       if (value === null) return;
-      var codes = paymentQRProfile().codes.slice();
-      codes.splice(Number(value), 1);
-      try { savePaymentQRs(codes); } catch (e) { snack(esc(e.message)); }
+      var profile = paymentQRProfile(), index = Number(value), qr = profile.codes[index];
+      if (!qr || String(profile.revision) !== slot.dataset.qrRevision) { showPaymentQRs(); return; }
+      confirmAsk('<strong>Delete ' + esc(qr.label) + ' QR?</strong><br>People linked to you will no longer see this QR in Owed.', 'Delete QR', function () {
+        var latest = paymentQRProfile();
+        if (latest.revision !== profile.revision) { showPaymentQRs(); return; }
+        var codes = latest.codes.slice();
+        codes.splice(index, 1);
+        try { savePaymentQRs(codes); } catch (e) { snack(esc(e.message)); }
+      });
     });
   }
 
@@ -14415,6 +14423,7 @@ var testSpendAmt = ''; // v74.00: the typed amount (restored across re-renders w
   // shell version, shown in Settings for the RUNNING version (the closest
   // older known version as fallback). Add a note for every shell release.
   var SHELL_NOTES = {
+    '75.63': ['Owed: wider Entry button and confirmation before removing a payment QR.'],
     '75.62': ['Owed: compact entry actions, an outlined My payment QRs button, and a visible square crop frame.'],
     '75.61': [
       'Owed: expanded cards group actions in the three-dot menu. Linked people can share payment QRs.'
