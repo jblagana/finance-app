@@ -1,0 +1,43 @@
+name: Live two-instance QR sharing
+on: [push]
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --prefix /tmp/preview playwright qrcode && /tmp/preview/node_modules/.bin/playwright install --with-deps chromium
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm install --prefix /tmp/preview firebase-tools
+      - run: |
+          echo 'Checking deployed Owed UI'
+          printf '%s' '{"emulators":{"auth":{"port":9099},"firestore":{"port":8080},"ui":{"enabled":false}}}' > firebase.json
+          CANDIDATE=1 EMULATOR=1 /tmp/preview/node_modules/.bin/firebase emulators:exec --project demo-finai --only auth,firestore 'node tools/owed-preview.cjs'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: owed-screen-snips
+          path: snips/*.png
+
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ecaea5de50256deb739fffb5e30f67e58fa59029
+          path: finance-app
+      - name: Release checks
+        shell: pwsh
+        working-directory: finance-app
+        run: |
+          ./tools/release.ps1 v75.65
+      - name: Verified stamp
+        working-directory: finance-app
+        shell: pwsh
+        run: |
+          Select-String 'var SHELL_RELEASE =' app.js
+          git diff --stat
